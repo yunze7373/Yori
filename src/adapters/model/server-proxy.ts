@@ -25,6 +25,23 @@ import {
   getTemplate,
   type ServerTemplate,
 } from './template-registry.js';
+import {
+  type ReasoningInput,
+  type ReasoningOutput,
+  type ReasoningValidationFailureReason,
+  deterministicReasoningFallback,
+  validateReasoningOutput,
+} from './reasoning.js';
+
+export interface ModelReasoningResponse {
+  readonly result: ReasoningOutput;
+  readonly usedFallback: boolean;
+  readonly fallbackReason?:
+    | 'disabled'
+    | 'timeout'
+    | 'error'
+    | ReasoningValidationFailureReason;
+}
 
 export interface ModelProxyConfig {
   readonly apiKey?: string;
@@ -239,7 +256,11 @@ export class ModelDevProxy {
    */
   public async handleHttpRequest(req: any, res: any): Promise<boolean> {
     const url = (req.url || '').split('?')[0];
-    if (url !== '/api/model/diagnostics' && url !== '/api/model/refine') {
+    if (
+      url !== '/api/model/diagnostics' &&
+      url !== '/api/model/refine' &&
+      url !== '/api/model/reason'
+    ) {
       return false;
     }
 
@@ -364,6 +385,80 @@ export class ModelDevProxy {
             }
 
             const result = await this.handleRefine(validation.template, validation.facts);
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(result));
+            resolve(true);
+          } catch {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Invalid JSON payload' }));
+            resolve(true);
+          }
+        });
+
+        req.on('error', () => {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Request read error' }));
+          resolve(true);
+        });
+      });
+    }
+
+    // Route: POST /api/model/reason (PH-002 B1 Constrained Reasoning Port)
+    if (url === '/api/model/reason') {
+      if (req.method !== 'POST') {
+        res.statusCode = 405;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return true;
+      }
+
+      // Content-Type validation
+      const contentType = ((req.headers?.['content-type'] as string) || '').toLowerCase();
+      if (!contentType.startsWith('application/json')) {
+        res.statusCode = 415;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Unsupported Media Type: application/json required' }));
+        return true;
+      }
+
+      // Rate limit check
+      if (!this.rateLimiter.check()) {
+        res.statusCode = 429;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Retry-After', '60');
+        res.end(JSON.stringify({ error: 'Too Many Requests: rate limit exceeded' }));
+        return true;
+      }
+
+      // Body size limit: 8KB (8192 bytes)
+      return new Promise<boolean>(resolve => {
+        let body = '';
+        let bytesCount = 0;
+        let isOversize = false;
+
+        req.on('data', (chunk: Buffer | string) => {
+          if (isOversize) return;
+          const chunkLen = typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
+          bytesCount += chunkLen;
+          if (bytesCount > 8192) {
+            isOversize = true;
+            res.statusCode = 413;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Payload Too Large: maximum body size is 8KB' }));
+            resolve(true);
+            return;
+          }
+          body += chunk.toString();
+        });
+
+        req.on('end', async () => {
+          if (isOversize) return;
+          try {
+            const parsed = JSON.parse(body) as ReasoningInput;
+            const result = await this.handleReasoning(parsed);
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify(result));
@@ -533,6 +628,126 @@ export class ModelDevProxy {
       const isTimeout = err instanceof Error && err.name === 'AbortError';
       return {
         wording: fallbackWording,
+        usedFallback: true,
+        fallbackReason: isTimeout ? 'timeout' : 'error',
+      };
+    }
+  }
+
+  /**
+   * Performs constrained model reasoning over structured candidate plans (PH-002 B1, AC-202-1).
+   * Validates output schema, signal/fact citations, and factual tokens.
+   * Any violation or failure safely discards the whole output for the deterministic ranking.
+   */
+  public async handleReasoning(
+    input: ReasoningInput
+  ): Promise<ModelReasoningResponse> {
+    const fallback = deterministicReasoningFallback(input);
+    const diag = this.getDiagnostics();
+
+    if (diag.status === 'disabled') {
+      return {
+        result: fallback,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+
+    const tmpl = getTemplate('reason_rank');
+    if (!tmpl) {
+      return {
+        result: fallback,
+        usedFallback: true,
+        fallbackReason: 'error',
+      };
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const userMessageContent = JSON.stringify({
+        templateId: tmpl.id,
+        instruction: tmpl.promptInstruction,
+        input,
+      });
+
+      const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.config.modelName,
+          max_tokens: 250,
+          messages: [
+            {
+              role: 'system',
+              content: tmpl.systemPrompt,
+            },
+            {
+              role: 'user',
+              content: userMessageContent,
+            },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        return {
+          result: fallback,
+          usedFallback: true,
+          fallbackReason: 'error',
+        };
+      }
+
+      const json = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const content = json.choices?.[0]?.message?.content;
+      if (!content) {
+        return {
+          result: fallback,
+          usedFallback: true,
+          fallbackReason: 'schema_invalid',
+        };
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        return {
+          result: fallback,
+          usedFallback: true,
+          fallbackReason: 'schema_invalid',
+        };
+      }
+
+      const validation = validateReasoningOutput(parsed, input);
+      if (!validation.valid) {
+        this.logger(
+          `[ModelProxy] Discarding reasoning output due to validation failure (${validation.reason}): ${validation.error}`
+        );
+        return {
+          result: fallback,
+          usedFallback: true,
+          fallbackReason: validation.reason,
+        };
+      }
+
+      return {
+        result: validation.data,
+        usedFallback: false,
+      };
+    } catch (err: unknown) {
+      const isTimeout = err instanceof Error && err.name === 'AbortError';
+      return {
+        result: fallback,
         usedFallback: true,
         fallbackReason: isTimeout ? 'timeout' : 'error',
       };

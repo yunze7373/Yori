@@ -297,6 +297,33 @@ export const SERVER_TEMPLATES: Readonly<Record<string, ServerTemplate>> = Object
       return { times: [], places: [] };
     },
   }),
+
+  reason_rank: Object.freeze({
+    id: 'reason_rank',
+    description: 'Constrained reasoning to rank engine candidate plans and propose intents',
+    systemPrompt:
+      'You are a strict calm reasoning assistant ranking candidate plans or proposing an intent. You may ONLY reorder candidate plan IDs and provide citations using provided signal IDs and confirmed memory fact keys. You must NEVER invent times, places, prices, or candidate IDs. Reply with JSON: {"orderedPlanIds": [...], "rationale": [{"planId": "...", "citedSignalIds": [...], "citedFactKeys": [...], "text": "..."}], "proposedIntent": {"intent": "...", "confidence": 0.8, "citedSignalIds": [...]}}',
+    promptInstruction:
+      'Rank the candidate plans based on confirmed preferences and real-time signals. All claims must cite provided signal IDs or fact keys.',
+    allowedFactRules: Object.freeze<Record<string, FactFieldRule>>({
+      candidatePlanIds: { type: 'string_array', maxItems: 10, itemMaxLength: 100 },
+      availableSignalIds: { type: 'string_array', maxItems: 20, itemMaxLength: 100 },
+      confirmedFactKeys: { type: 'string_array', maxItems: 20, itemMaxLength: 100 },
+      contextSummary: { type: 'string', maxLength: 300 },
+    }),
+    renderDeterministic(facts: Record<string, unknown>): string {
+      if (Array.isArray(facts.candidatePlanIds) && facts.candidatePlanIds.length > 0) {
+        return JSON.stringify({
+          orderedPlanIds: facts.candidatePlanIds,
+          rationale: [],
+        });
+      }
+      return JSON.stringify({ orderedPlanIds: [], rationale: [] });
+    },
+    extractFactTokens(_facts: Record<string, unknown>): { times: string[]; places: string[] } {
+      return { times: [], places: [] };
+    },
+  }),
 });
 
 /**

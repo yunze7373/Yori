@@ -13,6 +13,19 @@ import {
   resolveBindHost,
 } from './server-proxy.js';
 import { SERVER_TEMPLATES } from './template-registry.js';
+import {
+  buildReasoningInput,
+  reorderPlansWithReasoning,
+  createModelIntentCandidate,
+} from './reasoning.js';
+import {
+  createSimulatedSignal,
+  createMemoryFact,
+  type PreparedPlan,
+  type ContextSnapshot,
+  type MemoryFact,
+} from '../../core/contracts/index.js';
+import { sharedPolicy } from '../../core/policy/index.js';
 import type { SuppliedFacts, ModelPortRequest } from './types.js';
 
 describe('ModelPort Fact Checker (INV-103, AC-106-1)', () => {
@@ -1300,5 +1313,556 @@ describe('Slice A2: Proxy Guard Regression Suite & Prompt-Injection Fixtures (AC
         expect(call[0]).not.toContain(secretKey);
       }
     });
+  });
+});
+
+describe('Slice B1: Constrained Muse Spark Reasoning Port (AC-202-1, AC-202-3)', () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    vi.restoreAllMocks();
+  });
+
+  const sampleSnapshot: ContextSnapshot = {
+    id: 'snapshot-20261028-1200',
+    asOf: '2026-10-28T12:00:00Z',
+    timezone: 'Asia/Tokyo',
+    signals: [
+      createSimulatedSignal({
+        kind: 'calendar',
+        value: { title: 'Piano lesson at 3:00 PM' },
+        issuedAt: '2026-10-28T09:00:00Z',
+        validFor: 3600_000,
+        confidence: 1.0,
+        consentScope: 'local_only',
+      }),
+      createSimulatedSignal({
+        kind: 'weather',
+        value: { condition: 'rain', precipitationRisk: 0.8 },
+        issuedAt: '2026-10-28T11:30:00Z',
+        validFor: 7200_000,
+        confidence: 0.9,
+        consentScope: 'local_only',
+      }),
+      createSimulatedSignal({
+        kind: 'location',
+        value: { status: 'away', coordinates: [35.6895, 139.6917] },
+        issuedAt: '2026-10-28T12:00:00Z',
+        validFor: 600_000,
+        confidence: 0.95,
+        consentScope: 'device_only',
+      }),
+    ],
+  };
+
+  const sampleConfirmedFacts: MemoryFact[] = [
+    createMemoryFact(
+      'habit_rain_transit',
+      'drive',
+      'confirmed',
+      { source: 'user_confirmed', recordedAt: '2026-10-27T10:00:00Z' },
+      '2026-10-27T10:00:00Z'
+    ),
+    createMemoryFact(
+      'taste_lunch_japanese',
+      'prefers ramen or sushi',
+      'confirmed',
+      { source: 'user_confirmed', recordedAt: '2026-10-27T10:00:00Z' },
+      '2026-10-27T10:00:00Z'
+    ),
+  ];
+
+  const planDepart: PreparedPlan = {
+    id: 'plan-depart-piano',
+    intentId: 'depart',
+    headline: 'Piano lesson at 3:00 PM: Get ready at 2:05 PM, leave by 2:25 PM',
+    optionsOrSteps: [
+      { id: 'opt-drive', label: 'Drive', mode: 'drive', leaveAt: '2:30 PM', requiresConfirmation: false },
+      { id: 'opt-bus', label: 'Bus', mode: 'bus', leaveAt: '2:15 PM', requiresConfirmation: false },
+    ],
+    subjectTitle: 'Piano Studio',
+    apptAt: '3:00 PM',
+    prepareAt: '2:05 PM',
+    leaveAt: '2:25 PM',
+    requiresConfirmation: false,
+    createdAt: '2026-10-28T12:00:00Z',
+    why: {
+      evidenceSignals: [
+        { kind: 'calendar', source: 'simulated', issuedAt: '2026-10-28T09:00:00Z' },
+        { kind: 'weather', source: 'simulated', issuedAt: '2026-10-28T11:30:00Z' },
+      ],
+      memoryFactsUsed: [
+        { key: 'habit_rain_transit', value: 'drive', status: 'confirmed' },
+      ],
+      derivation: 'Rain forecast triggers departure with umbrella',
+    },
+  };
+
+  const planLunch: PreparedPlan = {
+    id: 'plan-lunch-away',
+    intentId: 'lunch',
+    headline: 'Places matching what you like, within walking distance',
+    optionsOrSteps: [
+      { id: 'opt-ramen', label: 'Ramen Ichiban', name: 'Ramen Ichiban', cuisine: 'japanese', requiresConfirmation: false },
+      { id: 'opt-salad', label: 'Green Bowl', name: 'Green Bowl', cuisine: 'salad', requiresConfirmation: false },
+    ],
+    requiresConfirmation: false,
+    createdAt: '2026-10-28T12:00:00Z',
+    why: {
+      evidenceSignals: [
+        { kind: 'location', source: 'simulated', issuedAt: '2026-10-28T12:00:00Z' },
+      ],
+      memoryFactsUsed: [
+        { key: 'taste_lunch_japanese', value: 'prefers ramen or sushi', status: 'confirmed' },
+      ],
+      derivation: 'Away at lunch window matching confirmed taste',
+    },
+  };
+
+  const samplePlans = [planDepart, planLunch];
+  const sampleInput = buildReasoningInput(samplePlans, sampleSnapshot, sampleConfirmedFacts);
+
+  it('buildReasoningInput derives candidate summaries and strictly bounded sets server-side without free text (Requirement 1)', () => {
+    expect(sampleInput.candidates).toHaveLength(2);
+    expect(sampleInput.candidates[0]!.id).toBe('plan-depart-piano');
+    expect(sampleInput.candidates[0]!.times).toEqual(['3:00 PM', '2:05 PM', '2:25 PM', '2:30 PM', '2:15 PM']);
+    expect(sampleInput.candidates[0]!.places).toEqual(['Piano Studio']);
+    expect(sampleInput.candidates[0]!.optionModes).toEqual(['drive', 'bus']);
+
+    expect(sampleInput.availableSignalIds).toContain('calendar:2026-10-28T09:00:00Z');
+    expect(sampleInput.availableSignalIds).toContain('weather:2026-10-28T11:30:00Z');
+    expect(sampleInput.availableSignalIds).toContain('location:2026-10-28T12:00:00Z');
+
+    expect(sampleInput.confirmedFactKeys).toContain('habit_rain_transit');
+    expect(sampleInput.confirmedFactKeys).toContain('taste_lunch_japanese');
+  });
+
+  it('Fixture 1: accepts fully-cited reasoning response and reorders candidate plans without mutating plan data (AC-202-1)', async () => {
+    const validModelResponse = {
+      orderedPlanIds: ['plan-lunch-away', 'plan-depart-piano'],
+      rationale: [
+        {
+          planId: 'plan-lunch-away',
+          citedSignalIds: ['location:2026-10-28T12:00:00Z'],
+          citedFactKeys: ['taste_lunch_japanese'],
+          text: 'Prioritize lunch near Green Bowl matching confirmed taste while user is away',
+        },
+        {
+          planId: 'plan-depart-piano',
+          citedSignalIds: ['calendar:2026-10-28T09:00:00Z', 'weather:2026-10-28T11:30:00Z'],
+          citedFactKeys: ['habit_rain_transit'],
+          text: 'Piano Studio lesson requires prepare at 2:05 PM and leave by 2:25 PM',
+        },
+      ],
+      proposedIntent: {
+        intent: 'grocery',
+        confidence: 0.8,
+        citedSignalIds: ['location:2026-10-28T12:00:00Z'],
+      },
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(validModelResponse) } }],
+      }),
+    });
+
+    const proxy = new ModelDevProxy({ apiKey: 'mock-key' });
+    const res = await proxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(false);
+    expect(res.result.orderedPlanIds).toEqual(['plan-lunch-away', 'plan-depart-piano']);
+    expect(res.result.rationale).toHaveLength(2);
+    expect(res.result.proposedIntent?.intent).toBe('grocery');
+
+    // Verify bounded effect: reorders engine candidates while preserving plan integrity
+    const reordered = reorderPlansWithReasoning(samplePlans, res.result);
+    expect(reordered[0]!.id).toBe('plan-lunch-away');
+    expect(reordered[1]!.id).toBe('plan-depart-piano');
+    expect(reordered[1]!.prepareAt).toBe('2:05 PM');
+    expect(reordered[1]!.leaveAt).toBe('2:25 PM');
+    expect(reordered[1]!.headline).toBe('Piano lesson at 3:00 PM: Get ready at 2:05 PM, leave by 2:25 PM');
+  });
+
+  it('Fixture 2: uncited claim triggers fallback to deterministic ranking (AC-202-1)', async () => {
+    const uncitedModelResponse = {
+      orderedPlanIds: ['plan-lunch-away', 'plan-depart-piano'],
+      rationale: [
+        {
+          planId: 'plan-lunch-away',
+          citedSignalIds: [], // Empty citations!
+          citedFactKeys: [],  // Empty citations!
+          text: 'Prioritize lunch near Green Bowl',
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(uncitedModelResponse) } }],
+      }),
+    });
+
+    const proxy = new ModelDevProxy({ apiKey: 'mock-key' });
+    const res = await proxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('missing_citation');
+    expect(res.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']); // Deterministic fallback
+  });
+
+  it('Fixture 3: invented time token in rationale triggers fallback to deterministic ranking (AC-202-1, INV-103)', async () => {
+    const hallucinatedTimeResponse = {
+      orderedPlanIds: ['plan-lunch-away', 'plan-depart-piano'],
+      rationale: [
+        {
+          planId: 'plan-depart-piano',
+          citedSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+          citedFactKeys: [],
+          text: 'You should leave at 4:45 PM for your lesson', // 4:45 PM is not in input candidate times!
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(hallucinatedTimeResponse) } }],
+      }),
+    });
+
+    const proxy = new ModelDevProxy({ apiKey: 'mock-key' });
+    const res = await proxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('unlisted_fact_token');
+    expect(res.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']);
+  });
+
+  it('Fixture 4: invented place token in rationale triggers fallback to deterministic ranking (AC-202-1, INV-103)', async () => {
+    const hallucinatedPlaceResponse = {
+      orderedPlanIds: ['plan-lunch-away', 'plan-depart-piano'],
+      rationale: [
+        {
+          planId: 'plan-lunch-away',
+          citedSignalIds: ['location:2026-10-28T12:00:00Z'],
+          citedFactKeys: ['taste_lunch_japanese'],
+          text: 'Stop by Starbucks Cafe or Tokyo Hotel for lunch', // Neither is in input places!
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(hallucinatedPlaceResponse) } }],
+      }),
+    });
+
+    const proxy = new ModelDevProxy({ apiKey: 'mock-key' });
+    const res = await proxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('unlisted_fact_token');
+    expect(res.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']);
+  });
+
+  it('Fixture 4b: invented price token in rationale triggers fallback to deterministic ranking (AC-202-1, INV-103)', async () => {
+    const hallucinatedPriceResponse = {
+      orderedPlanIds: ['plan-lunch-away', 'plan-depart-piano'],
+      rationale: [
+        {
+          planId: 'plan-lunch-away',
+          citedSignalIds: ['location:2026-10-28T12:00:00Z'],
+          citedFactKeys: ['taste_lunch_japanese'],
+          text: 'Lunch options cost $35.00 dollars today', // No price was in inputs!
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(hallucinatedPriceResponse) } }],
+      }),
+    });
+
+    const proxy = new ModelDevProxy({ apiKey: 'mock-key' });
+    const res = await proxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('unlisted_fact_token');
+    expect(res.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']);
+  });
+
+  it('Fixture 5: unknown planId triggers fallback to deterministic ranking (AC-202-1)', async () => {
+    const unknownPlanResponse = {
+      orderedPlanIds: ['unknown-invented-plan-999', 'plan-depart-piano'],
+      rationale: [
+        {
+          planId: 'plan-depart-piano',
+          citedSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+          citedFactKeys: [],
+          text: 'Piano Studio lesson at 3:00 PM',
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(unknownPlanResponse) } }],
+      }),
+    });
+
+    const proxy = new ModelDevProxy({ apiKey: 'mock-key' });
+    const res = await proxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('unknown_plan_id');
+    expect(res.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']);
+  });
+
+  it('Fixture 5b: unknown signal ID or fact key in citations triggers fallback (AC-202-1)', async () => {
+    const unknownSignalResponse = {
+      orderedPlanIds: ['plan-lunch-away', 'plan-depart-piano'],
+      rationale: [
+        {
+          planId: 'plan-depart-piano',
+          citedSignalIds: ['unauthorized_fake_signal:2026-10-28T09:00:00Z'],
+          citedFactKeys: [],
+          text: 'Piano Studio lesson at 3:00 PM',
+        },
+      ],
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(unknownSignalResponse) } }],
+      }),
+    });
+
+    const proxy = new ModelDevProxy({ apiKey: 'mock-key' });
+    const res = await proxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('unknown_signal_id');
+    expect(res.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']);
+  });
+
+  it('Fixture 5c: extra unauthorized keys trigger fallback (AC-202-1)', async () => {
+    const extraKeysResponse = {
+      orderedPlanIds: ['plan-lunch-away', 'plan-depart-piano'],
+      rationale: [],
+      malicious_extra_field: 'hacker_payload',
+    };
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify(extraKeysResponse) } }],
+      }),
+    });
+
+    const proxy = new ModelDevProxy({ apiKey: 'mock-key' });
+    const res = await proxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('extra_keys');
+    expect(res.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']);
+  });
+
+  it('Fixture 6: malformed JSON response triggers fallback to deterministic ranking (AC-202-1)', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '```json\n{ truncated malformed json...' } }],
+      }),
+    });
+
+    const proxy = new ModelDevProxy({ apiKey: 'mock-key' });
+    const res = await proxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('schema_invalid');
+    expect(res.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']);
+  });
+
+  it('Fixture 7: fetch timeout or network error triggers fallback to deterministic ranking (AC-202-1)', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error or connection timeout'));
+
+    const proxy = new ModelDevProxy({ apiKey: 'mock-key' });
+    const res = await proxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('error');
+    expect(res.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']);
+  });
+
+  it('disabled model returns deterministic fallback immediately without calling fetch (OWNER_GATE_1 unmet)', async () => {
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as any;
+
+    const disabledProxy = new ModelDevProxy(); // no API key
+    const res = await disabledProxy.handleReasoning(sampleInput);
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('disabled');
+    expect(res.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('model-proposed intent passes through shared suppression policy and never reaches composition when suppressed (AC-202-3)', () => {
+    const proposed = {
+      intent: 'lunch',
+      confidence: 0.85,
+      citedSignalIds: ['location:2026-10-28T12:00:00Z'],
+    };
+
+    const candidate = createModelIntentCandidate(proposed, sampleSnapshot.signals);
+    expect(candidate.intent).toBe('lunch');
+    expect(candidate.confidence).toBe(0.85);
+    expect(candidate.evidence).toHaveLength(1);
+    expect(candidate.evidence[0]!.kind).toBe('location');
+    expect(candidate.metadata?.source).toBe('model_reasoning');
+
+    // Subcase A: Policy suppresses when daily proactive prompt budget is exhausted (AC-202-3)
+    const policyContextBudgetExhausted = {
+      snapshot: sampleSnapshot,
+      memory: sampleConfirmedFacts,
+      isProactivePrompt: true,
+      promptCountToday: 3,
+      maxDailyPrompts: 3,
+    };
+    const suppressionBudget = sharedPolicy.checkSuppression(candidate, policyContextBudgetExhausted);
+    expect(suppressionBudget).toBeDefined();
+    expect(suppressionBudget!.code).toBe('budget_exhausted');
+
+    // Subcase B: Policy suppresses when intent was dismissed/suppressed today (INV-108)
+    const policyContextUserSuppressed = {
+      snapshot: sampleSnapshot,
+      memory: sampleConfirmedFacts,
+      suppressions: [
+        {
+          code: 'user_suppressed' as const,
+          reason: 'User suppressed lunch for today',
+          scope: 'today' as const,
+          recordedAt: '2026-10-28T10:00:00Z',
+          targetIntent: 'lunch',
+        },
+      ],
+    };
+    const suppressionUser = sharedPolicy.checkSuppression(candidate, policyContextUserSuppressed);
+    expect(suppressionUser).toBeDefined();
+    expect(suppressionUser!.code).toBe('user_suppressed');
+  });
+
+  it('HTTP endpoint POST /api/model/reason enforces proxy guards against external and malformed requests', async () => {
+    function createMockReq(options: {
+      url: string;
+      method: string;
+      headers?: Record<string, string>;
+      body?: string;
+      chunks?: Buffer[];
+    }) {
+      const req = new EventEmitter() as any;
+      req.url = options.url;
+      req.method = options.method;
+      req.headers = { host: '127.0.0.1:5173', ...options.headers };
+
+      process.nextTick(() => {
+        if (options.chunks) {
+          for (const chunk of options.chunks) {
+            req.emit('data', chunk);
+          }
+        } else if (options.body !== undefined) {
+          req.emit('data', Buffer.from(options.body));
+        }
+        req.emit('end');
+      });
+
+      return req;
+    }
+
+    function createMockRes() {
+      return {
+        statusCode: 200,
+        headers: {} as Record<string, string>,
+        body: '',
+        setHeader(name: string, value: string) {
+          this.headers[name.toLowerCase()] = value;
+        },
+        end(data?: string) {
+          if (data) this.body = data;
+        },
+      };
+    }
+
+    const proxy = new ModelDevProxy();
+
+    // 1. Foreign Host -> 403
+    const reqHost = createMockReq({
+      url: '/api/model/reason',
+      method: 'POST',
+      headers: { host: '192.168.1.50:5173' },
+    });
+    const resHost = createMockRes();
+    await proxy.handleHttpRequest(reqHost, resHost);
+    expect(resHost.statusCode).toBe(403);
+
+    // 2. Foreign Origin -> 403
+    const reqOrigin = createMockReq({
+      url: '/api/model/reason',
+      method: 'POST',
+      headers: { host: 'localhost:5173', origin: 'http://evil.com' },
+    });
+    const resOrigin = createMockRes();
+    await proxy.handleHttpRequest(reqOrigin, resOrigin);
+    expect(resOrigin.statusCode).toBe(403);
+
+    // 3. text/plain -> 415
+    const reqType = createMockReq({
+      url: '/api/model/reason',
+      method: 'POST',
+      headers: { host: 'localhost:5173', 'content-type': 'text/plain' },
+      body: 'text',
+    });
+    const resType = createMockRes();
+    await proxy.handleHttpRequest(reqType, resType);
+    expect(resType.statusCode).toBe(415);
+
+    // 4. Oversize body (>8KB) -> 413
+    const reqOversize = createMockReq({
+      url: '/api/model/reason',
+      method: 'POST',
+      headers: { host: 'localhost:5173', 'content-type': 'application/json' },
+      chunks: [Buffer.alloc(9000, 'x')],
+    });
+    const resOversize = createMockRes();
+    await proxy.handleHttpRequest(reqOversize, resOversize);
+    expect(resOversize.statusCode).toBe(413);
+
+    // 5. Valid loopback request -> 200
+    const reqValid = createMockReq({
+      url: '/api/model/reason',
+      method: 'POST',
+      headers: {
+        host: 'localhost:5173',
+        origin: 'http://localhost:5173',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(sampleInput),
+    });
+    const resValid = createMockRes();
+    await proxy.handleHttpRequest(reqValid, resValid);
+    expect(resValid.statusCode).toBe(200);
+    const body = JSON.parse(resValid.body);
+    expect(body.usedFallback).toBe(true);
+    expect(body.fallbackReason).toBe('disabled');
+    expect(body.result.orderedPlanIds).toEqual(['plan-depart-piano', 'plan-lunch-away']);
   });
 });
