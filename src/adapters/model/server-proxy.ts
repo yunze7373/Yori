@@ -158,6 +158,33 @@ export function isLocalReferer(refererHeader?: string): boolean {
   }
 }
 
+/**
+ * Resolves the server host binding.
+ * Binds to 0.0.0.0 when DEV_DEVICE_TESTING is enabled (phone testing),
+ * otherwise strictly binds to 127.0.0.1 loopback only.
+ */
+export function resolveBindHost(env: Record<string, string | undefined> = process.env): string {
+  return env['DEV_DEVICE_TESTING'] === 'true' ? '0.0.0.0' : '127.0.0.1';
+}
+
+/**
+ * Creates Vite / Connect development server middleware for the ModelDevProxy.
+ */
+export function createModelProxyMiddleware(
+  proxy: ModelDevProxy = new ModelDevProxy()
+): (req: any, res: any, next: (err?: any) => void) => Promise<void> {
+  return async (req: any, res: any, next: (err?: any) => void) => {
+    try {
+      const handled = await proxy.handleHttpRequest(req, res);
+      if (!handled) {
+        next();
+      }
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
 export class ModelDevProxy {
   private config: ModelProxyConfig;
   private readonly rateLimiter: RateLimiter;
