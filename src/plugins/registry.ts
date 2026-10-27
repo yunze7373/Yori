@@ -4,25 +4,17 @@
  *
  * Placed explicitly outside core pipeline paths (src/core/*), so adding or
  * modifying plugins never alters core contracts, shared policy, or storage.
- *
- * S0-1 provides the static registry shape without detector, preparer, or UI behaviour.
  */
 
-import type { IntentDetector, Preparer, ProviderAdapter } from '../core/contracts/index.js';
+import type { Plugin } from '../core/contracts/index.js';
+import { departPlugin } from './depart/index.js';
 
-export interface Plugin<TAdapter extends ProviderAdapter = ProviderAdapter> {
-  readonly id: string;
-  readonly name: string;
-  readonly description?: string;
-  readonly detector: IntentDetector;
-  readonly preparer: Preparer;
-  readonly adapter?: TAdapter;
-}
+export type { Plugin } from '../core/contracts/index.js';
 
 /**
  * Static plugin registry shape.
  */
-class PluginRegistry {
+export class PluginRegistry {
   private readonly plugins: Map<string, Plugin> = new Map();
 
   public register(plugin: Plugin): void {
@@ -51,5 +43,7 @@ class PluginRegistry {
 
 /**
  * Singleton static registry instance.
+ * S1-1: departPlugin is registered by default.
  */
 export const staticPluginRegistry = new PluginRegistry();
+staticPluginRegistry.register(departPlugin);

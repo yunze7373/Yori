@@ -62,6 +62,7 @@ export interface PreparedPlan {
   readonly requiresConfirmation: boolean; // INV-104: booking, payment, itinerary change
   readonly why: WhyExplanation;           // mandatory explainable proof
   readonly createdAt: string;
+  readonly alreadyDue?: boolean;          // AC-102-3: prepareAt has already passed
 }
 
 /**

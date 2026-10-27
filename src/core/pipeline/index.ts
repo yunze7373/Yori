@@ -1,9 +1,9 @@
 /**
- * Core Pipeline Entry (Stub for S0-2)
- * Full implementation scheduled for S2-1 / S3-1.
+ * Core Pipeline Entry
+ * Governed by Architecture Rev3 Section 2 & 3.
  *
- * Architecture Rev3 Section 2 & 3:
- * Pipeline drives Perception -> Snapshot -> Intent Detection -> Suppression (Shared Policy) -> Preparation -> HomeComposer.
+ * S1-1 minimal wiring:
+ * Iterate registered plugins -> detect -> (policy pass-through stub) -> prepare -> NOW = highest-confidence unsuppressed plan.
  */
 
 import type {
@@ -11,9 +11,13 @@ import type {
   MemoryFact,
   LivingContext,
   SuppressionReason,
+  Plugin,
+  PreparedPlan,
+  IntentCandidate,
 } from '../contracts/index.js';
-import type { Plugin } from '../../plugins/registry.js';
+import { staticPluginRegistry } from '../../plugins/registry.js';
 import type { FailClosedNotice } from '../policy/index.js';
+import { sharedPolicyStub } from '../policy/index.js';
 
 export interface PipelineInput {
   readonly snapshot: ContextSnapshot;
@@ -30,19 +34,53 @@ export interface PipelineResult {
 
 /**
  * Runs the central proactive agent pipeline.
- * Stub in S0-2 returns empty livingContext, suppressions, and notices.
+ * S1-1 wiring: runs registered plugins, checks suppression, prepares plans,
+ * and sets NOW to the highest-confidence unsuppressed plan.
  */
 export function runPipeline(input: PipelineInput): PipelineResult {
+  const plugins = input.plugins ?? staticPluginRegistry.getAll();
+  const suppressions: SuppressionReason[] = [];
+  const notices: FailClosedNotice[] = [];
+  const candidatePlans: Array<{ candidate: IntentCandidate; plan: PreparedPlan }> = [];
+
+  for (const plugin of plugins) {
+    // 1. Detect candidate
+    const rawCandidate = plugin.detector.detect(input.snapshot, input.memory);
+    if (!rawCandidate || typeof (rawCandidate as Promise<unknown>).then === 'function') {
+      continue;
+    }
+    const candidate = rawCandidate as IntentCandidate;
+
+    // 2. Policy suppression check (stub pass-through in S1-1; full shared policy in S2-1)
+    const suppression =
+      candidate.suppressedBy ?? sharedPolicyStub.checkSuppression(candidate);
+    if (suppression) {
+      suppressions.push(suppression);
+      continue; // Suppressed candidates never reach preparation (INV-108)
+    }
+
+    // 3. Prepare plan
+    const rawPlan = plugin.preparer.prepare(candidate, input.snapshot, input.memory);
+    if (rawPlan && typeof (rawPlan as Promise<unknown>).then !== 'function') {
+      candidatePlans.push({ candidate, plan: rawPlan as PreparedPlan });
+    }
+  }
+
+  // 4. Rank and choose NOW = highest-confidence unsuppressed plan
+  candidatePlans.sort((a, b) => b.candidate.confidence - a.candidate.confidence);
+
+  const now: PreparedPlan | null = candidatePlans.length > 0 ? candidatePlans[0]!.plan : null;
+  const ahead: PreparedPlan[] = candidatePlans.slice(1).map(c => c.plan);
+
   return Object.freeze({
     livingContext: Object.freeze({
-      now: null,
-      ahead: Object.freeze([]),
+      now,
+      ahead: Object.freeze(ahead),
       forYou: Object.freeze([]),
-      for_you: Object.freeze([]),
       map: null,
       asOf: input.snapshot.asOf,
     }),
-    suppressions: Object.freeze([]),
-    notices: Object.freeze([]),
+    suppressions: Object.freeze(suppressions),
+    notices: Object.freeze(notices),
   });
 }

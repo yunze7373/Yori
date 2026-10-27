@@ -7,6 +7,7 @@
 import type { IntentCandidate, SuppressionReason } from '../contracts/index.js';
 
 export interface FailClosedNotice {
+  readonly kind: 'fail_closed_notice';
   readonly type: 'fail_closed_notice';
   readonly reason: string;
   readonly missingOrStaleSignalKind: string;
@@ -36,6 +37,7 @@ export const sharedPolicyStub: SharedPolicySurface = {
   },
   createFailClosedNotice(signalKind: string, reason: string): FailClosedNotice {
     return Object.freeze({
+      kind: 'fail_closed_notice',
       type: 'fail_closed_notice',
       reason,
       missingOrStaleSignalKind: signalKind,
