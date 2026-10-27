@@ -10,3 +10,4 @@ export * from './intent.js';
 export * from './plan.js';
 export * from './composer.js';
 export * from './feedback.js';
+export * from './adapter.js';

@@ -8,9 +8,9 @@
  * S0-1 provides the static registry shape without detector, preparer, or UI behaviour.
  */
 
-import type { IntentDetector, Preparer } from '../core/contracts/index.js';
+import type { IntentDetector, Preparer, ProviderAdapter } from '../core/contracts/index.js';
 
-export interface Plugin<TAdapter = unknown> {
+export interface Plugin<TAdapter extends ProviderAdapter = ProviderAdapter> {
   readonly id: string;
   readonly name: string;
   readonly description?: string;

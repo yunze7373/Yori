@@ -3,6 +3,8 @@
  * Governed by Invariants INV-107 and Section 6 of Architecture.
  */
 
+import type { SuppressionScope } from './intent.js';
+
 export type UserFeedbackAction = 'accept' | 'adjust' | 'dismiss';
 
 /**
@@ -15,7 +17,7 @@ export type UserFeedbackAction = 'accept' | 'adjust' | 'dismiss';
 export interface UserFeedback {
   readonly planId: string;
   readonly action: UserFeedbackAction;
-  readonly suppressScope?: 'today' | 'this_event' | 'always' | string;
+  readonly suppressScope?: SuppressionScope;
   readonly note?: string;
   readonly timestamp: string;
 }

@@ -58,27 +58,67 @@ export interface MockSignalParams<T = unknown> {
 }
 
 /**
+ * Helper to recursively deep-freeze an object or array.
+ */
+export function deepFreeze<T>(item: T): T {
+  if (item === null || typeof item !== 'object' || Object.isFrozen(item)) {
+    return item;
+  }
+  Object.freeze(item);
+  for (const key of Object.getOwnPropertyNames(item)) {
+    const val = (item as Record<string, unknown>)[key];
+    if (val !== null && (typeof val === 'object' || typeof val === 'function')) {
+      deepFreeze(val);
+    }
+  }
+  return item;
+}
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/;
+
+/**
  * Factory for creating simulated signals from mock/simulated sources.
- * Enforces simulated labelling in types and runtime data (AC-101-3, INV-102).
+ * Enforces fail-closed validation on timestamps, durations, and confidence,
+ * and attaches explicit simulated labelling in types and runtime data (AC-101-3, INV-102).
  */
 export function createSimulatedSignal<T>(params: MockSignalParams<T>): SimulatedSignal<T> {
-  if (params.validFor <= 0) {
-    throw new Error(`validFor must be positive, got ${params.validFor}`);
+  if (typeof params.validFor !== 'number' || !Number.isFinite(params.validFor) || params.validFor <= 0) {
+    throw new Error(`validFor must be a finite positive number, got ${params.validFor}`);
   }
-  if (params.confidence < 0 || params.confidence > 1) {
-    throw new Error(`confidence must be between 0 and 1, got ${params.confidence}`);
+  if (
+    typeof params.confidence !== 'number' ||
+    !Number.isFinite(params.confidence) ||
+    params.confidence < 0 ||
+    params.confidence > 1
+  ) {
+    throw new Error(`confidence must be a finite number between 0 and 1, got ${params.confidence}`);
+  }
+  if (
+    typeof params.issuedAt !== 'string' ||
+    !ISO_DATE_PATTERN.test(params.issuedAt) ||
+    !Number.isFinite(Date.parse(params.issuedAt))
+  ) {
+    throw new Error(`issuedAt must be a valid ISO-8601 string, got '${params.issuedAt}'`);
   }
 
-  return Object.freeze({
+  // Clone nested value if object to guarantee deep immutability
+  const clonedValue =
+    params.value !== null && typeof params.value === 'object'
+      ? structuredClone(params.value)
+      : params.value;
+
+  const signal: SimulatedSignal<T> = {
     kind: params.kind,
-    value: params.value,
+    value: clonedValue,
     source: 'simulated' as const,
     label: 'simulated' as const,
     issuedAt: params.issuedAt,
     validFor: params.validFor,
     confidence: params.confidence,
     consentScope: params.consentScope,
-  });
+  };
+
+  return deepFreeze(signal);
 }
 
 /**
@@ -94,12 +134,23 @@ export interface ContextSnapshot {
 
 /**
  * Deeply freeze a ContextSnapshot to enforce immutable runtime integrity (INV-101).
+ * Clones signals and their values so external mutations can never alter snapshot contents.
  */
 export function freezeSnapshot(snapshot: ContextSnapshot): Readonly<ContextSnapshot> {
-  const frozenSignals = Object.freeze(snapshot.signals.map(s => Object.freeze({ ...s })));
-  return Object.freeze({
+  const clonedSnapshot: ContextSnapshot = {
     id: snapshot.id,
     asOf: snapshot.asOf,
-    signals: frozenSignals,
-  });
+    signals: snapshot.signals.map(s => {
+      const clonedVal =
+        s.value !== null && typeof s.value === 'object'
+          ? structuredClone(s.value)
+          : s.value;
+      return {
+        ...s,
+        value: clonedVal,
+      };
+    }),
+  };
+
+  return deepFreeze(clonedSnapshot);
 }

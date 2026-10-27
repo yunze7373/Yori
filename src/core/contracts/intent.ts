@@ -16,12 +16,14 @@ export type SuppressionCode =
   | 'budget_exhausted'
   | 'user_suppressed'
   | 'stale_signal'
-  | string;
+  | 'other';
+
+export type SuppressionScope = 'today' | 'this_event' | 'always';
 
 export interface SuppressionReason {
   readonly code: SuppressionCode;
   readonly reason: string;
-  readonly scope: 'today' | 'this_event' | 'always' | string;
+  readonly scope: SuppressionScope;
   readonly recordedAt: string;
 }
 
