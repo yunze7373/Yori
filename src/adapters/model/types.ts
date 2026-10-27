@@ -18,9 +18,8 @@ export interface SuppliedFacts {
 }
 
 export interface ModelPortRequest {
-  readonly intentId: string;
-  readonly templateWording: string;
-  readonly suppliedFacts: SuppliedFacts;
+  readonly templateId: string;
+  readonly facts: Record<string, unknown>;
 }
 
 export type FallbackReason =

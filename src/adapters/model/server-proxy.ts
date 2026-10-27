@@ -20,6 +20,11 @@ import type {
   ModelPortDiagnostics,
 } from './types.js';
 import { validateFactsInWording } from './fact-checker.js';
+import {
+  validateTemplateRequest,
+  getTemplate,
+  type ServerTemplate,
+} from './template-registry.js';
 
 export interface ModelProxyConfig {
   readonly apiKey?: string;
@@ -322,20 +327,16 @@ export class ModelDevProxy {
           if (isOversize) return;
           try {
             const parsed = JSON.parse(body);
-            if (
-              !parsed ||
-              typeof parsed !== 'object' ||
-              typeof parsed.templateWording !== 'string' ||
-              typeof parsed.suppliedFacts !== 'object' ||
-              parsed.suppliedFacts === null
-            ) {
-              res.statusCode = 400;
+            const validation = validateTemplateRequest(parsed);
+            if (!validation.valid) {
+              res.statusCode = validation.statusCode;
               res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify({ error: 'Invalid JSON request schema' }));
+              res.end(JSON.stringify({ error: validation.error }));
               resolve(true);
               return;
             }
-            const result = await this.handleRefine(parsed);
+
+            const result = await this.handleRefine(validation.template, validation.facts);
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify(result));
@@ -360,11 +361,51 @@ export class ModelDevProxy {
     return false;
   }
 
-  public async handleRefine(request: ModelPortRequest): Promise<ModelPortResponse> {
+  public async handleRefine(
+    requestOrTemplate: ModelPortRequest | ServerTemplate | string,
+    factsArg?: Record<string, unknown>
+  ): Promise<ModelPortResponse> {
+    let tmpl: ServerTemplate | undefined;
+    let actualFacts: Record<string, unknown> = {};
+
+    if (
+      typeof requestOrTemplate === 'object' &&
+      requestOrTemplate !== null &&
+      'id' in requestOrTemplate &&
+      'systemPrompt' in requestOrTemplate
+    ) {
+      tmpl = requestOrTemplate as ServerTemplate;
+      actualFacts = factsArg || {};
+    } else if (typeof requestOrTemplate === 'string') {
+      tmpl = getTemplate(requestOrTemplate);
+      actualFacts = factsArg || {};
+    } else if (
+      typeof requestOrTemplate === 'object' &&
+      requestOrTemplate !== null &&
+      'templateId' in requestOrTemplate
+    ) {
+      tmpl = getTemplate(requestOrTemplate.templateId);
+      actualFacts = requestOrTemplate.facts || {};
+    }
+
+    if (!tmpl) {
+      const fallbackWording =
+        typeof actualFacts.headline === 'string'
+          ? actualFacts.headline
+          : 'Upcoming notice';
+      return {
+        wording: fallbackWording,
+        usedFallback: true,
+        fallbackReason: 'error',
+      };
+    }
+
+    const fallbackWording = tmpl.renderDeterministic(actualFacts);
+
     const diag = this.getDiagnostics();
     if (diag.status === 'disabled') {
       return {
-        wording: request.templateWording,
+        wording: fallbackWording,
         usedFallback: true,
         fallbackReason: 'disabled',
       };
@@ -375,20 +416,12 @@ export class ModelDevProxy {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-      const times = Array.isArray(request.suppliedFacts?.times)
-        ? request.suppliedFacts.times.slice(0, 10)
-        : [];
-      const places = Array.isArray(request.suppliedFacts?.places)
-        ? request.suppliedFacts.places.slice(0, 10)
-        : [];
-      const contextSummary =
-        typeof request.suppliedFacts?.contextSummary === 'string'
-          ? request.suppliedFacts.contextSummary.slice(0, 200)
-          : '';
-      const templateWording =
-        typeof request.templateWording === 'string'
-          ? request.templateWording.slice(0, 500)
-          : '';
+      // Facts are inserted as quoted JSON data, never concatenated into instructions (Requirement 4)
+      const userMessageContent = JSON.stringify({
+        templateId: tmpl.id,
+        instruction: tmpl.promptInstruction,
+        facts: actualFacts,
+      });
 
       const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
         method: 'POST',
@@ -402,20 +435,11 @@ export class ModelDevProxy {
           messages: [
             {
               role: 'system',
-              content:
-                'You are an assistant refining notification wording. Do NOT add new times, places, or prices. Use ONLY provided facts. Reply with JSON: {"wording": "..."}',
+              content: tmpl.systemPrompt,
             },
             {
               role: 'user',
-              content: JSON.stringify({
-                templateId: request.intentId,
-                template: templateWording,
-                facts: {
-                  times,
-                  places,
-                  context: contextSummary,
-                },
-              }),
+              content: userMessageContent,
             },
           ],
         }),
@@ -426,7 +450,7 @@ export class ModelDevProxy {
 
       if (!response.ok) {
         return {
-          wording: request.templateWording,
+          wording: fallbackWording,
           usedFallback: true,
           fallbackReason: 'error',
         };
@@ -438,7 +462,7 @@ export class ModelDevProxy {
       const content = json.choices?.[0]?.message?.content;
       if (!content) {
         return {
-          wording: request.templateWording,
+          wording: fallbackWording,
           usedFallback: true,
           fallbackReason: 'schema_invalid',
         };
@@ -454,20 +478,21 @@ export class ModelDevProxy {
 
       if (!parsedWording) {
         return {
-          wording: request.templateWording,
+          wording: fallbackWording,
           usedFallback: true,
           fallbackReason: 'schema_invalid',
         };
       }
 
       // Fact checking: every token must be in supplied facts!
-      const factCheck = validateFactsInWording(parsedWording, request.suppliedFacts);
+      const factTokens = tmpl.extractFactTokens(actualFacts);
+      const factCheck = validateFactsInWording(parsedWording, factTokens);
       if (!factCheck.valid) {
         this.logger(
           `[ModelProxy] Discarding model wording due to unlisted tokens: ${factCheck.unlistedTokens.join(', ')}`
         );
         return {
-          wording: request.templateWording,
+          wording: fallbackWording,
           usedFallback: true,
           fallbackReason: 'unlisted_fact_token',
         };
@@ -480,7 +505,7 @@ export class ModelDevProxy {
     } catch (err: unknown) {
       const isTimeout = err instanceof Error && err.name === 'AbortError';
       return {
-        wording: request.templateWording,
+        wording: fallbackWording,
         usedFallback: true,
         fallbackReason: isTimeout ? 'timeout' : 'error',
       };

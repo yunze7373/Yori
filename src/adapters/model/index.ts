@@ -16,6 +16,7 @@ import type {
   ModelPortDiagnostics,
 } from './types.js';
 import { validateFactsInWording } from './fact-checker.js';
+import { getTemplate } from './template-registry.js';
 
 export class ClientModelPort implements ModelPort {
   constructor(private readonly proxyEndpoint: string = '/api/model') {}
@@ -39,6 +40,13 @@ export class ClientModelPort implements ModelPort {
   }
 
   public async refineWording(request: ModelPortRequest): Promise<ModelPortResponse> {
+    const template = getTemplate(request.templateId);
+    const fallbackWording = template
+      ? template.renderDeterministic(request.facts)
+      : typeof request.facts?.headline === 'string'
+      ? request.facts.headline
+      : 'Upcoming notice';
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
@@ -46,7 +54,10 @@ export class ClientModelPort implements ModelPort {
       const resp = await fetch(`${this.proxyEndpoint}/refine`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
+        body: JSON.stringify({
+          templateId: request.templateId,
+          facts: request.facts,
+        }),
         signal: controller.signal,
       });
 
@@ -54,7 +65,7 @@ export class ClientModelPort implements ModelPort {
 
       if (!resp.ok) {
         return {
-          wording: request.templateWording,
+          wording: fallbackWording,
           usedFallback: true,
           fallbackReason: 'error',
         };
@@ -63,11 +74,12 @@ export class ClientModelPort implements ModelPort {
       const result = (await resp.json()) as ModelPortResponse;
 
       // Second layer of fact checking on client side (defense in depth)
-      if (!result.usedFallback && result.wording) {
-        const check = validateFactsInWording(result.wording, request.suppliedFacts);
+      if (!result.usedFallback && result.wording && template) {
+        const factTokens = template.extractFactTokens(request.facts);
+        const check = validateFactsInWording(result.wording, factTokens);
         if (!check.valid) {
           return {
-            wording: request.templateWording,
+            wording: fallbackWording,
             usedFallback: true,
             fallbackReason: 'unlisted_fact_token',
           };
@@ -78,7 +90,7 @@ export class ClientModelPort implements ModelPort {
     } catch (err: unknown) {
       const isTimeout = err instanceof Error && err.name === 'AbortError';
       return {
-        wording: request.templateWording,
+        wording: fallbackWording,
         usedFallback: true,
         fallbackReason: isTimeout ? 'timeout' : 'disabled',
       };
@@ -90,3 +102,4 @@ export const defaultModelPort: ModelPort = new ClientModelPort();
 export * from './types.js';
 export * from './fact-checker.js';
 export * from './server-proxy.js';
+export * from './template-registry.js';

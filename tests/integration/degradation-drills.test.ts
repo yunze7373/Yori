@@ -64,9 +64,9 @@ describe('Degradation Drill: Model Disabled (NFR-102, AC-106-2)', () => {
     // Run client model port in disabled state
     const clientPort = new ClientModelPort('/api/model');
     const refined = await clientPort.refineWording({
-      intentId: 'depart',
-      templateWording: nowPlan!.headline,
-      suppliedFacts: {
+      templateId: 'depart',
+      facts: {
+        headline: nowPlan!.headline,
         times: ['2:05 PM', '2:25 PM', '3:00 PM'],
         places: ['Piano Studio'],
       },
@@ -91,9 +91,9 @@ describe('Degradation Drill: Model Timeout & Error Resilience (NFR-102)', () => 
 
     try {
       const res = await proxy.handleRefine({
-        intentId: 'depart',
-        templateWording: 'Piano lesson at 3:00: Get ready at 2:05, leave by 2:25',
-        suppliedFacts: {
+        templateId: 'depart',
+        facts: {
+          headline: 'Piano lesson at 3:00: Get ready at 2:05, leave by 2:25',
           times: ['2:05 PM', '2:25 PM', '3:00 PM'],
           places: ['Piano Studio'],
         },
@@ -128,9 +128,9 @@ describe('Degradation Drill: Model Timeout & Error Resilience (NFR-102)', () => 
 
     try {
       const res = await proxy.handleRefine({
-        intentId: 'depart',
-        templateWording: 'Piano lesson at 3:00: Get ready at 2:05, leave by 2:25',
-        suppliedFacts: {
+        templateId: 'depart',
+        facts: {
+          headline: 'Piano lesson at 3:00: Get ready at 2:05, leave by 2:25',
           times: ['2:05 PM', '2:25 PM', '3:00 PM'],
           places: ['Piano Studio'],
         },
