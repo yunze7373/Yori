@@ -97,10 +97,11 @@ To protect user privacy and guarantee deterministic testing:
 
 ---
 
-## ⚠️ Status & Known Limitations (PH-001)
+## ⚠️ Status & Known Limitations (PH-001 & PH-002)
 
-As part of the Phase 1 (PH-001) Chapter Closeout, Yori operates as a deterministic, local-first foundation with the following known architectural boundaries:
-- **Muse Spark is wording-only**: The model port refines natural language phrasing over supplied facts only; it does not perform unconstrained autonomous reasoning or decision-making. Any time or place token not present in the supplied fact set causes the output to be discarded for the deterministic template.
+As part of the project evolution, Yori operates as a deterministic, local-first foundation with the following known architectural boundaries:
+- **ModelPort Live Status (OWNER_GATE_1)**: `disabled` (status: `disabled`, keySource: `none`). OWNER_GATE_1 unmet, B proceeds fixture-only.
+- **Muse Spark is wording-only (PH-001)**: The model port refines natural language phrasing over supplied facts only; it does not perform unconstrained autonomous reasoning or decision-making. Any time or place token not present in the supplied fact set causes the output to be discarded for the deterministic template.
 - **XMemo remote adapter is off (HB-3)**: The remote memory adapter remains inactive pending an end-user application authentication path. Local storage serves as the source of truth; confirmed facts are persisted locally.
 - **Simulated providers**: Calendar, weather, location coordinates, routes, places, and grocery items are simulated mock fixtures with no real third-party service provider integrations.
 - **Proactive prompts not delivered as notifications**: Proactive prompt evaluation and budget enforcement occur during Living Context composition; OS-level system push notifications are not delivered in PH-001.
