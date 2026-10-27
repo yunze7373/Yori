@@ -1,0 +1,299 @@
+schema_version: 2
+project:
+  name: "yori"
+  archetype: "proactive-assistant-web-app"
+  created_at: "2026-10-28"
+  source: "arch_start"
+
+goals:
+  - id: G-101
+    title: "感知契约：信号/快照/场景回放与来源标注"
+    priority: P0
+    requirement_ids: ["REQ-001", "REQ-002"]
+    source:
+      file: ".progress/PROJECT_IDEA.md"
+      lines: "18-24"
+    acceptance:
+      - id: AC-101-1
+        statement: "ContextSignal/ContextSnapshot/Scenario/MemoryFact 契约冻结，信号恒带 source、issuedAt、validFor、confidence、consentScope（INV-101）"
+        verification: "unit-test"
+      - id: AC-101-2
+        statement: "场景时间线可在固定时钟下确定性回放，同一 Scenario 两次回放产生相同快照序列"
+        verification: "unit-test"
+      - id: AC-101-3
+        statement: "模拟信号在数据与界面层均 labelled simulated，真实/模拟不可混淆（INV-102）"
+        verification: "static"
+    expected_code:
+      modules:
+        - path: "src/core/contracts"
+          required: true
+        - path: "src/app/scenario-player"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-102
+    title: "出发场景：确定性准备/出发建议与天气重规划（D1/D2）"
+    priority: P0
+    requirement_ids: ["REQ-004"]
+    source:
+      file: ".progress/PROJECT_IDEA.md"
+      lines: "28-31"
+    acceptance:
+      - id: AC-102-1
+        statement: "D1：钢琴课 15:00、出行 30、缓冲 5、准备 20 → prepare 2:05 PM、leave 2:25 PM"
+        verification: "unit-test"
+      - id: AC-102-2
+        statement: "D2：1:35 PM 雨预报到达后重规划，雨伞进入 checklist，drive 2:30 / bus 2:15 按已确认雨天习惯排序，Why 引用预报 issuedAt 且无偏好变更"
+        verification: "unit-test"
+      - id: AC-102-3
+        statement: "时间计算为纯函数（注入 now/时区），DST 用例集通过，prepareAt 已过时 alreadyDue 标记而非隐藏"
+        verification: "unit-test"
+    expected_code:
+      modules:
+        - path: "src/plugins/depart"
+          required: true
+        - path: "src/core/contracts"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-103
+    title: "午餐场景：外出空闲窗口的克制推荐与抑制（D3/D4/D5）"
+    priority: P0
+    requirement_ids: ["REQ-004"]
+    source:
+      file: ".progress/PROJECT_IDEA.md"
+      lines: "28-31"
+    acceptance:
+      - id: AC-103-1
+        statement: "D3：12:10 外出、空闲至 1:30、未用餐 → 午餐卡 ≤3 个选项，每个 Why 引用已确认口味记忆"
+        verification: "e2e"
+      - id: AC-103-2
+        statement: "D4：忙碌或已用餐 → 午餐卡不出现（0 prompts），NOW 回退到下一项或安静状态"
+        verification: "e2e"
+      - id: AC-103-3
+        statement: "D5：用户表示不要午餐建议 → 当日抑制且记录原因，记忆仅生成 pending 提案（INV-107/108）"
+        verification: "e2e"
+    expected_code:
+      modules:
+        - path: "src/plugins/lunch"
+          required: true
+        - path: "src/adapters/mock"
+          required: true
+        - path: "src/core/policy"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-104
+    title: "共享策略：排序、抑制、通知上限与 fail-closed 降级"
+    priority: P0
+    requirement_ids: ["REQ-003"]
+    source:
+      file: "README.md"
+      lines: "23-30"
+    acceptance:
+      - id: AC-104-1
+        statement: "抑制恒记录 suppressedBy 原因（done/busy/declined/quiet/cooldown/dedup/threshold/budget），无静默丢弃"
+        verification: "unit-test"
+      - id: AC-104-2
+        statement: "每日主动提示上限默认 3，策略层强制执行且测试与 Me 中可度量（INV-105）"
+        verification: "unit-test"
+      - id: AC-104-3
+        statement: "D6：天气信号缺失或过期 → fail-closed 提示，不生成基于陈旧信号的计划，不臆造数据（INV-103/106）"
+        verification: "unit-test"
+      - id: AC-104-4
+        statement: "src/core/storage 为唯一持久化所有者：版本化信封、写后回读校验；损坏或未知版本数据显式报错并提供导出/重置，绝不静默清空或套用默认值（INV-110）"
+        verification: "unit-test"
+    expected_code:
+      modules:
+        - path: "src/core/policy"
+          required: true
+        - path: "src/core/contracts"
+          required: true
+        - path: "src/core/storage"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-105
+    title: "HomeComposer Living Context（NOW/AHEAD/FOR YOU）与 Review/Why/Me 闭环"
+    priority: P0
+    requirement_ids: ["REQ-005", "REQ-006"]
+    source:
+      file: "README.md"
+      lines: "23-30"
+    acceptance:
+      - id: AC-105-1
+        statement: "NOW 至多 1 项、AHEAD 至多 3 项、FOR YOU 呈现待确认提案与记忆洞察；无空间证据时不渲染地图"
+        verification: "e2e"
+      - id: AC-105-2
+        statement: "每条计划可 accept/adjust/dismiss 并查看 Why（证据信号 issuedAt、所用记忆、推导过程）"
+        verification: "e2e"
+      - id: AC-105-3
+        statement: "记忆仅在用户确认后写入；pending/rejected 提案状态在 Me 可见可查（INV-107）"
+        verification: "e2e"
+      - id: AC-105-4
+        statement: "页面重载后 MemoryFact、待确认提案、当日抑制与提示预算计数保持不变（Playwright reload 检查，INV-110）"
+        verification: "e2e"
+    expected_code:
+      modules:
+        - path: "src/core/composer"
+          required: true
+        - path: "src/core/storage"
+          required: true
+        - path: "src/ui/living-context"
+          required: true
+        - path: "src/ui/review"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-106
+    title: "模型与记忆集成端口：Muse Spark 受约束措辞与 XMemo 适配（可降级）"
+    priority: P1
+    requirement_ids: ["REQ-006"]
+    source:
+      file: "docs/architecture/SOURCE_XMEMO_IDEA.md"
+      lines: "45-52"
+    acceptance:
+      - id: AC-106-1
+        statement: "ModelPort 输出经 schema 校验与事实后检（时间/地点 token 必须来自信号事实集），不符即丢弃并回退确定性模板（INV-103）"
+        verification: "unit-test"
+      - id: AC-106-2
+        statement: "模型/XMemo 不可用、超时或未配置时 D1-D6 行为不变，失败仅见于诊断（HB-1/HB-3 降级路径）"
+        verification: "e2e"
+      - id: AC-106-3
+        statement: "仅 status=confirmed 的 MemoryFact 可经 MemoryPort 写回；客户端不持有任何 API 密钥（HB-2）"
+        verification: "static"
+    expected_code:
+      modules:
+        - path: "src/adapters/model"
+          required: true
+        - path: "src/adapters/xmemo"
+          required: true
+        - path: "src/core/contracts"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-107
+    title: "可扩展性证明：第三场景零核心改动接入（AC-EXT-1）"
+    priority: P0
+    requirement_ids: ["REQ-002"]
+    source:
+      file: ".progress/PROJECT_IDEA.md"
+      lines: "18-24"
+    acceptance:
+      - id: AC-EXT-1
+        statement: "grocery-stub 插件（detector+preparer+adapter）通过 NOW 组合、抑制与 Why，且 core 契约/composer/共享策略/存储文件 git diff 为零（INV-109）"
+        verification: "static"
+    expected_code:
+      modules:
+        - path: "src/plugins/grocery-stub"
+          required: true
+    owner_agent: "principal-architect"
+
+architecture_decisions:
+  - id: ADR-101
+    title: "通用主动管线 + 静态场景插件（detector/preparer/adapter），共享策略集中于 core"
+    status: "accepted"
+    rationale: "北极星要求通用 agent 而非单场景应用；插件只拥有场景逻辑，排序/抑制/确认/Why/通知/存储由 core 统一保证，AC-EXT-1 以零核心 diff 证明"
+    impacts_goals: ["G-101", "G-103", "G-107"]
+    file: "docs/architecture/ARCHITECTURE.md"
+  - id: ADR-102
+    title: "确定性引擎产出事实，LLM 仅经 ModelPort 做受约束措辞且可完全降级"
+    status: "accepted"
+    rationale: "时间/天气/地点错误会误导行程；模型输出 schema 校验 + 事实后检 + 模板回退使 HB-1（无密钥）与模型故障均不影响 D1-D6 正确性"
+    impacts_goals: ["G-102", "G-106"]
+    file: "docs/architecture/ARCHITECTURE.md"
+  - id: ADR-103
+    title: "记忆本地为真相源，XMemo 经 MemoryPort 适配，仅 confirmed 可写回"
+    status: "accepted"
+    rationale: "HB-3：终端用户 Web 集成鉴权未确认，agent 令牌不可入客户端；本地优先保证演示独立成立，XMemo 形状的事实格式使确认后迁移为适配器替换"
+    impacts_goals: ["G-105", "G-106"]
+    file: "docs/architecture/ARCHITECTURE.md"
+  - id: ADR-104
+    title: "PH-001 采用 client-only SPA（Option A），Option B 代理仅为可选 spike"
+    status: "accepted"
+    rationale: "N×M 中 A 在隐私与 2026-11-04 期限可行性最优；密钥托管（HB-2）使 B 不能成为 D1-D6 关键路径，端口设计保留迁移路径"
+    impacts_goals: ["G-101", "G-105", "G-106"]
+    file: "docs/architecture/ARCHITECTURE.md"
+  - id: ADR-105
+    title: "Rev3 取代 Rev2 基线（yori_mvp_001），Rev2 契约不保留"
+    status: "accepted"
+    rationale: "Owner 指令 ARCH-REV3-001 明确 Rev2 被 Rev3 取代且不得保留 S0-1 rev2 契约；时间引擎语义（公式/DST/fail-closed）作为 depart preparer 内核复用，编号与契约按 Rev3 重新冻结"
+    impacts_goals: ["G-101", "G-102"]
+    file: "docs/architecture/SPEC_IMPACT_REV3.md"
+
+non_functional_requirements:
+  - id: NFR-101
+    category: "privacy"
+    requirement_ids: ["REQ-006"]
+    target: "真实位置不传输；模型载荷仅含派生上下文标签；consentScope 门控任何出设备数据"
+    sli: "outbound_payload_fields"
+    verification: "audit-log"
+    deferred: false
+  - id: NFR-102
+    category: "correctness"
+    requirement_ids: ["REQ-004"]
+    target: "D1-D6 金标场景回放 100% 通过且与模型开关无关"
+    sli: "golden_scenario_pass_rate"
+    verification: "unit"
+    deferred: false
+  - id: NFR-103
+    category: "reliability"
+    requirement_ids: ["REQ-006"]
+    target: "模型/XMemo 故障注入下核心旅程零行为差异（降级仅见于诊断）"
+    sli: "degradation_behaviour_diff"
+    verification: "manual"
+    deferred: false
+  - id: NFR-104
+    category: "usability"
+    requirement_ids: ["REQ-003"]
+    target: "每日主动提示 ≤3 默认上限，Me 中可见当日已用预算"
+    sli: "daily_prompt_count"
+    verification: "e2e"
+    deferred: false
+  - id: NFR-105
+    category: "usability"
+    requirement_ids: ["REQ-005"]
+    target: "英文 UI 先行且全部用户可见字符串外置，具备 i18n 替换能力"
+    sli: "hardcoded_ui_strings"
+    verification: "static"
+    deferred: false
+
+phases:
+  - id: PH-001
+    title: "黑客松演示：通用管线 + depart/lunch 双场景 + 场景回放（截止 2026-11-04）"
+    goals: ["G-101", "G-102", "G-103", "G-104", "G-105", "G-106", "G-107"]
+    exit_criteria:
+      - "D1-D6 与 AC-EXT-1 全部通过（NFR-102），且模型禁用下同样通过"
+      - "INV-101..109 均有验证证据；单计划文件、无提交后修改"
+      - "场景回放可在桌面与移动宽度完整演示双场景章节"
+    forbidden_done_state:
+      - "directory skeleton only"
+      - "documentation only without runnable entry"
+      - "LLM-invented times, weather, places, routes or prices"
+      - "feedback silently mutating memory"
+  - id: PH-002
+    title: "通知与更多检测器、效果评估"
+    goals: ["G-103", "G-104", "G-105"]
+    exit_criteria:
+      - "通知通道在提示预算与安静时段策略下上线并有送达/打扰度量"
+      - "新增检测器经同一插件契约接入且抑制/Why 证据齐全"
+      - "主动建议接受率与误报抑制效果有评估结论"
+    forbidden_done_state:
+      - "notifications bypassing the shared prompt budget"
+  - id: PH-003
+    title: "真实 provider 接入（隐私评审后）"
+    goals: ["G-101", "G-102", "G-106"]
+    exit_criteria:
+      - "隐私评审通过：最小权限、按需采集、用户授权、保留与删除设计成文"
+      - "真实日历/天气/地点适配器以同一端口接入，模拟路径与标注规则保持"
+      - "每个真实集成单独 go/no-go，未通过则停留在探索结论"
+    forbidden_done_state:
+      - "real calendar/GPS access shipped without privacy review"
+      - "simulated and real data indistinguishable in UI"
+
+inspiration_sources:
+  - kind: "internal_spec"
+    query: "proactive personal agent context memory intent preparation home composer"
+    fetched_at: "2026-10-28T03:34:00Z"
+    summary: "Owner-approved Rev3 rationale (ARCH-REV3-001) + pinned vision (SOURCE_XMEMO_IDEA.md) + reviewer V2 prototype scenes Clear/Rain/Away-lunch (artifact not retrievable at design time, non-normative); D1-D6 in the request are the normative fixtures"
+    fallback_used: true

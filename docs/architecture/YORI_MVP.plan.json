@@ -1,0 +1,247 @@
+{
+  "schema_version": "1.0.0",
+  "plan": {
+    "id": "yori_rev3_001",
+    "phase": "PH-001",
+    "title": "Yori Rev3 PH-001: general proactive agent demo (depart + lunch, scenario replay, by 2026-11-04)",
+    "source": "ARCH-REV3-001 architect plan rev3 (docs/architecture/ARCHITECTURE.md Rev3); supersedes yori_mvp_001 rev2",
+    "created_at": "2026-10-28",
+    "status": "pending",
+    "description": "Contracts + D1-D6 golden harness first (Slice 0, no behaviour), then depart preparer, shared policy + lunch preparer, HomeComposer Living Context UI, Review/Why/Me memory loop with Model/XMemo ports, and scenario-player closeout with AC-EXT-1 zero-core-diff proof.",
+    "course_correction_summary": "previous_phase: ARCH_START rev2 approved (030502ae) | core_delivery: owner superseded rev2 with Rev3 general proactive agent (Context->Memory->Intent->Prepare->HomeComposer) | deviation: rev2 contracts retired per request, time engine kept as depart preparer core | INBOX_backlog: 0 P0, 0 P1 | next_phase_focus: Slice 0 contracts + golden harness"
+  },
+  "tasks": [
+    {
+      "id": "S0-1",
+      "slice": 0,
+      "title": "Slice 0: core contracts and static plugin registry shape (no behaviour)",
+      "priority": "P0",
+      "goal": "Freeze ContextSignal/ContextSnapshot/Scenario/MemoryFact, IntentDetector/Preparer/HomeComposer/UserFeedback contracts and the static plugin registry at src/plugins/registry.ts (explicitly outside core pipeline paths, so registration never edits core). No detector, preparer, or UI behaviour.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 4,
+      "dependencies": [],
+      "goal_ids": ["G-101"],
+      "acceptance_ids": ["AC-101-1", "AC-101-3"],
+      "arch_contract_refs": ["ADR-101", "ADR-105"],
+      "phase_plan_ref": "PH-001",
+      "files": ["src/core/contracts", "src/plugins/registry.ts", "src/app/scenario-player", "package.json", "tsconfig.json"],
+      "checks": [
+        "npx tsc --noEmit (strict) passes; ContextSignal requires source/issuedAt/validFor/confidence/consentScope (AC-101-1, INV-101)",
+        "Static test: simulated signals carry simulated labelling in types and fixtures; no real-source value constructible from mock adapters (AC-101-3, INV-102)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S0-1 --plan-ref docs/architecture/YORI_MVP.plan.json"
+      ]
+    },
+    {
+      "id": "S0-2",
+      "slice": 0,
+      "title": "Slice 0: D1-D6 + AC-EXT-1 golden harness and scenario replay (fails on stubs)",
+      "priority": "P0",
+      "goal": "Golden-scenario harness replaying Scenario timelines under a fixed clock: D1/D2 depart fixtures, D3-D6 lunch/policy fixtures, and an AC-EXT-1 expectation test that requires a grocery-stub plugin to be registered (failing until S5-1 implements it; NO stub implementation exists in this slice). Detectors/preparers are stubs; the harness must fail on them and pass determinism (same replay twice, identical snapshots).",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "new_feature",
+      "estimated_hours": 4,
+      "dependencies": ["S0-1"],
+      "goal_ids": ["G-101", "G-102", "G-104", "G-107"],
+      "acceptance_ids": ["AC-101-2", "AC-102-1", "AC-102-2", "AC-104-3", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101", "ADR-102"],
+      "phase_plan_ref": "PH-001",
+      "files": ["src/app/scenario-player", "src/plugins/depart", "src/core/policy", "src/core/contracts", "tests/golden"],
+      "checks": [
+        "npm run test -- tests/golden runs D1-D6 fixtures and FAILS against stub detectors/preparers (harness sensitivity proven)",
+        "Replay determinism: D1 timeline replayed twice yields identical snapshot sequences (AC-101-2); D6 fixture asserts fail-closed notice shape (AC-104-3)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S0-2 --plan-ref docs/architecture/YORI_MVP.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_REV3_A",
+      "title": "📬 INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["S0-2"],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "S1-1",
+      "slice": 1,
+      "title": "Depart plugin: detector + deterministic preparer with rain re-plan",
+      "priority": "P0",
+      "goal": "Depart detector over appointment/travel/weather signals and preparer on the pure time engine (leave=appt-travel-buffer, prepare=leave-prep, DST, alreadyDue). Rain forecast updates re-plan options with checklist changes and evidence-based Why; no memory mutation.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": ["S0-2", "INBOX_CHECK_REV3_A"],
+      "goal_ids": ["G-102"],
+      "acceptance_ids": ["AC-102-1", "AC-102-2", "AC-102-3"],
+      "arch_contract_refs": ["ADR-102", "ADR-105"],
+      "phase_plan_ref": "PH-001",
+      "files": ["src/plugins/depart", "src/core/contracts"],
+      "checks": [
+        "D1 golden green: prepare 2:05 PM, leave 2:25 PM for the 15:00 lesson fixture (AC-102-1)",
+        "D2 golden green: 1:35 PM rain forecast (issuedAt cited in Why) re-plans to drive 2:30 / bus 2:15 ranked by confirmed rain habit, umbrella checklist added, preferences byte-identical before/after (AC-102-2)",
+        "DST fixed-clock set green; past prepareAt flagged alreadyDue (AC-102-3)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S1-1 --plan-ref docs/architecture/YORI_MVP.plan.json"
+      ]
+    },
+    {
+      "id": "S2-1",
+      "slice": 2,
+      "title": "Shared suppression/ranking policy + lunch plugin with mock place adapter",
+      "priority": "P0",
+      "goal": "Core ranking/suppression policy (reason-coded, prompt budget 3/day) used by all plugins, the owned src/core/storage module (versioned envelope, write-read-back verify, explicit corruption error with export/reset, never silent wipe), plus lunch detector/preparer over the mock place adapter: away + free window + not-eaten yields at most 3 taste-ranked options; busy/ate yields zero; stale weather fails closed.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 8,
+      "dependencies": ["S1-1"],
+      "goal_ids": ["G-103", "G-104"],
+      "acceptance_ids": ["AC-103-1", "AC-103-2", "AC-103-3", "AC-104-1", "AC-104-2", "AC-104-3", "AC-104-4"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-001",
+      "files": ["src/core/policy", "src/core/storage", "src/plugins/lunch", "src/adapters/mock", "src/core/contracts"],
+      "checks": [
+        "D3 green: 12:10 away/free/not-eaten yields lunch card with at most 3 options, each Why citing a confirmed taste fact (AC-103-1)",
+        "D4 green: busy and already-ate variants yield 0 lunch prompts with suppressedBy reason recorded (AC-103-2, AC-104-1); D5: same-day suppression after user decline, memory only pending (AC-103-3)",
+        "Budget unit tests: 4th proactive prompt in a day is suppressed with budget reason (AC-104-2); D6 stale-weather fixture fails closed with notice (AC-104-3)",
+        "Storage unit tests: envelope round-trip with write-read-back verify; tampered or future-version payload yields explicit error plus export/reset and stored bytes are not wiped or defaulted (AC-104-4, INV-110)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S2-1 --plan-ref docs/architecture/YORI_MVP.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_REV3_B",
+      "title": "📬 INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["S2-1"],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "S3-1",
+      "slice": 3,
+      "title": "HomeComposer + Living Context UI (NOW/AHEAD/FOR YOU)",
+      "priority": "P0",
+      "goal": "Composer enforcing NOW at most 1, AHEAD at most 3, FOR YOU pending confirmations/insights, map only with spatial evidence; responsive mobile/desktop UI in English with externalized strings.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 9,
+      "dependencies": ["S2-1", "INBOX_CHECK_REV3_B"],
+      "goal_ids": ["G-105"],
+      "acceptance_ids": ["AC-105-1"],
+      "arch_contract_refs": ["ADR-104"],
+      "phase_plan_ref": "PH-001",
+      "files": ["src/core/composer", "src/ui/living-context"],
+      "checks": [
+        "Playwright: D1/D3 replays compose NOW/AHEAD within caps at desktop and mobile widths; D4 replay shows fallback NOW with no lunch card (AC-105-1)",
+        "No map element rendered without a spatial signal in snapshot; simulated labels visible on all mock data (AC-105-1, INV-102)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S3-1 --plan-ref docs/architecture/YORI_MVP.plan.json"
+      ]
+    },
+    {
+      "id": "S4-1",
+      "slice": 4,
+      "title": "Review/Why/Me memory loop + ModelPort and XMemo MemoryPort adapters",
+      "priority": "P1",
+      "goal": "Accept/adjust/dismiss with Why on every plan; feedback creates pending MemoryFact proposals applied only on confirm; Me shows confirmed/pending/rejected facts and daily prompt budget. ModelPort (Muse Spark) does schema-validated, fact-checked wording with deterministic fallback; MemoryPort writes back confirmed facts only (local adapter default per HB-3).",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 8,
+      "dependencies": ["S3-1"],
+      "goal_ids": ["G-105", "G-106", "G-104"],
+      "acceptance_ids": ["AC-105-2", "AC-105-3", "AC-105-4", "AC-106-1", "AC-106-2", "AC-106-3", "AC-104-2"],
+      "arch_contract_refs": ["ADR-102", "ADR-103"],
+      "phase_plan_ref": "PH-001",
+      "files": ["src/ui/review", "src/adapters/model", "src/adapters/xmemo", "src/core/contracts", "src/core/policy", "src/core/storage"],
+      "checks": [
+        "Playwright: dismiss-with-reason and adjust create pending proposals; preferences unchanged until confirm in Me; rejected proposals remain queryable (AC-105-2, AC-105-3, INV-107)",
+        "Playwright reload check: after reload, confirmed facts, pending proposals, same-day suppressions and the used prompt-budget count are unchanged (AC-105-4, INV-110)",
+        "ModelPort unit tests: output containing an unlisted time or place is discarded for the deterministic template; model disabled/timeout leaves D1-D6 outputs identical (AC-106-1, AC-106-2)",
+        "Static check: no API key or token literal in client code; MemoryPort write-back rejects non-confirmed facts (AC-106-3, HB-2)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S4-1 --plan-ref docs/architecture/YORI_MVP.plan.json"
+      ]
+    },
+    {
+      "id": "S5-1",
+      "slice": 5,
+      "title": "Scenario player + full e2e chapter closeout (AC-EXT-1 proof, degradation drills)",
+      "priority": "P0",
+      "goal": "Scenario player runs the Clear/Rain/Away-lunch chapters end to end; grocery-stub plugin proves extensibility with zero core diff; degradation drills with model and XMemo disabled; final D1-D6 sign-off for the 2026-11-04 demo.",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 6,
+      "dependencies": ["S4-1"],
+      "goal_ids": ["G-107", "G-101", "G-106"],
+      "acceptance_ids": ["AC-EXT-1", "AC-101-2", "AC-106-2"],
+      "arch_contract_refs": ["ADR-101", "ADR-103"],
+      "phase_plan_ref": "PH-001",
+      "files": ["src/plugins/grocery-stub", "src/app/scenario-player", "src/adapters/xmemo", "tests/golden"],
+      "checks": [
+        "AC-EXT-1 proof: baseline is the tree approved at S4-1 completion (record its commit/tree hash at S4-1 close); grocery-stub is implemented only in this slice, and git diff against that baseline over src/core/contracts, src/core/composer, src/core/policy and src/core/storage is empty, while its NOW/suppression/Why golden tests pass (AC-EXT-1, INV-109)",
+        "Full golden + e2e suite green from a clean checkout with model and XMemo adapters disabled (AC-106-2, NFR-102); scenario chapters replay deterministically (AC-101-2)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S5-1 --plan-ref docs/architecture/YORI_MVP.plan.json"
+      ]
+    },
+    {
+      "id": "PHASE_R_REV3_001",
+      "title": "🔥 Phase R planning + generate next phase plan",
+      "type": "meta",
+      "priority": "critical",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["S5-1"],
+      "goal": "All tasks completed -> auto-execute Phase R -> assess PH-001 exit vs goals.yaml -> plan PH-002 (notifications/detectors/eval) or converge to standby. PH-003 remains gated on privacy review.",
+      "phase_r_trigger": {
+        "auto_execute": true,
+        "tasks": [
+          "⚠️ Re-read .progress/AI_INSTRUCTIONS.md (ensure rules are not lost after model switch)",
+          "📬 R1: Read INBOX.md (scan mode command section first, then task section)",
+          "💤 R1.5: Convergence gate (no real pending → standby)",
+          "🎯 R2: Read docs/architecture/goals.yaml and PHASE_PLAN.md, execute target alignment assessment; 运行 phase_r_alignment_check.py 验证架构对齐锚点 (alignment anchor check)",
+          "📊 R3: Phase review: git diff confirm delivery + archive completed tasks + Git Commit",
+          "🗺️ R5: Intelligent planning: if PH-001 exit criteria met, generate the PH-002 plan and submit it for Reviewer plan review AND owner confirmation (guarded autonomy); PH-003 requires the privacy-review gate and must not auto-start",
+          "Update PROGRESS_STATUS.json + TODOS.md",
+          "⏸️ R6: Execute NOTHING from the PH-002 plan before the Reviewer + owner gate passes; enter standby and wait for the gate result"
+        ]
+      }
+    }
+  ],
+  "success_criteria": [
+    "D1-D6 and AC-EXT-1 pass with the model disabled (NFR-102); INV-101..INV-109 each have verification evidence",
+    "Exactly one PH-001 plan file exists (docs/architecture/YORI_MVP.plan.json rev3) and no scoped file changes after resubmission",
+    "HB-1/HB-3 blocker status recorded by 2026-10-30; demo correctness never depends on either integration"
+  ]
+}

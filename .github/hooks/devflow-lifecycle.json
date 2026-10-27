@@ -1,0 +1,15 @@
+{
+  "description": "DevFlow lifecycle hook event declarations for Copilot CLI hook guard.",
+  "guard_script": "python .progress/scripts/copilot_hook_guard.py",
+  "hooks": {
+    "sessionStart": "python .progress/scripts/copilot_hook_guard.py sessionStart --project-root .",
+    "agentStop": "python .progress/scripts/copilot_hook_guard.py agentStop --project-root .",
+    "sessionEnd": "python .progress/scripts/copilot_hook_guard.py sessionEnd --project-root .",
+    "preToolUse": "python .progress/scripts/copilot_hook_guard.py preToolUse --project-root .",
+    "postToolUse": "python .progress/scripts/copilot_hook_guard.py postToolUse --project-root .",
+    "postToolUseFailure": "python .progress/scripts/copilot_hook_guard.py postToolUseFailure --project-root .",
+    "preCompact": "python .progress/scripts/copilot_hook_guard.py preCompact --project-root .",
+    "subagentStart": "python .progress/scripts/copilot_hook_guard.py subagentStart --project-root .",
+    "notification": "python .progress/scripts/copilot_hook_guard.py notification --project-root ."
+  }
+}
