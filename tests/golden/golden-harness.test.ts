@@ -38,6 +38,7 @@ import {
 } from '../../src/app/scenario-player/index.js';
 import { runPipeline } from '../../src/core/pipeline/index.js';
 import { staticPluginRegistry } from '../../src/plugins/registry.js';
+import { createSimulatedSignal } from '../../src/core/contracts/index.js';
 import type { PreparedPlan } from '../../src/core/contracts/index.js';
 
 describe('Slice 0 S0-2: Deterministic Scenario Replay (AC-101-2)', () => {
@@ -297,10 +298,105 @@ describe('Slice 0 S0-2: D6 Fail-Closed Stale or Missing Signal (Fails on Stub)',
   });
 });
 
-describe('Slice 0 S0-2: AC-EXT-1 Golden Grocery-Stub Expectation (Fails on Missing Plugin)', () => {
-  it('AC-EXT-1 proof: requires grocery-stub plugin in static registry (implemented only in S5-1)', () => {
-    // In Slice 0, NO grocery-stub implementation exists (proves zero core diff in S5-1)
+describe('Slice 0 S0-2: AC-EXT-1 Golden Grocery-Stub Expectation (AC-EXT-1)', () => {
+  it('AC-EXT-1 proof: requires grocery-stub plugin in static registry and verifies pipeline outcomes', () => {
+    // 1. Static registry must contain grocery-stub
     const groceryPlugin = staticPluginRegistry.get('grocery-stub');
     expect(groceryPlugin, 'grocery-stub plugin not registered').toBeDefined();
+    expect(groceryPlugin?.id).toBe('grocery-stub');
+
+    const asOf = '2026-10-28T16:00:00.000Z';
+    const groceryListSignal = createSimulatedSignal({
+      kind: 'grocery_list',
+      value: { items: ['Milk', 'Bread', 'Apples'] },
+      issuedAt: asOf,
+      validFor: 86400000,
+      confidence: 1.0,
+      consentScope: 'device_only',
+    });
+
+    // 2. NOW composition: runPipeline produces grocery plan in LivingContext
+    const pipelineResult = runPipeline({
+      snapshot: {
+        id: 'snap-grocery-golden',
+        asOf,
+        timezone: 'America/Los_Angeles',
+        signals: [groceryListSignal],
+      },
+      memory: [
+        {
+          key: 'preferred_grocery_store',
+          value: 'Trader Joe’s',
+          status: 'confirmed',
+          updatedAt: asOf,
+          provenance: { source: 'user_confirmed', recordedAt: asOf },
+        },
+      ],
+      clock: asOf,
+    });
+
+    const nowPlan = pipelineResult.livingContext.now;
+    expect(nowPlan).toBeDefined();
+    expect(nowPlan?.intentId).toBe('grocery');
+    expect(nowPlan?.headline).toContain('3 items');
+    expect(nowPlan?.why.evidenceSignals.some(s => s.kind === 'grocery_list')).toBe(true);
+    expect(nowPlan?.why.memoryFactsUsed.some(f => f.key === 'preferred_grocery_store')).toBe(true);
+
+    // 3. Suppression check: already_done via completedToday
+    const completedResult = runPipeline({
+      snapshot: {
+        id: 'snap-grocery-done',
+        asOf,
+        timezone: 'America/Los_Angeles',
+        signals: [
+          groceryListSignal,
+          createSimulatedSignal({
+            kind: 'grocery_status',
+            value: { completedToday: true },
+            issuedAt: asOf,
+            validFor: 86400000,
+            confidence: 1.0,
+            consentScope: 'device_only',
+          }),
+        ],
+      },
+      memory: [],
+      clock: asOf,
+    });
+
+    expect(completedResult.livingContext.now?.intentId).not.toBe('grocery');
+    expect(
+      completedResult.suppressions.some(
+        s => s.code === 'already_done' && s.targetIntent === 'grocery'
+      )
+    ).toBe(true);
+
+    // 4. Suppression check: user_suppressed via targetIntent
+    const userSuppressedResult = runPipeline({
+      snapshot: {
+        id: 'snap-grocery-supp',
+        asOf,
+        timezone: 'America/Los_Angeles',
+        signals: [groceryListSignal],
+      },
+      memory: [],
+      suppressions: [
+        {
+          code: 'user_suppressed',
+          targetIntent: 'grocery',
+          reason: 'Do not suggest grocery today',
+          recordedAt: asOf,
+          scope: 'today',
+        },
+      ],
+      clock: asOf,
+    });
+
+    expect(userSuppressedResult.livingContext.now?.intentId).not.toBe('grocery');
+    expect(
+      userSuppressedResult.suppressions.some(
+        s => s.code === 'user_suppressed' && s.targetIntent === 'grocery'
+      )
+    ).toBe(true);
   });
 });

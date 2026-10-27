@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run src",
     "test:golden": "vitest run tests/golden",
+    "test:drills": "vitest run tests/integration",
     "test:e2e": "playwright test"
   },
   "devDependencies": {

@@ -9,9 +9,11 @@
 import type { Plugin } from '../core/contracts/index.js';
 import { departPlugin } from './depart/index.js';
 import { lunchPlugin } from './lunch/index.js';
+import { groceryStubPlugin } from './grocery-stub/index.js';
 import { setDefaultPluginsProvider } from '../core/pipeline/index.js';
 
 export type { Plugin } from '../core/contracts/index.js';
+export { groceryStubPlugin } from './grocery-stub/index.js';
 
 /**
  * Static plugin registry shape.
@@ -58,10 +60,12 @@ export class PluginRegistry {
  * Singleton static registry instance.
  * S1-1: departPlugin is registered.
  * S2-1: lunchPlugin is registered.
+ * S5-1: groceryStubPlugin is registered (AC-EXT-1 zero-core-diff extension).
  */
 export const staticPluginRegistry = new PluginRegistry();
 staticPluginRegistry.register(departPlugin);
 staticPluginRegistry.register(lunchPlugin);
+staticPluginRegistry.register(groceryStubPlugin);
 
 // Injects the default plugin provider into the core pipeline entry
 setDefaultPluginsProvider(() => staticPluginRegistry.getAll());

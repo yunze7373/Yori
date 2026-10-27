@@ -18,7 +18,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const EVIDENCE_DIR = path.resolve('docs/evidence/s4-1');
+const EVIDENCE_DIR = path.resolve(process.env.EVIDENCE_DIR || 'docs/evidence/s5-1');
 
 test.beforeAll(() => {
   if (!fs.existsSync(EVIDENCE_DIR)) {
@@ -26,7 +26,7 @@ test.beforeAll(() => {
   }
 });
 
-test.describe('Living Context UI E2E & Visual Verification (S4-1)', () => {
+test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeout)', () => {
   test.beforeEach(async ({ page }) => {
     // Clear localStorage before each test to ensure deterministic clean state
     await page.goto('/');
