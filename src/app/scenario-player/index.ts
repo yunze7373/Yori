@@ -3,6 +3,7 @@
  * Governed by G-101 and Acceptance Criteria AC-101-2.
  *
  * Replays Scenario timelines under an injected clock into frozen ContextSnapshots.
+ * Groups same-instant timeline events so each distinct timestamp produces exactly one snapshot.
  */
 
 import {
@@ -40,8 +41,8 @@ export function createFixedClock(isoTimestamp: string): Clock {
 
 /**
  * Replays a scenario timeline under a given Clock.
- * For each timeline event up to clock.now(), collects all active signals as of that event,
- * and produces deeply frozen, immutable ContextSnapshots.
+ * Groups events sharing identical `at` timestamps into single distinct snapshots,
+ * collects all active signals as of that event, and produces deeply frozen, immutable ContextSnapshots.
  */
 export function replayScenarioTimeline(
   scenario: Scenario,
@@ -49,22 +50,30 @@ export function replayScenarioTimeline(
 ): readonly ContextSnapshot[] {
   const maxTime = Date.parse(clock.now());
 
-  // Sort timeline events chronologically
-  const sortedEvents = [...scenario.timeline]
+  // Filter events up to clock.now() and sort chronologically
+  const eligibleEvents = [...scenario.timeline]
     .filter(event => Date.parse(event.at) <= maxTime)
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
 
+  // Group events by distinct timestamp
+  const eventsByTimestamp = new Map<string, ContextSignal[]>();
+  for (const event of eligibleEvents) {
+    const existing = eventsByTimestamp.get(event.at) ?? [];
+    existing.push(event.signal);
+    eventsByTimestamp.set(event.at, existing);
+  }
+
   const snapshots: ContextSnapshot[] = [];
   const accumulatedSignals: ContextSignal[] = [];
+  let index = 1;
 
-  for (let i = 0; i < sortedEvents.length; i++) {
-    const event = sortedEvents[i]!;
-    accumulatedSignals.push(event.signal);
+  for (const [timestamp, signals] of eventsByTimestamp.entries()) {
+    accumulatedSignals.push(...signals);
 
-    const snapshotId = `${scenario.id}-snap-${i + 1}`;
+    const snapshotId = `${scenario.id}-snap-${index++}`;
     const rawSnapshot: ContextSnapshot = {
       id: snapshotId,
-      asOf: event.at,
+      asOf: timestamp,
       signals: [...accumulatedSignals],
     };
 
