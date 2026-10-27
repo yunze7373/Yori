@@ -275,7 +275,7 @@ export function renderApp(root: HTMLElement, initialScene: DemoSceneId = 'clear'
     const notices = pipelineResult.notices;
 
     const greeting = getGreeting(snapshotAsOf, snapshotTimezone);
-    const nowPresentation = nowPlan ? formatNowPlan(nowPlan, currentScene) : null;
+    const nowPresentation = nowPlan ? formatNowPlan(nowPlan) : null;
 
     root.innerHTML = `
       <div class="app-layout">
@@ -614,12 +614,20 @@ export function renderApp(root: HTMLElement, initialScene: DemoSceneId = 'clear'
       });
     }
 
+    let confirmingReset = false;
     const resetBtn = root.querySelector('#btn-reset-storage') as HTMLButtonElement | null;
     if (resetBtn) {
       resetBtn.addEventListener('click', () => {
+        if (!confirmingReset) {
+          confirmingReset = true;
+          resetBtn.textContent = 'Confirm Reset';
+          resetBtn.style.backgroundColor = '#991B1B';
+          return;
+        }
         if (activeStorage) {
           activeStorage.reset();
         }
+        confirmingReset = false;
         actionFeedbackMessage = STRINGS.storageError.resetNotice;
         currentScene = 'clear';
         update();

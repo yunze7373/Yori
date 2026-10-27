@@ -236,6 +236,10 @@ export class DepartPreparer implements Preparer {
       const driveOption: PlanOption = {
         id: 'opt-drive',
         label: `drive leave ${driveTiming.leaveTime12}`, // e.g. "drive leave 2:30 PM"
+        mode: 'drive',
+        leaveAt: driveTiming.leaveIso,
+        travelMinutes: driveMinutes,
+        rankedByFactKey: 'rain_transport_preference',
         details: `${driveMinutes} min drive + ${bufferMinutes} min buffer`,
         estimatedMinutes: driveMinutes,
         requiresConfirmation: false,
@@ -244,6 +248,10 @@ export class DepartPreparer implements Preparer {
       const busOption: PlanOption = {
         id: 'opt-bus',
         label: `bus leave ${busTiming.leaveTime12}`, // e.g. "bus leave 2:15 PM"
+        mode: 'bus',
+        leaveAt: busTiming.leaveIso,
+        travelMinutes: busMinutes,
+        rankedByFactKey: 'rain_transport_preference',
         details: `${busMinutes} min bus + ${bufferMinutes} min buffer`,
         estimatedMinutes: busMinutes,
         requiresConfirmation: false,
@@ -269,6 +277,27 @@ export class DepartPreparer implements Preparer {
       headline = `Rain re-plan for ${title}: prepare ${primaryTiming.prepareTime12}, leave ${primaryTiming.leaveTime12} (umbrella recommended)`;
 
       derivation = `Rain re-plan: drive leave ${driveTiming.leaveTime12} (${driveTiming.leaveTime24} leave = ${driveTiming.apptTime24} appt - ${driveMinutes}m drive - ${bufferMinutes}m buffer); bus leave ${busTiming.leaveTime12} (${busTiming.leaveTime24} leave = ${busTiming.apptTime24} appt - ${busMinutes}m bus - ${bufferMinutes}m buffer); ranked by confirmed rain_transport_preference (${String(rainPreferenceFact?.value ?? 'drive_first')}); prepare ${primaryTiming.prepareTime12} (${primaryTiming.prepareTime24} prepare = ${primaryTiming.leaveTime24} leave - ${prepMinutes}m prep)`;
+
+      return Object.freeze({
+        id: `depart-plan-${calendarSignal.issuedAt}-${snapshot.asOf}`,
+        intentId: 'depart',
+        headline,
+        optionsOrSteps,
+        checklist,
+        requiresConfirmation: false,
+        alreadyDue,
+        subjectTitle: title,
+        apptAt: startTimeStr,
+        prepareAt: primaryTiming.prepareIso,
+        leaveAt: primaryTiming.leaveIso,
+        timezone: timeZone,
+        why: Object.freeze({
+          evidenceSignals: Object.freeze(evidenceSignals),
+          memoryFactsUsed: Object.freeze(memoryFactsUsed),
+          derivation,
+        }),
+        createdAt: snapshot.asOf,
+      });
     } else {
       // Single-mode departure (clear or rain with single travel mode)
       const travelMinutes = hasSingleMode
@@ -306,23 +335,28 @@ export class DepartPreparer implements Preparer {
       derivation = hasPrecipitationRisk
         ? `Rain departure: ${timing.derivation}`
         : timing.derivation;
-    }
 
-    return Object.freeze({
-      id: `depart-plan-${calendarSignal.issuedAt}-${snapshot.asOf}`,
-      intentId: 'depart',
-      headline,
-      optionsOrSteps,
-      checklist,
-      requiresConfirmation: false,
-      alreadyDue,
-      why: Object.freeze({
-        evidenceSignals: Object.freeze(evidenceSignals),
-        memoryFactsUsed: Object.freeze(memoryFactsUsed),
-        derivation,
-      }),
-      createdAt: snapshot.asOf,
-    });
+      return Object.freeze({
+        id: `depart-plan-${calendarSignal.issuedAt}-${snapshot.asOf}`,
+        intentId: 'depart',
+        headline,
+        optionsOrSteps,
+        checklist,
+        requiresConfirmation: false,
+        alreadyDue,
+        subjectTitle: title,
+        apptAt: startTimeStr,
+        prepareAt: timing.prepareIso,
+        leaveAt: timing.leaveIso,
+        timezone: timeZone,
+        why: Object.freeze({
+          evidenceSignals: Object.freeze(evidenceSignals),
+          memoryFactsUsed: Object.freeze(memoryFactsUsed),
+          derivation,
+        }),
+        createdAt: snapshot.asOf,
+      });
+    }
   }
 }
 

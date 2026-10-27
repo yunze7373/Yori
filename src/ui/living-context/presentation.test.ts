@@ -3,6 +3,7 @@ import {
   escapeHtml,
   getGreeting,
   formatNowPlan,
+  formatTime,
 } from './presentation.js';
 import { STRINGS } from './strings.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
@@ -50,13 +51,12 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
     });
 
     it('accurately respects different IANA timezones', () => {
-      // 17:00 UTC = 10:00 AM in LA (morning), but 02:00 AM next day in Tokyo (morning)
+      // 05:00 UTC = 14:00 (afternoon) in Tokyo (UTC+9)
       const iso = '2026-10-28T05:00:00.000Z';
-      // In Tokyo (UTC+9), 05:00Z is 14:00 (afternoon)
       const tokyoResult = getGreeting(iso, 'Asia/Tokyo');
       expect(tokyoResult.greeting).toBe(STRINGS.header.greetings.afternoon);
 
-      // In London (UTC+0), 05:00Z is 05:00 (morning)
+      // 05:00 UTC = 05:00 (morning) in London
       const londonResult = getGreeting(iso, 'Europe/London');
       expect(londonResult.greeting).toBe(STRINGS.header.greetings.morning);
     });
@@ -67,12 +67,31 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
     });
   });
 
-  describe('formatNowPlan Presentation Shielding (Finding 1 & 2)', () => {
-    it('shields Clear depart card from raw formulas and internal keys', () => {
-      const rawPlan: PreparedPlan = {
-        id: 'plan-1',
+  describe('formatTime Intl formatting', () => {
+    it('formats ISO timestamps to 12-hour local time without seconds', () => {
+      // 22:00 UTC = 15:00 (3:00 PM) in Los Angeles (-07:00)
+      const timeStr = formatTime('2026-10-28T22:00:00.000Z', 'America/Los_Angeles');
+      expect(timeStr).toBe('3:00 PM');
+    });
+
+    it('handles invalid or empty inputs gracefully', () => {
+      expect(formatTime(undefined)).toBe('');
+      expect(formatTime('not-a-date')).toBe('');
+    });
+  });
+
+  describe('formatNowPlan Presentation from Structured Plan Data (Finding 1 & 2)', () => {
+    it('renders Clear D1 plan from structured fields without scene-id branching', () => {
+      // 15:00 lesson, travel 30m, buffer 5m, prep 20m -> prepare 14:05 (21:05Z), leave 14:25 (21:25Z)
+      const plan: PreparedPlan = {
+        id: 'depart-d1',
         intentId: 'depart',
-        headline: 'Depart: prepare 2:05 PM, leave 2:25 PM',
+        headline: 'Depart for Piano lesson: prepare 2:05 PM, leave 2:25 PM',
+        subjectTitle: 'Piano lesson',
+        apptAt: '2026-10-28T22:00:00.000Z',
+        prepareAt: '2026-10-28T21:05:00.000Z',
+        leaveAt: '2026-10-28T21:25:00.000Z',
+        timezone: 'America/Los_Angeles',
         optionsOrSteps: [],
         requiresConfirmation: false,
         createdAt: '2026-10-28T17:00:00.000Z',
@@ -83,38 +102,133 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
         },
       };
 
-      const formatted = formatNowPlan(rawPlan, 'clear');
-      expect(formatted.title).toBe(STRINGS.depart.defaultTitle);
-      expect(formatted.headline).toContain('2:05 PM');
-      expect(formatted.headline).toContain('2:25 PM');
+      const formatted = formatNowPlan(plan);
+      expect(formatted.title).toBe('Piano lesson at 3:00 PM');
+      expect(formatted.headline).toBe('Get ready at 2:05 PM, leave by 2:25 PM');
       expect(formatted.basis).toBe(STRINGS.depart.basisLine);
-      expect(formatted.basis).not.toContain('appt -');
-      expect(formatted.basis).not.toContain('buffer');
+      expect(formatted.isRain).toBe(false);
+      expect(formatted.habitNote).toBeUndefined();
     });
 
-    it('formats Rain re-plan with human sentences and no raw memory keys', () => {
-      const rawPlan: PreparedPlan = {
-        id: 'plan-2',
+    it('renders Rain D2 re-plan reflecting engine timing: prepare 2:10 PM, leave 2:30 PM (Drive first)', () => {
+      // Multi-modal rain re-plan with Drive 25m (leave 14:30 / 2:30 PM, prep 14:10 / 2:10 PM) and Bus 40m (leave 14:15 / 2:15 PM)
+      const plan: PreparedPlan = {
+        id: 'depart-d2',
         intentId: 'depart',
-        headline: 'Rain re-plan: drive leave 2:30 PM',
+        headline: 'Rain re-plan for Piano lesson: prepare 2:10 PM, leave 2:30 PM (umbrella recommended)',
+        subjectTitle: 'Piano lesson',
+        apptAt: '2026-10-28T22:00:00.000Z',
+        prepareAt: '2026-10-28T21:10:00.000Z',
+        leaveAt: '2026-10-28T21:30:00.000Z',
+        timezone: 'America/Los_Angeles',
+        checklist: ['umbrella'],
+        optionsOrSteps: [
+          {
+            id: 'opt-drive',
+            label: 'drive leave 2:30 PM',
+            mode: 'drive',
+            leaveAt: '2026-10-28T21:30:00.000Z',
+            travelMinutes: 25,
+            requiresConfirmation: false,
+          },
+          {
+            id: 'opt-bus',
+            label: 'bus leave 2:15 PM',
+            mode: 'bus',
+            leaveAt: '2026-10-28T21:15:00.000Z',
+            travelMinutes: 40,
+            requiresConfirmation: false,
+          },
+        ],
+        requiresConfirmation: false,
+        createdAt: '2026-10-28T20:35:00.000Z',
+        why: {
+          evidenceSignals: [
+            {
+              kind: 'weather',
+              source: 'simulated',
+              issuedAt: '2026-10-28T20:35:00.000Z',
+              description: 'Rain forecast',
+            },
+          ],
+          memoryFactsUsed: [
+            {
+              key: 'rain_transport_preference',
+              value: 'drive_first',
+              status: 'confirmed',
+            },
+          ],
+          derivation: 'Rain re-plan derivation...',
+        },
+      };
+
+      const formatted = formatNowPlan(plan);
+      expect(formatted.title).toBe('Piano lesson at 3:00 PM');
+      // Must reflect engine re-plan: 2:10 PM and 2:30 PM, NOT clear-day 2:05/2:25!
+      expect(formatted.headline).toBe('Get ready at 2:10 PM, leave by 2:30 PM');
+      expect(formatted.isRain).toBe(true);
+      expect(formatted.rainBanner).toBe('What changed: rain forecast');
+      expect(formatted.umbrellaChip).toBe('Umbrella');
+      expect(formatted.habitNote).toBe('You usually prefer driving when it rains.');
+      expect(formatted.options.length).toBe(2);
+      expect(formatted.options[0]?.label).toBe('Drive · leave 2:30 PM');
+      expect(formatted.options[0]?.meta).toBe('25m drive');
+      expect(formatted.options[1]?.label).toBe('Bus · leave 2:15 PM');
+      expect(formatted.options[1]?.meta).toBe('40m bus');
+    });
+
+    it('omits habit note when confirmed habit fact is absent from why.memoryFactsUsed', () => {
+      const planWithoutHabit: PreparedPlan = {
+        id: 'depart-no-habit',
+        intentId: 'depart',
+        headline: 'Rain re-plan for Piano lesson',
+        subjectTitle: 'Piano lesson',
+        apptAt: '2026-10-28T22:00:00.000Z',
+        prepareAt: '2026-10-28T21:10:00.000Z',
+        leaveAt: '2026-10-28T21:30:00.000Z',
+        timezone: 'America/Los_Angeles',
+        checklist: ['umbrella'],
         optionsOrSteps: [],
         requiresConfirmation: false,
         createdAt: '2026-10-28T20:35:00.000Z',
         why: {
           evidenceSignals: [],
-          memoryFactsUsed: [],
-          derivation: 'Rain re-plan: ranked by confirmed rain_transport_preference (drive_first)',
+          memoryFactsUsed: [], // No habit fact
+          derivation: '...',
         },
       };
 
-      const formatted = formatNowPlan(rawPlan, 'rain');
+      const formatted = formatNowPlan(planWithoutHabit);
       expect(formatted.isRain).toBe(true);
-      expect(formatted.rainBanner).toBe('What changed: rain forecast');
-      expect(formatted.umbrellaChip).toBe('Umbrella');
-      expect(formatted.habitNote).toBe('You usually prefer driving when it rains.');
-      expect(formatted.habitNote).not.toContain('rain_transport_preference');
-      expect(formatted.options[0]?.label).toBe('Drive · leave 2:30');
-      expect(formatted.options[1]?.label).toBe('Bus · leave 2:15');
+      expect(formatted.habitNote).toBeUndefined();
+    });
+
+    it('dynamically formats a non-fixture appointment with its own times (e.g. 16:30 lesson)', () => {
+      // 16:30 (4:30 PM) appointment with 30m travel, 5m buffer, 20m prep
+      // leave = 16:30 - 35m = 15:55 (3:55 PM, 22:55Z)
+      // prepare = 15:55 - 20m = 15:35 (3:35 PM, 22:35Z)
+      const plan1630: PreparedPlan = {
+        id: 'depart-non-fixture',
+        intentId: 'depart',
+        headline: 'Depart for Chemistry Lab: prepare 3:35 PM, leave 3:55 PM',
+        subjectTitle: 'Chemistry Lab',
+        apptAt: '2026-10-28T23:30:00.000Z', // 16:30 in America/Los_Angeles
+        prepareAt: '2026-10-28T22:35:00.000Z', // 15:35
+        leaveAt: '2026-10-28T22:55:00.000Z', // 15:55
+        timezone: 'America/Los_Angeles',
+        optionsOrSteps: [],
+        requiresConfirmation: false,
+        createdAt: '2026-10-28T18:00:00.000Z',
+        why: {
+          evidenceSignals: [],
+          memoryFactsUsed: [],
+          derivation: '15:35 prep = 16:30 appt - 30m travel - 5m buffer - 20m prep',
+        },
+      };
+
+      const formatted = formatNowPlan(plan1630);
+      expect(formatted.title).toBe('Chemistry Lab at 4:30 PM');
+      expect(formatted.headline).toBe('Get ready at 3:35 PM, leave by 3:55 PM');
     });
 
     it('formats Lunch options with single distance metadata and mock disclosure', () => {
@@ -130,7 +244,7 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
             cuisine: 'japanese',
             distanceMinutes: 5,
             requiresConfirmation: false,
-          } as unknown as { id: string; label: string; requiresConfirmation: boolean },
+          },
           {
             id: 'opt-2',
             label: 'Demo Place B · Salad (salad) · 7m away',
@@ -138,7 +252,7 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
             cuisine: 'salad',
             distanceMinutes: 7,
             requiresConfirmation: false,
-          } as unknown as { id: string; label: string; requiresConfirmation: boolean },
+          },
         ],
         requiresConfirmation: false,
         createdAt: '2026-10-28T19:10:00.000Z',
@@ -149,7 +263,7 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
         },
       };
 
-      const formatted = formatNowPlan(rawPlan, 'away-lunch');
+      const formatted = formatNowPlan(rawPlan);
       expect(formatted.title).toBe('Lunch options near you');
       expect(formatted.mockPlacesNotice).toBe(
         'Mock places for this demo; real listings come from a place provider.'

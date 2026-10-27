@@ -97,7 +97,12 @@ test.describe('Living Context UI E2E & Visual Verification (AC-105-1)', () => {
     const select = page.locator('#scene-select');
     await select.selectOption('rain');
 
-    // 1. Verify Rain re-plan banner and umbrella chip
+    // 1. Verify Rain re-plan banner, umbrella chip, and engine-calculated timing (2:10 / 2:30)
+    const nowTitle = page.locator('#now-title');
+    await expect(nowTitle).toBeVisible();
+    await expect(nowTitle).toContainText('2:10 PM');
+    await expect(nowTitle).toContainText('2:30 PM');
+
     const rainBanner = page.locator('.rain-banner');
     await expect(rainBanner).toBeVisible();
     await expect(rainBanner).toContainText('What changed: rain forecast');
@@ -223,9 +228,13 @@ test.describe('Living Context UI E2E & Visual Verification (AC-105-1)', () => {
     const feedback = page.locator('#storage-action-feedback');
     await expect(feedback).toContainText('Storage backup exported successfully');
 
-    // 4. Test Reset action clears error and returns to fresh state
+    // 4. Test Reset action with confirmation step clears error and returns to fresh state
     const resetBtn = page.locator('#btn-reset-storage');
     await expect(resetBtn).toBeVisible();
+    // First tap prompts for confirmation (P3 UX advisory)
+    await resetBtn.click();
+    await expect(resetBtn).toContainText('Confirm Reset');
+    // Second tap executes reset
     await resetBtn.click();
 
     // Verify error box is now gone

@@ -3,15 +3,16 @@
  * Governed by Architecture Rev3 Section 5 and AC-105-1.
  *
  * Enforces:
- * - Clean human copy: subjects, primary action lines, and human basis sentences.
+ * - Dynamic data formatting: renders strictly from PreparedPlan structured fields via Intl.
+ * - Zero scene-id branching: formatting is pure and driven by plan contracts.
+ * - Human copy: appointment subjects, primary action lines, and human basis sentences.
  * - Zero engine debug tokens: never render formulas, memory keys, slice IDs, or invariant codes on home cards.
  * - Dynamic greeting derived from snapshot time in the snapshot timezone.
  * - Robust HTML escaping to eliminate XSS risks on interpolated data.
  */
 
 import { STRINGS } from './strings.js';
-import type { PreparedPlan } from '../../core/contracts/index.js';
-import type { DemoSceneId } from './app.js';
+import type { PreparedPlan, PlanOption } from '../../core/contracts/index.js';
 
 /**
  * Escapes characters that are special in HTML to prevent XSS.
@@ -26,6 +27,26 @@ export function escapeHtml(unsafe: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/**
+ * Formats an ISO date-time string into a localized 12-hour time (e.g. "2:05 PM").
+ */
+export function formatTime(isoString: string | undefined, timeZone?: string): string {
+  if (!isoString) {
+    return '';
+  }
+  const d = new Date(isoString);
+  if (!Number.isFinite(d.getTime())) {
+    return '';
+  }
+  const tz = timeZone || 'America/Los_Angeles';
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(d);
 }
 
 /**
@@ -92,36 +113,71 @@ export interface FormattedNowPlan {
 }
 
 /**
- * Maps a raw PreparedPlan into a human-first presentation model.
- * Completely shields cards from raw math formulas, slice IDs, and internal memory keys.
+ * Maps a raw PreparedPlan into a human-first presentation model purely from plan data.
+ * Zero scene-id branching.
  */
-export function formatNowPlan(
-  plan: PreparedPlan,
-  sceneId: DemoSceneId
-): FormattedNowPlan {
-  if (sceneId === 'rain') {
-    return Object.freeze({
-      title: STRINGS.depart.defaultTitle,
-      headline: STRINGS.depart.primaryLine,
-      basis: STRINGS.depart.basisLine,
-      isRain: true,
-      rainBanner: STRINGS.rain.whatChanged,
-      umbrellaChip: STRINGS.rain.umbrellaChip,
-      habitNote: STRINGS.rain.habitNote,
-      options: Object.freeze([
-        { label: STRINGS.rain.driveOption, meta: '25m drive' },
-        { label: STRINGS.rain.busOption, meta: '40m bus' },
-      ]),
-    });
-  }
-
+export function formatNowPlan(plan: PreparedPlan): FormattedNowPlan {
   if (plan.intentId === 'depart') {
+    const timeZone = plan.timezone || 'America/Los_Angeles';
+    const apptTimeStr = formatTime(plan.apptAt, timeZone);
+    const title = plan.subjectTitle
+      ? `${plan.subjectTitle}${apptTimeStr ? ` at ${apptTimeStr}` : ''}`
+      : STRINGS.depart.defaultTitle;
+
+    const prepareStr = formatTime(plan.prepareAt, timeZone);
+    const leaveStr = formatTime(plan.leaveAt, timeZone);
+    const headline =
+      prepareStr && leaveStr
+        ? `Get ready at ${prepareStr}, leave by ${leaveStr}`
+        : plan.headline;
+
+    const hasRainChecklist = plan.checklist?.includes('umbrella') ?? false;
+    const isRain =
+      hasRainChecklist ||
+      plan.why.evidenceSignals.some(s =>
+        s.description?.toLowerCase().includes('rain')
+      );
+
+    let habitNote: string | undefined;
+    const rainFact = plan.why.memoryFactsUsed.find(
+      f => f.key === 'rain_transport_preference' && f.status === 'confirmed'
+    );
+    if (rainFact) {
+      if (rainFact.value === 'bus_first') {
+        habitNote = 'You usually prefer taking transit when it rains.';
+      } else {
+        habitNote = 'You usually prefer driving when it rains.';
+      }
+    }
+
+    const options: FormattedNowOption[] = [];
+    if (isRain && plan.optionsOrSteps.length > 0) {
+      for (const opt of plan.optionsOrSteps) {
+        if (typeof opt !== 'string') {
+          const planOpt = opt as PlanOption;
+          const modeStr = planOpt.mode
+            ? planOpt.mode.charAt(0).toUpperCase() + planOpt.mode.slice(1)
+            : 'Option';
+          const leaveTimeStr = formatTime(planOpt.leaveAt, timeZone);
+          const label = leaveTimeStr ? `${modeStr} · leave ${leaveTimeStr}` : planOpt.label;
+          const meta =
+            typeof planOpt.travelMinutes === 'number'
+              ? `${planOpt.travelMinutes}m ${planOpt.mode || 'travel'}`
+              : undefined;
+          options.push({ label, meta });
+        }
+      }
+    }
+
     return Object.freeze({
-      title: STRINGS.depart.defaultTitle,
-      headline: STRINGS.depart.primaryLine,
+      title,
+      headline,
       basis: STRINGS.depart.basisLine,
-      isRain: false,
-      options: Object.freeze([]),
+      isRain,
+      rainBanner: isRain ? STRINGS.rain.whatChanged : undefined,
+      umbrellaChip: hasRainChecklist ? STRINGS.rain.umbrellaChip : undefined,
+      habitNote,
+      options: Object.freeze(options),
     });
   }
 
@@ -130,13 +186,10 @@ export function formatNowPlan(
       if (typeof opt === 'string') {
         return { label: opt };
       }
-      const optionObj = opt as unknown as Record<string, unknown>;
-      const rawName =
-        typeof optionObj.name === 'string' ? optionObj.name : opt.label;
-      const cuisine =
-        typeof optionObj.cuisine === 'string' ? optionObj.cuisine : '';
-      const cuisineTag = cuisine
-        ? cuisine.charAt(0).toUpperCase() + cuisine.slice(1)
+      const optionObj = opt as PlanOption;
+      const rawName = optionObj.name || optionObj.label;
+      const cuisineTag = optionObj.cuisine
+        ? optionObj.cuisine.charAt(0).toUpperCase() + optionObj.cuisine.slice(1)
         : '';
       const distance =
         typeof optionObj.distanceMinutes === 'number'
@@ -164,7 +217,7 @@ export function formatNowPlan(
   return Object.freeze({
     title: plan.headline,
     headline: plan.headline,
-    basis: STRINGS.depart.basisLine,
+    basis: 'Based on your scheduled plans.',
     isRain: false,
     options: Object.freeze([]),
   });

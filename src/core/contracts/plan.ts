@@ -39,6 +39,13 @@ export interface PlanOption {
   readonly estimatedMinutes?: number;
   readonly cost?: string;
   readonly requiresConfirmation: boolean;
+  readonly mode?: string;
+  readonly leaveAt?: string;
+  readonly travelMinutes?: number;
+  readonly rankedByFactKey?: string;
+  readonly name?: string;
+  readonly cuisine?: string;
+  readonly distanceMinutes?: number;
 }
 
 export interface PlanAction {
@@ -63,6 +70,11 @@ export interface PreparedPlan {
   readonly why: WhyExplanation;           // mandatory explainable proof
   readonly createdAt: string;
   readonly alreadyDue?: boolean;          // AC-102-3: prepareAt has already passed
+  readonly subjectTitle?: string;
+  readonly apptAt?: string;
+  readonly prepareAt?: string;
+  readonly leaveAt?: string;
+  readonly timezone?: string;
 }
 
 /**
