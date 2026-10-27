@@ -42,6 +42,74 @@ export class InMemoryStorageDriver implements StorageDriver {
   }
 }
 
+/**
+ * WebStorageDriver
+ * Persists to window.localStorage in browser environments (AC-105-4 reload persistence).
+ * Falls back gracefully to memory if localStorage is restricted or in Node/SSR.
+ */
+export class WebStorageDriver implements StorageDriver {
+  private fallbackStore: InMemoryStorageDriver | null = null;
+
+  private getStorage(): Storage | null {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const testKey = '__yori_storage_probe__';
+        window.localStorage.setItem(testKey, '1');
+        window.localStorage.removeItem(testKey);
+        return window.localStorage;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  public getItem(key: string): string | null {
+    const s = this.getStorage();
+    if (s) {
+      return s.getItem(key);
+    }
+    if (!this.fallbackStore) {
+      this.fallbackStore = new InMemoryStorageDriver();
+    }
+    return this.fallbackStore.getItem(key);
+  }
+
+  public setItem(key: string, value: string): void {
+    const s = this.getStorage();
+    if (s) {
+      s.setItem(key, value);
+      return;
+    }
+    if (!this.fallbackStore) {
+      this.fallbackStore = new InMemoryStorageDriver();
+    }
+    this.fallbackStore.setItem(key, value);
+  }
+
+  public removeItem(key: string): void {
+    const s = this.getStorage();
+    if (s) {
+      s.removeItem(key);
+      return;
+    }
+    if (this.fallbackStore) {
+      this.fallbackStore.removeItem(key);
+    }
+  }
+
+  public clear(): void {
+    const s = this.getStorage();
+    if (s) {
+      s.clear();
+      return;
+    }
+    if (this.fallbackStore) {
+      this.fallbackStore.clear();
+    }
+  }
+}
+
 export interface PromptBudgetRecord {
   readonly date: string; // YYYY-MM-DD in snapshot timezone
   readonly count: number;
@@ -52,6 +120,7 @@ export interface YoriStorageState {
   readonly proposals: readonly MemoryFact[];
   readonly suppressions: readonly SuppressionReason[];
   readonly promptBudget: PromptBudgetRecord;
+  readonly acceptedPlanIds?: readonly string[];
 }
 
 export interface StorageEnvelope<T> {

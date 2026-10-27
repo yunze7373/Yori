@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import {
   YoriStorage,
   InMemoryStorageDriver,
+  WebStorageDriver,
   StorageCorruptionError,
   CURRENT_STORAGE_SCHEMA_VERSION,
   type YoriStorageState,
@@ -145,6 +146,20 @@ describe('Storage Engine (AC-104-4, INV-110)', () => {
     storage.reset();
     expect(storage.load()).toBeNull();
     expect(storage.exportRaw()).toBeNull();
+  });
+
+  it('persists acceptedPlanIds in storage state and WebStorageDriver works in memory fallback', () => {
+    const driver = new WebStorageDriver();
+    const storage = new YoriStorage(driver);
+
+    const stateWithAccepted: YoriStorageState = {
+      ...sampleState,
+      acceptedPlanIds: ['depart-plan-1', 'lunch-plan-2'],
+    };
+
+    storage.save(stateWithAccepted, '2026-10-28T12:00:00.000Z');
+    const loaded = storage.load();
+    expect(loaded?.payload.acceptedPlanIds).toEqual(['depart-plan-1', 'lunch-plan-2']);
   });
 
   it('static audit: ensures src/core/storage contains zero ambient clock calls (Date.now / new Date())', () => {

@@ -231,6 +231,26 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
       expect(formatted.headline).toBe('Get ready at 3:35 PM, leave by 3:55 PM');
     });
 
+    it('falls back to plan headline when subjectTitle is missing without fabricating Piano lesson', () => {
+      const planNoSubject: PreparedPlan = {
+        id: 'depart-no-subject',
+        intentId: 'depart',
+        headline: 'Next scheduled departure',
+        requiresConfirmation: false,
+        createdAt: '2026-10-28T18:00:00.000Z',
+        optionsOrSteps: [],
+        why: {
+          evidenceSignals: [],
+          memoryFactsUsed: [],
+          derivation: '',
+        },
+      };
+
+      const formatted = formatNowPlan(planNoSubject);
+      expect(formatted.title).toBe('Next scheduled departure');
+      expect(formatted.title).not.toContain('Piano');
+    });
+
     it('formats Lunch options with single distance metadata and mock disclosure', () => {
       const rawPlan: PreparedPlan = {
         id: 'plan-3',

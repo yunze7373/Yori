@@ -40,9 +40,8 @@ export function formatTime(isoString: string | undefined, timeZone?: string): st
   if (!Number.isFinite(d.getTime())) {
     return '';
   }
-  const tz = timeZone || 'America/Los_Angeles';
   return new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
+    ...(timeZone ? { timeZone } : {}),
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
@@ -68,9 +67,8 @@ export function getGreeting(
       };
     }
 
-    const tz = timezone || 'America/Los_Angeles';
     const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
+      ...(timezone ? { timeZone: timezone } : {}),
       hour: 'numeric',
       hourCycle: 'h23',
     });
@@ -118,11 +116,12 @@ export interface FormattedNowPlan {
  */
 export function formatNowPlan(plan: PreparedPlan): FormattedNowPlan {
   if (plan.intentId === 'depart') {
-    const timeZone = plan.timezone || 'America/Los_Angeles';
+    const timeZone = plan.timezone;
     const apptTimeStr = formatTime(plan.apptAt, timeZone);
+    // Neutral plan headline fallback instead of fabricated 'Piano lesson at 3:00'
     const title = plan.subjectTitle
       ? `${plan.subjectTitle}${apptTimeStr ? ` at ${apptTimeStr}` : ''}`
-      : STRINGS.depart.defaultTitle;
+      : plan.headline;
 
     const prepareStr = formatTime(plan.prepareAt, timeZone);
     const leaveStr = formatTime(plan.leaveAt, timeZone);
@@ -144,9 +143,9 @@ export function formatNowPlan(plan: PreparedPlan): FormattedNowPlan {
     );
     if (rainFact) {
       if (rainFact.value === 'bus_first') {
-        habitNote = 'You usually prefer taking transit when it rains.';
+        habitNote = STRINGS.habit.rainTransit;
       } else {
-        habitNote = 'You usually prefer driving when it rains.';
+        habitNote = STRINGS.habit.rainDrive;
       }
     }
 

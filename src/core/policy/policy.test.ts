@@ -283,6 +283,129 @@ describe('Shared Policy Engine (INV-105, INV-106, INV-108)', () => {
     });
   });
 
+  describe('Cross-Plugin Isolation & Carried Negative Probes', () => {
+    it('user_suppressed matches ONLY targetIntent, ignoring free-text reason substring (Carried Binding)', () => {
+      // Reason contains 'depart' and 'grocery', but targetIntent is strictly 'lunch'
+      const lunchSuppression: SuppressionReason = {
+        code: 'user_suppressed',
+        reason: 'User chose not to depart for lunch; buy grocery instead',
+        scope: 'today',
+        recordedAt: '2026-10-28T19:10:00.000Z',
+        targetIntent: 'lunch',
+      };
+
+      const departCandidate: IntentCandidate = {
+        intent: 'depart',
+        confidence: 0.95,
+        evidence: [
+          createSimulatedSignal({
+            kind: 'calendar',
+            value: { title: 'Dentist' },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1.0,
+            consentScope: 'device_only',
+          }),
+        ],
+      };
+
+      const groceryCandidate: IntentCandidate = {
+        intent: 'grocery-stub',
+        confidence: 0.9,
+        evidence: [
+          createSimulatedSignal({
+            kind: 'pantry',
+            value: { item: 'milk' },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1.0,
+            consentScope: 'device_only',
+          }),
+        ],
+      };
+
+      // depart candidate must NOT be suppressed by the lunch suppression record
+      const departSuppression = policy.checkSuppression(departCandidate, {
+        snapshot: baseSnapshot,
+        memory: [],
+        suppressions: [lunchSuppression],
+      });
+      expect(departSuppression).toBeNull();
+
+      // grocery candidate must NOT be suppressed
+      const grocerySuppression = policy.checkSuppression(groceryCandidate, {
+        snapshot: baseSnapshot,
+        memory: [],
+        suppressions: [lunchSuppression],
+      });
+      expect(grocerySuppression).toBeNull();
+
+      // lunch candidate MUST be suppressed
+      const lunchSuppressionResult = policy.checkSuppression(sampleCandidate, {
+        snapshot: baseSnapshot,
+        memory: [],
+        suppressions: [lunchSuppression],
+      });
+      expect(lunchSuppressionResult).not.toBeNull();
+      expect(lunchSuppressionResult?.code).toBe('user_suppressed');
+      expect(lunchSuppressionResult?.targetIntent).toBe('lunch');
+    });
+
+    it('confirmed suppress_* facts match exact keys only and do not leak across plugins (Carried Binding)', () => {
+      // Confirmed fact for suppress_lunch must not match suppress_lunch_dinner or depart
+      const confirmedLunchFact = createMemoryFact(
+        'suppress_lunch',
+        'never',
+        'confirmed',
+        { source: 'user_confirmed', recordedAt: '2026-10-28T10:00:00Z' },
+        '2026-10-28T10:00:00Z'
+      );
+
+      const departCandidate: IntentCandidate = {
+        intent: 'depart',
+        confidence: 0.9,
+        evidence: [
+          createSimulatedSignal({
+            kind: 'calendar',
+            value: { title: 'Meeting' },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1.0,
+            consentScope: 'device_only',
+          }),
+        ],
+      };
+
+      // Check depart candidate is not suppressed by suppress_lunch
+      const departSuppression = policy.checkSuppression(departCandidate, {
+        snapshot: baseSnapshot,
+        memory: [confirmedLunchFact],
+      });
+      expect(departSuppression).toBeNull();
+
+      // Check candidate with key substring like 'un' does not match
+      const unCandidate: IntentCandidate = {
+        intent: 'un',
+        confidence: 0.9,
+        evidence: [
+          createSimulatedSignal({
+            kind: 'calendar',
+            value: {},
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1.0,
+            consentScope: 'device_only',
+          }),
+        ],
+      };
+      const unSuppression = policy.checkSuppression(unCandidate, {
+        snapshot: baseSnapshot,
+        memory: [confirmedLunchFact],
+      });
+      expect(unSuppression).toBeNull();
+    });
+  });
+
   describe('Static Audit: Zero Ambient Clock Calls', () => {
     it('ensures src/core/policy contains zero ambient clock calls (Date.now / new Date())', () => {
       const policyDir = path.resolve('src/core/policy');

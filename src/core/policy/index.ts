@@ -271,9 +271,8 @@ export class SharedPolicyEngine implements SharedPolicySurface {
 
     for (const rec of activeSuppressions) {
       if (rec.code === 'user_suppressed' && rec.scope === 'today') {
-        const recMatches =
-          rec.targetIntent === candidate.intent ||
-          rec.reason.toLowerCase().includes(candidate.intent.toLowerCase());
+        // Carried binding: user_suppressed matches ONLY targetIntent (no free-text reason substring)
+        const recMatches = rec.targetIntent === candidate.intent;
         if (recMatches) {
           // Check if the suppression record is from today in the snapshot's timezone
           if (isSameDay(rec.recordedAt, asOf, timezone)) {
@@ -292,12 +291,12 @@ export class SharedPolicyEngine implements SharedPolicySurface {
 
     // 4. Memory facts influence suppression ONLY when status === 'confirmed' (Finding 1 / INV-107)
     // Pending proposals and rejected proposals NEVER suppress! (Probe R1)
+    // Carried binding: confirmed suppress_* facts match exact keys only
     const confirmedSuppressionFact = memory.find(
       f =>
         f.status === 'confirmed' &&
         (f.key === `suppress_${candidate.intent}` ||
-          f.key === `suppress_${candidate.intent}_recommendations` ||
-          (f.key.startsWith('suppress_') && f.key.includes(candidate.intent)))
+          f.key === `suppress_${candidate.intent}_recommendations`)
     );
 
     if (confirmedSuppressionFact) {
