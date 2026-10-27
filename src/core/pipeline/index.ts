@@ -1,9 +1,17 @@
 /**
  * Core Pipeline Entry
- * Governed by Architecture Rev3 Section 2 & 3.
+ * Governed by Architecture Rev3 Sections 2, 3, 5 and Invariants INV-105, INV-106, INV-108, INV-109, INV-110.
  *
- * S1-1 minimal wiring:
- * Iterate registered plugins -> detect -> (policy pass-through stub) -> prepare -> NOW = highest-confidence unsuppressed plan.
+ * Core execution flow:
+ * 1. Evaluate environmental signals for missing/stale data via shared policy (INV-106).
+ * 2. Execute registered plugin detectors.
+ * 3. Evaluate candidate suppression via shared policy engine (INV-108).
+ * 4. Execute plugin preparers for unsuppressed candidates.
+ * 5. Deterministically rank candidates via shared policy engine.
+ * 6. Compose LivingContext (NOW, AHEAD, FOR YOU, map, asOf).
+ *
+ * Carried P3: Core pipeline files never import src/plugins/*. Plugins are passed in or injected.
+ * Both synchronous execution and async execution are supported.
  */
 
 import type {
@@ -15,15 +23,22 @@ import type {
   PreparedPlan,
   IntentCandidate,
 } from '../contracts/index.js';
-import { staticPluginRegistry } from '../../plugins/registry.js';
-import type { FailClosedNotice } from '../policy/index.js';
-import { sharedPolicyStub } from '../policy/index.js';
+import {
+  sharedPolicy,
+  type SharedPolicySurface,
+  type FailClosedNotice,
+} from '../policy/index.js';
+import type { YoriStorage } from '../storage/index.js';
 
 export interface PipelineInput {
   readonly snapshot: ContextSnapshot;
   readonly memory: readonly MemoryFact[];
   readonly clock?: { now(): string } | string;
   readonly plugins?: readonly Plugin[];
+  readonly policy?: SharedPolicySurface;
+  readonly storage?: YoriStorage;
+  readonly promptCountToday?: number;
+  readonly maxDailyPrompts?: number;
 }
 
 export interface PipelineResult {
@@ -32,55 +47,147 @@ export interface PipelineResult {
   readonly notices: readonly FailClosedNotice[];
 }
 
+export type PipelineResultPromise = Promise<PipelineResult> & PipelineResult;
+
+let defaultPluginsProvider: (() => readonly Plugin[]) | null = null;
+
+/**
+ * Injects a default plugin provider from the app or plugin assembly layer.
+ * Core pipeline files NEVER import from src/plugins (INV-109).
+ */
+export function setDefaultPluginsProvider(provider: () => readonly Plugin[]): void {
+  defaultPluginsProvider = provider;
+}
+
+/**
+ * Returns currently registered default plugins or empty array if none injected.
+ */
+export function getDefaultPlugins(): readonly Plugin[] {
+  return defaultPluginsProvider ? defaultPluginsProvider() : Object.freeze([]);
+}
+
 /**
  * Runs the central proactive agent pipeline.
- * S1-1 wiring: runs registered plugins, checks suppression, prepares plans,
- * and sets NOW to the highest-confidence unsuppressed plan.
+ * Evaluates signals, executes detectors/preparers, enforces shared suppression policy,
+ * deterministically ranks candidates, and composes LivingContext.
  */
-export function runPipeline(input: PipelineInput): PipelineResult {
-  const plugins = input.plugins ?? staticPluginRegistry.getAll();
-  const suppressions: SuppressionReason[] = [];
-  const notices: FailClosedNotice[] = [];
-  const candidatePlans: Array<{ candidate: IntentCandidate; plan: PreparedPlan }> = [];
+export function runPipeline(input: PipelineInput): PipelineResultPromise {
+  const plugins = input.plugins ?? getDefaultPlugins();
+  const policy = input.policy ?? sharedPolicy;
 
+  const evaluationClock =
+    typeof input.clock === 'string'
+      ? input.clock
+      : input.clock?.now() ?? input.snapshot.asOf;
+
+  // 1. Evaluate environmental signals for missing or expired dependencies (INV-106, D6)
+  const notices: FailClosedNotice[] = [...policy.evaluateSignals(input.snapshot, evaluationClock)];
+  const suppressions: SuppressionReason[] = [];
+
+  // Determine current daily prompt count for budget enforcement (INV-105)
+  let promptCountToday = input.promptCountToday;
+  if (promptCountToday === undefined && input.storage) {
+    try {
+      const stored = input.storage.load();
+      if (stored) {
+        promptCountToday = stored.payload.promptBudget.count;
+      }
+    } catch {
+      // In case of uninitialized or corrupted storage, default count is undefined
+    }
+  }
+
+  const policyContext = {
+    snapshot: input.snapshot,
+    memory: input.memory,
+    promptCountToday,
+    maxDailyPrompts: input.maxDailyPrompts,
+  };
+
+  const detectedCandidates: Array<{ plugin: Plugin; candidate: IntentCandidate }> = [];
+
+  // 2. Run detectors across all plugins
   for (const plugin of plugins) {
-    // 1. Detect candidate
     const rawCandidate = plugin.detector.detect(input.snapshot, input.memory);
-    if (!rawCandidate || typeof (rawCandidate as Promise<unknown>).then === 'function') {
+    if (!rawCandidate) {
       continue;
     }
-    const candidate = rawCandidate as IntentCandidate;
 
-    // 2. Policy suppression check (stub pass-through in S1-1; full shared policy in S2-1)
-    const suppression =
-      candidate.suppressedBy ?? sharedPolicyStub.checkSuppression(candidate);
+    if (typeof (rawCandidate as Promise<unknown>).then === 'function') {
+      throw new Error(
+        `Plugin '${plugin.id}' returned a Promise from detector, but synchronous pipeline execution is in effect.`
+      );
+    }
+
+    detectedCandidates.push({ plugin, candidate: rawCandidate as IntentCandidate });
+  }
+
+  // 3. Evaluate shared suppression policy (INV-108)
+  const unsuppressedCandidates: Array<{ plugin: Plugin; candidate: IntentCandidate }> = [];
+
+  for (const item of detectedCandidates) {
+    const suppression = policy.checkSuppression(item.candidate, policyContext);
     if (suppression) {
       suppressions.push(suppression);
       continue; // Suppressed candidates never reach preparation (INV-108)
     }
+    unsuppressedCandidates.push(item);
+  }
 
-    // 3. Prepare plan
-    const rawPlan = plugin.preparer.prepare(candidate, input.snapshot, input.memory);
-    if (rawPlan && typeof (rawPlan as Promise<unknown>).then !== 'function') {
-      candidatePlans.push({ candidate, plan: rawPlan as PreparedPlan });
+  // 4. Prepare plans for unsuppressed candidates
+  const preparedItems: Array<{ candidate: IntentCandidate; plan: PreparedPlan }> = [];
+
+  for (const item of unsuppressedCandidates) {
+    const rawPlan = item.plugin.preparer.prepare(item.candidate, input.snapshot, input.memory);
+    if (!rawPlan) {
+      continue;
+    }
+
+    if (typeof (rawPlan as Promise<unknown>).then === 'function') {
+      throw new Error(
+        `Plugin '${item.plugin.id}' returned a Promise from preparer, but synchronous pipeline execution is in effect.`
+      );
+    }
+
+    preparedItems.push({ candidate: item.candidate, plan: rawPlan as PreparedPlan });
+  }
+
+  // 5. Rank unsuppressed candidates deterministically via shared policy
+  const candidatesOnly = preparedItems.map(p => p.candidate);
+  const rankedCandidates = policy.rankCandidates(candidatesOnly, policyContext);
+
+  // Re-order prepared plans matching the ranked candidate order
+  const rankedPlans: PreparedPlan[] = [];
+  for (const rc of rankedCandidates) {
+    const match = preparedItems.find(p => p.candidate === rc);
+    if (match) {
+      rankedPlans.push(match.plan);
     }
   }
 
-  // 4. Rank and choose NOW = highest-confidence unsuppressed plan
-  candidatePlans.sort((a, b) => b.candidate.confidence - a.candidate.confidence);
+  // 6. Compose LivingContext (Architecture Rev3 Section 5)
+  // NOW: at most 1 item (single most relevant current plan)
+  const now: PreparedPlan | null = rankedPlans.length > 0 ? rankedPlans[0]! : null;
+  // AHEAD: at most 3 upcoming plans, ranked by shared policy
+  const ahead: PreparedPlan[] = rankedPlans.slice(1, 4);
+  // FOR YOU: pending memory proposals / insights awaiting user confirmation (INV-107)
+  const forYou: MemoryFact[] = input.memory.filter(m => m.status === 'pending') as MemoryFact[];
 
-  const now: PreparedPlan | null = candidatePlans.length > 0 ? candidatePlans[0]!.plan : null;
-  const ahead: PreparedPlan[] = candidatePlans.slice(1).map(c => c.plan);
+  const livingContext: LivingContext = Object.freeze({
+    now,
+    ahead: Object.freeze(ahead),
+    forYou: Object.freeze(forYou),
+    map: null,
+    asOf: input.snapshot.asOf,
+  });
 
-  return Object.freeze({
-    livingContext: Object.freeze({
-      now,
-      ahead: Object.freeze(ahead),
-      forYou: Object.freeze([]),
-      map: null,
-      asOf: input.snapshot.asOf,
-    }),
+  const result: PipelineResult = Object.freeze({
+    livingContext,
     suppressions: Object.freeze(suppressions),
     notices: Object.freeze(notices),
   });
+
+  // Support both synchronous immediate consumption and asynchronous Promise await (Carried P3)
+  const promise = Promise.resolve(result);
+  return Object.assign(promise, result);
 }

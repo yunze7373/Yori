@@ -8,6 +8,8 @@
 
 import type { Plugin } from '../core/contracts/index.js';
 import { departPlugin } from './depart/index.js';
+import { lunchPlugin } from './lunch/index.js';
+import { setDefaultPluginsProvider } from '../core/pipeline/index.js';
 
 export type { Plugin } from '../core/contracts/index.js';
 
@@ -21,6 +23,17 @@ export class PluginRegistry {
     if (this.plugins.has(plugin.id)) {
       throw new Error(`Plugin with id '${plugin.id}' is already registered`);
     }
+
+    // Carried P3: Reject Promise-returning or async plugins at registration with an explicit error
+    if (
+      plugin.detector?.detect?.constructor?.name === 'AsyncFunction' ||
+      plugin.preparer?.prepare?.constructor?.name === 'AsyncFunction'
+    ) {
+      throw new Error(
+        `Plugin '${plugin.id}' has async detector or preparer; synchronous registry requires sync plugins`
+      );
+    }
+
     this.plugins.set(plugin.id, Object.freeze({ ...plugin }));
   }
 
@@ -43,7 +56,12 @@ export class PluginRegistry {
 
 /**
  * Singleton static registry instance.
- * S1-1: departPlugin is registered by default.
+ * S1-1: departPlugin is registered.
+ * S2-1: lunchPlugin is registered.
  */
 export const staticPluginRegistry = new PluginRegistry();
 staticPluginRegistry.register(departPlugin);
+staticPluginRegistry.register(lunchPlugin);
+
+// Injects the default plugin provider into the core pipeline entry
+setDefaultPluginsProvider(() => staticPluginRegistry.getAll());

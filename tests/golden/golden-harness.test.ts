@@ -190,8 +190,9 @@ describe('Slice 0 S0-2: D4 Lunch Busy / Already-Ate Suppression (Fails on Stub)'
       clock: '2026-10-28T19:10:00.000Z',
     });
 
-    // 0 prompts for lunch in NOW
+    // 0 prompts for lunch in NOW or AHEAD (D4 carried binding)
     expect(busyResult.livingContext.now?.intentId).not.toBe('lunch');
+    expect(busyResult.livingContext.ahead.some(p => p.intentId === 'lunch')).toBe(false);
 
     // Suppression must be recorded by core policy with 'user_busy' code
     const busySuppression = busyResult.suppressions.find(s => s.code === 'user_busy');
@@ -209,6 +210,7 @@ describe('Slice 0 S0-2: D4 Lunch Busy / Already-Ate Suppression (Fails on Stub)'
     });
 
     expect(ateResult.livingContext.now?.intentId).not.toBe('lunch');
+    expect(ateResult.livingContext.ahead.some(p => p.intentId === 'lunch')).toBe(false);
     const ateSuppression = ateResult.suppressions.find(s => s.code === 'already_done');
     expect(
       ateSuppression,
@@ -236,10 +238,11 @@ describe('Slice 0 S0-2: D5 Explicit User Suppression Fixture (Fails on Stub)', (
     ).toBeDefined();
     expect(suppression?.scope).toBe('today');
 
-    // Invariant INV-107: memory change exists ONLY as a pending proposal
-    const pendingFact = d5MemoryFacts.find(f => f.key === 'suppress_lunch_recommendations');
-    expect(pendingFact).toBeDefined();
-    expect(pendingFact?.status).toBe('pending');
+    // Invariant INV-107 & D5 carried binding: livingContext.forYou contains the pending proposal and no confirmed fact was written
+    const forYouProposal = result.livingContext.forYou.find(f => f.key === 'suppress_lunch_recommendations');
+    expect(forYouProposal).toBeDefined();
+    expect(forYouProposal?.status).toBe('pending');
+    expect(result.livingContext.forYou.some(f => f.key === 'suppress_lunch_recommendations' && f.status === 'confirmed')).toBe(false);
   });
 });
 
