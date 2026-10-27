@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run src",
+    "test:golden": "vitest run tests/golden"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
