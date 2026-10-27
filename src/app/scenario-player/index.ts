@@ -74,6 +74,7 @@ export function replayScenarioTimeline(
     const rawSnapshot: ContextSnapshot = {
       id: snapshotId,
       asOf: timestamp,
+      timezone: scenario.timezone,
       signals: [...accumulatedSignals],
     };
 
@@ -85,6 +86,7 @@ export function replayScenarioTimeline(
     const emptySnapshot: ContextSnapshot = {
       id: `${scenario.id}-initial`,
       asOf: clock.now(),
+      timezone: scenario.timezone,
       signals: [],
     };
     snapshots.push(freezeSnapshot(emptySnapshot));

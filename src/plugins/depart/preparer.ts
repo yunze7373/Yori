@@ -4,7 +4,8 @@
  *
  * Prepares actionable departure plans with deterministic time calculation,
  * rain re-planning (multi-modal options, umbrella checklist, confirmed preference ranking),
- * explainable Why derivations, and fail-closed degradation on invalid or stale inputs.
+ * explainable Why derivations, and fail-closed degradation on invalid or missing inputs.
+ * Never fabricates default user habits, travel times, or timezones (INV-103).
  */
 
 import type {
@@ -22,8 +23,6 @@ import { computeDepartTiming, validateCalendarDate } from './engine.js';
 
 export interface DepartPreparerOptions {
   readonly defaultTimeZone?: string;
-  readonly defaultBufferMinutes?: number;
-  readonly defaultPrepMinutes?: number;
 }
 
 export class DepartPreparer implements Preparer {
@@ -54,7 +53,7 @@ export class DepartPreparer implements Preparer {
     const startTimeStr = (calVal.startTime ?? calVal.time ?? candidate.metadata?.startTime) as string | undefined;
 
     if (!startTimeStr || !validateCalendarDate(startTimeStr)) {
-      return null; // Fail closed on missing or impossible calendar date
+      return null; // Fail closed on missing, invalid, or offset-less calendar date
     }
 
     // 2. Locate travel estimate signal
@@ -76,6 +75,24 @@ export class DepartPreparer implements Preparer {
 
     const travelVal = travelSignal.value as Record<string, unknown>;
 
+    // Finding 2: Require real travel duration numbers. NEVER default to 30!
+    const hasMultiModal =
+      typeof travelVal.driveMinutes === 'number' &&
+      Number.isFinite(travelVal.driveMinutes) &&
+      travelVal.driveMinutes >= 0 &&
+      typeof travelVal.busMinutes === 'number' &&
+      Number.isFinite(travelVal.busMinutes) &&
+      travelVal.busMinutes >= 0;
+
+    const hasSingleMode =
+      typeof travelVal.travelMinutes === 'number' &&
+      Number.isFinite(travelVal.travelMinutes) &&
+      travelVal.travelMinutes >= 0;
+
+    if (!hasMultiModal && !hasSingleMode) {
+      return null; // Fail closed on missing/invalid travel duration numbers
+    }
+
     // 3. Locate weather signal and check expiration (INV-106)
     const weatherSignal = snapshot.signals.find(s => s.kind === 'weather');
     let validWeatherSignal: ContextSignal | null = null;
@@ -92,31 +109,48 @@ export class DepartPreparer implements Preparer {
       validWeatherSignal = weatherSignal;
     }
 
-    // 4. Memory facts (read-only, zero mutation per INV-107)
+    // 4. Memory facts (Finding 2: strictly require confirmed facts. Zero fabricated defaults!)
     const bufferFact = memory.find(
       f => f.key === 'prep_buffer_minutes' && f.status === 'confirmed'
     );
+    if (
+      !bufferFact ||
+      typeof bufferFact.value !== 'number' ||
+      !Number.isFinite(bufferFact.value) ||
+      bufferFact.value < 0
+    ) {
+      return null; // Fail closed on missing prep_buffer_minutes fact
+    }
+    const bufferMinutes = bufferFact.value;
+
     const prepFact = memory.find(
       f => f.key === 'prep_duration_minutes' && f.status === 'confirmed'
     );
+    if (
+      !prepFact ||
+      typeof prepFact.value !== 'number' ||
+      !Number.isFinite(prepFact.value) ||
+      prepFact.value < 0
+    ) {
+      return null; // Fail closed on missing prep_duration_minutes fact
+    }
+    const prepMinutes = prepFact.value;
+
     const rainPreferenceFact = memory.find(
       f => f.key === 'rain_transport_preference' && f.status === 'confirmed'
     );
 
-    const bufferMinutes =
-      typeof bufferFact?.value === 'number' && Number.isFinite(bufferFact.value)
-        ? bufferFact.value
-        : (this.options.defaultBufferMinutes ?? 5);
-
-    const prepMinutes =
-      typeof prepFact?.value === 'number' && Number.isFinite(prepFact.value)
-        ? prepFact.value
-        : (this.options.defaultPrepMinutes ?? 20);
-
+    // Finding 1: Explicit IANA timezone. Fail closed if not provided. NEVER default to LA!
     const timeZone =
-      (candidate.metadata?.timezone as string | undefined) ??
-      this.options.defaultTimeZone ??
-      'America/Los_Angeles';
+      (typeof candidate.metadata?.timezone === 'string' && candidate.metadata.timezone.trim()) ||
+      (typeof calVal.timezone === 'string' && (calVal.timezone as string).trim()) ||
+      (typeof calVal.timeZone === 'string' && (calVal.timeZone as string).trim()) ||
+      (typeof snapshot.timezone === 'string' && snapshot.timezone.trim()) ||
+      this.options.defaultTimeZone;
+
+    if (!timeZone) {
+      return null; // Fail closed: missing timezone
+    }
 
     // 5. Evaluate precipitation risk from valid weather signal
     const weatherVal = validWeatherSignal?.value as Record<string, unknown> | undefined;
@@ -128,7 +162,7 @@ export class DepartPreparer implements Preparer {
 
     const title = typeof calVal.title === 'string' ? calVal.title : 'Appointment';
 
-    // 6. Build options, timing, and checklist
+    // 6. Build evidence citations
     const evidenceSignals: EvidenceCitation[] = [
       {
         kind: 'calendar',
@@ -153,33 +187,31 @@ export class DepartPreparer implements Preparer {
       });
     }
 
+    // Finding 2: Only cite facts that exist with their real status and value
     const memoryFactsUsed: MemoryCitation[] = [
       {
         key: 'prep_buffer_minutes',
         value: bufferMinutes,
-        status: bufferFact?.status ?? 'confirmed',
+        status: bufferFact.status,
       },
       {
         key: 'prep_duration_minutes',
         value: prepMinutes,
-        status: prepFact?.status ?? 'confirmed',
+        status: prepFact.status,
       },
     ];
 
     let headline: string;
     let optionsOrSteps: readonly (PlanOption | string)[];
-    let checklist: readonly string[] = Object.freeze([]);
+    // Finding 4: Checklist is derived from valid forecast independently of option availability
+    const checklist: readonly string[] = hasPrecipitationRisk
+      ? Object.freeze(['umbrella'])
+      : Object.freeze([]);
     let alreadyDue = false;
     let derivation: string;
 
-    const hasMultiModal =
-      typeof travelVal.driveMinutes === 'number' &&
-      typeof travelVal.busMinutes === 'number';
-
     if (hasPrecipitationRisk && hasMultiModal) {
-      // D2 Rain Re-plan branch
-      checklist = Object.freeze(['umbrella']);
-
+      // D2 Rain Re-plan branch (multi-modal)
       const driveMinutes = travelVal.driveMinutes as number;
       const busMinutes = travelVal.busMinutes as number;
 
@@ -238,13 +270,10 @@ export class DepartPreparer implements Preparer {
 
       derivation = `Rain re-plan: drive leave ${driveTiming.leaveTime12} (${driveTiming.leaveTime24} leave = ${driveTiming.apptTime24} appt - ${driveMinutes}m drive - ${bufferMinutes}m buffer); bus leave ${busTiming.leaveTime12} (${busTiming.leaveTime24} leave = ${busTiming.apptTime24} appt - ${busMinutes}m bus - ${bufferMinutes}m buffer); ranked by confirmed rain_transport_preference (${String(rainPreferenceFact?.value ?? 'drive_first')}); prepare ${primaryTiming.prepareTime12} (${primaryTiming.prepareTime24} prepare = ${primaryTiming.leaveTime24} leave - ${prepMinutes}m prep)`;
     } else {
-      // D1 Standard clear / single-mode departure
-      const travelMinutes =
-        typeof travelVal.travelMinutes === 'number'
-          ? travelVal.travelMinutes
-          : typeof travelVal.driveMinutes === 'number'
-          ? travelVal.driveMinutes
-          : 30;
+      // Single-mode departure (clear or rain with single travel mode)
+      const travelMinutes = hasSingleMode
+        ? (travelVal.travelMinutes as number)
+        : (travelVal.driveMinutes as number);
 
       const timing = computeDepartTiming({
         apptTime: startTimeStr,
@@ -257,7 +286,9 @@ export class DepartPreparer implements Preparer {
 
       alreadyDue = timing.alreadyDue;
 
-      headline = `Depart for ${title}: prepare ${timing.prepareTime12}, leave ${timing.leaveTime12}`;
+      headline = hasPrecipitationRisk
+        ? `Rain departure for ${title}: prepare ${timing.prepareTime12}, leave ${timing.leaveTime12} (umbrella recommended)`
+        : `Depart for ${title}: prepare ${timing.prepareTime12}, leave ${timing.leaveTime12}`;
 
       optionsOrSteps = Object.freeze([
         {
@@ -272,7 +303,9 @@ export class DepartPreparer implements Preparer {
         },
       ]);
 
-      derivation = timing.derivation;
+      derivation = hasPrecipitationRisk
+        ? `Rain departure: ${timing.derivation}`
+        : timing.derivation;
     }
 
     return Object.freeze({

@@ -38,18 +38,19 @@ export interface DepartTimingResult {
   readonly derivation: string;
 }
 
-const ISO_CALENDAR_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(Z|[+-]\d{2}(?::?\d{2})?)?)?$/;
+const ISO_WITH_EXPLICIT_OFFSET_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}(?::?\d{2})?)$/;
 
 /**
- * Validates that an ISO string does not represent an impossible calendar date
- * (e.g. 2026-02-31, 2026-02-29 on non-leap years, 2026-04-31).
+ * Validates that an ISO date-time string represents a real, possible calendar date
+ * and strictly requires an explicit UTC offset or Z to prevent host-local parsing drift.
+ * Rejects impossible dates (e.g. 2026-02-31, 2026-02-29 on non-leap years) and offset-less strings.
  */
 export function validateCalendarDate(isoString: string): boolean {
   if (typeof isoString !== 'string' || !isoString.trim()) {
     return false;
   }
-  const match = ISO_CALENDAR_PATTERN.exec(isoString.trim());
+  const match = ISO_WITH_EXPLICIT_OFFSET_PATTERN.exec(isoString.trim());
   if (!match) {
     return false;
   }
@@ -70,13 +71,11 @@ export function validateCalendarDate(isoString: string): boolean {
     return false;
   }
 
-  if (match[4] !== undefined && match[5] !== undefined) {
-    const hour = parseInt(match[4], 10);
-    const minute = parseInt(match[5], 10);
-    const second = match[6] ? parseInt(match[6], 10) : 0;
-    if (hour > 23 || minute > 59 || second > 59) {
-      return false;
-    }
+  const hour = parseInt(match[4]!, 10);
+  const minute = parseInt(match[5]!, 10);
+  const second = parseInt(match[6]!, 10);
+  if (hour > 23 || minute > 59 || second > 59) {
+    return false;
   }
 
   return true;
@@ -115,12 +114,16 @@ export function formatTime24(epochMs: number, timeZone: string): string {
  * Pure function: calculates leave and prepare times, DST-safe, with alreadyDue flag.
  */
 export function computeDepartTiming(input: DepartTimingInput): DepartTimingResult {
-  // 1. Validate calendar dates
+  // 1. Validate calendar dates (must have explicit UTC offset or Z)
   if (!validateCalendarDate(input.apptTime)) {
-    throw new Error(`Impossible or invalid appointment calendar date: '${input.apptTime}'`);
+    throw new Error(
+      `Impossible or invalid appointment calendar date (must be a valid date with explicit UTC offset or Z): '${input.apptTime}'`
+    );
   }
   if (!validateCalendarDate(input.nowTime)) {
-    throw new Error(`Impossible or invalid nowTime calendar date: '${input.nowTime}'`);
+    throw new Error(
+      `Impossible or invalid nowTime calendar date (must be a valid date with explicit UTC offset or Z): '${input.nowTime}'`
+    );
   }
 
   // 2. Validate numeric durations (finite, non-negative)

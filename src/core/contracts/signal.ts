@@ -129,6 +129,7 @@ export function createSimulatedSignal<T>(params: MockSignalParams<T>): Simulated
 export interface ContextSnapshot {
   readonly id: string;
   readonly asOf: string; // ISO 8601 string
+  readonly timezone?: string; // Optional IANA timezone name (e.g. from Scenario)
   readonly signals: readonly ContextSignal[];
 }
 
@@ -140,6 +141,7 @@ export function freezeSnapshot(snapshot: ContextSnapshot): Readonly<ContextSnaps
   const clonedSnapshot: ContextSnapshot = {
     id: snapshot.id,
     asOf: snapshot.asOf,
+    timezone: snapshot.timezone,
     signals: snapshot.signals.map(s => {
       const clonedVal =
         s.value !== null && typeof s.value === 'object'

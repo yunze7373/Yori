@@ -123,6 +123,22 @@ describe('AC-102-3: Pure Time Calculation Engine & DST Set', () => {
 
 describe('Fail-Closed Boundary & Validation Testing (AC-102-3, INV-103)', () => {
   describe('Calendar Date Validation', () => {
+    it('rejects offset-less timestamps to prevent host-timezone drift (Finding 3)', () => {
+      expect(validateCalendarDate('2026-10-28T15:00:00')).toBe(false);
+      expect(validateCalendarDate('2026-10-28 15:00:00')).toBe(false);
+      expect(validateCalendarDate('2026-10-28')).toBe(false);
+      expect(() =>
+        computeDepartTiming({
+          apptTime: '2026-10-28T15:00:00', // offset-less!
+          travelMinutes: 30,
+          bufferMinutes: 5,
+          prepMinutes: 20,
+          timeZone: 'America/Los_Angeles',
+          nowTime: '2026-10-28T10:00:00-07:00',
+        })
+      ).toThrow(/explicit UTC offset or Z/);
+    });
+
     it('rejects impossible dates like 2026-02-31 that Date.parse rolls over', () => {
       expect(validateCalendarDate('2026-02-31T15:00:00Z')).toBe(false);
       expect(validateCalendarDate('2026-04-31T10:00:00Z')).toBe(false);
@@ -209,12 +225,14 @@ describe('DepartDetector Unit Tests', () => {
     const snapshot: ContextSnapshot = freezeSnapshot({
       id: 'snap-1',
       asOf: '2026-10-28T17:00:00.000Z',
+      timezone: 'America/Los_Angeles',
       signals: [
         createSimulatedSignal({
           kind: 'calendar',
           value: {
             title: 'Piano lesson',
             startTime: '2026-10-28T15:00:00-07:00',
+            timezone: 'America/Los_Angeles',
           },
           issuedAt: '2026-10-28T17:00:00.000Z',
           validFor: 36000000,
@@ -229,6 +247,77 @@ describe('DepartDetector Unit Tests', () => {
     expect(candidate?.intent).toBe('depart');
     expect(candidate?.confidence).toBe(1.0);
     expect(candidate?.metadata?.title).toBe('Piano lesson');
+  });
+
+  it('fails closed (returns null) on missing timezone in candidate / snapshot (Finding 1)', () => {
+    const snapshot: ContextSnapshot = freezeSnapshot({
+      id: 'snap-no-tz',
+      asOf: '2026-10-28T17:00:00.000Z',
+      signals: [
+        createSimulatedSignal({
+          kind: 'calendar',
+          value: {
+            title: 'Piano lesson',
+            startTime: '2026-10-28T15:00:00-07:00',
+            // no timezone!
+          },
+          issuedAt: '2026-10-28T17:00:00.000Z',
+          validFor: 36000000,
+          confidence: 1.0,
+          consentScope: 'device_only',
+        }),
+      ],
+    });
+
+    expect(detector.detect(snapshot, [])).toBeNull();
+  });
+
+  it('rejects past appointments beyond 15-minute grace window (Finding 5)', () => {
+    const snapshot: ContextSnapshot = freezeSnapshot({
+      id: 'snap-past',
+      asOf: '2026-10-28T17:00:00.000Z', // 10:00 AM local
+      timezone: 'America/Los_Angeles',
+      signals: [
+        createSimulatedSignal({
+          kind: 'calendar',
+          value: {
+            title: 'Past Lesson',
+            startTime: '2026-10-28T09:00:00-07:00', // 1 hour ago
+            timezone: 'America/Los_Angeles',
+          },
+          issuedAt: '2026-10-28T15:00:00.000Z',
+          validFor: 36000000,
+          confidence: 1.0,
+          consentScope: 'device_only',
+        }),
+      ],
+    });
+
+    expect(detector.detect(snapshot, [])).toBeNull();
+  });
+
+  it('rejects far-future appointments beyond 24-hour planning horizon (Finding 5)', () => {
+    const snapshot: ContextSnapshot = freezeSnapshot({
+      id: 'snap-far-future',
+      asOf: '2026-10-28T17:00:00.000Z', // 10:00 AM local
+      timezone: 'America/Los_Angeles',
+      signals: [
+        createSimulatedSignal({
+          kind: 'calendar',
+          value: {
+            title: 'Next Week Lesson',
+            startTime: '2026-11-05T15:00:00-08:00', // 8 days away
+            timezone: 'America/Los_Angeles',
+          },
+          issuedAt: '2026-10-28T17:00:00.000Z',
+          validFor: 36000000,
+          confidence: 1.0,
+          consentScope: 'device_only',
+        }),
+      ],
+    });
+
+    expect(detector.detect(snapshot, [])).toBeNull();
   });
 
   it('fails closed (returns null) on missing calendar signal', () => {
@@ -307,6 +396,7 @@ describe('DepartPreparer Unit Tests', () => {
         value: {
           title: 'Piano lesson',
           startTime: '2026-10-28T15:00:00-07:00',
+          timezone: 'America/Los_Angeles',
         },
         issuedAt: '2026-10-28T17:00:00.000Z',
         validFor: 36000000,
@@ -314,6 +404,11 @@ describe('DepartPreparer Unit Tests', () => {
         consentScope: 'device_only',
       }),
     ],
+    metadata: {
+      title: 'Piano lesson',
+      startTime: '2026-10-28T15:00:00-07:00',
+      timezone: 'America/Los_Angeles',
+    },
   };
 
   const memoryFacts: readonly MemoryFact[] = [
@@ -332,6 +427,156 @@ describe('DepartPreparer Unit Tests', () => {
       '2026-10-27T10:00:00Z'
     ),
   ];
+
+  it('renders non-LA appointments in their explicit IANA timezone: Tokyo lesson shows 2:05 PM / 2:25 PM (Finding 1)', () => {
+    // Tokyo 15:00 (+09:00), 30m travel, 5m buffer, 20m prep -> leave 14:25, prepare 14:05 Tokyo time!
+    const tokyoCandidate: IntentCandidate = {
+      intent: 'depart',
+      confidence: 1.0,
+      evidence: [
+        createSimulatedSignal({
+          kind: 'calendar',
+          value: {
+            title: 'Piano lesson Tokyo',
+            startTime: '2026-10-28T15:00:00+09:00',
+            timezone: 'Asia/Tokyo',
+          },
+          issuedAt: '2026-10-28T01:00:00.000Z', // 10:00 AM Tokyo
+          validFor: 36000000,
+          confidence: 1.0,
+          consentScope: 'device_only',
+        }),
+      ],
+      metadata: {
+        title: 'Piano lesson Tokyo',
+        startTime: '2026-10-28T15:00:00+09:00',
+        timezone: 'Asia/Tokyo',
+      },
+    };
+
+    const tokyoSnapshot: ContextSnapshot = freezeSnapshot({
+      id: 'snap-tokyo',
+      asOf: '2026-10-28T01:00:00.000Z',
+      timezone: 'Asia/Tokyo',
+      signals: [
+        tokyoCandidate.evidence[0]!,
+        createSimulatedSignal({
+          kind: 'travel_estimate',
+          value: { mode: 'drive', travelMinutes: 30 },
+          issuedAt: '2026-10-28T01:00:00.000Z',
+          validFor: 36000000,
+          confidence: 0.9,
+          consentScope: 'device_only',
+        }),
+      ],
+    });
+
+    const plan = preparer.prepare(tokyoCandidate, tokyoSnapshot, memoryFacts);
+    expect(plan).not.toBeNull();
+    // Must render in Tokyo local time (2:05 PM and 2:25 PM), NEVER LA time!
+    expect(plan?.headline).toContain('2:05 PM');
+    expect(plan?.headline).toContain('2:25 PM');
+    expect(plan?.why.derivation).toContain('14:25 leave');
+    expect(plan?.why.derivation).toContain('14:05 prepare');
+  });
+
+  it('fails closed (returns null) on missing confirmed prep_buffer_minutes in memory (Finding 2)', () => {
+    const memoryWithoutBuffer = memoryFacts.filter(f => f.key !== 'prep_buffer_minutes');
+    const snapshot: ContextSnapshot = freezeSnapshot({
+      id: 'snap-no-buf',
+      asOf: '2026-10-28T17:00:00.000Z',
+      timezone: 'America/Los_Angeles',
+      signals: [
+        mockCandidate.evidence[0]!,
+        createSimulatedSignal({
+          kind: 'travel_estimate',
+          value: { mode: 'drive', travelMinutes: 30 },
+          issuedAt: '2026-10-28T17:00:00.000Z',
+          validFor: 36000000,
+          confidence: 0.9,
+          consentScope: 'device_only',
+        }),
+      ],
+    });
+
+    expect(preparer.prepare(mockCandidate, snapshot, memoryWithoutBuffer)).toBeNull();
+  });
+
+  it('fails closed (returns null) on missing confirmed prep_duration_minutes in memory (Finding 2)', () => {
+    const memoryWithoutPrep = memoryFacts.filter(f => f.key !== 'prep_duration_minutes');
+    const snapshot: ContextSnapshot = freezeSnapshot({
+      id: 'snap-no-prep',
+      asOf: '2026-10-28T17:00:00.000Z',
+      timezone: 'America/Los_Angeles',
+      signals: [
+        mockCandidate.evidence[0]!,
+        createSimulatedSignal({
+          kind: 'travel_estimate',
+          value: { mode: 'drive', travelMinutes: 30 },
+          issuedAt: '2026-10-28T17:00:00.000Z',
+          validFor: 36000000,
+          confidence: 0.9,
+          consentScope: 'device_only',
+        }),
+      ],
+    });
+
+    expect(preparer.prepare(mockCandidate, snapshot, memoryWithoutPrep)).toBeNull();
+  });
+
+  it('fails closed (returns null) on missing travel duration numbers (Finding 2)', () => {
+    const snapshot: ContextSnapshot = freezeSnapshot({
+      id: 'snap-no-travel-mins',
+      asOf: '2026-10-28T17:00:00.000Z',
+      timezone: 'America/Los_Angeles',
+      signals: [
+        mockCandidate.evidence[0]!,
+        createSimulatedSignal({
+          kind: 'travel_estimate',
+          value: { mode: 'drive' }, // missing travelMinutes!
+          issuedAt: '2026-10-28T17:00:00.000Z',
+          validFor: 36000000,
+          confidence: 0.9,
+          consentScope: 'device_only',
+        }),
+      ],
+    });
+
+    expect(preparer.prepare(mockCandidate, snapshot, memoryFacts)).toBeNull();
+  });
+
+  it('rain forecast with single-mode travel still adds umbrella to checklist (Finding 4)', () => {
+    const snapshot: ContextSnapshot = freezeSnapshot({
+      id: 'snap-rain-single',
+      asOf: '2026-10-28T20:35:00.000Z',
+      timezone: 'America/Los_Angeles',
+      signals: [
+        mockCandidate.evidence[0]!,
+        createSimulatedSignal({
+          kind: 'weather',
+          value: { condition: 'rain', precipProbability: 0.9 },
+          issuedAt: '2026-10-28T20:35:00.000Z',
+          validFor: 7200000,
+          confidence: 0.92,
+          consentScope: 'device_only',
+        }),
+        createSimulatedSignal({
+          kind: 'travel_estimate',
+          value: { mode: 'drive', travelMinutes: 30 },
+          issuedAt: '2026-10-28T20:35:00.000Z',
+          validFor: 7200000,
+          confidence: 0.9,
+          consentScope: 'device_only',
+        }),
+      ],
+    });
+
+    const plan = preparer.prepare(mockCandidate, snapshot, memoryFacts);
+    expect(plan).not.toBeNull();
+    // Umbrella MUST be in checklist even with single-mode travel (Finding 4)
+    expect(plan?.checklist).toContain('umbrella');
+    expect(plan?.headline).toContain('umbrella recommended');
+  });
 
   it('prepares D1 clear plan with exact prepare 2:05 PM and leave 2:25 PM', () => {
     const snapshot: ContextSnapshot = freezeSnapshot({
