@@ -193,17 +193,21 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   gap: 16px;
 }
 
-.now-title {
-  font-size: 1.125rem;
+.now-subject {
+  font-family: var(--font-serif);
+  font-size: 1.375rem;
   font-weight: 600;
   color: var(--color-ink);
+  line-height: 1.3;
+  margin-top: 4px;
 }
 
-.now-headline {
-  font-size: 1.375rem;
+.now-title {
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--color-accent);
   line-height: 1.3;
+  margin-top: 2px;
 }
 
 .now-basis {
@@ -211,10 +215,26 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   color: var(--color-muted);
 }
 
+.habit-note {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  margin-top: 4px;
+}
+
+.mock-places-notice {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+  font-style: italic;
+  margin-top: 4px;
+}
+
 /* Rain Re-plan Elements */
 .rain-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background-color: #F0F6F5;
-  border-left: 3px solid var(--color-accent);
+  border: 1px solid #D5E4DF;
   padding: 10px 14px;
   border-radius: 8px;
   font-size: 0.875rem;
@@ -432,6 +452,13 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   display: flex;
   gap: 10px;
   margin-top: 14px;
+}
+
+.storage-feedback {
+  margin-top: 10px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #16382F;
 }
 
 .btn-danger {

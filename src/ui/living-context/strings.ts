@@ -1,11 +1,16 @@
 /**
  * Externalized UI Strings (NFR-105)
  * English UI first; all user-visible text externalized for i18n readiness.
+ * Free of internal engine identifiers, slice IDs, and invariant codes.
  */
 
 export const STRINGS = Object.freeze({
   header: Object.freeze({
-    greeting: 'Good afternoon.',
+    greetings: Object.freeze({
+      morning: 'Good morning.',
+      afternoon: 'Good afternoon.',
+      evening: 'Good evening.',
+    }),
     subheading: "I've been looking ahead for you.",
     demoChip: 'Demo · simulated context',
     simulatedBadge: 'SIMULATED',
@@ -16,19 +21,19 @@ export const STRINGS = Object.freeze({
     forYou: 'FOR YOU',
   }),
   scenes: Object.freeze({
-    clear: 'Clear (D1)',
-    rain: 'Rain (D2)',
-    awayLunch: 'Away Lunch (D3)',
-    busyLunch: 'Busy / Quiet (D4)',
-    missingWeather: 'Missing Weather (D6)',
-    corruptStorage: 'Corrupt Storage (INV-110)',
+    clear: 'Clear',
+    rain: 'Rain',
+    awayLunch: 'Away lunch',
+    busyLunch: 'Busy lunch',
+    missingWeather: 'Missing weather',
+    corruptStorage: 'Storage error',
   }),
   tabs: Object.freeze({
     today: 'Today',
     explore: 'Explore',
     ask: 'Ask',
     me: 'Me',
-    comingSoonBadge: 'Coming next',
+    comingSoonBadge: 'Coming soon',
   }),
   quietState: Object.freeze({
     title: 'Nothing needs your attention right now.',
@@ -38,22 +43,37 @@ export const STRINGS = Object.freeze({
     accept: 'Accept',
     adjust: 'Adjust',
     dismiss: 'Dismiss',
-    comingSoon: 'Coming next in S4-1',
+    comingSoon: 'Coming soon',
+  }),
+  depart: Object.freeze({
+    defaultTitle: 'Piano lesson at 3:00',
+    primaryLine: 'Get ready at 2:05 PM, leave by 2:25 PM',
+    basisLine: 'Based on your calendar, the route, and how you usually get ready.',
   }),
   rain: Object.freeze({
-    whatChanged: 'What changed: rain forecast arrived for your travel window',
-    checklistHeader: 'Checklist',
+    whatChanged: 'What changed: rain forecast',
     umbrellaChip: 'Umbrella',
+    driveOption: 'Drive · leave 2:30',
+    busOption: 'Bus · leave 2:15',
+    habitNote: 'You usually prefer driving when it rains.',
   }),
   lunch: Object.freeze({
-    mockPlacesNotice: 'Simulated nearby dining options matching confirmed tastes',
+    title: 'Lunch options near you',
+    primaryLine: 'Places matching what you like, within walking distance',
+    basisLine: 'Based on your location, schedule window, and what you usually like.',
+    mockPlacesNotice: 'Mock places for this demo; real listings come from a place provider.',
   }),
   storageError: Object.freeze({
-    title: 'Storage Corruption Detected',
+    title: 'Storage error detected',
     message:
-      'Stored data could not be verified against schema version 1. No data has been wiped.',
+      'Stored data could not be verified. Your existing records are preserved and have not been wiped.',
     exportBtn: 'Export Raw Data',
     resetBtn: 'Reset Storage',
+    exportedNotice: 'Storage backup exported successfully.',
+    resetNotice: 'Storage reset to fresh state.',
+  }),
+  notices: Object.freeze({
+    degradedNoticeHeader: 'Notice:',
   }),
   map: Object.freeze({
     label: 'Spatial Context Map',

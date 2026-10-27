@@ -87,10 +87,10 @@ export const d3Scenario: Scenario = {
       signal: createSimulatedSignal({
         kind: 'mock_places',
         value: [
-          { name: 'Ramen Ichiko', cuisine: 'japanese', distanceMinutes: 5 },
-          { name: 'Green Salad Co', cuisine: 'salad', distanceMinutes: 7 },
-          { name: 'Sushi Kura', cuisine: 'japanese', distanceMinutes: 10 },
-          { name: 'Burger Joint', cuisine: 'fast_food', distanceMinutes: 8 },
+          { name: 'Demo Place A · Ramen', cuisine: 'japanese', distanceMinutes: 5 },
+          { name: 'Demo Place B · Salad', cuisine: 'salad', distanceMinutes: 7 },
+          { name: 'Demo Place C · Sushi', cuisine: 'japanese', distanceMinutes: 10 },
+          { name: 'Demo Place D · Fast Food', cuisine: 'fast_food', distanceMinutes: 8 },
         ],
         issuedAt: '2026-10-28T19:10:00.000Z',
         validFor: 3600000,
