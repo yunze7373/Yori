@@ -22,6 +22,7 @@ describe('Lunch Detector (AC-103-1, INV-108)', () => {
     const snapshot: ContextSnapshot = {
       id: 'snap-lunch-1',
       asOf: '2026-10-28T19:10:00.000Z',
+      timezone: 'America/Los_Angeles',
       signals: [
         createSimulatedSignal({
           kind: 'location_status',
@@ -53,6 +54,7 @@ describe('Lunch Detector (AC-103-1, INV-108)', () => {
     const busySnapshot: ContextSnapshot = {
       id: 'snap-busy',
       asOf: '2026-10-28T19:10:00.000Z',
+      timezone: 'America/Los_Angeles',
       signals: [
         createSimulatedSignal({
           kind: 'schedule_window',
@@ -71,14 +73,74 @@ describe('Lunch Detector (AC-103-1, INV-108)', () => {
     expect(candidate?.suppressedBy).toBeUndefined(); // Must NOT suppress in plugin
   });
 
-  it('returns null when explicitly at home with no schedule/eating trigger', () => {
-    const homeSnapshot: ContextSnapshot = {
-      id: 'snap-home',
-      asOf: '2026-10-28T19:10:00.000Z',
+  it('returns null when explicitly at home, including in the evening at 20:00 (Probe R5)', () => {
+    const homeEveningSnapshot: ContextSnapshot = {
+      id: 'snap-home-evening',
+      asOf: '2026-10-29T03:00:00.000Z', // 20:00 local in America/Los_Angeles (-07:00)
+      timezone: 'America/Los_Angeles',
       signals: [
         createSimulatedSignal({
           kind: 'location_status',
           value: { isHome: true },
+          issuedAt: '2026-10-29T03:00:00.000Z',
+          validFor: 3600000,
+          confidence: 0.9,
+          consentScope: 'device_only',
+        }),
+        createSimulatedSignal({
+          kind: 'schedule_window',
+          value: { freeUntil: '2026-10-29T05:00:00.000Z' },
+          issuedAt: '2026-10-29T03:00:00.000Z',
+          validFor: 3600000,
+          confidence: 0.9,
+          consentScope: 'device_only',
+        }),
+      ],
+    };
+
+    const candidate = lunchDetector.detect(homeEveningSnapshot, []);
+    expect(candidate).toBeNull();
+  });
+
+  it('returns null when outside lunch window even if away (Finding 4)', () => {
+    // 08:30 AM morning in America/Los_Angeles (-07:00 is 15:30Z)
+    const morningSnapshot: ContextSnapshot = {
+      id: 'snap-morning',
+      asOf: '2026-10-28T15:30:00.000Z',
+      timezone: 'America/Los_Angeles',
+      signals: [
+        createSimulatedSignal({
+          kind: 'location_status',
+          value: { isHome: false },
+          issuedAt: '2026-10-28T15:30:00.000Z',
+          validFor: 3600000,
+          confidence: 0.9,
+          consentScope: 'device_only',
+        }),
+      ],
+    };
+
+    expect(lunchDetector.detect(morningSnapshot, [])).toBeNull();
+  });
+
+  it('returns null when free window is too short for lunch (< 20 mins) (Finding 4)', () => {
+    // 12:10 PM in America/Los_Angeles (19:10Z), free until 12:20 PM (19:20Z = 10 mins free)
+    const shortWindowSnapshot: ContextSnapshot = {
+      id: 'snap-short',
+      asOf: '2026-10-28T19:10:00.000Z',
+      timezone: 'America/Los_Angeles',
+      signals: [
+        createSimulatedSignal({
+          kind: 'location_status',
+          value: { isHome: false },
+          issuedAt: '2026-10-28T19:10:00.000Z',
+          validFor: 3600000,
+          confidence: 0.9,
+          consentScope: 'device_only',
+        }),
+        createSimulatedSignal({
+          kind: 'schedule_window',
+          value: { freeUntil: '2026-10-28T19:20:00.000Z' }, // 10 minutes only!
           issuedAt: '2026-10-28T19:10:00.000Z',
           validFor: 3600000,
           confidence: 0.9,
@@ -87,8 +149,7 @@ describe('Lunch Detector (AC-103-1, INV-108)', () => {
       ],
     };
 
-    const candidate = lunchDetector.detect(homeSnapshot, []);
-    expect(candidate).toBeNull();
+    expect(lunchDetector.detect(shortWindowSnapshot, [])).toBeNull();
   });
 
   it('returns null when snapshot has no relevant signals', () => {
@@ -106,6 +167,7 @@ describe('Lunch Preparer (AC-103-1, INV-103, INV-104)', () => {
   const validSnapshot: ContextSnapshot = {
     id: 'snap-prep-1',
     asOf: '2026-10-28T19:10:00.000Z',
+    timezone: 'America/Los_Angeles',
     signals: [
       createSimulatedSignal({
         kind: 'location_status',

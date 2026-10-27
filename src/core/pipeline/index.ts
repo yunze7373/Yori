@@ -37,6 +37,8 @@ export interface PipelineInput {
   readonly plugins?: readonly Plugin[];
   readonly policy?: SharedPolicySurface;
   readonly storage?: YoriStorage;
+  readonly suppressions?: readonly SuppressionReason[];
+  readonly isProactivePrompt?: boolean;
   readonly promptCountToday?: number;
   readonly maxDailyPrompts?: number;
 }
@@ -81,7 +83,9 @@ export function runPipeline(input: PipelineInput): PipelineResultPromise {
       : input.clock?.now() ?? input.snapshot.asOf;
 
   // 1. Evaluate environmental signals for missing or expired dependencies (INV-106, D6)
-  const notices: FailClosedNotice[] = [...policy.evaluateSignals(input.snapshot, evaluationClock)];
+  const notices: FailClosedNotice[] = [
+    ...policy.evaluateSignals(input.snapshot, plugins, evaluationClock),
+  ];
   const suppressions: SuppressionReason[] = [];
 
   // Determine current daily prompt count for budget enforcement (INV-105)
@@ -100,8 +104,12 @@ export function runPipeline(input: PipelineInput): PipelineResultPromise {
   const policyContext = {
     snapshot: input.snapshot,
     memory: input.memory,
+    suppressions: input.suppressions,
+    storage: input.storage,
+    isProactivePrompt: input.isProactivePrompt ?? false,
     promptCountToday,
     maxDailyPrompts: input.maxDailyPrompts,
+    plugins,
   };
 
   const detectedCandidates: Array<{ plugin: Plugin; candidate: IntentCandidate }> = [];

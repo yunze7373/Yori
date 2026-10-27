@@ -26,6 +26,7 @@ import {
   d4MemoryFacts,
   d5Scenario,
   d5MemoryFacts,
+  d5SameDaySuppressions,
   d6ScenarioStaleWeather,
   d6ScenarioMissingWeather,
   D6_EVALUATION_CLOCK,
@@ -227,6 +228,7 @@ describe('Slice 0 S0-2: D5 Explicit User Suppression Fixture (Fails on Stub)', (
     const result = runPipeline({
       snapshot: snapshots[snapshots.length - 1]!,
       memory: d5MemoryFacts,
+      suppressions: d5SameDaySuppressions,
       clock: '2026-10-28T19:15:00.000Z',
     });
 

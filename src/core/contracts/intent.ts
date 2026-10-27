@@ -25,6 +25,7 @@ export interface SuppressionReason {
   readonly reason: string;
   readonly scope: SuppressionScope;
   readonly recordedAt: string;
+  readonly targetIntent?: string;
 }
 
 /**

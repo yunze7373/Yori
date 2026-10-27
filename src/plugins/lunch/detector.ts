@@ -2,9 +2,13 @@
  * Lunch Intent Detector
  * Governed by Invariants INV-108, INV-109, and AC-103-1.
  *
- * Detects lunch intent when away from home, during a free window, or when eating status signals are present.
- * Invariant INV-108: Detector carries zero suppression logic. Suppressions (user_busy, already_done,
- * user_suppressed, budget_exhausted) are evaluated exclusively by the shared core policy engine.
+ * Detects lunch intent when away from home during a valid lunch window with an adequate free schedule window.
+ *
+ * Requirements (Finding 4):
+ * - User must be away from home (isHome === false; if isHome === true, returns null).
+ * - Snapshot local time must be within declared lunch window (11:00 - 14:30 local in snapshot's timezone).
+ * - User must have a free window of at least 20 minutes (or schedule conflict / already ate, which are passed to policy).
+ * - Zero suppression in plugin: user_busy and already_done are evaluated exclusively by shared core policy.
  */
 
 import type {
@@ -14,6 +18,64 @@ import type {
   MemoryFact,
   ContextSignal,
 } from '../../core/contracts/index.js';
+
+export const LUNCH_WINDOW_START_HOUR = 11; // 11:00 AM
+export const LUNCH_WINDOW_END_HOUR = 14;   // 14:30 (2:30 PM)
+export const LUNCH_WINDOW_END_MINUTE = 30;
+export const MINIMUM_LUNCH_WINDOW_MINUTES = 20;
+
+/**
+ * Checks whether an ISO timestamp falls within the local lunch window (11:00 - 14:30).
+ */
+export function isWithinLunchWindow(isoTime: string, timezone?: string): boolean {
+  try {
+    const d = new Date(isoTime);
+    if (!Number.isFinite(d.getTime())) {
+      return false;
+    }
+    const tz = timezone ?? 'UTC';
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(d);
+    let hour = parseInt(parts.find(p => p.type === 'hour')?.value ?? '0', 10);
+    if (hour === 24) hour = 0;
+    const minute = parseInt(parts.find(p => p.type === 'minute')?.value ?? '0', 10);
+    const minuteOfDay = hour * 60 + minute;
+    // 11:00 is 660 minutes; 14:30 is 870 minutes
+    return minuteOfDay >= 660 && minuteOfDay <= 870;
+  } catch {
+    return false;
+  }
+}
+
+export function getTimezoneFromSnapshot(snapshot: ContextSnapshot): string {
+  if (snapshot.timezone && snapshot.timezone.trim()) {
+    return snapshot.timezone.trim();
+  }
+  const tzSig = snapshot.signals.find(s => s.kind === 'timezone');
+  if (tzSig && typeof tzSig.value === 'string' && tzSig.value.trim()) {
+    return tzSig.value.trim();
+  }
+  // Check if any signal has an explicit offset like -07:00
+  for (const s of snapshot.signals) {
+    if (s.value && typeof s.value === 'object') {
+      const v = s.value as Record<string, unknown>;
+      for (const val of Object.values(v)) {
+        if (typeof val === 'string') {
+          const match = val.match(/([+-]\d{2}:\d{2})$/);
+          if (match && match[1]) {
+            return match[1];
+          }
+        }
+      }
+    }
+  }
+  return 'UTC';
+}
 
 export class LunchDetector implements IntentDetector {
   public readonly id = 'lunch-detector';
@@ -27,6 +89,13 @@ export class LunchDetector implements IntentDetector {
       return null;
     }
 
+    const timezone = getTimezoneFromSnapshot(snapshot);
+
+    // 1. Lunch window check (Finding 4): Snapshot local time must be in 11:00 - 14:30
+    if (!isWithinLunchWindow(snapshot.asOf, timezone)) {
+      return null;
+    }
+
     const signals = snapshot.signals;
 
     // Locate lunch-relevant environmental signals
@@ -35,15 +104,15 @@ export class LunchDetector implements IntentDetector {
     const eatingSignal = signals.find(s => s.kind === 'eating_status');
     const mockPlacesSignal = signals.find(s => s.kind === 'mock_places');
 
-    // If user is explicitly at home (isHome === true) and there is no schedule/eating trigger, no lunch-away candidate
+    // 2. Location check (Finding 4): If user is explicitly at home (isHome === true), no lunch recommendation
     if (locationSignal && locationSignal.value && typeof locationSignal.value === 'object') {
       const locVal = locationSignal.value as Record<string, unknown>;
-      if (locVal.isHome === true && !scheduleSignal && !eatingSignal) {
+      if (locVal.isHome === true) {
         return null;
       }
     }
 
-    // Must have at least one lunch-relevant signal: location_status (away), schedule_window, eating_status, or mock_places
+    // Must have at least one lunch-relevant signal
     const relevantSignals: ContextSignal[] = [];
     if (locationSignal) relevantSignals.push(locationSignal);
     if (scheduleSignal) relevantSignals.push(scheduleSignal);
@@ -54,26 +123,39 @@ export class LunchDetector implements IntentDetector {
       return null;
     }
 
-    // Check validity of evidence signals (fail closed if required signals have expired)
-    const snapshotAsOfMs = Date.parse(snapshot.asOf);
-    for (const sig of relevantSignals) {
-      if (
-        typeof sig.validFor === 'number' &&
-        typeof sig.issuedAt === 'string' &&
-        Number.isFinite(snapshotAsOfMs)
-      ) {
-        const issuedAtMs = Date.parse(sig.issuedAt);
-        if (Number.isFinite(issuedAtMs) && snapshotAsOfMs - issuedAtMs > sig.validFor) {
-          // Expired signal is handled by policy fail-closed evaluation
+    // 3. Free window check (Finding 4)
+    let isUserBusy = false;
+    if (scheduleSignal && scheduleSignal.value && typeof scheduleSignal.value === 'object') {
+      const schedVal = scheduleSignal.value as Record<string, unknown>;
+      if (schedVal.isBusy === true) {
+        isUserBusy = true;
+      } else if (typeof schedVal.freeUntil === 'string') {
+        const freeUntilMs = Date.parse(schedVal.freeUntil);
+        const asOfMs = Date.parse(snapshot.asOf);
+        if (Number.isFinite(freeUntilMs) && Number.isFinite(asOfMs)) {
+          const freeMinutes = (freeUntilMs - asOfMs) / (60 * 1000);
+          if (freeMinutes < MINIMUM_LUNCH_WINDOW_MINUTES) {
+            // Free window is too short for lunch (< 20 mins)
+            return null;
+          }
         }
       }
     }
 
-    // Base confidence from relevant signals (min 0.85 to be above low_confidence 0.6 threshold)
-    const confidences = relevantSignals
-      .map(s => s.confidence)
-      .filter((c): c is number => typeof c === 'number' && Number.isFinite(c));
-    const confidence = confidences.length > 0 ? Math.min(...confidences) : 0.85;
+    // 4. Eating status check (Finding 4)
+    let hasEatenToday = false;
+    if (eatingSignal && eatingSignal.value && typeof eatingSignal.value === 'object') {
+      const eatVal = eatingSignal.value as Record<string, unknown>;
+      if (eatVal.eatenToday === true) {
+        hasEatenToday = true;
+      }
+    }
+
+    // Base confidence: lower to 0.7 if eating status is unconfirmed/missing, 0.9 if confirmed not eaten
+    let confidence = 0.9;
+    if (!eatingSignal) {
+      confidence = 0.75;
+    }
 
     return Object.freeze({
       intent: 'lunch',
@@ -82,6 +164,10 @@ export class LunchDetector implements IntentDetector {
       urgency: 'medium',
       suggestedPlanningHorizonMs: 3600000,
       suppressedBy: undefined, // Zero suppression in plugins (INV-108)
+      metadata: Object.freeze({
+        isBusy: isUserBusy,
+        completedToday: hasEatenToday,
+      }),
     });
   }
 }

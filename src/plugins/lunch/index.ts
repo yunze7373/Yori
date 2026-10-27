@@ -20,4 +20,6 @@ export const lunchPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
   detector: lunchDetector,
   preparer: lunchPreparer,
   adapter: mockPlaceAdapter,
+  requiredSignals: Object.freeze(['location_status', 'schedule_window']),
+  triggerSignalKinds: Object.freeze(['location_status', 'schedule_window', 'eating_status']),
 });

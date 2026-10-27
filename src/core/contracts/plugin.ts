@@ -15,4 +15,6 @@ export interface Plugin<TAdapter extends ProviderAdapter = ProviderAdapter> {
   readonly detector: IntentDetector;
   readonly preparer: Preparer;
   readonly adapter?: TAdapter;
+  readonly requiredSignals?: readonly string[];
+  readonly triggerSignalKinds?: readonly string[];
 }

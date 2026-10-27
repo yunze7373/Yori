@@ -9,6 +9,7 @@ import {
   type Scenario,
   type MemoryFact,
   type UserFeedback,
+  type SuppressionReason,
   createSimulatedSignal,
   createMemoryFact,
 } from '../../src/core/contracts/index.js';
@@ -35,6 +36,16 @@ export const d5PendingMemoryProposal: MemoryFact<string> = createMemoryFact(
   },
   '2026-10-28T19:15:00.000Z'
 );
+
+export const d5SameDaySuppressions: readonly SuppressionReason[] = [
+  Object.freeze({
+    code: 'user_suppressed' as const,
+    reason: "User dismissed lunch plan: don't suggest lunch",
+    scope: 'today' as const,
+    recordedAt: '2026-10-28T19:15:00.000Z',
+    targetIntent: 'lunch',
+  }),
+];
 
 export const d5MemoryFacts: readonly MemoryFact[] = [d5PendingMemoryProposal];
 

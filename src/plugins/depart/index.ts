@@ -22,4 +22,6 @@ export const departPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
   detector: departDetector,
   preparer: departPreparer,
   adapter: departAdapter,
+  requiredSignals: Object.freeze(['calendar', 'weather']),
+  triggerSignalKinds: Object.freeze(['calendar']),
 });
