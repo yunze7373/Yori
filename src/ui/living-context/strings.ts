@@ -96,6 +96,20 @@ export const STRINGS = Object.freeze({
     cancelResetBtn: 'Cancel',
     exportNotice: 'Data backup exported successfully.',
     resetNotice: 'Storage reset to fresh state.',
+    persistenceUnavailable:
+      'Persistence unavailable: Storage is operating in temporary session mode because browser storage is restricted.',
+  }),
+  memory: Object.freeze({
+    prepBufferMinutesLabel: 'Buffer before leaving',
+    prepDurationMinutesLabel: 'Time to get ready',
+    prepBufferPreferenceLabel: 'Preparation & buffer routine',
+    rainTransportLabel: 'Rain travel habit',
+    tastePreferenceLabel: 'Dining taste preferences',
+    suppressLunchLabel: 'Lunch suggestions',
+    minutesUnit: '{minutes} min',
+    rainDriveValue: 'Prefers driving when it rains',
+    rainTransitValue: 'Prefers transit when it rains',
+    suppressedTodayValue: 'Suppressed for today',
   }),
   depart: Object.freeze({
     basisLine: 'Based on your calendar, the route, and how you usually get ready.',

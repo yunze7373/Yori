@@ -98,12 +98,69 @@ export function resolveModelConfig(
   };
 }
 
+export class RateLimiter {
+  private requests: number[] = [];
+
+  constructor(
+    private readonly maxRequests: number = 30,
+    private readonly windowMs: number = 60_000
+  ) {}
+
+  public check(now: number = Date.now()): boolean {
+    this.requests = this.requests.filter(t => now - t < this.windowMs);
+    if (this.requests.length >= this.maxRequests) {
+      return false;
+    }
+    this.requests.push(now);
+    return true;
+  }
+
+  public reset(): void {
+    this.requests = [];
+  }
+}
+
+export function isLocalHost(hostHeader?: string): boolean {
+  if (!hostHeader) return false;
+  const host = hostHeader.trim().toLowerCase();
+  if (host === 'localhost' || host.startsWith('localhost:')) return true;
+  if (host === '127.0.0.1' || host.startsWith('127.0.0.1:')) return true;
+  if (host === '[::1]' || host.startsWith('[::1]:')) return true;
+  return false;
+}
+
+export function isLocalOrigin(originHeader?: string): boolean {
+  if (!originHeader) return true;
+  const origin = originHeader.trim().toLowerCase();
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname.toLowerCase();
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
+export function isLocalReferer(refererHeader?: string): boolean {
+  if (!refererHeader) return true;
+  const referer = refererHeader.trim().toLowerCase();
+  try {
+    const url = new URL(referer);
+    const hostname = url.hostname.toLowerCase();
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
+
 export class ModelDevProxy {
   private config: ModelProxyConfig;
+  private readonly rateLimiter: RateLimiter;
 
   constructor(
     customConfig?: Partial<ModelProxyConfig>,
-    private readonly logger: (msg: string) => void = () => {}
+    private readonly logger: (msg: string) => void = () => {},
+    customRateLimiter?: RateLimiter
   ) {
     this.config = customConfig
       ? {
@@ -113,6 +170,11 @@ export class ModelDevProxy {
           modelName: customConfig.modelName ?? 'muse-spark-1.3',
         }
       : resolveModelConfig(this.logger);
+    this.rateLimiter = customRateLimiter ?? new RateLimiter(30, 60_000);
+  }
+
+  public getRateLimiter(): RateLimiter {
+    return this.rateLimiter;
   }
 
   public getDiagnostics(): ModelPortDiagnostics {
@@ -133,6 +195,171 @@ export class ModelDevProxy {
     };
   }
 
+  /**
+   * Handles incoming HTTP requests for model proxy routes with strict security guards.
+   * Enforces:
+   * 1. Local loopback Host header only (403 for LAN/Tailscale).
+   * 2. Local loopback Origin/Referer only (403 for cross-site / external origins).
+   * 3. Blocks cross-site Sec-Fetch-Site (403).
+   * 4. Content-Type: application/json required on POST (415).
+   * 5. Maximum 8KB payload cap (413).
+   * 6. Per-minute rate limit (429).
+   */
+  public async handleHttpRequest(req: any, res: any): Promise<boolean> {
+    const url = (req.url || '').split('?')[0];
+    if (url !== '/api/model/diagnostics' && url !== '/api/model/refine') {
+      return false;
+    }
+
+    // 1. Host header validation
+    const hostHeader = (req.headers?.['host'] || req.headers?.[':authority']) as string | undefined;
+    if (!isLocalHost(hostHeader)) {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Forbidden: non-local host access is blocked' }));
+      return true;
+    }
+
+    // 2. Origin validation
+    const originHeader = req.headers?.['origin'] as string | undefined;
+    if (originHeader && !isLocalOrigin(originHeader)) {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Forbidden: cross-origin access is blocked' }));
+      return true;
+    }
+
+    // 3. Sec-Fetch-Site validation
+    const secFetchSite = req.headers?.['sec-fetch-site'] as string | undefined;
+    if (secFetchSite === 'cross-site') {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Forbidden: cross-site requests are blocked' }));
+      return true;
+    }
+
+    // 4. Referer validation
+    const referer = req.headers?.['referer'] as string | undefined;
+    if (referer && !isLocalReferer(referer)) {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Forbidden: non-local referer is blocked' }));
+      return true;
+    }
+
+    // 5. Device testing mode isolation
+    if (process.env.DEV_DEVICE_TESTING === 'true') {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Forbidden: model proxy disabled in device-testing mode' }));
+      return true;
+    }
+
+    // Route: GET /api/model/diagnostics
+    if (url === '/api/model/diagnostics') {
+      if (req.method !== 'GET') {
+        res.statusCode = 405;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return true;
+      }
+      const diag = this.getDiagnostics();
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(diag));
+      return true;
+    }
+
+    // Route: POST /api/model/refine
+    if (url === '/api/model/refine') {
+      if (req.method !== 'POST') {
+        res.statusCode = 405;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return true;
+      }
+
+      // Content-Type validation
+      const contentType = ((req.headers?.['content-type'] as string) || '').toLowerCase();
+      if (!contentType.startsWith('application/json')) {
+        res.statusCode = 415;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Unsupported Media Type: application/json required' }));
+        return true;
+      }
+
+      // Rate limit check
+      if (!this.rateLimiter.check()) {
+        res.statusCode = 429;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Retry-After', '60');
+        res.end(JSON.stringify({ error: 'Too Many Requests: rate limit exceeded' }));
+        return true;
+      }
+
+      // Body size limit: 8KB (8192 bytes)
+      return new Promise<boolean>(resolve => {
+        let body = '';
+        let bytesCount = 0;
+        let isOversize = false;
+
+        req.on('data', (chunk: Buffer | string) => {
+          if (isOversize) return;
+          const chunkLen = typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
+          bytesCount += chunkLen;
+          if (bytesCount > 8192) {
+            isOversize = true;
+            res.statusCode = 413;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Payload Too Large: maximum body size is 8KB' }));
+            resolve(true);
+            return;
+          }
+          body += chunk.toString();
+        });
+
+        req.on('end', async () => {
+          if (isOversize) return;
+          try {
+            const parsed = JSON.parse(body);
+            if (
+              !parsed ||
+              typeof parsed !== 'object' ||
+              typeof parsed.templateWording !== 'string' ||
+              typeof parsed.suppliedFacts !== 'object' ||
+              parsed.suppliedFacts === null
+            ) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Invalid JSON request schema' }));
+              resolve(true);
+              return;
+            }
+            const result = await this.handleRefine(parsed);
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(result));
+            resolve(true);
+          } catch {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Invalid JSON payload' }));
+            resolve(true);
+          }
+        });
+
+        req.on('error', () => {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Request read error' }));
+          resolve(true);
+        });
+      });
+    }
+
+    return false;
+  }
+
   public async handleRefine(request: ModelPortRequest): Promise<ModelPortResponse> {
     const diag = this.getDiagnostics();
     if (diag.status === 'disabled') {
@@ -143,10 +370,25 @@ export class ModelDevProxy {
       };
     }
 
-    // Call the model API with strict fact validation and timeout
+    // Call the model API with strict fact validation, max_tokens, and timeout
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const times = Array.isArray(request.suppliedFacts?.times)
+        ? request.suppliedFacts.times.slice(0, 10)
+        : [];
+      const places = Array.isArray(request.suppliedFacts?.places)
+        ? request.suppliedFacts.places.slice(0, 10)
+        : [];
+      const contextSummary =
+        typeof request.suppliedFacts?.contextSummary === 'string'
+          ? request.suppliedFacts.contextSummary.slice(0, 200)
+          : '';
+      const templateWording =
+        typeof request.templateWording === 'string'
+          ? request.templateWording.slice(0, 500)
+          : '';
 
       const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
         method: 'POST',
@@ -156,6 +398,7 @@ export class ModelDevProxy {
         },
         body: JSON.stringify({
           model: this.config.modelName,
+          max_tokens: 150,
           messages: [
             {
               role: 'system',
@@ -165,8 +408,13 @@ export class ModelDevProxy {
             {
               role: 'user',
               content: JSON.stringify({
-                template: request.templateWording,
-                facts: request.suppliedFacts,
+                templateId: request.intentId,
+                template: templateWording,
+                facts: {
+                  times,
+                  places,
+                  context: contextSummary,
+                },
               }),
             },
           ],

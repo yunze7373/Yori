@@ -23,6 +23,7 @@ export interface MeViewState {
   readonly maxDailyPrompts: number;
   readonly timezone?: string;
   readonly actionNotice?: string;
+  readonly isPersistent?: boolean;
 }
 
 export function renderMeView(state: MeViewState): string {
@@ -40,6 +41,12 @@ export function renderMeView(state: MeViewState): string {
         <h1 class="me-title">${escapeHtml(STRINGS.me.title)}</h1>
         <p class="me-subtitle">${escapeHtml(STRINGS.me.subtitle)}</p>
       </header>
+
+      ${
+        state.isPersistent === false
+          ? `<div class="storage-notice banner-warning" role="status">${escapeHtml(STRINGS.me.persistenceUnavailable)}</div>`
+          : ''
+      }
 
       ${
         state.actionNotice

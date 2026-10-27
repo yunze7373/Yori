@@ -34,33 +34,54 @@ export function humanizeSignalKind(kind: string): string {
 
 export function humanizeMemoryKey(key: string): string {
   switch (key) {
-    case 'rain_transport_preference':
-      return 'Rain travel habit';
-    case 'taste_preference':
-    case 'taste_preferences':
-      return 'Dining taste preferences';
+    case 'prep_buffer_minutes':
+      return STRINGS.memory.prepBufferMinutesLabel;
+    case 'prep_duration_minutes':
+      return STRINGS.memory.prepDurationMinutesLabel;
     case 'prep_buffer_preference':
       return 'Preparation buffer habit';
+    case 'rain_transport_preference':
+      return STRINGS.memory.rainTransportLabel;
+    case 'taste_preference':
+    case 'taste_preferences':
+      return STRINGS.memory.tastePreferenceLabel;
     case 'suppress_lunch':
     case 'suppress_lunch_recommendations':
-      return 'Lunch suggestions preference';
+      return STRINGS.memory.suppressLunchLabel;
     default:
       return key.replace(/_/g, ' ');
   }
 }
 
 export function humanizeMemoryValue(key: string, value: unknown): string {
+  if (key === 'prep_buffer_minutes' || key === 'prep_duration_minutes') {
+    return STRINGS.memory.minutesUnit.replace('{minutes}', String(value ?? 0));
+  }
   if (key === 'rain_transport_preference') {
-    if (value === 'drive_first') return 'Prefers driving when it rains';
-    if (value === 'bus_first') return 'Prefers transit when it rains';
+    if (value === 'drive_first') return STRINGS.memory.rainDriveValue;
+    if (value === 'bus_first') return STRINGS.memory.rainTransitValue;
   }
   if (key.includes('taste')) {
     if (typeof value === 'string') return value;
     if (Array.isArray(value)) return value.join(', ');
   }
+  if (key.includes('suppress')) {
+    return STRINGS.memory.suppressedTodayValue;
+  }
   if (typeof value === 'object' && value !== null) {
-    return Object.entries(value)
-      .map(([k, v]) => `${k}: ${v}`)
+    const obj = value as Record<string, unknown>;
+    if ('prepMinutes' in obj || 'bufferMinutes' in obj) {
+      const parts: string[] = [];
+      if (typeof obj.prepMinutes === 'number') {
+        parts.push(`Get ready ${obj.prepMinutes} min`);
+      }
+      if (typeof obj.bufferMinutes === 'number') {
+        parts.push(`Leave a ${obj.bufferMinutes} min buffer`);
+      }
+      return parts.join(' · ');
+    }
+    return Object.entries(obj)
+      .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`)
       .join(', ');
   }
   return String(value ?? '');

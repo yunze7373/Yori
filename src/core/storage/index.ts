@@ -49,6 +49,14 @@ export class InMemoryStorageDriver implements StorageDriver {
  */
 export class WebStorageDriver implements StorageDriver {
   private fallbackStore: InMemoryStorageDriver | null = null;
+  private persistenceAvailable: boolean | null = null;
+
+  public isPersistent(): boolean {
+    if (this.persistenceAvailable === null) {
+      this.getStorage();
+    }
+    return this.persistenceAvailable === true;
+  }
 
   private getStorage(): Storage | null {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -56,11 +64,14 @@ export class WebStorageDriver implements StorageDriver {
         const testKey = '__yori_storage_probe__';
         window.localStorage.setItem(testKey, '1');
         window.localStorage.removeItem(testKey);
+        this.persistenceAvailable = true;
         return window.localStorage;
       } catch {
+        this.persistenceAvailable = false;
         return null;
       }
     }
+    this.persistenceAvailable = false;
     return null;
   }
 
@@ -153,6 +164,16 @@ export class YoriStorage {
     private readonly driver: StorageDriver,
     private readonly storageKey: string = 'yori_state_v1'
   ) {}
+
+  public isPersistent(): boolean {
+    if (
+      'isPersistent' in this.driver &&
+      typeof (this.driver as { isPersistent?: () => boolean }).isPersistent === 'function'
+    ) {
+      return (this.driver as { isPersistent: () => boolean }).isPersistent();
+    }
+    return !(this.driver instanceof InMemoryStorageDriver);
+  }
 
   public save(state: YoriStorageState, nowIso: string): void {
     const existingRaw = this.driver.getItem(this.storageKey);

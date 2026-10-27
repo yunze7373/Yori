@@ -3,32 +3,15 @@ import { ModelDevProxy } from './src/adapters/model/server-proxy.js';
 
 function modelProxyPlugin(): Plugin {
   const proxy = new ModelDevProxy();
-  const handleRequest = (req: any, res: any, next: () => void) => {
-    if (req.url === '/api/model/diagnostics' && req.method === 'GET') {
-      const diag = proxy.getDiagnostics();
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(diag));
-      return;
+  const handleRequest = async (req: any, res: any, next: () => void) => {
+    try {
+      const handled = await proxy.handleHttpRequest(req, res);
+      if (!handled) {
+        next();
+      }
+    } catch {
+      next();
     }
-    if (req.url === '/api/model/refine' && req.method === 'POST') {
-      let body = '';
-      req.on('data', (chunk: Buffer | string) => {
-        body += chunk;
-      });
-      req.on('end', async () => {
-        try {
-          const parsed = JSON.parse(body);
-          const result = await proxy.handleRefine(parsed);
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify(result));
-        } catch {
-          res.statusCode = 400;
-          res.end(JSON.stringify({ error: 'Invalid JSON request' }));
-        }
-      });
-      return;
-    }
-    next();
   };
 
   return {
@@ -42,14 +25,16 @@ function modelProxyPlugin(): Plugin {
   };
 }
 
+const bindHost = process.env.DEV_DEVICE_TESTING === 'true' ? '0.0.0.0' : '127.0.0.1';
+
 export default defineConfig({
   plugins: [modelProxyPlugin()],
   server: {
     port: 5173,
-    host: true,
+    host: bindHost,
   },
   preview: {
     port: 4173,
-    host: true,
+    host: bindHost,
   },
 });

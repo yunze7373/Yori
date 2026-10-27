@@ -392,6 +392,7 @@ export function renderApp(
         maxDailyPrompts: DEFAULT_DAILY_PROMPT_BUDGET,
         timezone: snapshotTimezone,
         actionNotice: actionFeedbackMessage ?? undefined,
+        isPersistent: storage.isPersistent(),
       });
     } else {
       mainContentHtml = `
