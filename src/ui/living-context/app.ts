@@ -45,6 +45,8 @@ import {
   escapeHtml,
   getGreeting,
   formatNowPlan,
+  formatNoticeMessage,
+  humanizeProposalTitle,
 } from './presentation.js';
 import {
   YoriStorage,
@@ -420,7 +422,7 @@ export function renderApp(
                 .map(
                   n => `
           <div class="notice-box" role="status">
-            <strong>${escapeHtml(STRINGS.notices.degradedNoticeHeader)}</strong> ${escapeHtml(n.noticeText)}
+            <strong>${escapeHtml(STRINGS.notices.degradedNoticeHeader)}</strong> ${escapeHtml(formatNoticeMessage(n))}
           </div>
         `
                 )
@@ -633,8 +635,8 @@ export function renderApp(
                         fact => `
                 <div class="item-row pending-for-you-row" id="for-you-${escapeHtml(fact.key)}">
                   <div style="flex: 1;">
-                    <div class="item-title">Preference proposal: ${escapeHtml(fact.key.replace(/_/g, ' '))}</div>
-                    <div class="item-subtitle">${fact.provenance.note ? escapeHtml(fact.provenance.note) : 'Awaiting confirmation'}</div>
+                    <div class="item-title">${escapeHtml(humanizeProposalTitle(fact.key))}</div>
+                    <div class="item-subtitle">${fact.provenance.note ? escapeHtml(fact.provenance.note) : escapeHtml(STRINGS.proposals.awaitingConfirmation)}</div>
                   </div>
                   <div class="proposal-actions">
                     <button type="button" class="btn btn-sm btn-primary btn-confirm-proposal" data-key="${escapeHtml(fact.key)}">
@@ -986,10 +988,13 @@ export function renderApp(
         const reasonKey = checkedRadio ? checkedRadio.value : 'dont_suggest_today';
 
         let reasonText = "User dismissed: Don't suggest this today";
+        let proposalNote = STRINGS.dismissDialog.noteDismissToday.replace('{intent}', planToDismiss.intentId);
         if (reasonKey === 'busy_today') {
           reasonText = "User dismissed: Busy during this time";
+          proposalNote = STRINGS.dismissDialog.noteDismissBusy.replace('{intent}', planToDismiss.intentId);
         } else if (reasonKey === 'not_needed') {
           reasonText = "User dismissed: Not needed";
+          proposalNote = STRINGS.dismissDialog.noteDismissNotNeeded.replace('{intent}', planToDismiss.intentId);
         }
 
         const suppression: SuppressionReason = {
@@ -1020,7 +1025,7 @@ export function renderApp(
             {
               source: 'user_feedback',
               recordedAt: snapshotAsOf,
-              note: `User dismissed ${planToDismiss.intentId}: ${reasonText}`,
+              note: proposalNote,
             },
             snapshotAsOf
           );

@@ -65,6 +65,16 @@ export const STRINGS = Object.freeze({
     reasonBusy: "I'm busy during this time",
     reasonNotNeeded: 'Not needed',
     confirmDismiss: 'Dismiss Plan',
+    noteDismissToday: 'You dismissed {intent} · Not today',
+    noteDismissBusy: 'You dismissed {intent} · Busy',
+    noteDismissNotNeeded: 'You dismissed {intent} · Not needed',
+  }),
+  proposals: Object.freeze({
+    suppressLunchTitle: 'Skip lunch suggestions for today?',
+    prepBufferTitle: 'Remember departure prep & buffer routine?',
+    groceryStoreTitle: 'Remember preferred grocery store?',
+    genericProposalTitle: 'Remember preference for {key}?',
+    awaitingConfirmation: 'Awaiting confirmation',
   }),
   whySheet: Object.freeze({
     title: "Why you're seeing this",
@@ -139,6 +149,16 @@ export const STRINGS = Object.freeze({
   }),
   notices: Object.freeze({
     degradedNoticeHeader: 'Notice:',
+    weatherMissing: "The weather forecast isn't available right now, so I won't guess.",
+    weatherStale: "The weather forecast is out of date, so recommendations may be limited.",
+    trafficMissing: "Traffic and route travel estimates aren't available right now.",
+    trafficStale: "Travel estimates are out of date, so departure timing may be limited.",
+    calendarMissing: "Calendar details aren't available right now.",
+    calendarStale: "Calendar information is out of date.",
+    placesMissing: "Nearby place recommendations aren't available right now.",
+    placesStale: "Nearby place information is out of date.",
+    genericMissing: "Some real-time information isn't available right now.",
+    genericStale: "Some real-time information is out of date.",
   }),
   map: Object.freeze({
     label: 'Spatial Context Map',

@@ -63,8 +63,21 @@ describe('Grocery Stub Plugin (AC-EXT-1)', () => {
     expect(plan).not.toBeNull();
     expect(plan?.intentId).toBe('grocery');
     expect(plan?.headline).toContain('3 items');
+    expect(plan?.subjectTitle).toBe('Grocery shopping (Trader Joe’s)');
     expect(plan?.why.memoryFactsUsed).toHaveLength(1);
     expect(plan?.why.memoryFactsUsed[0]?.key).toBe('preferred_grocery_store');
+  });
+
+  it('prepares generic grocery plan without defaulting to a retail brand when no store preference exists', () => {
+    const candidate = groceryDetector.detect(baseSnapshot, [])!;
+    const plan = groceryPreparer.prepare(candidate, baseSnapshot, []);
+    expect(plan).not.toBeNull();
+    expect(plan?.intentId).toBe('grocery');
+    expect(plan?.headline).toContain('3 items');
+    expect(plan?.subjectTitle).toBe('Grocery shopping');
+    expect(plan?.why.derivation).toBe('Detected shopping list with 3 items.');
+    expect(plan?.why.derivation).not.toContain('Trader Joe');
+    expect(plan?.why.memoryFactsUsed).toHaveLength(0);
   });
 
   it('suppresses grocery candidate via shared core policy when completedToday is true (already_done)', () => {

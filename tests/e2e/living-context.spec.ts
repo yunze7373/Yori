@@ -248,7 +248,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     // 5. Invariant INV-107: Proposal appears in FOR YOU with Confirm and Not true buttons
     const forYouRow = page.locator('#for-you-prep_buffer_preference');
     await expect(forYouRow).toBeVisible();
-    await expect(forYouRow).toContainText('prep buffer preference');
+    await expect(forYouRow).toContainText('departure prep & buffer routine');
     await expect(forYouRow.locator('.btn-confirm-proposal')).toBeVisible();
     await expect(forYouRow.locator('.btn-reject-proposal')).toBeVisible();
   });
@@ -283,6 +283,15 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const quietTitle = page.locator('.quiet-title');
     await expect(quietTitle).toBeVisible();
     await expect(quietTitle).toContainText('Nothing needs your attention right now');
+
+    // 5. Zero degradation notice on dismissed lunch scene (Finding 1)
+    await expect(page.locator('.notice-box')).toHaveCount(0);
+
+    // 6. Clean human proposal copy in FOR YOU (Finding 3)
+    const lunchProposal = page.locator('#for-you-suppress_lunch_recommendations');
+    await expect(lunchProposal).toBeVisible();
+    await expect(lunchProposal.locator('.item-title')).toContainText('Skip lunch suggestions for today?');
+    await expect(lunchProposal.locator('.item-subtitle')).toContainText('You dismissed lunch · Not today');
 
     // Screenshot evidence after dismiss
     const screenshotPath = path.join(EVIDENCE_DIR, `after-dismiss-${viewName}.png`);
@@ -538,5 +547,43 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     await expect(errorBox).not.toBeVisible();
     const nowTitle = page.locator('#now-title');
     await expect(nowTitle).toBeVisible();
+  });
+
+  test('Calm UI Invariants: No notice in clean scenes and zero engineering jargon across all scenes (Finding 1)', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const select = page.locator('#scene-select');
+
+    // 1. Verify no notice in Clear, Rain, Away-lunch, Busy-lunch
+    const cleanScenes = ['clear', 'rain', 'away-lunch', 'busy-lunch'];
+    for (const scene of cleanScenes) {
+      await select.selectOption(scene);
+      await expect(page.locator('.notice-box')).toHaveCount(0);
+    }
+
+    // 2. Body-text scan across every scene finds zero engineering jargon
+    const allScenes = ['clear', 'rain', 'away-lunch', 'busy-lunch', 'missing-weather', 'corrupt-storage'];
+    const forbiddenPatterns = [
+      /fail-closed/i,
+      /\bplugin\b/i,
+      /grocery_list/i,
+      /grocery_status/i,
+      /weather_forecast/i,
+      /travel_estimate/i,
+      /schedule_window/i,
+      /nearby_places/i,
+      /grocery-stub/i,
+      /depart-plugin/i,
+      /lunch-plugin/i,
+    ];
+
+    for (const scene of allScenes) {
+      await select.selectOption(scene);
+      const text = await page.innerText('body');
+      for (const pattern of forbiddenPatterns) {
+        expect(text).not.toMatch(pattern);
+      }
+    }
   });
 });

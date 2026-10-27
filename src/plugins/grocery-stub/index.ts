@@ -23,5 +23,5 @@ export const groceryStubPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze
   preparer: groceryPreparer,
   adapter: mockGroceryAdapter,
   requiredSignals: Object.freeze(['grocery_list']),
-  triggerSignalKinds: Object.freeze(['grocery_list', 'grocery_status', 'schedule_window']),
+  triggerSignalKinds: Object.freeze(['grocery_list', 'grocery_status']),
 });

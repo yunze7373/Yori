@@ -49,7 +49,10 @@ export class GroceryPreparer implements Preparer {
       });
     }
 
-    const storeName = storeFact && typeof storeFact.value === 'string' ? storeFact.value : 'Trader Joe’s';
+    const storeName =
+      storeFact && typeof storeFact.value === 'string' && storeFact.value.trim().length > 0
+        ? storeFact.value.trim()
+        : undefined;
 
     const itemNames = items.slice(0, 3).map((it: unknown) => {
       if (typeof it === 'string') return it;
@@ -62,6 +65,12 @@ export class GroceryPreparer implements Preparer {
     const headline = `Grocery run: ${itemCount} item${itemCount === 1 ? '' : 's'} on your list`;
     const planId = `plan-grocery-${Date.parse(snapshot.asOf)}`;
 
+    const derivation = storeName
+      ? `Detected shopping list with ${itemCount} items. Recommended stopping at ${storeName}.`
+      : `Detected shopping list with ${itemCount} items.`;
+
+    const subjectTitle = storeName ? `Grocery shopping (${storeName})` : 'Grocery shopping';
+
     return Object.freeze({
       id: planId,
       intentId: 'grocery',
@@ -69,7 +78,7 @@ export class GroceryPreparer implements Preparer {
       optionsOrSteps: Object.freeze(itemNames),
       requiresConfirmation: false,
       why: Object.freeze({
-        derivation: `Detected shopping list with ${itemCount} items. Recommended stopping at ${storeName}.`,
+        derivation,
         evidenceSignals: Object.freeze([...candidate.evidence].map(e => ({
           kind: e.kind,
           source: e.source,
@@ -79,7 +88,7 @@ export class GroceryPreparer implements Preparer {
       }),
       createdAt: snapshot.asOf,
       timezone: snapshot.timezone ?? 'UTC',
-      subjectTitle: `Grocery shopping (${storeName})`,
+      subjectTitle,
     });
   }
 }

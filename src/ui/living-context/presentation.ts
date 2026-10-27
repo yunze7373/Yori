@@ -221,3 +221,52 @@ export function formatNowPlan(plan: PreparedPlan): FormattedNowPlan {
     options: Object.freeze([]),
   });
 }
+
+/**
+ * Maps a PolicyNotice into a calm, human-first message.
+ * Enforces zero engineering jargon: no 'fail-closed', no plugin IDs, no '_' signal keys.
+ */
+export function formatNoticeMessage(notice: {
+  readonly missingOrStaleSignalKind?: string;
+  readonly isStale?: boolean;
+}): string {
+  const kind = notice.missingOrStaleSignalKind?.toLowerCase();
+  const isStale = Boolean(notice.isStale);
+
+  if (kind === 'weather' || kind === 'weather_forecast') {
+    return isStale ? STRINGS.notices.weatherStale : STRINGS.notices.weatherMissing;
+  }
+  if (kind === 'traffic' || kind === 'travel_estimate' || kind === 'travel') {
+    return isStale ? STRINGS.notices.trafficStale : STRINGS.notices.trafficMissing;
+  }
+  if (kind === 'calendar' || kind === 'calendar_event') {
+    return isStale ? STRINGS.notices.calendarStale : STRINGS.notices.calendarMissing;
+  }
+  if (kind === 'places' || kind === 'nearby_places') {
+    return isStale ? STRINGS.notices.placesStale : STRINGS.notices.placesMissing;
+  }
+  return isStale ? STRINGS.notices.genericStale : STRINGS.notices.genericMissing;
+}
+
+/**
+ * Maps a memory proposal key into a plain human sentence.
+ * Eliminates raw identifiers and repetitive prefixes.
+ */
+export function humanizeProposalTitle(key: string): string {
+  switch (key) {
+    case 'suppress_lunch':
+    case 'suppress_lunch_recommendations':
+      return STRINGS.proposals.suppressLunchTitle;
+    case 'prep_buffer_preference':
+      return STRINGS.proposals.prepBufferTitle;
+    case 'preferred_grocery_store':
+    case 'grocery_store_preference':
+      return STRINGS.proposals.groceryStoreTitle;
+    default:
+      return STRINGS.proposals.genericProposalTitle.replace(
+        '{key}',
+        key.replace(/[_-]/g, ' ')
+      );
+  }
+}
+

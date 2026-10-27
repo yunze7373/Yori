@@ -31,6 +31,9 @@ npm test
 # Run golden acceptance harness (D1–D6 + AC-EXT-1)
 npm run test:golden
 
+# Run degradation drills (NFR-102/103)
+npm run test:drills
+
 # Run Playwright E2E verification
 npm run test:e2e
 ```
@@ -91,6 +94,18 @@ To protect user privacy and guarantee deterministic testing:
 - All calendar events, weather readings, location coords, route durations, and dining venues are **simulated mock fixtures**.
 - Every simulated card displays an explicit **Demo · simulated context** chip and **SIMULATED** badge.
 - No ambient system clocks (`Date.now()` or `new Date()`) are accessed within domain logic; all calculations derive from injected snapshot timestamps.
+
+---
+
+## ⚠️ Status & Known Limitations (PH-001)
+
+As part of the Phase 1 (PH-001) Chapter Closeout, Yori operates as a deterministic, local-first foundation with the following known architectural boundaries:
+- **Muse Spark is wording-only**: The model port refines natural language phrasing over supplied facts only; it does not perform unconstrained autonomous reasoning or decision-making. Any time or place token not present in the supplied fact set causes the output to be discarded for the deterministic template.
+- **XMemo remote adapter is off (HB-3)**: The remote memory adapter remains inactive pending an end-user application authentication path. Local storage serves as the source of truth; confirmed facts are persisted locally.
+- **Simulated providers**: Calendar, weather, location coordinates, routes, places, and grocery items are simulated mock fixtures with no real third-party service provider integrations.
+- **Proactive prompts not delivered as notifications**: Proactive prompt evaluation and budget enforcement occur during Living Context composition; OS-level system push notifications are not delivered in PH-001.
+
+These unfinished North Star capabilities are deferred to **Phase 2 (PH-002)**, which introduces real model reasoning, end-user authenticated XMemo integration, real provider adapters, and OS push notification channels.
 
 ---
 
