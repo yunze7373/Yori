@@ -251,3 +251,88 @@ Machine-readable decisions: `goals.yaml` (ADR-101..105). Phases:
 eval, PH-003 real providers after privacy review). Executable slices:
 `YORI_MVP.plan.json`. `RECOMMENDATIONS.md` is a superseded Rev2
 record and is not part of this baseline.
+
+## 14. PH-002 design (ARCH-PH002-001, planning only)
+
+PH-001 is complete (Reviewer-approved, commit `bfb1c446`). PH-002
+keeps the North Star, INV-101..110, and the plugin/shared-policy
+architecture. It prioritises one minimal **real** closed loop over
+breadth, and never sacrifices the PH-001 visual/end-to-end demo.
+OS-level notifications (the earlier PH-002 sketch) are deferred out
+of this phase by deadline; see `PHASE_PLAN.md`.
+
+### 14.1 Workstream A — security-first proxy (first slice)
+
+The PH-001 dev proxy accepts client-supplied `templateWording` text.
+PH-002 removes free-text prompt carriage:
+
+- The client sends only `{ templateId, facts }`. Prompt text lives in
+  a **server-side template registry** (`src/adapters/model/`), keyed
+  by fixed template ids; unknown ids are rejected (400).
+- `facts` is validated against a strict structured schema (bounded
+  arrays, bounded string lengths, no extra keys). Schema-invalid ⇒
+  400, no model call.
+- All PH-001 guards remain and are regression-tested: loopback host,
+  local origin/referer, cross-site rejection, 415/413/429.
+- **AC-EXT-1 impact: none.** Templates and schemas live in
+  `src/adapters/model/*` and proxy wiring; no `src/core/**` file
+  changes, so the AC-EXT-1 zero-core-diff baseline (`f43c6c1d`) is
+  preserved and no new baseline is proposed.
+
+### 14.2 Workstream B — constrained Spark reasoning
+
+Beyond wording: the model may **rank or choose among
+engine-produced candidate plans**, or **propose an intent with a
+confidence**, over supplied structured facts. It still originates no
+times, weather, places, routes, or prices. Outputs are
+schema-validated; every claim cites supplied signal/fact ids
+(provenance); the fact checker rejects uncited or fabricated tokens;
+any failure ⇒ deterministic ranking/fallback. Tests replay recorded
+fixtures/mocks offline — no live key needed in CI. Golden D1–D6 are
+byte-identical with the model off. A model-proposed intent enters the
+same shared suppression policy as any detector candidate; it gets no
+privileged path to the user.
+
+### 14.3 Workstream C — XMemo via end-user app OAuth
+
+Target loop: OAuth sign-in → read preferences → write back only
+user-confirmed facts, minimal scopes, tokens held server-side only,
+local memory remains the fallback and the offline truth. If no
+end-user app auth path exists in XMemo, the plan does not invent one:
+the slice delivers the verified finding, the minimal owner action
+(app registration), and a fallback demo path (local adapter +
+agent-side confirmed write-back demonstration outside the client).
+
+### 14.4 Workstream D — minimal real providers
+
+Incremental, behind the existing ports, each with a mock twin
+carried within the existing `ContextSignal` shape — PH-002 makes
+**zero `src/core/**` changes** (Reviewer option (a); the AC-EXT-1
+baseline stands). Signal records keep `source/issuedAt/validFor` and
+consent gating; keyless/free sources preferred, with cost and ToS
+stated per provider. First increment: real clock/time and one
+keyless weather source queried with a **configured fixed demo-city
+coordinate only** — the device geolocation API is never called, and
+any real device location requires a separate explicit owner gate.
+Calendar and route providers, and anything transmitting real GPS or
+private calendar content, likewise require explicit owner
+authorization and are not in the default path. Demo/submission
+preparation (Workstream E) is scheduled **before** the real-provider
+increments so deadline slip in D can never consume it.
+
+### 14.5 Workstream E — demo and submission preparation
+
+UI visual re-review against `docs/evidence/s5-1`, demo narrative,
+3-minute video script, public-repo hygiene (secret scan, licence,
+README). Every external action (recording publication, repo
+visibility change, hackathon submission) sits behind an explicit
+owner gate. There is no auto-submission anywhere in the plan.
+
+### 14.6 Owner-action checklist (plan appendix)
+
+`YORI_PH002.plan.json` carries the checklist as gated tasks:
+MODEL_API_KEY in `.env.local`; XMemo OAuth/app registration decision;
+any provider keys; any external cost approval; video recording and
+submission steps. Each names the owner action, what it unblocks, and
+what happens if it is not done (the fallback that keeps the demo
+whole).

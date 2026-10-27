@@ -26,12 +26,30 @@ the deterministic/local path, so a miss does not move the deadline.
 Exit: PH-001 exit criteria in `goals.yaml`, including D1–D6 passing
 with the model disabled. Skeleton/docs-only is not done.
 
-## PH-002 — Notifications, more detectors, evaluation
+## PH-002 — Minimal real closed loop (internal deadline 2026-11-04)
 
-Real notification delivery under the shared prompt budget and quiet
-hours; additional detectors through the same plugin contract;
-acceptance/disturbance evaluation of proactive suggestions. Entry:
-PH-001 exit met. No notification path may bypass shared policy.
+Per ARCH-PH002-001 (planning only; execution gated by Reviewer +
+owner). One minimal real loop over breadth; the PH-001 demo is never
+sacrificed for real providers. OS notifications are deferred out of
+this phase. Executable slices: `YORI_PH002.plan.json`.
+
+| Slice | Content | Goals | Est. |
+|---|---|---|---|
+| A (first) | Proxy hardening: server-side template ids + validated structured facts; PH-001 guards regression; AC-EXT-1 zero-core-diff preserved | G-201 | ~6h |
+| B | Constrained Spark reasoning (rank/choose or intent proposal) with provenance, fact check, deterministic fallback, recorded fixtures | G-202 | ~10h |
+| C | XMemo end-user OAuth loop, or verified no-path finding + owner action + fallback demo | G-203 | ~8h |
+| E (prep first) | Demo narrative, 3-min video script, repo hygiene, submission package draft — scheduled before D so provider slip cannot consume it; all owner-gated, no auto-submit | G-205 | ~8h |
+| D | Minimal real providers behind ports (real time + keyless weather with fixed demo-city coordinate, no device geolocation), mock twins, consent gates | G-204 | ~8h |
+| E (visual) | Visual re-review after UI-affecting slices, dual-width retest | G-205 | (in E row above) |
+| Closeout | Chapter tests: D1–D6 unchanged (model off), A–D acceptance, degradation drills | G-201..204 | ~4h |
+
+Total ≈ 44h against ~6 days (external submission 2026-11-05 11:00
+JST). Cut line, in order: D calendar/route increments → E video
+polish beyond script → B intent-proposal mode (keep candidate
+ranking) → C live OAuth (fallback demo path). Never cut: Slice A,
+D1–D6 integrity, the core visual demo. Owner gates: MODEL_API_KEY
+configuration, XMemo app registration, provider keys/costs, any
+external submission — see the checklist tasks in the plan.
 
 ## PH-003 — Real providers (gated)
 

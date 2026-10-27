@@ -1,0 +1,530 @@
+{
+  "schema_version": "1.0.0",
+  "plan": {
+    "id": "yori_ph002_001",
+    "phase": "PH-002",
+    "title": "Yori PH-002: minimal real closed loop (security proxy, constrained Spark reasoning, XMemo OAuth, real providers, demo/submission prep)",
+    "source": "ARCH-PH002-001 Phase R planning (docs/architecture/ARCHITECTURE.md section 14); execution requires Reviewer approval plus owner gates",
+    "created_at": "2026-10-29",
+    "status": "pending",
+    "description": "Slice A security-first proxy hardening first, then constrained Muse Spark reasoning, XMemo OAuth loop (or verified fallback), minimal real providers behind ports, and owner-gated demo/submission preparation. Internal deadline 2026-11-04, external submission 2026-11-05 11:00 JST.",
+    "course_correction_summary": "previous_phase: PH-001 complete (bfb1c446, AC-EXT-1 baseline f43c6c1d) | core_delivery: PH-002 plan only, no implementation authorized by the planning request | deviation: OS notifications deferred out of PH-002 by deadline | INBOX_backlog: 0 P0, 0 P1 | next_phase_focus: Slice A proxy templates"
+  },
+  "tasks": [
+    {
+      "id": "A1",
+      "slice": "A",
+      "title": "Server-side template registry and structured facts schema for the model proxy",
+      "priority": "P0",
+      "goal": "Replace client-supplied templateWording with {templateId, facts}: prompt text moves to a server-side registry in src/adapters/model keyed by fixed ids; facts validated against a strict schema (bounded arrays/lengths, no extra keys). Unknown id or invalid facts returns 400 with no model call. No src/core/** change (AC-EXT-1 preserved).",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 4,
+      "dependencies": [],
+      "goal_ids": [
+        "G-201"
+      ],
+      "acceptance_ids": [
+        "AC-201-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/server-proxy.ts",
+        "src/adapters/model/types.ts",
+        "src/adapters/model/index.ts",
+        "vite.config.ts"
+      ],
+      "checks": [
+        "Unit tests: unknown templateId, extra facts keys, and oversize strings each return 400 and the upstream model is never called (AC-201-1)",
+        "Existing wording flow (D1-D6 scenes) produces identical user-visible output through template ids",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id A1 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "A2",
+      "slice": "A",
+      "title": "Proxy guard regression suite and AC-EXT-1 zero-core-diff proof",
+      "priority": "P0",
+      "goal": "Regression-test every PH-001 guard (loopback host, local origin/referer, cross-site, 415/413/429, device-testing isolation) plus prompt-injection fixtures against the new template path, and prove Slice A touched no core file.",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 2,
+      "dependencies": [
+        "A1"
+      ],
+      "goal_ids": [
+        "G-201"
+      ],
+      "acceptance_ids": [
+        "AC-201-2",
+        "AC-201-3"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/model.test.ts",
+        "src/adapters/model/server-proxy.ts"
+      ],
+      "checks": [
+        "Guard suite green: non-local host/origin/referer and cross-site yield 403; non-JSON 415; over-8KB 413; over-rate 429 (AC-201-2)",
+        "Injection fixture (facts containing instruction-like text) cannot alter the server-side template or produce uncited facts in output",
+        "git diff f43c6c1d -- src/core is empty after Slice A (AC-201-3)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id A2 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_PH002_A",
+      "title": "📬 INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": [
+        "A2"
+      ],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "OWNER_GATE_1",
+      "slice": "B",
+      "title": "OWNER GATE: configure MODEL_API_KEY for Yori (.env.local)",
+      "priority": "P0",
+      "goal": "Owner action: place the Meta model key as MODEL_API_KEY in .env.local (key exists via Muse Code but is not configured for Yori). Executor must not create, copy, or hunt for credentials. If not done, Slice B proceeds on recorded fixtures only and live reasoning stays disabled.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "A2",
+        "INBOX_CHECK_PH002_A"
+      ],
+      "owner_gate": "Owner configures MODEL_API_KEY in .env.local; no credential handling by any agent",
+      "goal_ids": [
+        "G-202"
+      ],
+      "acceptance_ids": [
+        "AC-202-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-102"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/server-proxy.ts"
+      ],
+      "checks": [
+        "Diagnostics endpoint reports enabled only when the owner-configured key is present; the key value never appears in logs, tests, or repo files",
+        "If the gate is unmet, record it and continue with fixture-only Slice B (demo unaffected)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id OWNER_GATE_1 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "B1",
+      "slice": "B",
+      "title": "Constrained reasoning port: rank/choose among engine candidates or propose intent",
+      "priority": "P0",
+      "goal": "Extend ModelPort beyond wording: model ranks or chooses among engine-produced candidate plans, or proposes an intent with confidence, over structured facts. Output schema-validated; every claim cites supplied signal/fact ids; uncited or fabricated tokens discard the whole output to the deterministic ranking. PH-002 stays core-free (option a): a model-proposed intent is produced adapter-side as a standard IntentCandidate and enters the EXISTING pipeline entry, so the shared suppression policy applies unchanged with zero src/core/** edits.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": [
+        "OWNER_GATE_1"
+      ],
+      "goal_ids": [
+        "G-202"
+      ],
+      "acceptance_ids": [
+        "AC-202-1",
+        "AC-202-3"
+      ],
+      "arch_contract_refs": [
+        "ADR-102"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/index.ts",
+        "src/adapters/model/types.ts",
+        "src/adapters/model/fact-checker.ts"
+      ],
+      "checks": [
+        "Unit tests: a fixture response citing only supplied ids is accepted; responses with uncited claims or invented time/place/price tokens are discarded to deterministic ranking (AC-202-1)",
+        "A model-proposed intent suppressed by budget/busy/decline policy never reaches composition (AC-202-3)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id B1 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "B2",
+      "slice": "B",
+      "title": "Recorded-fixture reasoning tests and model-off golden invariance",
+      "priority": "P0",
+      "goal": "All reasoning behaviour is reproducible offline from recorded fixtures/mocks (no live key in CI), and D1-D6 golden outputs are byte-identical with the model disabled, enabled-with-fixtures, and failing.",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 4,
+      "dependencies": [
+        "B1"
+      ],
+      "goal_ids": [
+        "G-202"
+      ],
+      "acceptance_ids": [
+        "AC-202-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-102"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/model.test.ts",
+        "tests/golden"
+      ],
+      "checks": [
+        "npm run test:golden and reasoning fixture suites pass with network disabled and no MODEL_API_KEY set (AC-202-2)",
+        "Fault-injection (timeout, 5xx, malformed JSON) leaves every golden output unchanged; failures appear only in diagnostics",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id B2 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "C1",
+      "slice": "C",
+      "title": "XMemo end-user OAuth existence spike and decision record",
+      "priority": "P1",
+      "goal": "Verify with auditable evidence whether XMemo offers an end-user app OAuth path (registration, scopes, redirect, token endpoints). Deliver a decision record: path exists (with minimal scopes) or does not (with the minimal owner registration action and the fallback demo path). No invented endpoints.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": [
+        "B2"
+      ],
+      "goal_ids": [
+        "G-203"
+      ],
+      "acceptance_ids": [
+        "AC-203-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-103"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/xmemo/remote-adapter.ts",
+        "src/adapters/xmemo/types.ts",
+        "docs/architecture/SPEC_IMPACT_PH002.md"
+      ],
+      "checks": [
+        "Decision record cites the actual XMemo auth documentation or console evidence inspected; unverifiable claims are marked unverified (AC-203-1)",
+        "If no path exists, the record names the single minimal owner action (app registration) and the fallback demo path used by C2",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id C1 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "C2",
+      "slice": "C",
+      "title": "XMemo loop with server-side tokens, or fallback demo path",
+      "priority": "P1",
+      "goal": "If C1 finds a path (and the owner completes registration): OAuth sign-in, read preferences, write back confirmed facts only, tokens server-side only, local fallback on any failure. If not: ship the fallback demo path (local adapter as truth; confirmed write-back demonstrated via the agent-side path outside the client) with the limitation stated in DEMO.md.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 5,
+      "dependencies": [
+        "C1"
+      ],
+      "owner_gate": "Owner completes XMemo OAuth/app registration if C1 finds a path; otherwise owner accepts the fallback demo path",
+      "goal_ids": [
+        "G-203"
+      ],
+      "acceptance_ids": [
+        "AC-203-1",
+        "AC-203-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-103"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/xmemo/remote-adapter.ts",
+        "src/adapters/xmemo/local-adapter.ts",
+        "docs/DEMO.md"
+      ],
+      "checks": [
+        "Static proof: no token or secret string exists in client-bundled code; MemoryPort write-back rejects non-confirmed facts (AC-203-2)",
+        "With XMemo unreachable or unconfigured, PH-001 memory journeys pass unchanged; whichever path shipped is the one DEMO.md describes",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id C2 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_PH002_B",
+      "title": "📬 INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": [
+        "C2"
+      ],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "E2",
+      "slice": "E",
+      "title": "Demo narrative, 3-minute video script, repo hygiene, submission prep (owner-gated)",
+      "priority": "P1",
+      "goal": "Prepare the demo narrative and 3-minute video script, run public-repo hygiene (secret scan, licence, README), and assemble submission materials. Everything stops at the owner gate: no recording publication, visibility change, or hackathon submission is executed by this task.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 4,
+      "dependencies": [
+        "C2",
+        "INBOX_CHECK_PH002_B"
+      ],
+      "owner_gate": "Owner approves video publication, repo visibility, and the formal hackathon submission (internal 2026-11-04, external 2026-11-05 11:00 JST); no auto-submission",
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/strings.ts",
+        "docs/DEMO.md",
+        "README.md"
+      ],
+      "checks": [
+        "Video script times to about 3 minutes and walks the North Star loop (think ahead, Living Context, Review/Why, memory confirm) on the real demo scenes (AC-205-2)",
+        "Secret scan over the repo (including .env.local patterns and history) is clean; licence file and public README present",
+        "Submission package is assembled and listed for the owner; zero external submissions performed",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id E2 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "D1",
+      "slice": "D",
+      "title": "First real provider increment: real time and keyless weather behind ports",
+      "priority": "P1",
+      "goal": "Add real clock/time and one keyless/free weather source behind the existing signal ports, each with a mock twin carried within the EXISTING ContextSignal shape (no src/core/** change). Weather queries use a configured fixed demo-city coordinate only; the device geolocation API is never called, and any real device location requires a separate explicit owner gate. Cost (zero) and provider ToS stated in the provider record. Simulated labelling rules unchanged for mock data; real data labelled real.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 5,
+      "dependencies": [
+        "E2"
+      ],
+      "goal_ids": [
+        "G-204"
+      ],
+      "acceptance_ids": [
+        "AC-204-1",
+        "AC-204-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers",
+        "src/adapters/mock/index.ts"
+      ],
+      "checks": [
+        "Provider contract tests pass for both the real adapter (recorded responses) and its mock twin; stale real data triggers the same D6 fail-closed notice (AC-204-1)",
+        "Static/config test: no geolocation API reference exists in the provider path and the only coordinates sent are the configured demo-city values; provider record documents endpoint, cost (keyless/free), ToS (AC-204-2)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D1 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "D2",
+      "slice": "D",
+      "title": "Calendar/route increment gate: consent design only, no default enablement",
+      "priority": "P1",
+      "goal": "Design (not enable) the calendar/route provider increment: consent UX, least-privilege scopes, data-flow inventory. Implementation proceeds only after explicit owner authorization recorded in the task; otherwise the increment stops at the design and PH-002 ships without it (first cut-line item).",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": [
+        "D1"
+      ],
+      "owner_gate": "Explicit owner authorization required before any calendar/route implementation or any real GPS/private-calendar data flow",
+      "goal_ids": [
+        "G-204"
+      ],
+      "acceptance_ids": [
+        "AC-204-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers",
+        "src/adapters/mock/index.ts"
+      ],
+      "checks": [
+        "Static and configuration proof: with the gate unmet, no code path transmits real GPS coordinates or private calendar content (AC-204-2)",
+        "Consent design lists scopes, retention, and deletion behaviour for owner decision",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D2 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "E1",
+      "slice": "E",
+      "title": "UI visual re-review against PH-001 evidence and dual-width retest",
+      "priority": "P1",
+      "goal": "Re-review the Living Context UI against docs/evidence/s5-1 (desktop 1280x800, mobile 390x844), fix regressions found, and retest the core journeys at both widths. The PH-001 visual baseline is the floor, not a suggestion.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 4,
+      "dependencies": [
+        "D2"
+      ],
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/app.ts",
+        "src/ui/living-context/styles.css",
+        "docs/evidence"
+      ],
+      "checks": [
+        "Visual re-review checklist recorded against s5-1 evidence; core journeys pass Playwright at desktop and mobile widths (AC-205-1)",
+        "New real-data surfaces (if D1 shipped) keep simulated/real labelling distinguishable in screenshots",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id E1 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "CLOSEOUT_PH002",
+      "slice": "closeout",
+      "title": "PH-002 chapter closeout: full test scope and demo freeze",
+      "priority": "P0",
+      "goal": "Clean-checkout full run: D1-D6 golden (model off, byte-identical), Slice A guard suite, B fixture suite, C fallback journeys, D provider contract tests, e2e core journeys, degradation drills. Freeze the demo build for the owner gate.",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 4,
+      "dependencies": [
+        "E2"
+      ],
+      "goal_ids": [
+        "G-201",
+        "G-202",
+        "G-204",
+        "G-101",
+        "G-102",
+        "G-103",
+        "G-104",
+        "G-105",
+        "G-106",
+        "G-107"
+      ],
+      "acceptance_ids": [
+        "AC-201-2",
+        "AC-202-2",
+        "AC-204-1",
+        "AC-101-2",
+        "AC-102-1",
+        "AC-103-1",
+        "AC-104-2",
+        "AC-105-1",
+        "AC-106-2",
+        "AC-EXT-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-101",
+        "ADR-102"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/model.test.ts",
+        "src/adapters/providers",
+        "tests/golden"
+      ],
+      "checks": [
+        "npm test, npm run test:golden, npm run test:drills, and npm run test:e2e all pass from a clean checkout with no keys configured",
+        "AC-EXT-1 re-proof: git diff f43c6c1d -- src/core remains empty for the whole PH-002 diff",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id CLOSEOUT_PH002 --plan-ref docs/architecture/YORI_PH002.plan.json"
+      ]
+    },
+    {
+      "id": "PHASE_R_PH002_001",
+      "title": "🔥 Phase R planning + generate next phase plan",
+      "type": "meta",
+      "priority": "critical",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": [
+        "CLOSEOUT_PH002"
+      ],
+      "goal": "PH-002 tasks completed -> Phase R -> assess PH-002 exit vs goals.yaml -> draft the next phase plan and submit it for Reviewer plan review AND owner confirmation. Nothing executes before that gate; PH-003 privacy gate still applies.",
+      "phase_r_trigger": {
+        "auto_execute": true,
+        "tasks": [
+          "⚠️ Re-read .progress/AI_INSTRUCTIONS.md (ensure rules are not lost after model switch)",
+          "📬 R1: Read INBOX.md (scan mode command section first, then task section)",
+          "💤 R1.5: Convergence gate (no real pending → standby)",
+          "🎯 R2: Read docs/architecture/goals.yaml and PHASE_PLAN.md, execute target alignment assessment; 运行 phase_r_alignment_check.py 验证架构对齐锚点 (alignment anchor check)",
+          "📊 R3: Phase review: git diff confirm delivery + archive completed tasks + Git Commit",
+          "🗺️ R5: Intelligent planning: draft the next phase plan and submit it for Reviewer plan review AND owner confirmation (guarded autonomy); PH-003 requires the privacy-review gate and must not auto-start",
+          "Update PROGRESS_STATUS.json + TODOS.md",
+          "⏸️ R6: Execute NOTHING from the next plan before the Reviewer + owner gate passes; enter standby and wait for the gate result"
+        ]
+      }
+    }
+  ],
+  "success_criteria": [
+    "Slice A lands first with AC-EXT-1 zero-core-diff (baseline f43c6c1d) intact across the whole PH-002 diff",
+    "D1-D6 golden outputs byte-identical with the model off; B and C each demonstrate their deterministic/local fallback",
+    "No unauthorized spend, no real-location or private-calendar transmission, no auto-submission; every owner gate explicitly recorded"
+  ]
+}

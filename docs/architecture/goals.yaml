@@ -189,6 +189,116 @@ goals:
           required: true
     owner_agent: "principal-architect"
 
+  - id: G-201
+    title: "模型代理安全加固：服务端固定模板 + 结构化事实校验"
+    priority: P0
+    requirement_ids: ["REQ-006"]
+    source:
+      file: "docs/architecture/ARCHITECTURE.md"
+      lines: "256-275"
+    acceptance:
+      - id: AC-201-1
+        statement: "客户端仅发送 templateId 与结构化 facts；未知 templateId、schema 外字段、超限长度一律 400 且不触发模型调用"
+        verification: "unit-test"
+      - id: AC-201-2
+        statement: "PH-001 安全守卫回归全绿：loopback host、本地 origin/referer、cross-site 403、415/413/429 保持不变"
+        verification: "unit-test"
+      - id: AC-201-3
+        statement: "本目标实现对 src/core/** 零改动，AC-EXT-1 基线 f43c6c1d 的 zero-diff 持续成立（static 证明）"
+        verification: "static"
+    expected_code:
+      modules:
+        - path: "src/adapters/model"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-202
+    title: "Muse Spark 受约束推理：在引擎候选间排序/选择或提出意图"
+    priority: P0
+    requirement_ids: ["REQ-003", "REQ-006"]
+    source:
+      file: "docs/architecture/ARCHITECTURE.md"
+      lines: "276-290"
+    acceptance:
+      - id: AC-202-1
+        statement: "推理输出 schema 校验通过且每条断言引用所供信号/事实 id；无引用或出现未供时间/地点/价格 token 即整份丢弃并回退确定性排序"
+        verification: "unit-test"
+      - id: AC-202-2
+        statement: "离线录制 fixture/mock 可复现全部推理测试；模型关闭时 D1-D6 金标输出字节级不变"
+        verification: "unit-test"
+      - id: AC-202-3
+        statement: "模型提出的意图与检测器候选走同一共享抑制管线，无直达用户的特权路径"
+        verification: "unit-test"
+    expected_code:
+      modules:
+        - path: "src/adapters/model"
+          required: true
+        - path: "src/core/policy"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-203
+    title: "XMemo 终端用户 OAuth 闭环（或已验证的不存在结论与回退演示）"
+    priority: P1
+    requirement_ids: ["REQ-006"]
+    source:
+      file: "docs/architecture/ARCHITECTURE.md"
+      lines: "291-302"
+    acceptance:
+      - id: AC-203-1
+        statement: "OAuth 路径存在性以可审计证据结论：存在则最小 scope 读偏好、仅 confirmed 写回、令牌仅服务端；不存在则给出最小 owner 动作（应用注册）与回退演示路径"
+        verification: "manual"
+      - id: AC-203-2
+        statement: "XMemo 不可达或未配置时本地记忆行为与 PH-001 一致，前端不持有任何令牌（静态证明）"
+        verification: "static"
+    expected_code:
+      modules:
+        - path: "src/adapters/xmemo"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-204
+    title: "最小真实 provider 增量（端口之后、mock 双生、同意门控）"
+    priority: P1
+    requirement_ids: ["REQ-002"]
+    source:
+      file: "docs/architecture/ARCHITECTURE.md"
+      lines: "303-313"
+    acceptance:
+      - id: AC-204-1
+        statement: "首个增量（真实时钟 + 一个免密钥天气源）经既有端口接入，信号恒带 source/issuedAt/validFor 且与 mock 双生行为一致，成本与 ToS 成文"
+        verification: "unit-test"
+      - id: AC-204-2
+        statement: "未经 owner 显式授权，真实 GPS 与私人日历内容不离开设备；天气仅用配置的演示城市坐标、永不调用设备定位（静态与配置证明）"
+        verification: "static"
+    expected_code:
+      modules:
+        - path: "src/adapters/mock"
+          required: true
+        - path: "src/core/contracts"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-205
+    title: "演示与提交准备（视觉复审、叙事、视频脚本、仓库卫生，全部门控）"
+    priority: P1
+    requirement_ids: ["REQ-005"]
+    source:
+      file: "docs/architecture/ARCHITECTURE.md"
+      lines: "314-323"
+    acceptance:
+      - id: AC-205-1
+        statement: "对照 docs/evidence/s5-1 完成视觉复审清单且核心旅程双宽度复测通过"
+        verification: "manual"
+      - id: AC-205-2
+        statement: "3 分钟视频脚本与提交材料齐备；仓库 secret scan 干净、许可证与 README 就位；任何对外提交动作停在 owner 门前（无自动提交）"
+        verification: "manual"
+    expected_code:
+      modules:
+        - path: "src/ui/living-context"
+          required: true
+    owner_agent: "principal-architect"
+
 architecture_decisions:
   - id: ADR-101
     title: "通用主动管线 + 静态场景插件（detector/preparer/adapter），共享策略集中于 core"
@@ -272,14 +382,16 @@ phases:
       - "LLM-invented times, weather, places, routes or prices"
       - "feedback silently mutating memory"
   - id: PH-002
-    title: "通知与更多检测器、效果评估"
-    goals: ["G-103", "G-104", "G-105"]
+    title: "最小真实闭环：安全代理、受约束推理、XMemo OAuth、真实 provider 增量与演示提交准备（内截止 2026-11-04）"
+    goals: ["G-201", "G-202", "G-203", "G-204", "G-205"]
     exit_criteria:
-      - "通知通道在提示预算与安静时段策略下上线并有送达/打扰度量"
-      - "新增检测器经同一插件契约接入且抑制/Why 证据齐全"
-      - "主动建议接受率与误报抑制效果有评估结论"
+      - "Workstream A 先行落地且 AC-201-1..3 与 AC-EXT-1 zero-diff 证明通过"
+      - "B/C 各有可审计验收与确定性回退；D1-D6 在模型关闭时字节级不变"
+      - "演示/视频/提交材料停在 owner 门前，无自动提交、无未授权支出、无真实位置传输"
     forbidden_done_state:
-      - "notifications bypassing the shared prompt budget"
+      - "client-supplied free-text prompt carriage"
+      - "model output reaching the user without schema validation and fact check"
+      - "auto-submission or unauthorized spend"
   - id: PH-003
     title: "真实 provider 接入（隐私评审后）"
     goals: ["G-101", "G-102", "G-106"]
