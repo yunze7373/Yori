@@ -20,6 +20,7 @@ import {
 } from './grammar.js';
 import {
   type DecisionLogger,
+  type EngineStatus,
   globalDecisionLogger,
 } from '../../adapters/model/decision-log.js';
 import {
@@ -37,8 +38,15 @@ import {
   FIXTURE_CMD_WHY,
 } from '../../../tests/fixtures/model-command-fixtures.js';
 
+export type ModelInterpreterMode =
+  | 'live'
+  | 'recorded_replay'
+  | 'scripted_fixture'
+  | 'replay'
+  | 'offline';
+
 export interface ModelInterpreterOptions {
-  readonly mode?: 'live' | 'replay' | 'offline';
+  readonly mode?: ModelInterpreterMode;
   readonly fixtures?: Record<string, ModelCommandDecisionOutput>;
   readonly fallbackInterpreter?: CommandInterpreter;
   readonly logger?: DecisionLogger;
@@ -86,7 +94,7 @@ function normalizeKey(str: string): string {
 }
 
 export class ModelCommandInterpreter implements CommandInterpreter {
-  private readonly mode: 'live' | 'replay' | 'offline';
+  private readonly mode: ModelInterpreterMode;
   private readonly fixtures: Record<string, ModelCommandDecisionOutput>;
   private readonly fallbackInterpreter: CommandInterpreter;
   private readonly logger: DecisionLogger;
@@ -94,7 +102,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
   private readonly timeoutMs: number;
 
   constructor(options: ModelInterpreterOptions = {}) {
-    this.mode = options.mode ?? 'replay';
+    this.mode = options.mode ?? 'scripted_fixture';
     this.fixtures = options.fixtures ?? DEFAULT_RECORDED_FIXTURES;
     this.fallbackInterpreter = options.fallbackInterpreter ?? defaultCommandInterpreter;
     this.logger = options.logger ?? globalDecisionLogger;
@@ -322,8 +330,11 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       };
     }
 
-    // Valid recorded fixture: emit 'Recorded model output · replay' (C6)
+    // Valid fixture: emit truthfully according to mode ('scripted_fixture' vs 'recorded_model_replay')
     const out = validation.output;
+    const engineStatus: EngineStatus =
+      this.mode === 'recorded_replay' ? 'recorded_model_replay' : 'scripted_fixture';
+
     this.logger.log({
       timestamp: now,
       templateId: 'decision_command',
@@ -332,7 +343,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       outputReasonCodes: out.reasonCodes,
       outputIntent: out.intent,
       validationResult: { valid: true },
-      engineStatus: 'recorded_model_replay',
+      engineStatus,
     });
 
     return {
@@ -345,7 +356,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       reasonCodes: out.reasonCodes,
       citedSignalIds: out.citedSignalIds,
       citedFactKeys: out.citedFactKeys,
-      engineStatus: 'recorded_model_replay',
+      engineStatus,
     };
   }
 
@@ -463,5 +474,5 @@ export class ModelCommandInterpreter implements CommandInterpreter {
 }
 
 export const defaultModelCommandInterpreter = new ModelCommandInterpreter({
-  mode: 'replay',
+  mode: 'scripted_fixture',
 });

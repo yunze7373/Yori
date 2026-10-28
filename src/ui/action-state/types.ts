@@ -19,6 +19,7 @@ export interface ActionCommandContext {
   readonly memory?: readonly MemoryFact[];
   readonly candidate?: IntentCandidate;
   readonly sceneId?: string;
+  readonly userConfirmedKeys?: ReadonlySet<string>;
 }
 
 export type ActionStatus =

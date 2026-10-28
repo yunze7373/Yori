@@ -1,9 +1,10 @@
 /**
- * Recorded Model Decision Command Fixtures (V2a-2, Condition C6)
+ * Scripted Model Decision Command Fixtures (V2a-2, Condition C6)
  * Governed by LIVING_CONTEXT_V2.md §9 R1 and conditions C6/C7.
  *
  * All fixtures are completely offline and deterministic with zero live API calls.
- * Used for offline replay ('Recorded model output · replay') and fault injection testing.
+ * Used for scripted fixture testing ('Scripted model fixture · not a live model call')
+ * and fault injection testing.
  */
 
 import type { ReasoningReasonCode } from '../../src/adapters/model/reasoning.js';

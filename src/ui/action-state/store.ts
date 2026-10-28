@@ -33,6 +33,7 @@ import {
 } from '../../plugins/depart/request-override.js';
 import { formatTime } from '../living-context/presentation.js';
 import { derivePlanTimingFacts } from '../view-models/timing.js';
+import { buildHumanDerivation, humanizeMemoryKey } from '../review/why-sheet.js';
 
 function checkSystemReducedMotion(): boolean {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -164,7 +165,7 @@ export class DefaultActionStateStore implements ActionStateStore {
       this.transcriptList.push({
         id: `msg-${Date.now()}-welcome`,
         sender: 'assistant',
-        text: "I can help adjust your departure plan (V2a): ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.",
+        text: "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.",
         timestamp: new Date().toISOString(),
       });
     }
@@ -549,9 +550,33 @@ export class DefaultActionStateStore implements ActionStateStore {
     // 3. WHY ('Why?', 'Why this plan?')
     if (cmd.intent === 'WHY') {
       this.beginCommand(trimmed);
-      const explanation =
-        ctx?.plan?.why?.derivation ??
-        "This plan is derived from your schedule and travel estimate fixtures.";
+
+      let explanation: string;
+      if (!ctx || !ctx.plan) {
+        explanation = "There is no active plan right now.";
+      } else {
+        const baseDerivation = buildHumanDerivation(ctx.plan);
+        const userConfirmed =
+          ctx.userConfirmedKeys ??
+          new Set(
+            ctx.memory
+              ?.filter(f => f.status === 'confirmed' && (f.provenance as any)?.source === 'user_confirmed')
+              .map(f => f.key) ?? []
+          );
+
+        const memoryFactsUsed = ctx.plan.why?.memoryFactsUsed ?? [];
+        if (memoryFactsUsed.length > 0) {
+          const notes = memoryFactsUsed.map(f => {
+            const isConfirmed = userConfirmed.has(f.key);
+            const prov = isConfirmed ? 'Confirmed preference' : 'Demo profile · sample preference';
+            return `${humanizeMemoryKey(f.key)} (${prov})`;
+          });
+          explanation = `${baseDerivation} Selected using your ${notes.join(', ')}.`;
+        } else {
+          explanation = baseDerivation;
+        }
+      }
+
       this.transcriptList.push({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',

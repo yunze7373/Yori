@@ -756,6 +756,7 @@ export function renderApp(
       snapshot,
       memory: combinedMemory,
       sceneId: currentScene,
+      userConfirmedKeys,
     });
 
     const greeting = getGreeting(snapshotAsOf, snapshotTimezone);

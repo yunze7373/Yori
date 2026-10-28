@@ -58,9 +58,28 @@ describe('V2a-2: Muse Spark Constrained Decision Engine & Decision Log', () => {
   });
 
   describe('Condition C6: Truth in Engine Status', () => {
-    it('labels recorded fixture replay as "Recorded model output · replay", never live', () => {
+    it('labels scripted fixture as "Scripted model fixture · not a live model call", never recorded or live', () => {
       const logger = new DecisionLogger();
-      const interpreter = new ModelCommandInterpreter({ mode: 'replay', logger });
+      const interpreter = new ModelCommandInterpreter({ mode: 'scripted_fixture', logger });
+
+      const res = interpreter.interpret('Can I leave later?', {
+        availableModes: ['drive', 'bus'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
+        confirmedFactKeys: ['rain_transport_preference', 'prep_buffer_minutes'],
+        validTimes: [rainPlan.leaveAt, rainPlan.prepareAt, rainPlan.apptAt],
+        validPlaces: [rainPlan.subjectTitle],
+      });
+
+      expect(res.engineStatus).toBe('scripted_fixture');
+      expect(logger.getEngineStatusLabel()).toBe('Scripted model fixture · not a live model call');
+      expect(ENGINE_STATUS_LABELS.scripted_fixture).toBe('Scripted model fixture · not a live model call');
+      expect(logger.getEngineStatusLabel()).not.toBe('Meta model · live');
+      expect(logger.getEngineStatusLabel()).not.toBe('Recorded Meta model output · replay');
+    });
+
+    it('labels recorded replay as "Recorded Meta model output · replay"', () => {
+      const logger = new DecisionLogger();
+      const interpreter = new ModelCommandInterpreter({ mode: 'recorded_replay', logger });
 
       const res = interpreter.interpret('Can I leave later?', {
         availableModes: ['drive', 'bus'],
@@ -71,9 +90,8 @@ describe('V2a-2: Muse Spark Constrained Decision Engine & Decision Log', () => {
       });
 
       expect(res.engineStatus).toBe('recorded_model_replay');
-      expect(logger.getEngineStatusLabel()).toBe('Recorded model output · replay');
-      expect(ENGINE_STATUS_LABELS.recorded_model_replay).toBe('Recorded model output · replay');
-      expect(logger.getEngineStatusLabel()).not.toBe('Meta model · live');
+      expect(logger.getEngineStatusLabel()).toBe('Recorded Meta model output · replay');
+      expect(ENGINE_STATUS_LABELS.recorded_model_replay).toBe('Recorded Meta model output · replay');
     });
 
     it('labels model-off or failed output as "Offline fallback · deterministic"', () => {
@@ -89,12 +107,22 @@ describe('V2a-2: Muse Spark Constrained Decision Engine & Decision Log', () => {
     it('labels live model call as "Meta model · live" only when proxy returns valid data', () => {
       expect(ENGINE_STATUS_LABELS.meta_model_live).toBe('Meta model · live');
     });
+
+    it('guarantees 1:1 mapping between engine status and data provenance', () => {
+      const statuses = ['meta_model_live', 'recorded_model_replay', 'scripted_fixture', 'offline_deterministic'] as const;
+      const labels = new Set(statuses.map(s => ENGINE_STATUS_LABELS[s]));
+      expect(labels.size).toBe(4);
+      expect(ENGINE_STATUS_LABELS.scripted_fixture).toContain('not a live model call');
+      expect(ENGINE_STATUS_LABELS.recorded_model_replay).toContain('Recorded Meta model output');
+      expect(ENGINE_STATUS_LABELS.meta_model_live).toBe('Meta model · live');
+      expect(ENGINE_STATUS_LABELS.offline_deterministic).toBe('Offline fallback · deterministic');
+    });
   });
 
   describe('Condition C7: Redacted Decision Log', () => {
     it('records templateId, input ids, output reason codes, validation result, and zero secrets/PII', () => {
       const logger = new DecisionLogger();
-      const interpreter = new ModelCommandInterpreter({ mode: 'replay', logger });
+      const interpreter = new ModelCommandInterpreter({ mode: 'scripted_fixture', logger });
 
       interpreter.interpret('Can I leave later?', {
         availableModes: ['drive', 'bus'],
@@ -114,7 +142,7 @@ describe('V2a-2: Muse Spark Constrained Decision Engine & Decision Log', () => {
       expect(entry.outputReasonCodes).toContain('weather_adjusted');
       expect(entry.outputIntent).toBe('LEAVE_LATER');
       expect(entry.validationResult.valid).toBe(true);
-      expect(entry.engineStatus).toBe('recorded_model_replay');
+      expect(entry.engineStatus).toBe('scripted_fixture');
       expect(entry.timestamp).toBeDefined();
 
       // Invariant: JSON export has ZERO secrets, raw prompt text, or PII
@@ -382,8 +410,11 @@ describe('V2a-2: Muse Spark Constrained Decision Engine & Decision Log', () => {
       );
 
       expect(whyHtml).toContain('Situation Attribution');
-      expect(whyHtml).toContain('weather adjusted');
-      expect(whyHtml).toContain('weather:2026-10-28T20:35:00.000Z');
+      expect(whyHtml).toContain('Weather Adjusted');
+      expect(whyHtml).toContain('Weather forecast · issued 1:35 PM');
+      expect(whyHtml).toContain('Precipitation increased · travel buffer adjusted for rain');
+      expect(whyHtml).not.toContain('weather:2026-10-28');
+      expect(whyHtml).not.toContain('2026-10-28T20:35:00.000Z');
       expect(whyHtml).toContain('Because you asked: leave 15 min later · this time only');
     });
 

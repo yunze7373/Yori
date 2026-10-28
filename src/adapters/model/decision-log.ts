@@ -16,11 +16,13 @@
 export type EngineStatus =
   | 'meta_model_live'
   | 'recorded_model_replay'
+  | 'scripted_fixture'
   | 'offline_deterministic';
 
 export const ENGINE_STATUS_LABELS: Record<EngineStatus, string> = {
   meta_model_live: 'Meta model · live',
-  recorded_model_replay: 'Recorded model output · replay',
+  recorded_model_replay: 'Recorded Meta model output · replay',
+  scripted_fixture: 'Scripted model fixture · not a live model call',
   offline_deterministic: 'Offline fallback · deterministic',
 };
 

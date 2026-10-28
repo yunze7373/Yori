@@ -162,7 +162,7 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       expect(store.getInteractionState()).toBe('CONVERSATION');
       expect(store.getTranscript().length).toBeGreaterThan(0);
       expect(store.getTranscript()[0]?.sender).toBe('assistant');
-      expect(store.getTranscript()[0]?.text).toContain('V2a');
+      expect(store.getTranscript()[0]?.text).toContain('I can help adjust your departure plan');
       expect(listener).toHaveBeenCalled();
 
       store.closeConversation();

@@ -167,8 +167,8 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await input.fill('Can I leave later?');
     await page.locator('#conversation-send-btn').click();
 
-    // After model decision engine runs under recorded fixtures, status updates to Recorded model output · replay (C6)
-    await expect(statusChip).toContainText('Recorded model output · replay');
+    // After model decision engine runs under scripted fixtures, status updates truthfully (C6)
+    await expect(statusChip).toContainText('Scripted model fixture · not a live model call');
 
     // Verify comparison box appears with both options and model recommendation badge
     const compBox = page.locator('.chat-comparison-box');
@@ -182,7 +182,15 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await expect(recBadge).toContainText('Recommended');
 
     // Status chip remains honestly labelled
-    await expect(statusChip).toContainText('Recorded model output · replay');
+    await expect(statusChip).toContainText('Scripted model fixture · not a live model call');
+
+    // Capture model comparison screenshot while conversation overlay and status chip are open
+    const viewport = page.viewportSize();
+    const isMobile = (viewport?.width ?? 0) < 600;
+    const filename = isMobile
+      ? 'v2-model-comparison-mobile.png'
+      : 'v2-model-comparison-desktop.png';
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, filename), fullPage: false });
 
     // Inspect Redacted Decision Log panel (C7)
     const toggleLogBtn = page.locator('#btn-toggle-decision-log');
@@ -219,9 +227,24 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
 
     const whySheet = page.locator('#why-sheet-backdrop');
     await expect(whySheet).toBeVisible();
-    await expect(page.locator('#why-situation-section')).toContainText('Situation Attribution');
-    await expect(page.locator('#why-situation-section')).toContainText('weather adjusted');
-    await expect(page.locator('#why-situation-section')).toContainText('weather:2026-10-28T20:35:00.000Z');
+    const situationSection = page.locator('#why-situation-section');
+    await expect(situationSection).toContainText('Situation Attribution');
+    await expect(situationSection).toContainText('Weather Adjusted');
+    await expect(situationSection).toContainText('Weather forecast · issued 1:35 PM');
+
+    // Anti-jargon & human provenance invariants on Why sheet (Finding 2)
+    const situationText = await situationSection.innerText();
+    expect(situationText).not.toContain('weather:2026-10-28');
+    expect(situationText).not.toContain('2026-10-28T20:35:00.000Z');
+    expect(situationText).not.toContain('Weather forecast updated to rain');
+    expect(situationText).toContain('Precipitation increased · travel buffer adjusted for rain');
+
+    // Full Why sheet scan for zero engineering jargon
+    const fullWhyText = await whySheet.innerText();
+    expect(fullWhyText).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    expect(fullWhyText).not.toContain('weather:2026');
+    expect(fullWhyText).not.toContain('rain_transport_preference');
+    expect(fullWhyText).not.toContain('fail-closed');
 
     // Close Why sheet
     await page.locator('#btn-close-why').click();
@@ -235,14 +258,6 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
 
     // Axe audit
     await checkAxe(page);
-
-    // Capture screenshot evidence
-    const viewport = page.viewportSize();
-    const isMobile = (viewport?.width ?? 0) < 600;
-    const filename = isMobile
-      ? 'v2-model-comparison-mobile.png'
-      : 'v2-model-comparison-desktop.png';
-    await page.screenshot({ path: path.join(EVIDENCE_DIR, filename), fullPage: false });
   });
 
   test('V2a-1 C1 non-resurrection: dismissed plan cannot be resurrected by chat', async ({
@@ -283,5 +298,36 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     // Close conversation and verify home is still quiet (no NOW card resurrected)
     await page.locator('#conversation-close-btn').click();
     await expect(page.locator('.now-card')).toHaveCount(0);
+  });
+
+  test('Chat "Why?" produces human derivation with honest sample profile provenance and zero formulas (Finding 3)', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+
+    const sceneSelect = page.locator('#scene-select');
+    await sceneSelect.selectOption('rain');
+
+    const askBar = page.locator('#ask-bar');
+    await askBar.click();
+
+    const input = page.locator('#conversation-input');
+    await input.fill('Why this plan?');
+    await page.locator('#conversation-send-btn').click();
+
+    const transcript = page.locator('#conversation-transcript');
+    await expect(transcript).toContainText('Piano lesson is scheduled at 3:00 PM');
+    await expect(transcript).toContainText('Demo profile · sample preference');
+    await expect(transcript).toContainText('Rain travel habit');
+
+    // Anti-jargon invariants
+    const text = await transcript.innerText();
+    expect(text).not.toContain('14:30');
+    expect(text).not.toContain('15:00 leave');
+    expect(text).not.toContain('=');
+    expect(text).not.toContain('rain_transport_preference');
+    expect(text).not.toMatch(/confirmed\s+rain_transport/i);
+    expect(text).not.toContain('derived from your schedule and travel estimate fixtures');
   });
 });

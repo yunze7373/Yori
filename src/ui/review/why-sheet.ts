@@ -13,6 +13,49 @@ import type { PreparedPlan, EvidenceCitation } from '../../core/contracts/index.
 import { formatTime, escapeHtml } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
 
+export const REASON_CODE_COPY: Record<string, { title: string; description: string }> = {
+  weather_adjusted: {
+    title: 'Weather Adjusted',
+    description: 'Precipitation increased · travel buffer adjusted for rain',
+  },
+  time_critical: {
+    title: 'Time Critical',
+    description: 'Arrival time tightly constrained by scheduled appointment',
+  },
+  matches_confirmed_preference: {
+    title: 'Preference Matched',
+    description: 'Selected to align with your confirmed travel preference',
+  },
+  shorter_trip: {
+    title: 'Shorter Trip',
+    description: 'Route selected to minimize travel duration',
+  },
+  free_window_fit: {
+    title: 'Schedule Fit',
+    description: 'Fits comfortably within your available schedule window',
+  },
+};
+
+export function humanizeSignalId(signalId: string, timezone: string): string {
+  const parts = signalId.split(':');
+  const kind = parts[0] || 'signal';
+  const label =
+    kind === 'weather'
+      ? 'Weather forecast'
+      : kind === 'calendar'
+      ? 'Calendar event'
+      : kind.charAt(0).toUpperCase() + kind.slice(1);
+
+  if (parts.length > 1) {
+    const isoString = parts.slice(1).join(':');
+    const formatted = formatTime(isoString, timezone);
+    if (formatted) {
+      return `${label} · issued ${formatted}`;
+    }
+  }
+  return label;
+}
+
 export function humanizeSignalKind(kind: string): string {
   switch (kind.toLowerCase()) {
     case 'calendar':
@@ -205,21 +248,27 @@ export function renderWhySheet(
 
           ${
             situationAttribution
-              ? `
+              ? (() => {
+                  const reasonMeta =
+                    REASON_CODE_COPY[situationAttribution.reasonCode] || {
+                      title: situationAttribution.reasonCode.replace(/_/g, ' '),
+                      description: 'Attributed to context change',
+                    };
+                  const signalLabel = humanizeSignalId(situationAttribution.signalId, tz);
+                  return `
           <!-- Situation Attribution Section (V2a-2) -->
           <section class="why-section" id="why-situation-section" aria-labelledby="why-situation-heading">
             <h3 id="why-situation-heading" class="why-section-title">Situation Attribution</h3>
-            <div class="why-situation-badge-row">
-              <span class="badge-reason-code">${escapeHtml(situationAttribution.reasonCode.replace(/_/g, ' '))}</span>
-              <span class="badge-signal-id">${escapeHtml(situationAttribution.signalId)}</span>
+            <div class="why-situation-item">
+              <div class="why-situation-badge-row">
+                <span class="badge-reason-code">${escapeHtml(reasonMeta.title)}</span>
+                <span class="badge-signal-id">${escapeHtml(signalLabel)}</span>
+              </div>
+              <p class="why-situation-text">${escapeHtml(reasonMeta.description)}</p>
             </div>
-            ${
-              situationAttribution.explanation
-                ? `<p class="why-situation-text">${escapeHtml(situationAttribution.explanation)}</p>`
-                : ''
-            }
           </section>
-          `
+          `;
+                })()
               : ''
           }
 

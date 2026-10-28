@@ -35,7 +35,7 @@ export interface CausalityGoldenRecord {
   scenarioId: string;
   signalKind: string;
   signalIssuedAt: string;
-  reasoningEngine: 'deterministic_fallback' | 'meta_model_live' | 'recorded_model_replay';
+  reasoningEngine: 'deterministic_fallback' | 'meta_model_live' | 'recorded_model_replay' | 'scripted_fixture';
   suggestionHeadline: string;
   confirmedPlanId: string;
   finalState: 'accepted' | 'settled';
@@ -169,9 +169,9 @@ describe('Causality Golden G-RAIN (LIVING_CONTEXT_V2.md §9 R2)', () => {
     expect(weatherCitation!.issuedAt).toBe('2026-10-28T20:35:00.000Z');
 
     // -------------------------------------------------------------
-    // Phase 3: Model reasoning under recorded fixture
+    // Phase 3: Model reasoning under scripted fixture
     // -------------------------------------------------------------
-    const modelInterpreter = new ModelCommandInterpreter({ mode: 'replay' });
+    const modelInterpreter = new ModelCommandInterpreter({ mode: 'scripted_fixture' });
     const decision = modelInterpreter.interpret('Can I leave later?', {
       availableModes: ['drive', 'bus'],
       availableSignalIds: [`weather:${weatherCitation!.issuedAt}`, 'calendar:2026-10-28T17:00:00.000Z'],
@@ -180,23 +180,23 @@ describe('Causality Golden G-RAIN (LIVING_CONTEXT_V2.md §9 R2)', () => {
       validPlaces: [rainPlan!.subjectTitle!],
     });
 
-    expect(decision.engineStatus).toBe('recorded_model_replay');
+    expect(decision.engineStatus).toBe('scripted_fixture');
     expect(decision.situationAttribution).toBeDefined();
     expect(decision.situationAttribution!.reasonCode).toBe('weather_adjusted');
     expect(decision.recommendedOptionDelta).toBe(5);
 
-    // Full causality chain under recorded model replay
+    // Full causality chain under scripted model fixture
     const causalityRecord: CausalityGoldenRecord = {
-      scenarioId: 'G-RAIN-clear-to-rain-model-replay',
+      scenarioId: 'G-RAIN-clear-to-rain-model-fixture',
       signalKind: weatherCitation!.kind,
       signalIssuedAt: weatherCitation!.issuedAt,
-      reasoningEngine: 'recorded_model_replay',
+      reasoningEngine: 'scripted_fixture',
       suggestionHeadline: rainPlan!.headline,
       confirmedPlanId: rainPlan!.id,
       finalState: 'accepted',
     };
 
-    expect(causalityRecord.reasoningEngine).toBe('recorded_model_replay');
+    expect(causalityRecord.reasoningEngine).toBe('scripted_fixture');
     expect(causalityRecord.suggestionHeadline).toContain('umbrella recommended');
     expect(causalityRecord.finalState).toBe('accepted');
   });
