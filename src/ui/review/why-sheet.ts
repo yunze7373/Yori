@@ -24,7 +24,7 @@ export const REASON_CODE_COPY: Record<string, { title: string; description: stri
   },
   matches_confirmed_preference: {
     title: 'Preference Matched',
-    description: 'Selected to align with your confirmed travel preference',
+    description: 'Matches your confirmed preference',
   },
   shorter_trip: {
     title: 'Shorter Trip',
@@ -82,6 +82,9 @@ export function humanizeSignalKind(kind: string): string {
       return 'Schedule window';
     case 'eating_status':
       return 'Meal timing status';
+    case 'mock_places':
+    case 'places':
+      return 'Nearby places';
     case 'user_request':
       return 'User request';
     default:
@@ -93,6 +96,9 @@ export function humanizeSignalDescription(
   sig: EvidenceCitation,
   _tz?: string
 ): string {
+  if (sig.kind === 'mock_places' || sig.kind === 'places') {
+    return 'Demo place list';
+  }
   if (sig.kind === 'location_status') {
     if (sig.description?.toLowerCase().includes('downtown')) {
       return 'Away from home in Downtown';
@@ -185,8 +191,15 @@ export function humanizeMemoryValue(key: string, value: unknown): string {
   return String(value ?? '');
 }
 
-export function buildHumanDerivation(plan: PreparedPlan): string {
+export function buildHumanDerivation(
+  plan: PreparedPlan,
+  userConfirmedKeys?: ReadonlySet<string>
+): string {
   const tz = plan.timezone;
+  const memoryFacts = plan.why?.memoryFactsUsed ?? [];
+  const hasPreferences = memoryFacts.length > 0;
+  const allConfirmed = hasPreferences && memoryFacts.every(f => userConfirmedKeys?.has(f.key));
+
   if (plan.intentId === 'depart') {
     const subject = plan.subjectTitle || 'Your upcoming appointment';
     const apptTime = formatTime(plan.apptAt, tz);
@@ -201,21 +214,37 @@ export function buildHumanDerivation(plan: PreparedPlan): string {
       const routeDesc = isReal ? 'live route estimates' : 'the route estimate (simulated)';
       const userReq = plan.why?.evidenceSignals?.find(s => s.kind === 'user_request');
       const requestNote = userReq ? ` (${userReq.description})` : '';
-      return `${subject} is scheduled at ${apptTime}. Based on ${routeDesc} and your preparation routine, we scheduled preparation to start at ${prepareTime} and departure by ${leaveTime}.${requestNote}`;
+      const routineDesc = allConfirmed
+        ? 'your confirmed preparation routine'
+        : hasPreferences
+        ? 'sample preparation habits from the demo profile'
+        : 'your preparation routine';
+      return `${subject} is scheduled at ${apptTime}. Based on ${routeDesc} and ${routineDesc}, we scheduled preparation to start at ${prepareTime} and departure by ${leaveTime}.${requestNote}`;
     }
   }
 
   if (plan.intentId === 'lunch') {
     const userReq = plan.why?.evidenceSignals?.find(s => s.kind === 'user_request');
     const requestNote = userReq ? ` (${userReq.description})` : '';
-    return `Detected that you are away from home during a free schedule window. Recommended places within walking distance that align with your confirmed taste preferences.${requestNote}`;
+    const prefDesc = allConfirmed
+      ? 'align with your confirmed taste preferences'
+      : hasPreferences
+      ? 'align with sample taste preferences from the demo profile'
+      : 'align with your taste preferences';
+    return `Detected that you are away from home during a free schedule window. Recommended places within walking distance that ${prefDesc}.${requestNote}`;
   }
 
   // Fallback: sanitize any raw derivation string from internal formulas
+  const fallbackPrefWord = allConfirmed
+    ? 'confirmed preferences'
+    : hasPreferences
+    ? 'sample preferences from the demo profile'
+    : 'preferences';
   return (
     plan.why.derivation
       .replace(/appt\s*-\s*travel\s*-\s*buffer/gi, 'travel time and buffer')
-      .replace(/[_-]/g, ' ') || 'Derived automatically from context signals and your confirmed preferences.'
+      .replace(/confirmed taste preferences/gi, allConfirmed ? 'confirmed taste preferences' : 'sample taste preferences from the demo profile')
+      .replace(/[_-]/g, ' ') || `Derived automatically from context signals and ${fallbackPrefWord}.`
   );
 }
 
@@ -228,12 +257,13 @@ export function renderWhySheet(
     readonly signalId: string;
     readonly reasonCode: string;
     readonly explanation?: string;
+    readonly citedFactKeys?: readonly string[];
   }
 ): string {
   const tz = timezone || plan.timezone || 'America/Los_Angeles';
   const signals = plan.why.evidenceSignals;
   const memoryFacts = plan.why.memoryFactsUsed;
-  const derivationText = buildHumanDerivation(plan);
+  const derivationText = buildHumanDerivation(plan, userConfirmedKeys);
 
   return `
     <div class="modal-backdrop" id="why-sheet-backdrop" role="presentation">
@@ -259,11 +289,36 @@ export function renderWhySheet(
           ${
             situationAttribution
               ? (() => {
-                  const reasonMeta =
-                    REASON_CODE_COPY[situationAttribution.reasonCode] || {
-                      title: situationAttribution.reasonCode.replace(/_/g, ' '),
-                      description: 'Attributed to context change',
-                    };
+                  let reasonTitle: string;
+                  let reasonDesc: string;
+
+                  if (situationAttribution.reasonCode === 'matches_confirmed_preference') {
+                    const factsToCheck =
+                      situationAttribution.citedFactKeys && situationAttribution.citedFactKeys.length > 0
+                        ? situationAttribution.citedFactKeys
+                        : plan.why.memoryFactsUsed.map(f => f.key);
+
+                    const isAllUserConfirmed =
+                      factsToCheck.length > 0 &&
+                      factsToCheck.every(k => userConfirmedKeys?.has(k));
+
+                    if (isAllUserConfirmed) {
+                      reasonTitle = 'Preference Matched';
+                      reasonDesc = 'Matches your confirmed preference';
+                    } else {
+                      reasonTitle = 'Sample Preference';
+                      reasonDesc = 'Matches a sample preference from the demo profile';
+                    }
+                  } else {
+                    const reasonMeta =
+                      REASON_CODE_COPY[situationAttribution.reasonCode] || {
+                        title: situationAttribution.reasonCode.replace(/_/g, ' '),
+                        description: 'Attributed to context change',
+                      };
+                    reasonTitle = reasonMeta.title;
+                    reasonDesc = reasonMeta.description;
+                  }
+
                   const signalLabel = humanizeSignalId(situationAttribution.signalId, tz);
                   return `
           <!-- Situation Attribution Section (V2a-2) -->
@@ -271,10 +326,10 @@ export function renderWhySheet(
             <h3 id="why-situation-heading" class="why-section-title">Situation Attribution</h3>
             <div class="why-situation-item">
               <div class="why-situation-badge-row">
-                <span class="badge-reason-code">${escapeHtml(reasonMeta.title)}</span>
+                <span class="badge-reason-code">${escapeHtml(reasonTitle)}</span>
                 <span class="badge-signal-id">${escapeHtml(signalLabel)}</span>
               </div>
-              <p class="why-situation-text">${escapeHtml(reasonMeta.description)}</p>
+              <p class="why-situation-text">${escapeHtml(reasonDesc)}</p>
             </div>
           </section>
           `;

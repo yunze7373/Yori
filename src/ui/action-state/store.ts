@@ -488,7 +488,10 @@ export class DefaultActionStateStore implements ActionStateStore {
     });
 
     if (cmd.situationAttribution) {
-      this.currentSituationAttribution = cmd.situationAttribution;
+      this.currentSituationAttribution = {
+        ...cmd.situationAttribution,
+        citedFactKeys: cmd.citedFactKeys ?? cmd.situationAttribution.citedFactKeys,
+      };
     }
 
     // 1. ACCEPT ('Looks good', 'Accept', 'Confirm')
@@ -559,7 +562,6 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (!activePlan) {
         explanation = "There is no active plan right now.";
       } else {
-        const baseDerivation = buildHumanDerivation(activePlan);
         const userConfirmed =
           ctx?.userConfirmedKeys ??
           new Set(
@@ -567,6 +569,7 @@ export class DefaultActionStateStore implements ActionStateStore {
               ?.filter(f => f.status === 'confirmed' && (f.provenance as any)?.source === 'user_confirmed')
               .map(f => f.key) ?? []
           );
+        const baseDerivation = buildHumanDerivation(activePlan, userConfirmed);
 
         const memoryFactsUsed = activePlan.why?.memoryFactsUsed ?? [];
         if (memoryFactsUsed.length > 0) {

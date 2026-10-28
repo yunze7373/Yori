@@ -41,6 +41,7 @@ export interface SituationAttribution {
   readonly signalId: string;
   readonly reasonCode: ReasoningReasonCode;
   readonly explanation?: string;
+  readonly citedFactKeys?: readonly string[];
 }
 
 export interface InterpretedCommand {

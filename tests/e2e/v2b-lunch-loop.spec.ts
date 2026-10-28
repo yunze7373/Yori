@@ -158,10 +158,33 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     const whyText = await page.locator('#why-order-text, .why-derivation-text').innerText();
     expect(whyText).toContain('Because you asked: quieter, vegetarian · this time only');
 
-    // Anti-jargon: no raw ISO strings or raw IDs in Why sheet
+    // Situation Attribution: honest Sample Preference attribution, zero "confirmed" or "travel"
+    const sitSection = page.locator('#why-situation-section');
+    await expect(sitSection).toBeVisible();
+    await expect(sitSection).toContainText('Sample Preference');
+    await expect(sitSection).toContainText('Matches a sample preference from the demo profile');
+    const sitText = await sitSection.innerText();
+    expect(sitText.toLowerCase()).not.toContain('confirmed');
+    expect(sitText.toLowerCase()).not.toContain('travel');
+
+    // Derivation text: states sample taste preferences from the demo profile, zero "confirmed"
+    const derivLocator = page.locator('.why-derivation-text');
+    await expect(derivLocator).toContainText('sample taste preferences from the demo profile');
+    const derivText = await derivLocator.innerText();
+    expect(derivText.toLowerCase()).not.toContain('confirmed');
+
+    // Memory facts: clearly labeled Demo profile · sample preference
+    await expect(whySheet).toContainText('Demo profile · sample preference');
+
+    // Anti-jargon: no raw ISO strings, raw keys, or mock places jargon in Why sheet
     expect(whyText).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     expect(whyText).not.toMatch(/mock_places:\d{4}/);
     expect(whyText).not.toMatch(/taste_preference=/);
+    await expect(whySheet).toContainText('Nearby places');
+    await expect(whySheet).toContainText('Demo place list');
+    const whySheetFullText = await whySheet.innerText();
+    expect(whySheetFullText).not.toContain('mock places');
+    expect(whySheetFullText).not.toContain('mock_places');
 
     // Close Why sheet
     await page.locator('#btn-close-why').click();
@@ -214,5 +237,18 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     // 4. Assert engine status updates to scripted fixture truthfully (C6)
     await expect(statusChip).toContainText('Scripted model fixture · not a live model call');
     await expect(page.locator('#conversation-transcript')).toContainText('Demo Place B · Salad');
+
+    // 5. Ask "Why?" in chat and verify honest sample preference wording with zero "confirmed"
+    await input.fill('Why?');
+    await page.locator('#conversation-send-btn').click();
+
+    const transcript = page.locator('#conversation-transcript');
+    await expect(transcript).toContainText('sample taste preferences from the demo profile');
+    await expect(transcript).toContainText('Demo profile · sample preference');
+
+    // The assistant's latest response must NOT contain "confirmed"
+    const lastAssistantMsg = page.locator('.chat-bubble-assistant').last();
+    const lastMsgText = await lastAssistantMsg.innerText();
+    expect(lastMsgText.toLowerCase()).not.toContain('confirmed');
   });
 });

@@ -211,7 +211,7 @@ export class LunchPreparer implements Preparer {
           kind: placesSignal.kind,
           source: placesSignal.source,
           issuedAt: placesSignal.issuedAt,
-          description: 'Nearby mock places list',
+          description: 'Demo place list',
         })
       );
     }
@@ -233,8 +233,15 @@ export class LunchPreparer implements Preparer {
       : '';
 
     const headline = filters.length > 0
-      ? `Lunch options near you (${selected.length} places matching ${filters.join(' and ')} and your tastes)`
+      ? `Lunch options near you · prioritized for ${filters.join(', ')}`
       : `Lunch options near you (${selected.length} places matching your tastes)`;
+
+    const isUserConfirmed = confirmedTasteFacts.every(
+      f => (f.provenance as any)?.source === 'user_confirmed'
+    );
+    const tasteDesc = isUserConfirmed
+      ? 'confirmed taste preferences'
+      : 'sample taste preferences from the demo profile';
 
     return Object.freeze({
       id: `plan-lunch-${snapshot.asOf.replace(/[^0-9]/g, '')}`,
@@ -247,7 +254,7 @@ export class LunchPreparer implements Preparer {
       why: Object.freeze({
         evidenceSignals: Object.freeze(evidenceSignals),
         memoryFactsUsed: Object.freeze(memoryFactsUsed),
-        derivation: `${filterNote}Recommended ${selected.length} options matching confirmed taste preferences (${tasteFactSummary}).`,
+        derivation: `${filterNote}Recommended ${selected.length} options matching ${tasteDesc} (${tasteFactSummary}).`,
       }),
     });
   }

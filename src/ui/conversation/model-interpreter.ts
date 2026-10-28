@@ -375,12 +375,19 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       engineStatus,
     });
 
+    const situationAttribution = out.situationAttribution
+      ? {
+          ...out.situationAttribution,
+          citedFactKeys: out.citedFactKeys,
+        }
+      : undefined;
+
     return {
       intent: out.intent,
       rawText,
       slots: out.slots,
       explanation: out.explanation,
-      situationAttribution: out.situationAttribution,
+      situationAttribution,
       recommendedOptionDelta: out.recommendedOptionDelta,
       reasonCodes: out.reasonCodes,
       citedSignalIds: out.citedSignalIds,
@@ -460,12 +467,19 @@ export class ModelCommandInterpreter implements CommandInterpreter {
         latencyMs,
       });
 
+      const situationAttribution = out.situationAttribution
+        ? {
+            ...out.situationAttribution,
+            citedFactKeys: out.citedFactKeys,
+          }
+        : undefined;
+
       return {
         intent: out.intent,
         rawText: input,
         slots: out.slots,
         explanation: out.explanation,
-        situationAttribution: out.situationAttribution,
+        situationAttribution,
         recommendedOptionDelta: out.recommendedOptionDelta,
         reasonCodes: out.reasonCodes,
         citedSignalIds: out.citedSignalIds,
