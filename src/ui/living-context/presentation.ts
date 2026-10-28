@@ -270,3 +270,34 @@ export function humanizeProposalTitle(key: string): string {
   }
 }
 
+/**
+ * Maps a PreparedPlan in the AHEAD list into a human-first presentation model.
+ */
+export function formatAheadPlan(plan: PreparedPlan): {
+  readonly title: string;
+  readonly subtitle: string;
+} {
+  if (plan.intentId === 'depart') {
+    const timeZone = plan.timezone;
+    const apptTimeStr = formatTime(plan.apptAt, timeZone);
+    const leaveStr = formatTime(plan.leaveAt, timeZone);
+    const title = plan.subjectTitle
+      ? `${plan.subjectTitle}${apptTimeStr ? ` at ${apptTimeStr}` : ''}`
+      : plan.headline;
+    const subtitle = leaveStr
+      ? `Leave by ${leaveStr}`
+      : 'Scheduled event on your calendar';
+    return { title, subtitle };
+  }
+  if (plan.intentId === 'lunch') {
+    return {
+      title: STRINGS.lunch.title,
+      subtitle: STRINGS.lunch.primaryLine,
+    };
+  }
+  return {
+    title: plan.headline,
+    subtitle: 'Upcoming scheduled moment',
+  };
+}
+

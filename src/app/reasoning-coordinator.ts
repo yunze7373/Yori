@@ -28,9 +28,12 @@ import {
   buildReasoningInput,
   reorderPlansWithReasoning,
   createModelIntentCandidate,
+  validateReasoningOutput,
   type ReasoningOutput,
   type ReasoningValidationFailureReason,
+  type ReasoningReasonCode,
 } from '../adapters/model/reasoning.js';
+import { STRINGS } from '../ui/living-context/strings.js';
 
 export interface ModelReasoningApiResponse {
   readonly result: ReasoningOutput;
@@ -147,17 +150,40 @@ export async function coordinateReasoning(
     };
   }
 
+  // Defense in depth: Client-side validation against supplied plans (Finding 1)
+  const clientValidation = validateReasoningOutput(responseData.result, reasoningInput);
+  if (!clientValidation.valid) {
+    logger(`[ReasoningCoordinator] Client validation failed: ${clientValidation.error}`);
+    return {
+      applied: false,
+      now: originalNow,
+      ahead: originalAhead,
+      rationaleMap: emptyRationaleMap,
+      fallbackReason: clientValidation.reason,
+    };
+  }
+
   // 4. Valid reorder: reorder plans keeping plan data byte-for-byte intact
   const reorderedPlans = reorderPlansWithReasoning(allPlans, responseData.result);
   const newNow = living.now !== null ? (reorderedPlans[0] ?? null) : null;
   const newAhead = living.now !== null ? reorderedPlans.slice(1, 4) : reorderedPlans.slice(0, 3);
 
   // 5. Build rationale map for UI display in Why Sheet
+  // NEVER render free model text (Finding 1 / INV-103).
+  // Only map validated enumerated reasonCodes to externalized UI copy!
   const rationaleMap = new Map<string, string>();
   if (Array.isArray(responseData.result.rationale)) {
     for (const r of responseData.result.rationale) {
-      if (r && r.planId && r.text) {
-        rationaleMap.set(r.planId, r.text);
+      if (r && r.planId) {
+        const code =
+          (r.reasonCode as ReasoningReasonCode | undefined) ||
+          (Array.isArray(r.reasonCodes) ? (r.reasonCodes[0] as ReasoningReasonCode) : undefined);
+        if (code && typeof code === 'string' && code in STRINGS.reasoningReasons) {
+          rationaleMap.set(
+            r.planId,
+            STRINGS.reasoningReasons[code as keyof typeof STRINGS.reasoningReasons]
+          );
+        }
       }
     }
   }

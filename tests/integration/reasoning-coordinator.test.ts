@@ -189,9 +189,13 @@ describe('Slice B2: Living Context Reasoning Coordinator & Offline Fixtures (AC-
     expect(res.ahead[0]?.apptAt).toBe(planDepart.apptAt);
     expect(res.ahead[0]?.leaveAt).toBe(planDepart.leaveAt);
 
-    // Rationales populated
-    expect(res.rationaleMap.get('plan-lunch-away')).toContain('Prioritize lunch');
-    expect(res.rationaleMap.get('plan-depart-piano')).toContain('Departure for Piano Studio');
+    // Rationales populated with externalized human copy for reasonCodes (Finding 1)
+    expect(res.rationaleMap.get('plan-lunch-away')).toBe(
+      'Prioritized because it matches your confirmed preferences.'
+    );
+    expect(res.rationaleMap.get('plan-depart-piano')).toBe(
+      'Prioritized because this event requires timely departure.'
+    );
   });
 
   it('Fixture 2 (Uncited Claim): falls back and preserves deterministic order', async () => {
@@ -403,7 +407,7 @@ describe('Slice B2: Living Context Reasoning Coordinator & Offline Fixtures (AC-
   });
 
   it('Why Sheet Integration: displays "Why this order" section with rationale text and zero engineering jargon', () => {
-    const rationaleText = 'Prioritize lunch near Green Bowl matching confirmed taste while user is away';
+    const rationaleText = 'Prioritized because it matches your confirmed preferences.';
     const htmlWithRationale = renderWhySheet(planLunch, rationaleText);
 
     expect(htmlWithRationale).toContain('id="why-order-section"');
@@ -420,5 +424,76 @@ describe('Slice B2: Living Context Reasoning Coordinator & Offline Fixtures (AC-
     const htmlWithoutRationale = renderWhySheet(planLunch);
     expect(htmlWithoutRationale).not.toContain('id="why-order-section"');
     expect(htmlWithoutRationale).not.toContain('Why this order');
+  });
+
+  it('Defense In Depth (Finding 1): invented-venue strings in free model text can never reach the UI', async () => {
+    const inventedVenueOutputs = [
+      'Prioritize lunch near Green Bowl matching confirmed taste',
+      'Try Blue Lotus, it opens now',
+      'Head to Sunrise Diner downtown',
+      'Ichiran Shibuya has short queues',
+    ];
+
+    for (const badText of inventedVenueOutputs) {
+      const mockApiResponse: ModelReasoningApiResponse = {
+        result: {
+          orderedPlanIds: ['plan-lunch-away', 'plan-depart-piano'],
+          rationale: [
+            {
+              planId: 'plan-lunch-away',
+              citedSignalIds: ['location:2026-10-28T12:00:00Z'],
+              citedFactKeys: ['taste_lunch_japanese'],
+              reasonCode: 'matches_confirmed_preference',
+              text: badText, // free-text containing invented venue/claims
+            },
+          ],
+        },
+        usedFallback: false,
+      };
+
+      const mockFetch = createMockFetch({ json: async () => mockApiResponse });
+      const res = await coordinateReasoning(deterministicLiving, sampleSnapshot, sampleConfirmedFacts, {
+        fetchFn: mockFetch,
+      });
+
+      // The rationale map exposed to the UI MUST NOT contain the bad text
+      const mapped = res.rationaleMap.get('plan-lunch-away');
+      expect(mapped).toBeDefined();
+      expect(mapped).not.toContain('Green Bowl');
+      expect(mapped).not.toContain('Blue Lotus');
+      expect(mapped).not.toContain('Sunrise Diner');
+      expect(mapped).not.toContain('Ichiran');
+      expect(mapped).not.toContain('opens now');
+      expect(mapped).not.toContain('short queues');
+      // It only contains the approved, externalized copy:
+      expect(mapped).toBe('Prioritized because it matches your confirmed preferences.');
+    }
+  });
+
+  it('Defense In Depth (Finding 1): client-side re-validation discards invalid responses with unknown fact tokens', async () => {
+    const mockApiResponse: ModelReasoningApiResponse = {
+      result: {
+        orderedPlanIds: ['plan-lunch-away', 'plan-depart-piano'],
+        rationale: [
+          {
+            planId: 'plan-lunch-away',
+            citedSignalIds: ['location:2026-10-28T12:00:00Z'],
+            citedFactKeys: ['taste_lunch_japanese'],
+            text: 'Dine at invented restaurant at 5:00 PM for $50',
+          },
+        ],
+      },
+      usedFallback: false,
+    };
+
+    const mockFetch = createMockFetch({ json: async () => mockApiResponse });
+    const res = await coordinateReasoning(deterministicLiving, sampleSnapshot, sampleConfirmedFacts, {
+      fetchFn: mockFetch,
+    });
+
+    // Client-side validation in coordinator catches it and falls back!
+    expect(res.applied).toBe(false);
+    expect(res.fallbackReason).toBe('unlisted_fact_token');
+    expect(res.now?.id).toBe('plan-depart-piano');
   });
 });

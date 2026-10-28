@@ -18,13 +18,13 @@ export const FIXTURE_ACCEPTED_REORDER: ReasoningOutput = {
       planId: 'plan-lunch-away',
       citedSignalIds: ['location:2026-10-28T12:00:00Z'],
       citedFactKeys: ['taste_lunch_japanese'],
-      text: 'Prioritize lunch near Green Bowl matching confirmed taste while user is away',
+      reasonCode: 'matches_confirmed_preference',
     },
     {
       planId: 'plan-depart-piano',
       citedSignalIds: ['calendar:2026-10-28T09:00:00Z', 'weather:2026-10-28T11:30:00Z'],
       citedFactKeys: ['habit_rain_transit'],
-      text: 'Departure for Piano Studio scheduled with umbrella due to rain forecast',
+      reasonCode: 'time_critical',
     },
   ],
 };

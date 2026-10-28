@@ -46,6 +46,7 @@ import {
   escapeHtml,
   getGreeting,
   formatNowPlan,
+  formatAheadPlan,
   formatNoticeMessage,
   humanizeProposalTitle,
 } from './presentation.js';
@@ -340,7 +341,7 @@ export function computeSceneState(
           endTime: '2026-10-28T16:00:00-07:00',
           location: 'Piano Studio (Downtown)',
         },
-        issuedAt: '2026-10-28T17:00:00.000Z',
+        issuedAt: '2026-10-28T19:10:00.000Z',
         validFor: 36000000,
         confidence: 1.0,
         consentScope: 'device_only',
@@ -351,7 +352,7 @@ export function computeSceneState(
           mode: 'drive',
           travelMinutes: 30,
         },
-        issuedAt: '2026-10-28T17:00:00.000Z',
+        issuedAt: '2026-10-28T19:10:00.000Z',
         validFor: 36000000,
         confidence: 0.9,
         consentScope: 'device_only',
@@ -362,7 +363,7 @@ export function computeSceneState(
           condition: 'clear',
           precipProbability: 0.0,
         },
-        issuedAt: '2026-10-28T17:00:00.000Z',
+        issuedAt: '2026-10-28T19:10:00.000Z',
         validFor: 36000000,
         confidence: 0.95,
         consentScope: 'device_only',
@@ -378,12 +379,34 @@ export function computeSceneState(
         confidence: 0.95,
         consentScope: 'device_only',
       });
+      const scheduleSig = createSimulatedSignal({
+        kind: 'schedule_window',
+        value: {
+          freeUntil: '2026-10-28T14:00:00-07:00',
+          nextEvent: 'Piano lesson at 3:00 PM',
+        },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+      const eatingSig = createSimulatedSignal({
+        kind: 'eating_status',
+        value: {
+          eatenToday: false,
+          lastMeal: 'Breakfast 08:30',
+        },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 0.9,
+        consentScope: 'device_only',
+      });
 
       const snapshot: ContextSnapshot = {
         id: 'snapshot-multi-candidate',
         asOf: '2026-10-28T19:10:00.000Z',
         timezone: 'America/Los_Angeles',
-        signals: [calendarSig, travelSig, weatherSig, locationSig],
+        signals: [calendarSig, travelSig, weatherSig, locationSig, scheduleSig, eatingSig],
       };
 
       const combinedMemory = [
@@ -441,6 +464,7 @@ export function renderApp(
   const timingOverrides: Record<string, { prepMinutes: number; bufferMinutes: number }> = {};
 
   let coordinatedScene: DemoSceneId | null = null;
+  let reasoningRequestId = 0;
   let reasoningState: {
     scene: DemoSceneId;
     now: PreparedPlan | null;
@@ -716,12 +740,13 @@ export function renderApp(
               ${
                 aheadPlans.length > 0
                   ? aheadPlans
-                      .map(
-                        item => `
+                      .map(item => {
+                        const aheadPres = formatAheadPlan(item);
+                        return `
                 <div class="item-row" data-plan-id="${escapeHtml(item.id)}">
                   <div>
-                    <div class="item-title">${escapeHtml(item.headline)}</div>
-                    <div class="item-subtitle">Scheduled event on your calendar</div>
+                    <div class="item-title">${escapeHtml(aheadPres.title)}</div>
+                    <div class="item-subtitle">${escapeHtml(aheadPres.subtitle)}</div>
                   </div>
                   <div style="display: flex; gap: 8px; align-items: center;">
                     <button type="button" class="btn btn-sm btn-outline btn-ahead-why" data-plan-id="${escapeHtml(item.id)}">
@@ -730,8 +755,8 @@ export function renderApp(
                     <span class="card-badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
                   </div>
                 </div>
-              `
-                      )
+              `;
+                      })
                       .join('')
                   : `
                 <div class="item-row" style="color: var(--color-muted);">
@@ -865,7 +890,11 @@ export function renderApp(
         <!-- Active Modals (Why sheet, Adjust, Dismiss) -->
         ${
           activeModal?.type === 'why'
-            ? renderWhySheet(activeModal.plan, reasoningState?.rationales[activeModal.plan.id])
+            ? renderWhySheet(
+                activeModal.plan,
+                reasoningState?.rationales[activeModal.plan.id],
+                snapshotTimezone
+              )
             : activeModal?.type === 'adjust'
             ? renderAdjustDialog(activeModal.values)
             : activeModal?.type === 'dismiss'
@@ -886,6 +915,7 @@ export function renderApp(
         currentScene = (e.target as HTMLSelectElement).value as DemoSceneId;
         actionFeedbackMessage = null;
         coordinatedScene = null;
+        reasoningRequestId++;
         reasoningState = null;
         update();
       });
@@ -1297,15 +1327,22 @@ export function renderApp(
       const allPlans = [living.now, ...living.ahead].filter((p): p is PreparedPlan => p !== null);
       if (allPlans.length > 0) {
         coordinatedScene = currentScene;
+        const requestScene = currentScene;
+        const requestId = ++reasoningRequestId;
+
         coordinateReasoning(living, snapshot, combinedMemory)
           .then(res => {
+            // Guard against scene race: only apply if the user hasn't switched scene (Finding 2)
+            if (currentScene !== requestScene || requestId !== reasoningRequestId) {
+              return;
+            }
             if (res.applied) {
               const rationales: Record<string, string> = {};
               res.rationaleMap.forEach((text, id) => {
                 rationales[id] = text;
               });
               reasoningState = {
-                scene: currentScene,
+                scene: requestScene,
                 now: res.now,
                 ahead: res.ahead,
                 rationales,

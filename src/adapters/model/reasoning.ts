@@ -56,11 +56,28 @@ export interface ReasoningInput {
   readonly timezone?: string;
 }
 
+export type ReasoningReasonCode =
+  | 'matches_confirmed_preference'
+  | 'time_critical'
+  | 'shorter_trip'
+  | 'weather_adjusted'
+  | 'free_window_fit';
+
+export const VALID_REASON_CODES: ReadonlySet<string> = new Set([
+  'matches_confirmed_preference',
+  'time_critical',
+  'shorter_trip',
+  'weather_adjusted',
+  'free_window_fit',
+]);
+
 export interface PlanRationale {
   readonly planId: string;
   readonly citedSignalIds: readonly string[];
   readonly citedFactKeys: readonly string[];
-  readonly text: string;
+  readonly reasonCode?: ReasoningReasonCode;
+  readonly reasonCodes?: readonly ReasoningReasonCode[];
+  readonly text?: string;
 }
 
 export interface ProposedIntent {
@@ -465,7 +482,14 @@ export function validateReasoningOutput(
     };
   }
 
-  const allowedRationaleKeys = new Set(['planId', 'citedSignalIds', 'citedFactKeys', 'text']);
+  const allowedRationaleKeys = new Set([
+    'planId',
+    'citedSignalIds',
+    'citedFactKeys',
+    'text',
+    'reasonCode',
+    'reasonCodes',
+  ]);
   const availableSignals = new Set(input.availableSignalIds);
   const confirmedFacts = new Set(input.confirmedFactKeys);
 
@@ -557,35 +581,82 @@ export function validateReasoningOutput(
       };
     }
 
-    if (typeof ratObj.text !== 'string' || ratObj.text.trim().length === 0) {
+    // Validate reasonCode if provided
+    let validatedReasonCode: ReasoningReasonCode | undefined;
+    if (ratObj.reasonCode !== undefined) {
+      if (typeof ratObj.reasonCode !== 'string' || !VALID_REASON_CODES.has(ratObj.reasonCode)) {
+        return {
+          valid: false,
+          reason: 'schema_invalid',
+          error: `Invalid or unrecognized reasonCode '${ratObj.reasonCode}'`,
+        };
+      }
+      validatedReasonCode = ratObj.reasonCode as ReasoningReasonCode;
+    }
+
+    // Validate reasonCodes array if provided
+    let validatedReasonCodes: ReasoningReasonCode[] | undefined;
+    if (ratObj.reasonCodes !== undefined) {
+      if (!Array.isArray(ratObj.reasonCodes) || ratObj.reasonCodes.length === 0) {
+        return {
+          valid: false,
+          reason: 'schema_invalid',
+          error: "'reasonCodes' must be a non-empty array of valid reason codes",
+        };
+      }
+      validatedReasonCodes = [];
+      for (const rc of ratObj.reasonCodes) {
+        if (typeof rc !== 'string' || !VALID_REASON_CODES.has(rc)) {
+          return {
+            valid: false,
+            reason: 'schema_invalid',
+            error: `Invalid reason code '${rc}' in reasonCodes`,
+          };
+        }
+        validatedReasonCodes.push(rc as ReasoningReasonCode);
+      }
+    }
+
+    // Ensure at least one explanation form is provided (reasonCode, reasonCodes, or text)
+    if (!validatedReasonCode && !validatedReasonCodes && ratObj.text === undefined) {
       return {
         valid: false,
         reason: 'schema_invalid',
-        error: 'Rationale text must be a non-empty string',
+        error: 'Rationale must supply at least one valid reasonCode, reasonCodes, or text',
       };
     }
 
-    // Fact checking: ensure rationale text does not invent unlisted times, places, or prices
-    const textFactCheck = validateFactsInWording(ratObj.text, {
-      times: allSuppliedTimes,
-      places: allSuppliedPlaces,
-    });
-    if (!textFactCheck.valid) {
-      return {
-        valid: false,
-        reason: 'unlisted_fact_token',
-        error: `Rationale text contains unlisted tokens: ${textFactCheck.unlistedTokens.join(', ')}`,
-      };
-    }
+    if (ratObj.text !== undefined) {
+      if (typeof ratObj.text !== 'string' || ratObj.text.trim().length === 0) {
+        return {
+          valid: false,
+          reason: 'schema_invalid',
+          error: 'Rationale text must be a non-empty string when provided',
+        };
+      }
 
-    // Check for unsupplied price patterns
-    const priceMatch = ratObj.text.match(/(\$\s*\d+|\b\d+\s*(?:dollars|usd|yen|euros|cents)\b)/gi);
-    if (priceMatch) {
-      return {
-        valid: false,
-        reason: 'unlisted_fact_token',
-        error: `Rationale text contains unsupplied price token: ${priceMatch.join(', ')}`,
-      };
+      // Fact checking: ensure rationale text does not invent unlisted times, places, or prices
+      const textFactCheck = validateFactsInWording(ratObj.text, {
+        times: allSuppliedTimes,
+        places: allSuppliedPlaces,
+      });
+      if (!textFactCheck.valid) {
+        return {
+          valid: false,
+          reason: 'unlisted_fact_token',
+          error: `Rationale text contains unlisted tokens: ${textFactCheck.unlistedTokens.join(', ')}`,
+        };
+      }
+
+      // Check for unsupplied price patterns
+      const priceMatch = ratObj.text.match(/(\$\s*\d+|\b\d+\s*(?:dollars|usd|yen|euros|cents)\b)/gi);
+      if (priceMatch) {
+        return {
+          valid: false,
+          reason: 'unlisted_fact_token',
+          error: `Rationale text contains unsupplied price token: ${priceMatch.join(', ')}`,
+        };
+      }
     }
 
     validatedRationales.push(
@@ -593,7 +664,9 @@ export function validateReasoningOutput(
         planId: ratObj.planId,
         citedSignalIds: Object.freeze(citedSignals),
         citedFactKeys: Object.freeze(citedFacts),
-        text: ratObj.text,
+        reasonCode: validatedReasonCode,
+        reasonCodes: validatedReasonCodes ? Object.freeze(validatedReasonCodes) : undefined,
+        text: typeof ratObj.text === 'string' ? ratObj.text : undefined,
       })
     );
   }
