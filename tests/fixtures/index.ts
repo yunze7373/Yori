@@ -9,3 +9,4 @@ export * from './d3.js';
 export * from './d4.js';
 export * from './d5.js';
 export * from './d6.js';
+export * from './reasoning-fixtures.js';

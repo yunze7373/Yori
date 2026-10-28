@@ -112,7 +112,7 @@ export function buildHumanDerivation(plan: PreparedPlan): string {
   );
 }
 
-export function renderWhySheet(plan: PreparedPlan): string {
+export function renderWhySheet(plan: PreparedPlan, orderingRationale?: string): string {
   const tz = plan.timezone;
   const signals = plan.why.evidenceSignals;
   const memoryFacts = plan.why.memoryFactsUsed;
@@ -127,6 +127,18 @@ export function renderWhySheet(plan: PreparedPlan): string {
         </div>
 
         <div class="modal-body">
+          ${
+            orderingRationale
+              ? `
+          <!-- Ordering Rationale Section -->
+          <section class="why-section" id="why-order-section" aria-labelledby="why-order-heading">
+            <h3 id="why-order-heading" class="why-section-title">Why this order</h3>
+            <p class="why-derivation-text" id="why-order-text">${escapeHtml(orderingRationale)}</p>
+          </section>
+          `
+              : ''
+          }
+
           <!-- Evidence Section -->
           <section class="why-section" aria-labelledby="why-evidence-heading">
             <h3 id="why-evidence-heading" class="why-section-title">${escapeHtml(STRINGS.whySheet.evidenceTitle)}</h3>

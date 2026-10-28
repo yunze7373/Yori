@@ -27,6 +27,7 @@ export const STRINGS = Object.freeze({
     busyLunch: 'Busy lunch',
     missingWeather: 'Missing weather',
     corruptStorage: 'Storage error',
+    multiCandidate: 'Reasoning demo',
   }),
   tabs: Object.freeze({
     today: 'Today',

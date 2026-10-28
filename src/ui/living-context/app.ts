@@ -39,8 +39,9 @@ import type {
   PreparedPlan,
   MemoryFact,
   SuppressionReason,
+  ContextSnapshot,
 } from '../../core/contracts/index.js';
-import { createMemoryFact } from '../../core/contracts/index.js';
+import { createMemoryFact, createSimulatedSignal } from '../../core/contracts/index.js';
 import {
   escapeHtml,
   getGreeting,
@@ -58,6 +59,7 @@ import { renderDismissDialog } from '../review/dismiss-dialog.js';
 import { renderMeView } from '../me/me-view.js';
 import { createMemoryPort } from '../../adapters/xmemo/index.js';
 import { DEFAULT_DAILY_PROMPT_BUDGET } from '../../core/policy/index.js';
+import { coordinateReasoning } from '../../app/reasoning-coordinator.js';
 
 export type DemoSceneId =
   | 'clear'
@@ -65,7 +67,8 @@ export type DemoSceneId =
   | 'away-lunch'
   | 'busy-lunch'
   | 'missing-weather'
-  | 'corrupt-storage';
+  | 'corrupt-storage'
+  | 'multi-candidate';
 
 export interface AppState {
   currentScene: DemoSceneId;
@@ -87,6 +90,8 @@ export function computeSceneState(
   storage: YoriStorage;
   snapshotAsOf: string;
   snapshotTimezone: string;
+  snapshot: ContextSnapshot;
+  combinedMemory: readonly MemoryFact[];
 } {
   const plugins = staticPluginRegistry.getAll();
   const effectiveStorage = storage ?? new YoriStorage(new WebStorageDriver());
@@ -142,6 +147,8 @@ export function computeSceneState(
         storage: effectiveStorage,
         snapshotAsOf: latestSnapshot.asOf,
         snapshotTimezone: latestSnapshot.timezone || 'America/Los_Angeles',
+        snapshot: latestSnapshot,
+        combinedMemory,
       };
     }
 
@@ -180,6 +187,8 @@ export function computeSceneState(
         storage: effectiveStorage,
         snapshotAsOf: snapshot.asOf,
         snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
+        snapshot,
+        combinedMemory,
       };
     }
 
@@ -218,6 +227,8 @@ export function computeSceneState(
         storage: effectiveStorage,
         snapshotAsOf: snapshot.asOf,
         snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
+        snapshot,
+        combinedMemory,
       };
     }
 
@@ -248,6 +259,8 @@ export function computeSceneState(
         storage: effectiveStorage,
         snapshotAsOf: snapshot.asOf,
         snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
+        snapshot,
+        combinedMemory,
       };
     }
 
@@ -271,6 +284,8 @@ export function computeSceneState(
         storage: effectiveStorage,
         snapshotAsOf: snapshot.asOf,
         snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
+        snapshot,
+        combinedMemory: storedConfirmedFacts,
       };
     }
 
@@ -310,6 +325,97 @@ export function computeSceneState(
         storage: effectiveStorage,
         snapshotAsOf: snapshot.asOf,
         snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
+        snapshot,
+        combinedMemory: [],
+      };
+    }
+
+    case 'multi-candidate': {
+      // User is away in lunch window (12:10 PM) with a scheduled piano lesson at 3:00 PM
+      const calendarSig = createSimulatedSignal({
+        kind: 'calendar',
+        value: {
+          title: 'Piano lesson',
+          startTime: '2026-10-28T15:00:00-07:00',
+          endTime: '2026-10-28T16:00:00-07:00',
+          location: 'Piano Studio (Downtown)',
+        },
+        issuedAt: '2026-10-28T17:00:00.000Z',
+        validFor: 36000000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+      const travelSig = createSimulatedSignal({
+        kind: 'travel_estimate',
+        value: {
+          mode: 'drive',
+          travelMinutes: 30,
+        },
+        issuedAt: '2026-10-28T17:00:00.000Z',
+        validFor: 36000000,
+        confidence: 0.9,
+        consentScope: 'device_only',
+      });
+      const weatherSig = createSimulatedSignal({
+        kind: 'weather',
+        value: {
+          condition: 'clear',
+          precipProbability: 0.0,
+        },
+        issuedAt: '2026-10-28T17:00:00.000Z',
+        validFor: 36000000,
+        confidence: 0.95,
+        consentScope: 'device_only',
+      });
+      const locationSig = createSimulatedSignal({
+        kind: 'location_status',
+        value: {
+          isHome: false,
+          currentArea: 'Downtown',
+        },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 0.95,
+        consentScope: 'device_only',
+      });
+
+      const snapshot: ContextSnapshot = {
+        id: 'snapshot-multi-candidate',
+        asOf: '2026-10-28T19:10:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [calendarSig, travelSig, weatherSig, locationSig],
+      };
+
+      const combinedMemory = [
+        ...d1MemoryFacts.filter(f => !storedConfirmedFacts.some(sc => sc.key === f.key)),
+        ...d3MemoryFacts.filter(f => !storedConfirmedFacts.some(sc => sc.key === f.key)),
+        ...storedConfirmedFacts,
+        ...storedProposals,
+      ];
+
+      const result = runPipeline({
+        snapshot,
+        memory: combinedMemory,
+        clock: '2026-10-28T19:10:00.000Z',
+        plugins,
+        storage: effectiveStorage,
+        suppressions: storedSuppressions,
+      });
+
+      const mapEvidence: SpatialMapEvidence = {
+        placeOrRoute: { name: 'Downtown Dining District', area: 'Downtown' },
+        spatialEvidence: locationSig,
+      };
+
+      return {
+        pipelineResult: result,
+        spatialMapEvidence: mapEvidence,
+        storageError: false,
+        storage: effectiveStorage,
+        snapshotAsOf: snapshot.asOf,
+        snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
+        snapshot,
+        combinedMemory,
       };
     }
   }
@@ -334,6 +440,14 @@ export function renderApp(
   let actionFeedbackMessage: string | null = null;
   const timingOverrides: Record<string, { prepMinutes: number; bufferMinutes: number }> = {};
 
+  let coordinatedScene: DemoSceneId | null = null;
+  let reasoningState: {
+    scene: DemoSceneId;
+    now: PreparedPlan | null;
+    ahead: readonly PreparedPlan[];
+    rationales: Record<string, string>;
+  } | null = null;
+
   function update() {
     const {
       pipelineResult,
@@ -342,6 +456,8 @@ export function renderApp(
       storage,
       snapshotAsOf,
       snapshotTimezone,
+      snapshot,
+      combinedMemory,
     } = computeSceneState(currentScene, sharedStorage);
 
     // Ensure initial storage envelope exists if clean
@@ -368,7 +484,8 @@ export function renderApp(
     }
 
     const living = pipelineResult.livingContext;
-    const nowPlan = living.now;
+    const nowPlan = reasoningState && reasoningState.scene === currentScene ? reasoningState.now : living.now;
+    const aheadPlans = reasoningState && reasoningState.scene === currentScene ? reasoningState.ahead : living.ahead;
     const notices = pipelineResult.notices;
     const acceptedPlanIds: readonly string[] = storedEnvelope?.payload.acceptedPlanIds ?? [];
 
@@ -597,8 +714,8 @@ export function renderApp(
             <h2 class="section-label">${escapeHtml(STRINGS.sections.ahead)}</h2>
             <div class="ahead-list">
               ${
-                living.ahead.length > 0
-                  ? living.ahead
+                aheadPlans.length > 0
+                  ? aheadPlans
                       .map(
                         item => `
                 <div class="item-row" data-plan-id="${escapeHtml(item.id)}">
@@ -694,6 +811,7 @@ export function renderApp(
                   <option value="busy-lunch" ${currentScene === 'busy-lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.busyLunch)}</option>
                   <option value="missing-weather" ${currentScene === 'missing-weather' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.missingWeather)}</option>
                   <option value="corrupt-storage" ${currentScene === 'corrupt-storage' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.corruptStorage)}</option>
+                  <option value="multi-candidate" ${currentScene === 'multi-candidate' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.multiCandidate)}</option>
                 </select>
               </div>
             </div>
@@ -747,7 +865,7 @@ export function renderApp(
         <!-- Active Modals (Why sheet, Adjust, Dismiss) -->
         ${
           activeModal?.type === 'why'
-            ? renderWhySheet(activeModal.plan)
+            ? renderWhySheet(activeModal.plan, reasoningState?.rationales[activeModal.plan.id])
             : activeModal?.type === 'adjust'
             ? renderAdjustDialog(activeModal.values)
             : activeModal?.type === 'dismiss'
@@ -767,6 +885,8 @@ export function renderApp(
       selectEl.addEventListener('change', e => {
         currentScene = (e.target as HTMLSelectElement).value as DemoSceneId;
         actionFeedbackMessage = null;
+        coordinatedScene = null;
+        reasoningState = null;
         update();
       });
     }
@@ -861,7 +981,7 @@ export function renderApp(
     root.querySelectorAll('.btn-ahead-why').forEach(btn => {
       btn.addEventListener('click', e => {
         const planId = (e.currentTarget as HTMLElement).getAttribute('data-plan-id');
-        const match = living.ahead.find(p => p.id === planId);
+        const match = aheadPlans.find(p => p.id === planId);
         if (match) {
           activeModal = { type: 'why', plan: match };
           update();
@@ -1171,6 +1291,33 @@ export function renderApp(
 
     const meResetBtn = root.querySelector('#btn-me-reset') as HTMLButtonElement | null;
     if (meResetBtn) meResetBtn.addEventListener('click', () => handleReset(meResetBtn));
+
+    // Coordinate reasoning asynchronously after deterministic composition (Requirement 4)
+    if (coordinatedScene !== currentScene) {
+      const allPlans = [living.now, ...living.ahead].filter((p): p is PreparedPlan => p !== null);
+      if (allPlans.length > 0) {
+        coordinatedScene = currentScene;
+        coordinateReasoning(living, snapshot, combinedMemory)
+          .then(res => {
+            if (res.applied) {
+              const rationales: Record<string, string> = {};
+              res.rationaleMap.forEach((text, id) => {
+                rationales[id] = text;
+              });
+              reasoningState = {
+                scene: currentScene,
+                now: res.now,
+                ahead: res.ahead,
+                rationales,
+              };
+              update();
+            }
+          })
+          .catch(() => {
+            // Silently handled in UI with deterministic order preserved
+          });
+      }
+    }
   }
 
   update();
