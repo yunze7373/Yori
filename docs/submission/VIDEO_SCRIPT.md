@@ -2,7 +2,7 @@
 
 > **Governed by Plan:** `YORI_SUBMIT` (Task `VIDEO-SCRIPT-SYNC`, AC-205-2)  
 > **Target Duration:** Exactly 3:00 (180 seconds)  
-> **Pacing:** ~142 words per minute (425 spoken words)  
+> **Pacing:** ~138 words per minute (415 spoken words)  
 > **Resolution:** 1280×800 Desktop or 390×844 Mobile portrait  
 > **Guaranteed Path:** Zero owner credentials; all demo scenes run deterministically with external model off (`MODEL_API_KEY` unset) and mock/recorded fixtures.
 
@@ -85,7 +85,7 @@ Return to the Today tab on Scene D2: the NOW card immediately recomputes its dep
 *(1:49)* Yori strictly caps proactive prompts to three per day.  
 *(1:53)* Before you confirm anything, your confirmed list is empty—active demo scenes only borrow sample habits from a simulated demo profile.  
 *(2:01)* Under Invariant INV-107, pending proposals never enter confirmed memory until you tap 'Confirm'.  
-*(2:07)* Once confirmed, returning to Today immediately recalculates departure timing—ready at 2:00 PM, leave by 2:25 PM—and the Why Sheet updates to show your preferences as 'Confirmed'.  
+*(2:07)* Once confirmed, returning to Today immediately recalculates departure timing, and the Why Sheet updates to show your preferences as 'Confirmed'.  
 *(2:14)* Local storage is sovereign; remote sync remains safely owner-gated."
 
 ---
@@ -113,43 +113,43 @@ Return to app home screen. Camera pauses on the clean, calm UI with the tagline 
 
 ---
 
-## Speaker Production Checklist
-
-- [ ] Speak in a calm, clear, unhurried conversational cadence.
-- [ ] Align screen interactions tightly with spoken timestamps.
-- [ ] Avoid buzzwords like "supercharged" or "magical"; let the calm clarity of the UI speak for itself.
-- [ ] Verify audio levels are crisp with no background hum or clipping.
-
----
-
 ## Verbatim UI Quotes & E2E Assertion Map
 
-Every on-screen string quoted in this script is verified verbatim against the rendered UI by automated Playwright assertions in [`tests/e2e/fallback-walkthrough.spec.ts`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts):
+Every on-screen string quoted in this script is verified verbatim against the rendered UI by automated Playwright assertions in [`tests/e2e/fallback-walkthrough.spec.ts`](../../tests/e2e/fallback-walkthrough.spec.ts):
 
 | Script Section | Quoted UI Text | Rendered UI Selector | Test Spec Line Reference |
 |---|---|---|---|
-| Part 1 (Hook) | `Demo · simulated context` | `.demo-chip` | [`fallback-walkthrough.spec.ts:93`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L93) |
-| Part 1 (Hook) | `Piano lesson` | `.now-card .now-subject` | [`fallback-walkthrough.spec.ts:101`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L101) |
-| Part 1 (Hook) | `Get ready at 2:05 PM, leave by 2:25 PM` | `.now-card #now-title` | [`fallback-walkthrough.spec.ts:102`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L102) |
-| Part 1 (Hook) | `SIMULATED` | `.now-card .card-badge` | [`fallback-walkthrough.spec.ts:103`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L103) |
-| Part 2 (D2 Rain) | `What changed: rain forecast` | `.now-card .rain-banner` | [`fallback-walkthrough.spec.ts:119`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L119) |
-| Part 2 (D2 Rain) | `Umbrella` | `.now-card #chip-umbrella` | [`fallback-walkthrough.spec.ts:124`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L124) |
-| Part 2 (D2 Rain) | `Drive · leave 2:30 PM` / `25m drive` | `.options-grid .option-tile:first-child` | [`fallback-walkthrough.spec.ts:129-130`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L129-L130) |
-| Part 2 (D2 Rain) | `Bus · leave 2:15 PM` / `40m bus` | `.options-grid .option-tile:nth-child(2)` | [`fallback-walkthrough.spec.ts:131-132`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L131-L132) |
-| Part 2 (D2 Rain) | `You usually prefer driving when it rains.` | `.now-card .habit-note` | [`fallback-walkthrough.spec.ts:135`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L135) |
-| Part 3 (D3 Away) | `Lunch options near you` | `.now-card .now-subject` | [`fallback-walkthrough.spec.ts:169`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L169) |
-| Part 3 (D3 Away) | `Mock places for this demo; real listings come from a place provider.` | `.now-card .mock-places-notice` | [`fallback-walkthrough.spec.ts:171-173`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L171-L173) |
-| Part 3 (D3 Away) | `Memory & Habits` / `Demo profile · sample preference` | `.why-section` | [`fallback-walkthrough.spec.ts:181-185`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L181-L185) |
-| Part 3 (D4 Busy) | `Nothing needs your attention right now.` | `.quiet-title` | [`fallback-walkthrough.spec.ts:219`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L219) |
-| Part 4 (Why Sheet) | `Why you're seeing this` | `#why-sheet-title` | [`fallback-walkthrough.spec.ts:245`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L245) |
-| Part 4 (Why Sheet) | `Weather forecast` / `Recorded at 1:35 PM` / `SIMULATED` | `.why-section:has-text("Evidence & Signals")` | [`fallback-walkthrough.spec.ts:251-254`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L251-L254) |
-| Part 4 (Why Sheet) | `Memory & Habits` / `Demo profile · sample preference` | `.why-section:has-text("Memory & Habits")` | [`fallback-walkthrough.spec.ts:257-265`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L257-L265) |
-| Part 4 (Adjust) | `Adjust Departure Timing` | `#adjust-dialog-title` | [`fallback-walkthrough.spec.ts:285`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L285) |
-| Part 5 (Me Tab) | `Me & Memory` | `.me-title` | [`fallback-walkthrough.spec.ts:315`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L315) |
-| Part 5 (Me Tab) | `0 of 3 used today` | `.badge-budget` | [`fallback-walkthrough.spec.ts:320`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L320) |
-| Part 5 (Me Tab) | `No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.` | `#confirmed-facts-list .memory-empty` | [`fallback-walkthrough.spec.ts:325-327`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L325-L327) |
-| Part 5 (Me Tab) | `Preparation buffer habit` | `#proposal-prep_buffer_preference` | [`fallback-walkthrough.spec.ts:332`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L332) |
-| Part 5 (Me Tab) | `Confirmed` | `#fact-prep_buffer_preference` | [`fallback-walkthrough.spec.ts:348`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L348) |
-| Part 5 (Recomputation) | `Get ready at 2:00 PM, leave by 2:25 PM` | `#now-title` (Scene D2 post-confirm) | [`fallback-walkthrough.spec.ts:361`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L361) |
-| Part 5 (Recomputation) | `Buffer before leaving` / `Time to get ready` (`Confirmed`) | `.why-section .badge-confirmed` | [`fallback-walkthrough.spec.ts:369-371`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L369-L371) |
-| Part 5 (Recomputation) | `Rain travel habit` (`Demo profile · sample preference`) | `.why-section .card-badge` | [`fallback-walkthrough.spec.ts:374-376`](file://<repo-root>/tests/e2e/fallback-walkthrough.spec.ts#L374-L376) |
+| Part 1 (Hook) | `Demo · simulated context` | `.demo-chip` | [`fallback-walkthrough.spec.ts:93`](../../tests/e2e/fallback-walkthrough.spec.ts#L93) |
+| Part 1 (Hook) | `Piano lesson` | `.now-card .now-subject` | [`fallback-walkthrough.spec.ts:101`](../../tests/e2e/fallback-walkthrough.spec.ts#L101) |
+| Part 1 (Hook) | `Get ready at 2:05 PM, leave by 2:25 PM` | `.now-card #now-title` | [`fallback-walkthrough.spec.ts:102`](../../tests/e2e/fallback-walkthrough.spec.ts#L102) |
+| Part 1 (Hook) | `SIMULATED` | `.now-card .card-badge` | [`fallback-walkthrough.spec.ts:103`](../../tests/e2e/fallback-walkthrough.spec.ts#L103) |
+| Part 2 (D2 Rain) | `What changed: rain forecast` | `.now-card .rain-banner` | [`fallback-walkthrough.spec.ts:119`](../../tests/e2e/fallback-walkthrough.spec.ts#L119) |
+| Part 2 (D2 Rain) | `Umbrella` | `.now-card #chip-umbrella` | [`fallback-walkthrough.spec.ts:124`](../../tests/e2e/fallback-walkthrough.spec.ts#L124) |
+| Part 2 (D2 Rain) | `Drive · leave 2:30 PM` / `25m drive` | `.options-grid .option-tile:first-child` | [`fallback-walkthrough.spec.ts:129-130`](../../tests/e2e/fallback-walkthrough.spec.ts#L129-L130) |
+| Part 2 (D2 Rain) | `Bus · leave 2:15 PM` / `40m bus` | `.options-grid .option-tile:nth-child(2)` | [`fallback-walkthrough.spec.ts:131-132`](../../tests/e2e/fallback-walkthrough.spec.ts#L131-L132) |
+| Part 2 (D2 Rain) | `You usually prefer driving when it rains.` | `.now-card .habit-note` | [`fallback-walkthrough.spec.ts:135`](../../tests/e2e/fallback-walkthrough.spec.ts#L135) |
+| Part 3 (D3 Away) | `Lunch options near you` | `.now-card .now-subject` | [`fallback-walkthrough.spec.ts:169`](../../tests/e2e/fallback-walkthrough.spec.ts#L169) |
+| Part 3 (D3 Away) | `Mock places for this demo; real listings come from a place provider.` | `.now-card .mock-places-notice` | [`fallback-walkthrough.spec.ts:171-173`](../../tests/e2e/fallback-walkthrough.spec.ts#L171-L173) |
+| Part 3 (D3 Away) | `Memory & Habits` / `Demo profile · sample preference` | `.why-section` | [`fallback-walkthrough.spec.ts:181-185`](../../tests/e2e/fallback-walkthrough.spec.ts#L181-L185) |
+| Part 3 (D4 Busy) | `Nothing needs your attention right now.` | `.quiet-title` | [`fallback-walkthrough.spec.ts:219`](../../tests/e2e/fallback-walkthrough.spec.ts#L219) |
+| Part 4 (Why Sheet) | `Why you're seeing this` | `#why-sheet-title` | [`fallback-walkthrough.spec.ts:245`](../../tests/e2e/fallback-walkthrough.spec.ts#L245) |
+| Part 4 (Why Sheet) | `Weather forecast` / `Recorded at 1:35 PM` / `SIMULATED` | `.why-section:has-text("Evidence & Signals")` | [`fallback-walkthrough.spec.ts:251-254`](../../tests/e2e/fallback-walkthrough.spec.ts#L251-L254) |
+| Part 4 (Why Sheet) | `Memory & Habits` / `Demo profile · sample preference` | `.why-section:has-text("Memory & Habits")` | [`fallback-walkthrough.spec.ts:257-265`](../../tests/e2e/fallback-walkthrough.spec.ts#L257-L265) |
+| Part 4 (Adjust) | `Adjust Departure Timing` | `#adjust-dialog-title` | [`fallback-walkthrough.spec.ts:285`](../../tests/e2e/fallback-walkthrough.spec.ts#L285) |
+| Part 5 (Me Tab) | `Me & Memory` | `.me-title` | [`fallback-walkthrough.spec.ts:315`](../../tests/e2e/fallback-walkthrough.spec.ts#L315) |
+| Part 5 (Me Tab) | `0 of 3 used today` | `.badge-budget` | [`fallback-walkthrough.spec.ts:320`](../../tests/e2e/fallback-walkthrough.spec.ts#L320) |
+| Part 5 (Me Tab) | `No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.` | `#confirmed-facts-list .memory-empty` | [`fallback-walkthrough.spec.ts:325-327`](../../tests/e2e/fallback-walkthrough.spec.ts#L325-L327) |
+| Part 5 (Me Tab) | `Preparation buffer habit` | `#proposal-prep_buffer_preference` | [`fallback-walkthrough.spec.ts:332`](../../tests/e2e/fallback-walkthrough.spec.ts#L332) |
+| Part 5 (Me Tab) | `Confirmed` | `#fact-prep_buffer_preference` | [`fallback-walkthrough.spec.ts:348`](../../tests/e2e/fallback-walkthrough.spec.ts#L348) |
+| Part 5 (Recomputation) | `Get ready at 2:00 PM, leave by 2:25 PM` | `#now-title` (Scene D2 post-confirm) | [`fallback-walkthrough.spec.ts:361`](../../tests/e2e/fallback-walkthrough.spec.ts#L361) |
+| Part 5 (Recomputation) | `Buffer before leaving` / `Time to get ready` (`Confirmed`) | `.why-section .badge-confirmed` | [`fallback-walkthrough.spec.ts:369-371`](../../tests/e2e/fallback-walkthrough.spec.ts#L369-L371) |
+| Part 5 (Recomputation) | `Rain travel habit` (`Demo profile · sample preference`) | `.why-section .card-badge` | [`fallback-walkthrough.spec.ts:374-376`](../../tests/e2e/fallback-walkthrough.spec.ts#L374-L376) |
+
+---
+
+## Speaker Production Checklist
+
+- [ ] Speak in a calm, clear, unhurried conversational cadence (~138 wpm).
+- [ ] Align screen interactions tightly with spoken timestamps.
+- [ ] Avoid buzzwords like "supercharged" or "magical"; let the calm clarity of the UI speak for itself.
+- [ ] Verify audio levels are crisp with no background hum or clipping.
