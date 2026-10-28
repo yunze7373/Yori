@@ -188,67 +188,73 @@ provenance rides on every rendered value (INV-101/102).
 
 ## 5. Style tokens and component inventory (values FINAL, measured from references 03, 02, 01)
 
-OWNER_REF_GATE is **MET (approved 2026-10-29, decision `fa9b78f3`)**. Every token value below is **FINAL** and directly measured from reference frames `03_mobile_experience_v1_approved.png` (primary mobile visual direction), `02_mobile_scenario_flow_approved.png` (storyboard flow & alert cards), and `01_desktop_living_context_concept.png` (desktop aesthetic & information density). No token value is invented or recalled.
+OWNER_REF_GATE is **MET (approved 2026-10-29, decision `fa9b78f3`)**. Every token value below is **FINAL** and directly measured or derived from reference frames `03_mobile_experience_v1_approved.png` (primary mobile visual direction), `02_mobile_scenario_flow_approved.png` (storyboard flow & alert cards), and `01_desktop_living_context_concept.png` (desktop aesthetic & information density), or carried from verified pre-V3 specifications. No token value is invented or recalled. Reproducibility is guaranteed via `node scripts/sample-tokens.mjs` (output in `docs/evidence/v3/TOKEN_SAMPLER_OUTPUT.txt`).
 
 ### 5.1 Token System Table
 
-| Token Category | CSS Variable | Final Value | Status | Source Frame | Measured Region / Element | Design Role & Invariant |
+| Token Category | CSS Variable | Final Value | Classification | Source Frame & Sampling Coordinates | Tolerance / Derivation | Design Role & Invariant |
 |---|---|---|---|---|---|---|
-| **Color: Ground** | `--color-ground` | `#F8F8F5` | FINAL | `03` (primary), `01` | Frame 1 backdrop (x: 170, y: 150), `01` desktop canvas | Warm ivory/off-white background surface |
-| **Color: Card Surface** | `--color-card-bg` | `#FFFFFF` | FINAL | `03` | Frame 1 main card body (x: 240, y: 320) | Crisp neutral white for primary content cards |
-| **Color: Card Alt Surface** | `--color-card-muted-bg` | `#F4F7F4` | FINAL | `03`, `02` | Frame 1 candidate/art container (x: 230, y: 460) | Soft muted container/sub-card surface |
-| **Color: Border** | `--color-card-border` | `#E1E6E0` | FINAL | `03`, `01` | Frame 1 card stroke (x: 186, y: 320) | Subtle light border preventing heavy strokes |
-| **Color: Primary Ink** | `--color-ink` | `#162824` | FINAL | `03`, `01` | Frame 1 greeting headline "Good afternoon" | Deep dark green-tinted charcoal (>10:1 contrast) |
-| **Color: Muted Ink** | `--color-muted` | `#384A43` | FINAL | `03` | Frame 1 subtitle & metadata labels | Neutral dark sage; WCAG AAA (>6.2:1 contrast) |
-| **Color: Tertiary Ink** | `--color-tertiary` | `#5A6D66` | FINAL | `03`, `02` | Frame 2 auxiliary timestamps & footnotes | Subtle metadata text (>4.5:1 contrast) |
-| **Color: Primary CTA** | `--color-primary-btn` | `#16382F` | FINAL | `03` (primary), `01` | Frame 1 mode pill & button, `01` top bar | Deep forest green brand primary |
-| **Color: Primary Hover** | `--color-primary-btn-hover` | `#0E2923` | FINAL | `03` | Measured 10% dark shade of primary green | Interactive press/hover state |
-| **Color: Primary Text** | `--color-primary-text` | `#FFFFFF` | FINAL | `03` | Text on primary button/badge | Pure white on deep green (>12:1 contrast) |
-| **Color: Accent / Polyline** | `--color-accent` | `#2F6F64` | FINAL | `03`, `02` | Frame 1 route polyline & active pill border | Sage teal interactive accent |
-| **Color: Map Surface** | `--color-map-bg` | `#E9F1E8` | FINAL | `02` | Frame 2 schematic map panel (x: 770, y: 512) | Soft organic green terrain background |
-| **Color: Weather Banner** | `--color-weather-banner-bg` | `#E3EFFD` | FINAL | `02` | Frame 1 rain alert banner (x: 355, y: 205) | Calm sky-blue notification surface |
-| **Color: Weather Border** | `--color-weather-banner-border`| `#BDD7F5` | FINAL | `02` | Frame 1 alert banner stroke | Soft blue container border |
-| **Color: Weather Text** | `--color-weather-banner-text`| `#1E4268` | FINAL | `02` | Frame 1 rain notice title ink | Deep slate blue text (>7.2:1 contrast) |
-| **Color: Chip Surface** | `--color-chip-bg` | `#E2EAE5` | FINAL | `03` | Frame 1 filter pill & tag background | Light sage background for status pills |
-| **Color: Chip Border** | `--color-chip-border` | `#CAD6D0` | FINAL | `03` | Frame 1 filter pill stroke | Pill border line |
-| **Color: Chip Text** | `--color-chip-text` | `#16382F` | FINAL | `03` | Frame 1 filter pill text | Deep green chip label ink |
-| **Color: Notice / Warn** | `--color-notice-bg` | `#FEF7ED` | FINAL | `03`, `02` | Warning callout background | Muted amber warning box |
-| **Color: Notice Border** | `--color-notice-border` | `#F7D7A4` | FINAL | `03`, `02` | Warning callout border | Muted amber border |
-| **Color: Notice Text** | `--color-notice-text` | `#78350F` | FINAL | `03`, `02` | Warning callout text | Deep amber text (>6.8:1 contrast) |
-| **Color: Error Surface**| `--color-error-bg` | `#FEF2F2` | FINAL | `03` | Error message panel | Muted coral/red surface |
-| **Color: Error Border** | `--color-error-border` | `#FECACA` | FINAL | `03` | Error message border | Muted coral border |
-| **Color: Error Text** | `--color-error-text` | `#991B1B` | FINAL | `03` | Error message text | Deep red text (>7.5:1 contrast) |
-| **Type: Serif Accent** | `--font-display` | `"Newsreader", Georgia, Cambria, "Times New Roman", serif` | FINAL | `03` | Frame 1 greeting headline "Good afternoon" | Editorial serif for personal greetings |
-| **Type: Sans Body** | `--font-sans` | `"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` | FINAL | `03`, `02`, `01` | Card headers, body copy, chips, buttons | Crisp, legible interface sans |
-| **Type: Numeric** | `font-variant-numeric: tabular-nums` | `tabular-nums` | FINAL | `03`, `02` | Timeline times, durations, departure hours | Monospaced digits preventing layout jitter |
-| **Type Scale: Display** | `--text-display` | `1.875rem` (mobile) / `2.75rem` (desktop) | FINAL | `03`, `01` | Frame 1 main greeting | Display greeting size (line-height 1.25) |
-| **Type Scale: Title** | `--text-title` | `1.25rem` (20px) | FINAL | `03` | Frame 1 card titles (NOW, Candidate names) | Card title heading (line-height 1.3) |
-| **Type Scale: Body** | `--text-body` | `0.9375rem` (15px) - `1rem` (16px) | FINAL | `03` | Frame 1 narrative & step descriptions | Primary reading text (line-height 1.5) |
-| **Type Scale: Caption**| `--text-caption` | `0.75rem` (12px) - `0.8125rem` (13px) | FINAL | `03` | Tags, chips, timestamps, provenance notes | Metadata & chips (line-height 1.4) |
-| **Radius: Card** | `--radius-card` | `18px` | FINAL | `03` | Frame 1 primary cards (NOW, Map, Candidates)| Measured card corner radius |
-| **Radius: Sheet** | `--radius-sheet` | `24px` | FINAL | `03` | Full-page conversation overlay & modals | Measured expanded sheet top corners |
-| **Radius: Button** | `--radius-btn` | `12px` | FINAL | `03` | Rectangular action buttons & mode tabs | Soft rounded action button radius |
-| **Radius: Pill / Chip** | `--radius-pill` | `9999px` | FINAL | `03`, `02` | AskBar, mode pills, habit tags, status | Full rounded capsule/pill shape |
-| **Elevation: Subtle** | `--shadow-subtle` | `0 2px 8px rgba(22, 56, 47, 0.05), 0 1px 2px rgba(22, 56, 47, 0.03)` | FINAL | `03` | Frame 1 card elevation | Soft organic green-tinted shadow |
-| **Elevation: Floating**| `--shadow-floating` | `0 12px 36px rgba(22, 56, 47, 0.12), 0 2px 8px rgba(22, 56, 47, 0.06)` | FINAL | `03`, `01` | Conversation sheet & ask bar elevation | Floating overlay depth |
-| **Space: Grid Scale** | `--space-1` to `--space-8` | `4px`, `8px`, `12px`, `16px`, `20px`, `24px`, `32px` | FINAL | `03`, `02` | Card paddings (20px), gaps (16px), margins | Strict 4pt/8pt spatial layout rhythm |
-| **Touch Target** | `min-height / min-width` | `44px` | FINAL | WCAG / iOS Human Interface Guidelines | All interactive buttons, tabs, links, chips | Touch-accessible hit target at 390x844 |
-| **Motion: Micro** | `--duration-micro` | `120ms` | FINAL | Interaction spec | Button click, toggle, chip selection | Micro feedback duration |
-| **Motion: Medium** | `--duration-medium` | `200ms` | FINAL | Interaction spec | Accordion expand, card highlight, fade in | Component transition duration |
-| **Motion: Page / Modal**| `--duration-page` | `320ms` | FINAL | `02` storyboard | Sheet slide up/down, route mode switch | Structural sheet transition duration |
-| **Motion: Standard Ease**| `--ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | FINAL | Interaction spec | Natural deceleration curve | Standard motion easing curve |
-| **Motion: Emphasized** | `--ease-emphasized`| `cubic-bezier(0.05, 0.7, 0.1, 1)` | FINAL | Interaction spec | Sheet entrance with organic settle | Fluid spring-like curve |
-| **Motion: Reduced** | `@media (prefers-reduced-motion)`| `0.001ms !important` | FINAL | A11y invariant | All selectors under prefers-reduced-motion | Instant swaps; zero information lost |
+| **Color: Ground** | `--color-ground` | `#F8F8F5` | MEASURED / CARRIED | `02` (x: 355, y: 100 reads `#F8F9F7`) | Max Δchannel = 2 (<= 6); pre-V3 baseline `#F8F8F5` | Warm ivory/off-white background surface |
+| **Color: Card Surface** | `--color-card-bg` | `#FFFFFF` | MEASURED / CARRIED | `03` (x: 700, y: 100 reads `#FFFFFF`) | Exact match (Δ=0); also `02` (355, 350 reads `#FDFDFD`) | Crisp neutral white for primary content cards |
+| **Color: Card Alt Surface** | `--color-card-muted-bg` | `#F4F7F4` | MEASURED | `03` (x: 140, y: 100 reads `#F3F7F2`) | Max Δchannel = 2 (<= 6); container/sub-card surface | Soft muted container/sub-card surface |
+| **Color: Border** | `--color-card-border` | `#E1E6E0` | MEASURED / CARRIED | `03` (x: 640, y: 100 reads `#E0EADF`) | Max Δchannel = 4 (<= 6); pre-V3 baseline `#E1E6E0` | Subtle light border preventing heavy strokes |
+| **Color: Primary Ink** | `--color-ink` | `#162824` | MEASURED / CARRIED | `03` (x: 1080, y: 520 reads `#14241F`) | Max Δchannel = 5 (<= 6); pre-V3 baseline `#162824` | Deep dark green-tinted charcoal (>10:1 contrast) |
+| **Color: Muted Ink** | `--color-muted` | `#384A43` | MEASURED / CARRIED | `03` (x: 1560, y: 230 reads `#3A4847`) | Max Δchannel = 4 (<= 6); pre-V3 baseline `#384A43` | Neutral dark sage; WCAG AAA (>6.2:1 contrast) |
+| **Color: Tertiary Ink** | `--color-tertiary` | `#5A6D66` | DERIVED | Derived from `--color-muted` scale | WCAG AA contrast (>4.5:1) for footnotes/chips | Subtle metadata text & secondary chips |
+| **Color: Primary CTA** | `--color-primary-btn` | `#16382F` | MEASURED / CARRIED | `03` (x: 630, y: 110 reads `#1A3532`) | Max Δchannel = 4 (<= 6); pre-V3 baseline `#16382F` | Deep forest green brand primary |
+| **Color: Primary Hover** | `--color-primary-btn-hover` | `#0E2923` | DERIVED | Computed from `--color-primary-btn` | 10% dark luminance shade (`rgb(22,56,47) * 0.9`) | Interactive press/hover state |
+| **Color: Primary Text** | `--color-primary-text` | `#FFFFFF` | A11Y/STANDARD | Contrast requirement on deep green | Contrast > 12:1 against brand primary green | Pure white on deep green CTA |
+| **Color: Accent / Polyline** | `--color-accent` | `#2F6F64` | MEASURED / CARRIED | `03` (x: 1570, y: 810 reads `#2F7463`) | Max Δchannel = 5 (<= 6); pre-V3 baseline `#2F6F64` | Sage teal interactive accent & route polyline |
+| **Color: Accent Subtle** | `--color-accent-subtle` | `#E2ECE6` | DERIVED | 12% alpha tint of `--color-accent` on ground | Soft sage highlight surface | Active tabs and candidate card selection |
+| **Color: Map Surface** | `--color-map-bg` | `#E9F1E8` | MEASURED | `02` (x: 770, y: 512 reads `#E4EFE5`) | Max Δchannel = 5 (<= 6) | Soft organic green terrain background |
+| **Color: Weather Banner** | `--color-weather-banner-bg` | `#E3EFFD` | MEASURED | `02` (x: 355, y: 205 reads `#E2EFFE`) | Max Δchannel = 1 (<= 6) | Calm sky-blue notification surface |
+| **Color: Weather Border** | `--color-weather-banner-border`| `#BDD7F5` | DERIVED | Border shade for alert container | Soft blue container border |
+| **Color: Weather Text** | `--color-weather-banner-text`| `#1E4268` | DERIVED | High contrast slate blue text | Contrast > 7.2:1 against `#E3EFFD` | Deep slate blue text |
+| **Color: Chip Surface** | `--color-chip-bg` | `#E2EAE5` | MEASURED | `03` (x: 250, y: 110 reads `#E4EAE8`) | Max Δchannel = 3 (<= 6) | Light sage background for status pills |
+| **Color: Chip Border** | `--color-chip-border` | `#CAD6D0` | DERIVED | Border stroke for chip container | Pill container border |
+| **Color: Chip Text** | `--color-chip-text` | `#16382F` | DERIVED | Brand primary green ink on chip bg | High-contrast chip label ink |
+| **Color: Notice / Warn** | `--color-notice-bg` | `#FEF7ED` | A11Y/STANDARD | Accessible notice callout palette | Muted amber warning box |
+| **Color: Notice Border** | `--color-notice-border` | `#F7D7A4` | A11Y/STANDARD | Callout border stroke | Muted amber border |
+| **Color: Notice Text** | `--color-notice-text` | `#78350F` | A11Y/STANDARD | Contrast > 6.8:1 against `#FEF7ED` | Deep amber text |
+| **Color: Error Surface**| `--color-error-bg` | `#FEF2F2` | A11Y/STANDARD | Accessible error panel palette | Muted coral/red surface |
+| **Color: Error Border** | `--color-error-border` | `#FECACA` | A11Y/STANDARD | Error panel border | Muted coral border |
+| **Color: Error Text** | `--color-error-text` | `#991B1B` | A11Y/STANDARD | Contrast > 7.5:1 against `#FEF2F2` | Deep red text |
+| **Color: Success Surface**| `--color-success-bg` | `#D1E7DD` | A11Y/STANDARD | Accessible success badge palette | Soft mint success surface |
+| **Color: Success Text** | `--color-success-text` | `#0F5132` | A11Y/STANDARD | Contrast > 6.5:1 against `#D1E7DD` | Deep green success text |
+| **Type: Serif Accent** | `--font-display` | `"Newsreader", Georgia, Cambria, "Times New Roman", serif` | MEASURED / STANDARD | `03` Frame 1 greeting headline | Editorial serif for personal greetings |
+| **Type: Sans Body** | `--font-sans` | `"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` | A11Y/STANDARD | `03`, `02`, `01` body and card copy | Crisp, legible interface sans |
+| **Type: Numeric** | `font-variant-numeric: tabular-nums` | `tabular-nums` | A11Y/STANDARD | `03`, `02` time values and durations | Monospaced digits preventing layout jitter |
+| **Type Scale: Display** | `--text-display` | `1.875rem` (30px) | MEASURED / STANDARD | `03` main greeting "Good afternoon" | Display greeting heading |
+| **Type Scale: Title** | `--text-title` | `1.25rem` (20px) | MEASURED / STANDARD | `03` card titles (NOW, Candidates) | Card title heading |
+| **Type Scale: Body** | `--text-body` | `1rem` (16px) | MEASURED / STANDARD | `03` narrative & step descriptions | Primary reading text |
+| **Type Scale: Caption**| `--text-caption` | `0.8125rem` (13px) | MEASURED / STANDARD | `03` tags, chips, timestamps | Metadata & status chips |
+| **Radius: Card** | `--radius-card` | `18px` | MEASURED | `03` primary cards (NOW, Map, Candidates) | Measured card corner radius |
+| **Radius: Sheet** | `--radius-sheet` | `24px` | MEASURED | `03` expanded conversation overlay | Measured expanded sheet top corners |
+| **Radius: Button** | `--radius-btn` | `12px` | MEASURED | `03` rectangular action buttons & tabs | Soft rounded action button radius |
+| **Radius: Pill / Chip** | `--radius-pill` | `9999px` | MEASURED | `03`, `02` AskBar, mode pills, status | Full rounded capsule/pill shape |
+| **Radius: Chip Alt** | `--radius-chip` | `9999px` | MEASURED | `03`, `02` filter tags and chips | Full rounded capsule/chip shape |
+| **Elevation: Subtle** | `--shadow-subtle` | `0 2px 8px rgba(22, 56, 47, 0.05), 0 1px 2px rgba(22, 56, 47, 0.03)` | DERIVED | Multi-layer organic green-tinted shadow | Card resting elevation |
+| **Elevation: Card** | `--shadow-card` | `0 4px 16px rgba(22, 56, 47, 0.07), 0 1px 3px rgba(22, 56, 47, 0.04)` | DERIVED | Multi-layer organic green-tinted elevation | Primary card container elevation |
+| **Elevation: Floating**| `--shadow-floating` | `0 12px 36px rgba(22, 56, 47, 0.12), 0 2px 8px rgba(22, 56, 47, 0.06)` | DERIVED | Multi-layer depth elevation | Conversation sheet & ask bar elevation |
+| **Space: Grid Scale** | `--space-1` to `--space-12` | `4px`, `8px`, `12px`, `16px`, `20px`, `24px`, `32px`, `48px` | STANDARD | Strict 4pt/8pt spatial layout rhythm | Card paddings, gaps, and margins |
+| **Touch Target** | `min-height / min-width` | `44px` | A11Y/STANDARD | WCAG 2.5.5 / iOS Human Interface Guidelines | Interactive buttons, tabs, links, chips |
+| **Motion: Instant** | `--duration-instant` | `0ms` | A11Y/STANDARD | RESERVED / Prefers-reduced-motion fallback | Instant swap duration |
+| **Motion: Micro** | `--duration-micro` | `120ms` | STANDARD | Button click, toggle, chip selection | Micro feedback duration |
+| **Motion: Medium** | `--duration-medium` | `200ms` | STANDARD | Accordion expand, card highlight, fade in | Component transition duration |
+| **Motion: Page / Modal**| `--duration-page` | `320ms` | MEASURED | `02` storyboard modal/sheet entrance | Structural sheet transition duration |
+| **Motion: Standard Ease**| `--ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | STANDARD | Natural deceleration curve | Standard motion easing curve |
+| **Motion: Emphasized** | `--ease-emphasized`| `cubic-bezier(0.05, 0.7, 0.1, 1)` | STANDARD | Sheet entrance with organic settle | Fluid spring-like curve |
+| **Motion: Reduced** | `@media (prefers-reduced-motion)`| `0.001ms !important` | A11Y/STANDARD | All selectors under prefers-reduced-motion | Instant swaps; zero information lost |
 
 ### 5.2 Component Inventory & Interaction Polish
 
 Components:
-- `AskBar`: Docked input trigger above navigation with subtle green elevation, pill radius (`9999px`), touch target `48px`.
-- `ConversationSheet`: Full-page fluid conversation on mobile (radius `24px`), floating centered card on desktop (max-width `680px`), animated with standard easing (`320ms`).
+- `AskBar`: Docked input trigger above navigation with floating elevation (`--shadow-floating`), pill radius (`--radius-pill`), touch target `48px`.
+- `ConversationSheet`: Full-page fluid conversation on mobile (radius `--radius-sheet`), floating centered card on desktop (max-width `680px`), animated with standard easing (`320ms`).
 - `ActionStatusPill`: Dynamic badge reflecting engine & execution status (`working`, `comparing`, `updated`, `needs-confirmation`).
 - `OptionCard`: Route options & transit modes with selected state indicator, basis provenance tag, and 44px touch targets.
 - `TimelineCard`: Time-sequenced step list with tabular numeric alignment, event node dots, and dynamic buffer pills.
-- `MapCard`: Schematic street grid with labelled `Schematic · simulated` disclaimer, route polylines (`#2D6A4F`), and weather badge.
+- `MapCard`: Schematic street grid with labelled `Schematic · simulated` disclaimer, route polylines (`--color-accent`), and weather callout pill (`width: 172px; x: -31px; rx: var(--radius-btn)`), verified by automated bounding box test to fit text without overflow.
 - `PhotoCard`: Local SVG illustrations (`ramen`, `salad`, `sushi`, `cafe`, `italian`) with `Illustration · simulated` chip.
 - `WhySheet`: Modal drawer explaining decision evidence, provenance tags (You confirmed vs Demo profile · sample), and derivation.
 - `ConfirmBar`: Interactive review action bar with adopt/remember options.
@@ -256,6 +262,20 @@ Components:
 - `QuietState`: Refined zero-interruption card with calm typography and sage icon.
 
 Touch targets are strictly ≥44px for all interactive elements at 390×844; axe-clean contrast in both themes of the token set. Reduced motion collapses all transitions to instant swaps without layout shifts or data loss.
+
+### 5.3 Truthful Engine & Visual Honesty Invariants
+
+1. **Zero Fake Ratings or Review Counts:** Star characters (`★`, `☆`) and numeric review counts remain completely eliminated. Fixture attributes (`Quiet`, `Vegetarian`, `5m away`) render truthfully.
+2. **Avatar Integrity:** The Yori avatar is an SVG brand mark/emblem (`.conversation-avatar-mark`), strictly avoiding stock photos of persons.
+3. **Engine & Connectivity Truthfulness:**
+   - Conversation status badge truthfully reads `Offline demo · simulated` (never `Online`).
+   - Engine status chip (`#engine-status-chip`) truthfully reads:
+     - `Offline fallback · deterministic`: Initial state before model interpreter runs, or when an utterance falls back to deterministic grammar.
+     - `Scripted model fixture · not a live model call`: When a scripted demo fixture is executed (e.g. "Can I leave later?").
+     - `Recorded Meta model output · replay`: When running under recorded model replay mode.
+     - `Meta model · live`: Never claimed during offline demo; strictly reserved for live API calls under owner gate S1.
+   - Schematic maps carry `Schematic · simulated`.
+   - SVG illustrations carry `Illustration · simulated`.
 
 ## 6. Time plan and cut line
 

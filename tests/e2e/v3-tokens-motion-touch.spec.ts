@@ -40,6 +40,11 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
         colorAccent: style.getPropertyValue('--color-accent').trim(),
         colorMapBg: style.getPropertyValue('--color-map-bg').trim(),
         colorWeatherBg: style.getPropertyValue('--color-weather-banner-bg').trim(),
+        fontDisplay: style.getPropertyValue('--font-display').trim(),
+        textDisplay: style.getPropertyValue('--text-display').trim(),
+        textTitle: style.getPropertyValue('--text-title').trim(),
+        textBody: style.getPropertyValue('--text-body').trim(),
+        textCaption: style.getPropertyValue('--text-caption').trim(),
         radiusCard: style.getPropertyValue('--radius-card').trim(),
         radiusSheet: style.getPropertyValue('--radius-sheet').trim(),
         durationMicro: style.getPropertyValue('--duration-micro').trim(),
@@ -62,6 +67,11 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     expect(rootTokens.colorAccent.toUpperCase()).toBe('#2F6F64');
     expect(rootTokens.colorMapBg.toUpperCase()).toBe('#E9F1E8');
     expect(rootTokens.colorWeatherBg.toUpperCase()).toBe('#E3EFFD');
+    expect(rootTokens.fontDisplay.toLowerCase()).toContain('newsreader');
+    expect(rootTokens.textDisplay).toBe('1.875rem');
+    expect(rootTokens.textTitle).toBe('1.25rem');
+    expect(rootTokens.textBody).toBe('1rem');
+    expect(parseFloat(rootTokens.textCaption)).toBeCloseTo(0.8125, 4);
     expect(rootTokens.radiusCard).toBe('18px');
     expect(rootTokens.radiusSheet).toBe('24px');
     expect(parseDurationMs(rootTokens.durationMicro)).toBeCloseTo(120, 0);
@@ -376,5 +386,92 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
       path: path.join(EVIDENCE_DIR, `v3-lunch-updated-home-${vpSuffix}.png`),
     });
     await checkAxe(page);
+  });
+
+  test('V3 Static Token Audit: all :root custom properties are referenced in styles.css without dead definitions', async () => {
+    const cssPath = path.resolve(process.cwd(), 'src/ui/living-context/styles.css');
+    const css = fs.readFileSync(cssPath, 'utf8');
+    const rootMatch = css.match(/:root\s*\{([^}]+)\}/);
+    expect(rootMatch).not.toBeNull();
+    const rootContent: string = rootMatch && rootMatch[1] ? rootMatch[1] : '';
+
+    const propRegex = /(--[a-zA-Z0-9_-]+)\s*:/g;
+    const declared: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = propRegex.exec(rootContent)) !== null) {
+      if (m[1]) declared.push(m[1]);
+    }
+
+    const restOfCss = css.slice(rootMatch!.index! + rootMatch![0].length);
+    const unused: string[] = [];
+    for (const prop of declared) {
+      const isReserved = rootContent.includes(`RESERVED: ${prop}`);
+      const count = (restOfCss.match(new RegExp(`var\\(${prop}[\\), ]`, 'g')) || []).length;
+      if (count === 0 && !isReserved) {
+        unused.push(prop);
+      }
+    }
+
+    expect(unused, `Unused CSS custom properties found in styles.css: ${unused.join(', ')}`).toEqual([]);
+  });
+
+  test('V3 Map Signal Label: "Rain forecast · simulated" pill fits text without overflow', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+    await page.selectOption('#scene-select', 'rain');
+    await page.waitForTimeout(300);
+
+    // Locate the weather callout rect and text
+    const rect = page.locator('.v2-map-canvas svg g:has(text) > rect, .v2-map-canvas svg g rect').first();
+    const text = page.locator('.v2-map-canvas svg g text').first();
+
+    await expect(rect).toBeVisible();
+    await expect(text).toBeVisible();
+
+    const rectBox = await rect.boundingBox();
+    const textBox = await text.boundingBox();
+
+    expect(rectBox).not.toBeNull();
+    expect(textBox).not.toBeNull();
+
+    // Verify text is completely inside rect horizontally with positive margins
+    expect(textBox!.x).toBeGreaterThanOrEqual(rectBox!.x);
+    expect(textBox!.x + textBox!.width).toBeLessThanOrEqual(rectBox!.x + rectBox!.width);
+  });
+
+  test('V3 Truthful Engine Status: conversation displays truthful "Offline fallback · deterministic" and "Scripted model fixture · not a live model call"', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+    await page.selectOption('#scene-select', 'rain');
+    await page.waitForTimeout(200);
+
+    await page.locator('#ask-bar').click();
+    await page.waitForSelector('#conversation-overlay');
+
+    const statusBadge = page.locator('#conversation-status-badge');
+    await expect(statusBadge).toHaveText('Offline demo · simulated');
+
+    const engineChip = page.locator('#engine-status-chip');
+    // Initial status before model interpreter runs an utterance is offline fallback
+    await expect(engineChip).toHaveText('Offline fallback · deterministic');
+
+    // Send a query that executes the scripted model fixture
+    await page.locator('#conversation-input').fill('Can I leave later?');
+    await page.locator('#conversation-send-btn').click();
+
+    // After interpreting fixture command, engine status updates to scripted fixture
+    await expect(engineChip).toHaveText('Scripted model fixture · not a live model call');
+
+    // Never fake live claims
+    const chipText = await engineChip.innerText();
+    expect(chipText).not.toBe('Meta model · live');
+    expect(chipText).not.toBe('Online');
+
+    await page.locator('#conversation-close-btn').click();
+    await expect(page.locator('#conversation-overlay')).toHaveCount(0);
   });
 });

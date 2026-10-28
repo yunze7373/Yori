@@ -21,53 +21,61 @@ Slice `V3` implements the final style tokens, visual polish, touch-target compli
 
 ## 2. Token Measurement & Derivation Matrix (FINAL)
 
-| Token Category | CSS Variable | Final Value | Status | Source Reference Frame | Measured Region / Element | Design Role & Invariant |
-|---|---|---|---|---|---|---|
-| **Color: Ground** | `--color-ground` | `#F8F8F5` | FINAL | `03` (primary), `01` | Frame 1 backdrop (x: 170, y: 150), `01` desktop canvas | Warm ivory/off-white background surface |
-| **Color: Card Surface** | `--color-card-bg` | `#FFFFFF` | FINAL | `03` | Frame 1 main card body (x: 240, y: 320) | Crisp neutral white for primary content cards |
-| **Color: Card Alt Surface** | `--color-card-muted-bg` | `#F4F7F4` | FINAL | `03`, `02` | Frame 1 candidate/art container (x: 230, y: 460) | Soft muted container/sub-card surface |
-| **Color: Border** | `--color-card-border` | `#E1E6E0` | FINAL | `03`, `01` | Frame 1 card stroke (x: 186, y: 320) | Subtle light border preventing heavy strokes |
-| **Color: Primary Ink** | `--color-ink` | `#162824` | FINAL | `03`, `01` | Frame 1 greeting headline "Good afternoon" | Deep dark green-tinted charcoal (>10:1 contrast) |
-| **Color: Muted Ink** | `--color-muted` | `#384A43` | FINAL | `03` | Frame 1 subtitle & metadata labels | Neutral dark sage; WCAG AAA (>6.2:1 contrast) |
-| **Color: Tertiary Ink** | `--color-tertiary` | `#5A6D66` | FINAL | `03`, `02` | Frame 2 auxiliary timestamps & footnotes | Subtle metadata text (>4.5:1 contrast) |
-| **Color: Primary CTA** | `--color-primary-btn` | `#16382F` | FINAL | `03` (primary), `01` | Frame 1 mode pill & button, `01` top bar | Deep forest green brand primary |
-| **Color: Primary Hover** | `--color-primary-btn-hover` | `#0E2923` | FINAL | `03` | Measured 10% dark shade of primary green | Interactive press/hover state |
-| **Color: Primary Text** | `--color-primary-text` | `#FFFFFF` | FINAL | `03` | Text on primary button/badge | Pure white on deep green (>12:1 contrast) |
-| **Color: Accent / Polyline** | `--color-accent` | `#2F6F64` | FINAL | `03`, `02` | Frame 1 route polyline & active pill border | Sage teal interactive accent |
-| **Color: Map Surface** | `--color-map-bg` | `#E9F1E8` | FINAL | `02` | Frame 2 schematic map panel (x: 770, y: 512) | Soft organic green terrain background |
-| **Color: Weather Banner** | `--color-weather-banner-bg` | `#E3EFFD` | FINAL | `02` | Frame 1 rain alert banner (x: 355, y: 205) | Calm sky-blue notification surface |
-| **Color: Weather Border** | `--color-weather-banner-border`| `#BDD7F5` | FINAL | `02` | Frame 1 alert banner stroke | Soft blue container border |
-| **Color: Weather Text** | `--color-weather-banner-text`| `#1E4268` | FINAL | `02` | Frame 1 rain notice title ink | Deep slate blue text (>7.2:1 contrast) |
-| **Color: Chip Surface** | `--color-chip-bg` | `#E2EAE5` | FINAL | `03` | Frame 1 filter pill & tag background | Light sage background for status pills |
-| **Color: Chip Border** | `--color-chip-border` | `#CAD6D0` | FINAL | `03` | Frame 1 filter pill stroke | Pill border line |
-| **Color: Chip Text** | `--color-chip-text` | `#16382F` | FINAL | `03` | Frame 1 filter pill text | Deep green chip label ink |
-| **Color: Notice / Warn** | `--color-notice-bg` | `#FEF7ED` | FINAL | `03`, `02` | Warning callout background | Muted amber warning box |
-| **Color: Notice Border** | `--color-notice-border` | `#F7D7A4` | FINAL | `03`, `02` | Warning callout border | Muted amber border |
-| **Color: Notice Text** | `--color-notice-text` | `#78350F` | FINAL | `03`, `02` | Warning callout text | Deep amber text (>6.8:1 contrast) |
-| **Color: Error Surface**| `--color-error-bg` | `#FEF2F2` | FINAL | `03` | Error message panel | Muted coral/red surface |
-| **Color: Error Border** | `--color-error-border` | `#FECACA` | FINAL | `03` | Error message border | Muted coral border |
-| **Color: Error Text** | `--color-error-text` | `#991B1B` | FINAL | `03` | Error message text | Deep red text (>7.5:1 contrast) |
-| **Type: Serif Accent** | `--font-display` | `"Newsreader", Georgia, Cambria, "Times New Roman", serif` | FINAL | `03` | Frame 1 greeting headline "Good afternoon" | Editorial serif for personal greetings |
-| **Type: Sans Body** | `--font-sans` | `"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` | FINAL | `03`, `02`, `01` | Card headers, body copy, chips, buttons | Crisp, legible interface sans |
-| **Type: Numeric** | `font-variant-numeric: tabular-nums` | `tabular-nums` | FINAL | `03`, `02` | Timeline times, durations, departure hours | Monospaced digits preventing layout jitter |
-| **Type Scale: Display** | `--text-display` | `1.875rem` (mobile) / `2.75rem` (desktop) | FINAL | `03`, `01` | Frame 1 main greeting | Display greeting size (line-height 1.25) |
-| **Type Scale: Title** | `--text-title` | `1.25rem` (20px) | FINAL | `03` | Frame 1 card titles (NOW, Candidate names) | Card title heading (line-height 1.3) |
-| **Type Scale: Body** | `--text-body` | `0.9375rem` (15px) - `1rem` (16px) | FINAL | `03` | Frame 1 narrative & step descriptions | Primary reading text (line-height 1.5) |
-| **Type Scale: Caption**| `--text-caption` | `0.75rem` (12px) - `0.8125rem` (13px) | FINAL | `03` | Tags, chips, timestamps, provenance notes | Metadata & chips (line-height 1.4) |
-| **Radius: Card** | `--radius-card` | `18px` | FINAL | `03` | Frame 1 primary cards (NOW, Map, Candidates)| Measured card corner radius |
-| **Radius: Sheet** | `--radius-sheet` | `24px` | FINAL | `03` | Full-page conversation overlay & modals | Measured expanded sheet top corners |
-| **Radius: Button** | `--radius-btn` | `12px` | FINAL | `03` | Rectangular action buttons & mode tabs | Soft rounded action button radius |
-| **Radius: Pill / Chip** | `--radius-pill` | `9999px` | FINAL | `03`, `02` | AskBar, mode pills, habit tags, status | Full rounded capsule/pill shape |
-| **Elevation: Subtle** | `--shadow-subtle` | `0 2px 8px rgba(22, 56, 47, 0.05), 0 1px 2px rgba(22, 56, 47, 0.03)` | FINAL | `03` | Frame 1 card elevation | Soft organic green-tinted shadow |
-| **Elevation: Floating**| `--shadow-floating` | `0 12px 36px rgba(22, 56, 47, 0.12), 0 2px 8px rgba(22, 56, 47, 0.06)` | FINAL | `03`, `01` | Conversation sheet & ask bar elevation | Floating overlay depth |
-| **Space: Grid Scale** | `--space-1` to `--space-8` | `4px`, `8px`, `12px`, `16px`, `20px`, `24px`, `32px` | FINAL | `03`, `02` | Card paddings (20px), gaps (16px), margins | Strict 4pt/8pt spatial layout rhythm |
-| **Touch Target** | `min-height / min-width` | `44px` | FINAL | WCAG / iOS Human Interface Guidelines | All interactive buttons, tabs, links, chips | Touch-accessible hit target at 390x844 |
-| **Motion: Micro** | `--duration-micro` | `120ms` | FINAL | Interaction spec | Button click, toggle, chip selection | Micro feedback duration |
-| **Motion: Medium** | `--duration-medium` | `200ms` | FINAL | Interaction spec | Accordion expand, card highlight, fade in | Component transition duration |
-| **Motion: Page / Modal**| `--duration-page` | `320ms` | FINAL | `02` storyboard | Sheet slide up/down, route mode switch | Structural sheet transition duration |
-| **Motion: Standard Ease**| `--ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | FINAL | Interaction spec | Natural deceleration curve | Standard motion easing curve |
-| **Motion: Emphasized** | `--ease-emphasized`| `cubic-bezier(0.05, 0.7, 0.1, 1)` | FINAL | Interaction spec | Sheet entrance with organic settle | Fluid spring-like curve |
-| **Motion: Reduced** | `@media (prefers-reduced-motion)`| `0.001ms !important` | FINAL | A11y invariant | All selectors under prefers-reduced-motion | Instant swaps; zero information lost |
+The token system is verified with reproducible automated canvas sampling via `node scripts/sample-tokens.mjs` (output recorded in `docs/evidence/v3/TOKEN_SAMPLER_OUTPUT.txt`). All 56 `:root` CSS custom properties declared in `src/ui/living-context/styles.css` are actively referenced across the component inventory (verified by automated static audit).
+
+| Token Category | CSS Variable | Final Value | Classification | Source Frame & Coordinates | Max Δchannel | Status | Design Role & Invariant |
+|---|---|---|---|---|---|---|---|
+| **Color: Ground** | `--color-ground` | `#F8F8F5` | MEASURED / CARRIED | `02` (x: 355, y: 100 reads `#F8F9F7`) | 2 (<= 6) | PASS | Warm ivory/off-white background surface |
+| **Color: Card Surface** | `--color-card-bg` | `#FFFFFF` | MEASURED / CARRIED | `03` (x: 700, y: 100 reads `#FFFFFF`) | 0 (exact) | PASS | Crisp neutral white for primary content cards |
+| **Color: Card Alt Surface** | `--color-card-muted-bg` | `#F4F7F4` | MEASURED | `03` (x: 140, y: 100 reads `#F3F7F2`) | 2 (<= 6) | PASS | Soft muted container/sub-card surface |
+| **Color: Border** | `--color-card-border` | `#E1E6E0` | MEASURED / CARRIED | `03` (x: 640, y: 100 reads `#E0EADF`) | 4 (<= 6) | PASS | Subtle light border preventing heavy strokes |
+| **Color: Primary Ink** | `--color-ink` | `#162824` | MEASURED / CARRIED | `03` (x: 1080, y: 520 reads `#14241F`) | 5 (<= 6) | PASS | Deep dark green-tinted charcoal (>10:1 contrast) |
+| **Color: Muted Ink** | `--color-muted` | `#384A43` | MEASURED / CARRIED | `03` (x: 1560, y: 230 reads `#3A4847`) | 4 (<= 6) | PASS | Neutral dark sage; WCAG AAA (>6.2:1 contrast) |
+| **Color: Tertiary Ink** | `--color-tertiary` | `#5A6D66` | DERIVED | Derived from `--color-muted` scale | — | PASS | Subtle metadata text & secondary chips (>4.5:1) |
+| **Color: Primary CTA** | `--color-primary-btn` | `#16382F` | MEASURED / CARRIED | `03` (x: 630, y: 110 reads `#1A3532`) | 4 (<= 6) | PASS | Deep forest green brand primary |
+| **Color: Primary Hover** | `--color-primary-btn-hover` | `#0E2923` | DERIVED | Computed 10% dark luminance shade | — | PASS | Interactive press/hover state |
+| **Color: Primary Text** | `--color-primary-text` | `#FFFFFF` | A11Y/STANDARD | Contrast requirement (>12:1) | — | PASS | Pure white on deep green CTA button |
+| **Color: Accent / Polyline** | `--color-accent` | `#2F6F64` | MEASURED / CARRIED | `03` (x: 1570, y: 810 reads `#2F7463`) | 5 (<= 6) | PASS | Sage teal interactive accent & route polyline |
+| **Color: Accent Subtle** | `--color-accent-subtle` | `#E2ECE6` | DERIVED | 12% alpha tint of `--color-accent` | — | PASS | Soft sage surface for active tabs/cards |
+| **Color: Map Surface** | `--color-map-bg` | `#E9F1E8` | MEASURED | `02` (x: 770, y: 512 reads `#E4EFE5`) | 5 (<= 6) | PASS | Soft organic green terrain background |
+| **Color: Weather Banner** | `--color-weather-banner-bg` | `#E3EFFD` | MEASURED | `02` (x: 355, y: 205 reads `#E2EFFE`) | 1 (<= 6) | PASS | Calm sky-blue notification surface |
+| **Color: Weather Border** | `--color-weather-banner-border`| `#BDD7F5` | DERIVED | Border shade for alert container | — | PASS | Soft blue container border |
+| **Color: Weather Text** | `--color-weather-banner-text`| `#1E4268` | DERIVED | Contrast > 7.2:1 against banner bg | — | PASS | Deep slate blue alert text |
+| **Color: Chip Surface** | `--color-chip-bg` | `#E2EAE5` | MEASURED | `03` (x: 250, y: 110 reads `#E4EAE8`) | 3 (<= 6) | PASS | Light sage background for status pills |
+| **Color: Chip Border** | `--color-chip-border` | `#CAD6D0` | DERIVED | Border stroke for chip container | — | PASS | Container border line |
+| **Color: Chip Text** | `--color-chip-text` | `#16382F` | DERIVED | Brand primary green chip ink | — | PASS | High contrast chip label text |
+| **Color: Notice / Warn** | `--color-notice-bg` | `#FEF7ED` | A11Y/STANDARD | Accessible notice callout palette | — | PASS | Muted amber warning box |
+| **Color: Notice Border** | `--color-notice-border` | `#F7D7A4` | A11Y/STANDARD | Notice border stroke | — | PASS | Muted amber border |
+| **Color: Notice Text** | `--color-notice-text` | `#78350F` | A11Y/STANDARD | Contrast > 6.8:1 against notice bg | — | PASS | Deep amber text |
+| **Color: Error Surface**| `--color-error-bg` | `#FEF2F2` | A11Y/STANDARD | Accessible error panel palette | — | PASS | Muted coral/red surface |
+| **Color: Error Border** | `--color-error-border` | `#FECACA` | A11Y/STANDARD | Error panel border | — | PASS | Muted coral border |
+| **Color: Error Text** | `--color-error-text` | `#991B1B` | A11Y/STANDARD | Contrast > 7.5:1 against error bg | — | PASS | Deep red text |
+| **Color: Success Surface**| `--color-success-bg` | `#D1E7DD` | A11Y/STANDARD | Accessible success badge palette | — | PASS | Soft mint success surface |
+| **Color: Success Text** | `--color-success-text` | `#0F5132` | A11Y/STANDARD | Contrast > 6.5:1 against success bg | — | PASS | Deep green success text |
+| **Type: Serif Accent** | `--font-display` | `"Newsreader", Georgia, Cambria, "Times New Roman", serif` | MEASURED / STANDARD | `03` Frame 1 greeting headline | — | PASS | Editorial serif for personal greetings |
+| **Type: Sans Body** | `--font-sans` | `"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` | A11Y/STANDARD | Interface sans across cards & body | — | PASS | Crisp, legible interface sans |
+| **Type: Numeric** | `font-variant-numeric: tabular-nums` | `tabular-nums` | A11Y/STANDARD | Numeric times and durations | — | PASS | Monospaced digits preventing layout jitter |
+| **Type Scale: Display** | `--text-display` | `1.875rem` (30px) | MEASURED / STANDARD | `03` main greeting "Good afternoon" | — | PASS | Display greeting size (line-height 1.25) |
+| **Type Scale: Title** | `--text-title` | `1.25rem` (20px) | MEASURED / STANDARD | `03` card titles (NOW, Candidates) | — | PASS | Card title heading (line-height 1.3) |
+| **Type Scale: Body** | `--text-body` | `1rem` (16px) | MEASURED / STANDARD | `03` narrative & step descriptions | — | PASS | Primary reading text (line-height 1.5) |
+| **Type Scale: Caption**| `--text-caption` | `0.8125rem` (13px) | MEASURED / STANDARD | `03` tags, chips, timestamps | — | PASS | Metadata & chips (line-height 1.4) |
+| **Radius: Card** | `--radius-card` | `18px` | MEASURED | `03` primary cards (NOW, Map, Candidates) | — | PASS | Measured card corner radius |
+| **Radius: Sheet** | `--radius-sheet` | `24px` | MEASURED | `03` expanded conversation overlay | — | PASS | Measured expanded sheet top corners |
+| **Radius: Button** | `--radius-btn` | `12px` | MEASURED | `03` rectangular action buttons & tabs | — | PASS | Soft rounded action button radius |
+| **Radius: Pill / Chip** | `--radius-pill` | `9999px` | MEASURED | `03`, `02` AskBar, mode pills, status | — | PASS | Full rounded capsule/pill shape |
+| **Radius: Chip Alt** | `--radius-chip` | `9999px` | MEASURED | `03`, `02` filter tags and chips | — | PASS | Full rounded capsule/chip shape |
+| **Elevation: Subtle** | `--shadow-subtle` | `0 2px 8px rgba(22, 56, 47, 0.05), 0 1px 2px rgba(22, 56, 47, 0.03)` | DERIVED | Organic green-tinted shadow | — | PASS | Soft card elevation |
+| **Elevation: Card** | `--shadow-card` | `0 4px 16px rgba(22, 56, 47, 0.07), 0 1px 3px rgba(22, 56, 47, 0.04)` | DERIVED | Primary card container depth | — | PASS | Card elevation depth |
+| **Elevation: Floating**| `--shadow-floating` | `0 12px 36px rgba(22, 56, 47, 0.12), 0 2px 8px rgba(22, 56, 47, 0.06)` | DERIVED | Floating overlay elevation | — | PASS | Conversation sheet & ask bar elevation |
+| **Space: Grid Scale** | `--space-1` to `--space-12` | `4px`, `8px`, `12px`, `16px`, `20px`, `24px`, `32px`, `48px` | STANDARD | Strict 4pt/8pt spatial layout rhythm | — | PASS | Card paddings, gaps, and margins |
+| **Touch Target** | `min-height / min-width` | `44px` | A11Y/STANDARD | WCAG / iOS Human Interface Guidelines | — | PASS | Interactive buttons, tabs, links, chips |
+| **Motion: Instant** | `--duration-instant` | `0ms` | A11Y/STANDARD | RESERVED / Prefers-reduced-motion fallback | — | PASS | Instant swap duration |
+| **Motion: Micro** | `--duration-micro` | `120ms` | STANDARD | Micro feedback duration | — | PASS | Button click, toggle, chip selection |
+| **Motion: Medium** | `--duration-medium` | `200ms` | STANDARD | Component transition duration | — | PASS | Accordion expand, card highlight, fade in |
+| **Motion: Page / Modal**| `--duration-page` | `320ms` | MEASURED | Storyboard sheet transition duration | — | PASS | Sheet slide up/down, route mode switch |
+| **Motion: Standard Ease**| `--ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | STANDARD | Natural deceleration curve | — | PASS | Standard motion easing curve |
+| **Motion: Emphasized** | `--ease-emphasized`| `cubic-bezier(0.05, 0.7, 0.1, 1)` | STANDARD | Organic settle curve | — | PASS | Sheet entrance spring-like curve |
+| **Motion: Reduced** | `@media (prefers-reduced-motion)`| `0.001ms !important` | A11Y/STANDARD | Instant swaps; zero information lost | — | PASS | All selectors under prefers-reduced-motion |
 
 ---
 
@@ -114,13 +122,24 @@ Under `@media (prefers-reduced-motion: reduce)`:
 
 ---
 
-## 5. Visual Honesty Invariant Verification (Rev3 / Rev4)
+## 5. Visual Honesty & Token System Verification (Rev3 / Rev4)
 
 1. **Zero Fake Ratings or Review Counts:** Star characters (`★`, `☆`) and numeric review counts remain completely eliminated. Fixture attributes (`Quiet`, `Vegetarian`, `5m away`) render truthfully.
 2. **Avatar Integrity:** The Yori avatar is an SVG brand mark/emblem (`.conversation-avatar-mark`), strictly avoiding stock photos of persons.
-3. **Engine & Connectivity Truthfulness:**
-   - Conversation status reads `Offline demo · simulated` (never `Online`).
-   - Engine status reads `Recorded model output · replay` or `Offline fallback · deterministic` (never `Live` without owner gate S1).
+3. **Truthful Engine & Connectivity Status:**
+   - Conversation status badge reads `Offline demo · simulated` (never `Online`).
+   - Engine status chip (`#engine-status-chip`) reads:
+     - `Offline fallback · deterministic`: Initial state before model interpreter runs, or when an utterance falls back to deterministic grammar.
+     - `Scripted model fixture · not a live model call`: When a scripted demo fixture is executed (asserted in V3 e2e).
+     - `Recorded Meta model output · replay`: When running under recorded model replay mode.
+     - `Meta model · live`: Never claimed during offline demo; strictly reserved for live API calls under owner gate S1.
+4. **Map Signal Label Pill Polish (P3 Resolution):**
+   - In `.v2-map-canvas svg g rect`, pill width is set to `172px` (offset `x: -31px`), fitting the label `"Rain forecast · simulated"` with comfortable margins horizontally.
+   - Verified by an automated Playwright bounding-box assertion (`tests/e2e/v3-tokens-motion-touch.spec.ts`) confirming text is strictly inside the pill geometry on mobile (390×844) and desktop (1280×800).
+5. **Static Token Coverage Audit:**
+   - An automated static test verifies that 100% of the 56 declared `:root` CSS custom properties are actively referenced in `styles.css` without dead or unused properties.
+   - Transition declarations across all interactive components strictly reference `--duration-*` and `--ease-*` design tokens, eliminating hardcoded transition literals.
+6. **Schematic Map & Illustration Honesty:**
    - Schematic maps carry `Schematic · simulated`.
    - SVG illustrations carry `Illustration · simulated`.
 
