@@ -14,6 +14,8 @@ export const STRINGS = Object.freeze({
     subheading: "I've been looking ahead for you.",
     demoChip: 'Demo · simulated context',
     simulatedBadge: 'SIMULATED',
+    liveWeatherBadge: 'Live weather',
+    weatherAttribution: 'Weather data by Open-Meteo.com',
   }),
   sections: Object.freeze({
     now: 'NOW · YOUR NEXT MOMENT',

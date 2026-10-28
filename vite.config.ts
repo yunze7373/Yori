@@ -4,6 +4,7 @@ import {
   resolveBindHost,
 } from './src/adapters/model/server-proxy.js';
 import { createXMemoProxyMiddleware } from './src/adapters/xmemo/server-proxy.js';
+import { createWeatherProxyMiddleware } from './src/adapters/providers/server-proxy.js';
 
 function modelProxyPlugin(): Plugin {
   const middleware = createModelProxyMiddleware();
@@ -33,10 +34,24 @@ function xmemoProxyPlugin(): Plugin {
   };
 }
 
+function weatherProxyPlugin(): Plugin {
+  const middleware = createWeatherProxyMiddleware();
+
+  return {
+    name: 'weather-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
+
 const bindHost = resolveBindHost();
 
 export default defineConfig({
-  plugins: [modelProxyPlugin(), xmemoProxyPlugin()],
+  plugins: [modelProxyPlugin(), xmemoProxyPlugin(), weatherProxyPlugin()],
   server: {
     port: 5173,
     host: bindHost,

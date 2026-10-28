@@ -40,8 +40,15 @@ import type {
   MemoryFact,
   SuppressionReason,
   ContextSnapshot,
+  ContextSignal,
+  RealSignal,
 } from '../../core/contracts/index.js';
-import { createMemoryFact, createSimulatedSignal } from '../../core/contracts/index.js';
+import {
+  createMemoryFact,
+  createSimulatedSignal,
+  freezeSnapshot,
+} from '../../core/contracts/index.js';
+import type { WeatherData } from '../../adapters/providers/weather-types.js';
 import {
   escapeHtml,
   getGreeting,
@@ -83,7 +90,8 @@ export interface AppState {
 
 export function computeSceneState(
   scene: DemoSceneId,
-  storage?: YoriStorage
+  storage?: YoriStorage,
+  liveWeatherSignal?: ContextSignal | null
 ): {
   pipelineResult: PipelineResult;
   spatialMapEvidence: SpatialMapEvidence | null;
@@ -96,6 +104,17 @@ export function computeSceneState(
 } {
   const plugins = staticPluginRegistry.getAll();
   const effectiveStorage = storage ?? new YoriStorage(new WebStorageDriver());
+
+  function injectWeather(snap: ContextSnapshot): ContextSnapshot {
+    if (!liveWeatherSignal || scene === 'missing-weather') return snap;
+    return freezeSnapshot({
+      ...snap,
+      signals: [
+        ...snap.signals.filter(s => s.kind !== 'weather'),
+        liveWeatherSignal,
+      ],
+    });
+  }
 
   // Load existing persistent state if available
   let loadedEnvelope = null;
@@ -115,7 +134,8 @@ export function computeSceneState(
       const clock = createFixedClock(D1_INITIAL_CLOCK);
       const player = createScenarioPlayer(d1Scenario, clock);
       const snapshots = player.getSnapshots();
-      const latestSnapshot = snapshots[snapshots.length - 1]!;
+      const rawSnapshot = snapshots[snapshots.length - 1]!;
+      const latestSnapshot = injectWeather(rawSnapshot);
 
       // Merge seed facts with stored facts & proposals
       const combinedMemory = [
@@ -156,7 +176,8 @@ export function computeSceneState(
     case 'rain': {
       const clock = createFixedClock('2026-10-28T20:35:00.000Z');
       const player = createScenarioPlayer(d2Scenario, clock);
-      const snapshot = player.getSnapshotAt('2026-10-28T20:35:00.000Z');
+      const rawSnapshot = player.getSnapshotAt('2026-10-28T20:35:00.000Z');
+      const snapshot = injectWeather(rawSnapshot);
 
       const combinedMemory = [
         ...d2MemoryFacts.filter(f => !storedConfirmedFacts.some(sc => sc.key === f.key)),
@@ -402,12 +423,13 @@ export function computeSceneState(
         consentScope: 'device_only',
       });
 
-      const snapshot: ContextSnapshot = {
+      const rawSnapshot: ContextSnapshot = {
         id: 'snapshot-multi-candidate',
         asOf: '2026-10-28T19:10:00.000Z',
         timezone: 'America/Los_Angeles',
         signals: [calendarSig, travelSig, weatherSig, locationSig, scheduleSig, eatingSig],
       };
+      const snapshot = injectWeather(rawSnapshot);
 
       const combinedMemory = [
         ...d1MemoryFacts.filter(f => !storedConfirmedFacts.some(sc => sc.key === f.key)),
@@ -477,6 +499,16 @@ export function renderApp(
     connected: false,
   };
 
+  let weatherStatus: {
+    enabled: boolean;
+    provider?: string;
+    attribution?: { text: string; url: string; license?: string };
+    demoCity?: { name: string; latitude: number; longitude: number; timezone: string };
+  } = {
+    enabled: false,
+  };
+  let liveWeatherSignal: RealSignal<WeatherData> | null = null;
+
   if (typeof window !== 'undefined' && window.location?.search?.includes('xmemo=connected')) {
     actionFeedbackMessage = 'XMemo account connected successfully';
     activeTab = 'me';
@@ -497,7 +529,36 @@ export function renderApp(
     }
   }
 
+  async function checkWeatherStatus() {
+    try {
+      if (typeof fetch !== 'undefined') {
+        const resp = await fetch('/api/weather/status', { cache: 'no-store' });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.enabled) {
+            weatherStatus = data;
+            try {
+              const currResp = await fetch('/api/weather/current', { cache: 'no-store' });
+              if (currResp.ok) {
+                const currData = await currResp.json();
+                if (currData.signals && currData.signals.length > 0) {
+                  liveWeatherSignal = currData.signals[0];
+                  update();
+                }
+              }
+            } catch {
+              // fail-closed
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore network errors
+    }
+  }
+
   void checkXMemoStatus();
+  void checkWeatherStatus();
 
   function update() {
     const {
@@ -509,7 +570,11 @@ export function renderApp(
       snapshotTimezone,
       snapshot,
       combinedMemory,
-    } = computeSceneState(currentScene, sharedStorage);
+    } = computeSceneState(
+      currentScene,
+      sharedStorage,
+      weatherStatus.enabled ? liveWeatherSignal : null
+    );
 
     // Ensure initial storage envelope exists if clean
     let storedEnvelope = null;
@@ -844,6 +909,15 @@ export function renderApp(
                 </svg>
                 ${escapeHtml(STRINGS.header.demoChip)}
               </span>
+              ${
+                weatherStatus.enabled && liveWeatherSignal
+                  ? `
+              <span class="live-weather-chip" id="chip-live-weather" aria-label="Live Weather Active">
+                ${escapeHtml(STRINGS.header.liveWeatherBadge)}
+              </span>
+              `
+                  : ''
+              }
 
               <!-- Desktop Navigation Links -->
               <nav class="desktop-nav" aria-label="Desktop Navigation">
@@ -872,6 +946,15 @@ export function renderApp(
             <div class="greeting-section">
               <h1 class="greeting-title">${escapeHtml(greeting.greeting)}</h1>
               <p class="greeting-subheading">${escapeHtml(greeting.subheading)}</p>
+              ${
+                weatherStatus.enabled && liveWeatherSignal
+                  ? `
+              <div class="weather-attribution" id="weather-attribution">
+                <a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</a>
+              </div>
+              `
+                  : ''
+              }
             </div>
           </div>
         </header>

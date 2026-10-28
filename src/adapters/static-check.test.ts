@@ -136,4 +136,50 @@ describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
       }
     }
   });
+
+  it('ensures src/ contains zero navigator.geolocation references (AC-204-2, INV-103)', () => {
+    const srcFiles = collectFiles(path.resolve('src'));
+    const forbiddenPatterns = [
+      /navigator\.geolocation/i,
+      /getCurrentPosition/i,
+      /watchPosition/i,
+    ];
+
+    for (const filePath of srcFiles) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      for (const pattern of forbiddenPatterns) {
+        const match = pattern.exec(content);
+        expect(
+          match,
+          `Forbidden geolocation API reference detected in ${path.relative(process.cwd(), filePath)}: ${match?.[0]}`
+        ).toBeNull();
+      }
+    }
+  });
+
+  it('ensures outgoing weather requests send only the configured demo-city coordinates (AC-204-2)', async () => {
+    const { OpenMeteoWeatherAdapter, DEFAULT_DEMO_CITY } = await import('./providers/index.js');
+    let capturedUrl = '';
+    const mockFetch = (async (url: string) => {
+      capturedUrl = url;
+      return {
+        ok: true,
+        json: async () => ({ current: { time: '2026-10-28T12:00', weather_code: 0, temperature_2m: 20, precipitation: 0 } }),
+      } as any;
+    }) as unknown as typeof fetch;
+
+    const adapter = new OpenMeteoWeatherAdapter({
+      enabled: true,
+      coordinate: DEFAULT_DEMO_CITY,
+      fetchFn: mockFetch,
+    });
+
+    await adapter.signals();
+
+    const parsed = new URL(capturedUrl);
+    expect(parsed.searchParams.get('latitude')).toBe(String(DEFAULT_DEMO_CITY.latitude));
+    expect(parsed.searchParams.get('longitude')).toBe(String(DEFAULT_DEMO_CITY.longitude));
+    expect(parsed.searchParams.get('latitude')).toBe('37.7749');
+    expect(parsed.searchParams.get('longitude')).toBe('-122.4194');
+  });
 });
