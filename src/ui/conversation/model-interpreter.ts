@@ -226,6 +226,16 @@ export class ModelCommandInterpreter implements CommandInterpreter {
           error: `Reason code '${String(code)}' is not in VALID_REASON_CODES`,
         };
       }
+      if (code === 'matches_confirmed_preference') {
+        const hasConfirmed = context?.confirmedFactKeys && context.confirmedFactKeys.length > 0;
+        if (!hasConfirmed) {
+          return {
+            valid: false,
+            reason: 'unconfirmed_fact_used',
+            error: "Reason code 'matches_confirmed_preference' requires confirmed facts in context",
+          };
+        }
+      }
     }
 
     // 6. Validate situationAttribution if present
@@ -256,6 +266,16 @@ export class ModelCommandInterpreter implements CommandInterpreter {
           reason: 'invalid_reason_code',
           error: `situationAttribution reasonCode '${String(sa.reasonCode)}' is not valid`,
         };
+      }
+      if (sa.reasonCode === 'matches_confirmed_preference') {
+        const hasConfirmed = context?.confirmedFactKeys && context.confirmedFactKeys.length > 0;
+        if (!hasConfirmed) {
+          return {
+            valid: false,
+            reason: 'unconfirmed_fact_used',
+            error: "situationAttribution reasonCode 'matches_confirmed_preference' requires confirmed facts in context",
+          };
+        }
       }
     }
 

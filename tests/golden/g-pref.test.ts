@@ -247,6 +247,6 @@ describe('Causality Golden G-PREF (LIVING_CONTEXT_V2.md §9 R2)', () => {
     expect(decision.engineStatus).toBe('scripted_fixture');
     expect(decision.slots.filters).toEqual(['quieter', 'vegetarian']);
     expect(decision.situationAttribution).toBeDefined();
-    expect(decision.situationAttribution!.reasonCode).toBe('matches_confirmed_preference');
+    expect(decision.situationAttribution!.reasonCode).toBe('free_window_fit');
   });
 });

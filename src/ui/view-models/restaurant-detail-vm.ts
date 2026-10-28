@@ -13,6 +13,7 @@
 import type { PreparedPlan, PlanOption, SpatialMapEvidence } from '../../core/contracts/index.js';
 import { formatTime } from '../living-context/presentation.js';
 import { getLocalIllustration } from './photo-vm.js';
+import { classifyFactSource } from './provenance.js';
 import { deriveMapVM } from './map-vm.js';
 import type { RestaurantDetailVM, RestaurantDirectionStepVM } from './types.js';
 
@@ -128,7 +129,9 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
   const tasteFact = plan.why?.memoryFactsUsed?.find(
     f => f.key.includes('taste') || f.key.includes('cuisine')
   );
-  const isConfirmed = tasteFact ? (userConfirmedKeys?.has(tasteFact.key) ?? false) : false;
+  const isConfirmed = tasteFact
+    ? classifyFactSource(tasteFact, userConfirmedKeys) === 'user_confirmed'
+    : false;
   const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
   const basis = `Based on taste: ${cuisine} (${provenance})`;
 

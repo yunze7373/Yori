@@ -158,11 +158,11 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     const whyText = await page.locator('#why-order-text, .why-derivation-text').innerText();
     expect(whyText).toContain('Because you asked: quieter, vegetarian · this time only');
 
-    // Situation Attribution: honest Sample Preference attribution, zero "confirmed" or "travel"
+    // Situation Attribution: honest Schedule Fit attribution, zero "confirmed" or "travel"
     const sitSection = page.locator('#why-situation-section');
     await expect(sitSection).toBeVisible();
-    await expect(sitSection).toContainText('Sample Preference');
-    await expect(sitSection).toContainText('Matches a sample preference from the demo profile');
+    await expect(sitSection).toContainText('Schedule Fit');
+    await expect(sitSection).toContainText('Fits comfortably within your available schedule window');
     const sitText = await sitSection.innerText();
     expect(sitText.toLowerCase()).not.toContain('confirmed');
     expect(sitText.toLowerCase()).not.toContain('travel');
@@ -250,5 +250,112 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     const lastAssistantMsg = page.locator('.chat-bubble-assistant').last();
     const lastMsgText = await lastAssistantMsg.innerText();
     expect(lastMsgText.toLowerCase()).not.toContain('confirmed');
+  });
+
+  test('V2b surface sweep: no false confirmed or live claims with demo facts across Away lunch and Rain', async ({
+    page,
+  }) => {
+    function assertNoFalseConfirmedOrLive(text: string, surfaceName: string) {
+      const sanitized = text
+        .replace(/\bnot confirmed\b/gi, '')
+        .replace(/\bscripted model fixture · not a live model call\b/gi, '');
+
+      const confirmedMatches = sanitized.match(/\bconfirmed\b/i);
+      expect(
+        confirmedMatches,
+        `Unexpected 'confirmed' found on surface '${surfaceName}':\n${text}`
+      ).toBeNull();
+
+      const liveMatches = sanitized.match(/\blive\b/i);
+      expect(
+        liveMatches,
+        `Unexpected 'live' found on surface '${surfaceName}':\n${text}`
+      ).toBeNull();
+    }
+
+    // 1. Away Lunch Sweep
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+    await page.locator('#scene-select').selectOption('away-lunch');
+
+    // (1a) Home surface
+    let text = await page.locator('.app-layout').innerText();
+    assertNoFalseConfirmedOrLive(text, 'away-lunch:home');
+
+    // (1b) Detail surface (RestaurantDetail)
+    await page.locator('.v2-candidate-card').first().click();
+    await page.waitForSelector('#restaurant-detail-name');
+    text = await page.locator('.v2-restaurant-detail').innerText();
+    assertNoFalseConfirmedOrLive(text, 'away-lunch:detail');
+    await page.locator('#restaurant-detail-back-btn').click();
+    await page.waitForSelector('.now-card');
+
+    // (1c) Why sheet
+    await page.locator('#btn-why').click();
+    await page.waitForSelector('#why-sheet-backdrop');
+    text = await page.locator('#why-sheet-backdrop').innerText();
+    assertNoFalseConfirmedOrLive(text, 'away-lunch:why-sheet');
+    await page.locator('#btn-close-why').click();
+
+    // (1d) Chat Why
+    await page.locator('#ask-bar').click();
+    await page.waitForSelector('#conversation-overlay');
+    await page.locator('#conversation-input').fill('Why?');
+    await page.locator('#conversation-send-btn').click();
+    await expect(page.locator('.chat-bubble-assistant').last()).toBeVisible();
+    text = await page.locator('#conversation-transcript').innerText();
+    assertNoFalseConfirmedOrLive(text, 'away-lunch:chat-why');
+
+    // (1e) After filter
+    await page.locator('#conversation-input').fill('quieter + vegetarian');
+    await page.locator('#conversation-send-btn').click();
+    // Auto-collapses to home
+    await expect(page.locator('#conversation-overlay')).toHaveCount(0, { timeout: 5000 });
+    await page.waitForSelector('.now-card');
+    text = await page.locator('.app-layout').innerText();
+    assertNoFalseConfirmedOrLive(text, 'away-lunch:after-filter:home');
+
+    await page.locator('#btn-why').click();
+    await page.waitForSelector('#why-sheet-backdrop');
+    text = await page.locator('#why-sheet-backdrop').innerText();
+    assertNoFalseConfirmedOrLive(text, 'away-lunch:after-filter:why-sheet');
+    await page.locator('#btn-close-why').click();
+
+    // (1f) After Undo
+    await page.locator('#btn-undo-accept').click();
+    text = await page.locator('.app-layout').innerText();
+    assertNoFalseConfirmedOrLive(text, 'away-lunch:after-undo:home');
+
+    // 2. Rain Scene Sweep
+    await page.locator('#scene-select').selectOption('rain');
+    await page.waitForSelector('.now-card');
+
+    // (2a) Rain Home
+    text = await page.locator('.app-layout').innerText();
+    assertNoFalseConfirmedOrLive(text, 'rain:home');
+
+    // (2b) Rain Detail
+    await page.locator('#btn-view-trip-details').click();
+    await page.waitForSelector('.v2-trip-detail');
+    text = await page.locator('.v2-trip-detail').innerText();
+    assertNoFalseConfirmedOrLive(text, 'rain:detail');
+    await page.locator('#trip-detail-back-btn').click();
+    await page.waitForSelector('.now-card');
+
+    // (2c) Rain Why Sheet
+    await page.locator('#btn-why').click();
+    await page.waitForSelector('#why-sheet-backdrop');
+    text = await page.locator('#why-sheet-backdrop').innerText();
+    assertNoFalseConfirmedOrLive(text, 'rain:why-sheet');
+    await page.locator('#btn-close-why').click();
+
+    // (2d) Rain Chat Why
+    await page.locator('#ask-bar').click();
+    await page.waitForSelector('#conversation-overlay');
+    await page.locator('#conversation-input').fill('Why this plan?');
+    await page.locator('#conversation-send-btn').click();
+    await expect(page.locator('.chat-bubble-assistant').last()).toBeVisible();
+    text = await page.locator('#conversation-transcript').innerText();
+    assertNoFalseConfirmedOrLive(text, 'rain:chat-why');
   });
 });

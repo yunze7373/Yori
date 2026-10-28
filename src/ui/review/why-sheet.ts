@@ -12,6 +12,7 @@
 import type { PreparedPlan, EvidenceCitation } from '../../core/contracts/index.js';
 import { formatTime, escapeHtml } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
+import { classifyFactSource, provenanceLabel } from '../view-models/provenance.js';
 
 export const REASON_CODE_COPY: Record<string, { title: string; description: string }> = {
   weather_adjusted: {
@@ -198,7 +199,9 @@ export function buildHumanDerivation(
   const tz = plan.timezone;
   const memoryFacts = plan.why?.memoryFactsUsed ?? [];
   const hasPreferences = memoryFacts.length > 0;
-  const allConfirmed = hasPreferences && memoryFacts.every(f => userConfirmedKeys?.has(f.key));
+  const allConfirmed =
+    hasPreferences &&
+    memoryFacts.every(f => classifyFactSource(f, userConfirmedKeys) === 'user_confirmed');
 
   if (plan.intentId === 'depart') {
     const subject = plan.subjectTitle || 'Your upcoming appointment';
@@ -300,7 +303,9 @@ export function renderWhySheet(
 
                     const isAllUserConfirmed =
                       factsToCheck.length > 0 &&
-                      factsToCheck.every(k => userConfirmedKeys?.has(k));
+                      factsToCheck.every(
+                        k => classifyFactSource(k, userConfirmedKeys, plan.why.memoryFactsUsed) === 'user_confirmed'
+                      );
 
                     if (isAllUserConfirmed) {
                       reasonTitle = 'Preference Matched';
@@ -393,10 +398,9 @@ export function renderWhySheet(
                 memoryFacts.length > 0
                   ? memoryFacts
                       .map(fact => {
-                        const isUserConfirmed = userConfirmedKeys?.has(fact.key) ?? false;
-                        const badgeText = isUserConfirmed
-                          ? STRINGS.whySheet.confirmedBadge
-                          : STRINGS.whySheet.sampleProfileBadge;
+                        const provKind = classifyFactSource(fact, userConfirmedKeys);
+                        const isUserConfirmed = provKind === 'user_confirmed';
+                        const badgeText = provenanceLabel(provKind);
                         const badgeClass = isUserConfirmed ? 'badge-confirmed' : 'badge-simulated';
                         return `
                       <div class="why-item-row">

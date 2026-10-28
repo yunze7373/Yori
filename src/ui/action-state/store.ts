@@ -35,6 +35,7 @@ import {
 import { formatTime } from '../living-context/presentation.js';
 import { derivePlanTimingFacts } from '../view-models/timing.js';
 import { buildHumanDerivation, humanizeMemoryKey } from '../review/why-sheet.js';
+import { classifyFactSource, provenanceLabel } from '../view-models/provenance.js';
 
 function checkSystemReducedMotion(): boolean {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -453,16 +454,13 @@ export class DefaultActionStateStore implements ActionStateStore {
       }
     }
 
-    // Gather confirmed facts from memory
+    // Gather confirmed facts using the central provenance classifier (amendment R1)
     const confirmedFactKeys: string[] = [];
     if (ctx?.memory) {
       for (const f of ctx.memory) {
-        if (f.status === 'confirmed') confirmedFactKeys.push(f.key);
-      }
-    }
-    if (ctx?.plan?.why?.memoryFactsUsed) {
-      for (const f of ctx.plan.why.memoryFactsUsed) {
-        confirmedFactKeys.push(f.key);
+        if (classifyFactSource(f, ctx.userConfirmedKeys) === 'user_confirmed') {
+          confirmedFactKeys.push(f.key);
+        }
       }
     }
 
@@ -574,8 +572,8 @@ export class DefaultActionStateStore implements ActionStateStore {
         const memoryFactsUsed = activePlan.why?.memoryFactsUsed ?? [];
         if (memoryFactsUsed.length > 0) {
           const notes = memoryFactsUsed.map(f => {
-            const isConfirmed = userConfirmed.has(f.key);
-            const prov = isConfirmed ? 'Confirmed preference' : 'Demo profile · sample preference';
+            const kind = classifyFactSource(f, userConfirmed, ctx?.memory);
+            const prov = kind === 'user_confirmed' ? 'Confirmed preference' : provenanceLabel(kind);
             return `${humanizeMemoryKey(f.key)} (${prov})`;
           });
           explanation = `${baseDerivation} Selected using your ${notes.join(', ')}.`;

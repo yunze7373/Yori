@@ -25,6 +25,7 @@ import { deriveTimelineVM } from './timeline-vm.js';
 import { deriveOptionCardVMs } from './option-card-vm.js';
 import { deriveMapVM } from './map-vm.js';
 import { getLocalIllustration } from './photo-vm.js';
+import { classifyFactSource } from './provenance.js';
 import type {
   HomeCompositionVM,
   CandidateCardVM,
@@ -170,7 +171,9 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           const tasteFact = plan.why?.memoryFactsUsed?.find(
             f => f.key.includes('taste') || f.key.includes('cuisine')
           );
-          const isConfirmed = tasteFact ? (userConfirmedKeys?.has(tasteFact.key) ?? false) : false;
+          const isConfirmed = tasteFact
+            ? classifyFactSource(tasteFact, userConfirmedKeys) === 'user_confirmed'
+            : false;
           const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
           const basis = `Based on taste: ${cuisine} (${provenance})`;
 
