@@ -1,6 +1,6 @@
-# Yori Living Context Demo Guide (Phase 1 PH-001)
+# Yori Living Context Demo Guide (Phase 2 PH-002)
 
-Welcome to Yori, the calm, proactive context-aware assistant. This guide details how to run the application, explore simulated demo scenes, understand review and memory mechanics, and safely configure the optional AI model.
+Welcome to Yori, the calm, proactive context-aware assistant. This guide details how to run the application, explore simulated demo scenes, understand review and memory mechanics, and inspect the optional AI reasoning and cloud memory integrations.
 
 ---
 
@@ -25,16 +25,16 @@ Open **[http://127.0.0.1:5173](http://127.0.0.1:5173)** in your browser (mobile-
 # Run type checks
 npm run typecheck
 
-# Run unit & integration test suites
+# Run unit & integration test suites (231 tests)
 npm test
 
 # Run golden acceptance harness (D1–D6 + AC-EXT-1)
 npm run test:golden
 
-# Run degradation drills (NFR-102/103)
+# Run degradation drills (NFR-102/103 fault-injection invariance)
 npm run test:drills
 
-# Run Playwright E2E verification
+# Run Playwright E2E verification (38 tests)
 npm run test:e2e
 ```
 
@@ -85,6 +85,7 @@ Use the **Demo Scenes** selector at the top-right of the navigation bar to test 
 - **Pending Proposals**: Surfaces unconfirmed proposals with **Confirm** and **Not true** actions.
 - **Rejected Audit Trail**: Declined proposals are kept queryable for transparency and are never re-applied.
 - **Data Controls**: Export your data as JSON or perform a verified two-step storage reset.
+- **XMemo Sync Card**: When `XMEMO_OAUTH_ENABLED=true`, surfaces the "Connect XMemo" section to synchronize confirmed facts.
 
 ---
 
@@ -97,16 +98,14 @@ To protect user privacy and guarantee deterministic testing:
 
 ---
 
-## ⚠️ Status & Known Limitations (PH-001 & PH-002)
+## ⚠️ Status & Known Limitations (PH-002)
 
 As part of the project evolution, Yori operates as a deterministic, local-first foundation with the following known architectural boundaries:
 - **ModelPort Live Status (OWNER_GATE_1)**: `disabled` (status: `disabled`, keySource: `none`). OWNER_GATE_1 unmet, B proceeds fixture-only.
-- **Muse Spark is wording-only (PH-001)**: The model port refines natural language phrasing over supplied facts only; it does not perform unconstrained autonomous reasoning or decision-making. Any time or place token not present in the supplied fact set causes the output to be discarded for the deterministic template.
+- **Muse Spark is wording & ranking only**: The model port refines natural language phrasing over supplied facts and reorders candidates within constrained schemas; it does not perform unconstrained autonomous execution. Any time, place, or citation token not present in the supplied signal set causes the output to be discarded for the deterministic baseline.
 - **XMemo live sync: implemented, disabled pending owner authorization; local memory is the source of truth**: The server-side OAuth 2.0 PKCE and MCP proxy plumbing is implemented behind the `XMEMO_OAUTH_ENABLED` feature flag (disabled by default). Local storage serves as the source of truth; confirmed facts are persisted locally in versioned envelopes. Remote synchronization remains disabled until explicit owner authorization.
 - **Simulated providers**: Calendar, weather, location coordinates, routes, places, and grocery items are simulated mock fixtures with no real third-party service provider integrations.
-- **Proactive prompts not delivered as notifications**: Proactive prompt evaluation and budget enforcement occur during Living Context composition; OS-level system push notifications are not delivered in PH-001.
-
-These unfinished North Star capabilities are deferred to **Phase 2 (PH-002)**, which introduces real model reasoning, end-user authenticated XMemo integration, real provider adapters, and OS push notification channels.
+- **Proactive prompts not delivered as notifications**: Proactive prompt evaluation and budget enforcement occur during Living Context composition; OS-level system push notifications are deferred to native platform wrappers.
 
 ---
 
@@ -131,3 +130,12 @@ If you wish to test live AI phrasing refinement via Meta Muse Spark:
    - Request bodies are capped at **8 KB (HTTP 413)**.
    - Rate limiting is enforced at **30 requests/minute (HTTP 429)**.
    - All model outputs undergo rigorous **fact-checking**: any hallucinated time or place token not present in the supplied fact set is discarded for the deterministic template.
+
+---
+
+## 🔗 Submission Documents
+
+For hackathon judges and evaluators:
+- **[3-Minute Video Script](submission/VIDEO_SCRIPT.md)**: Timed demonstration script walking the North Star loop.
+- **[Project Description](submission/PROJECT_DESCRIPTION.md)**: Problem statement, technical architecture, and privacy model.
+- **[Submission Checklist](submission/SUBMISSION_CHECKLIST.md)**: Owner-gated release checklist.
