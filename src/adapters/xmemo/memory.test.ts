@@ -125,13 +125,11 @@ describe('MemoryPort (XMemo & Local Adapters)', () => {
 
     it('loadFacts maps recalled items to confirmed facts with xmemo provenance on 200', async () => {
       const mockFetch = (async (url: string) => {
-        expect(url).toBe('/api/xmemo/mcp');
+        expect(url).toBe('/api/xmemo/preferences');
         return {
           ok: true,
           status: 200,
           json: async () => ({
-            jsonrpc: '2.0',
-            id: 1,
             result: {
               memories: [
                 {
@@ -209,15 +207,15 @@ describe('MemoryPort (XMemo & Local Adapters)', () => {
       expect(facts).toEqual([]);
     });
 
-    it('writeBack dispatches confirmed fact to MCP remember tool on 200', async () => {
+    it('writeBack dispatches confirmed fact to confirmed-facts route on 200', async () => {
       let capturedBody: any;
       const mockFetch = (async (url: string, init: any) => {
-        expect(url).toBe('/api/xmemo/mcp');
+        expect(url).toBe('/api/xmemo/confirmed-facts');
         capturedBody = JSON.parse(init.body);
         return {
           ok: true,
           status: 200,
-          json: async () => ({ jsonrpc: '2.0', id: 1, result: { success: true } }),
+          json: async () => ({ success: true }),
         };
       }) as any;
 
@@ -229,10 +227,9 @@ describe('MemoryPort (XMemo & Local Adapters)', () => {
 
       const res = await adapter.writeBack(mockConfirmedFact);
       expect(res.success).toBe(true);
-      expect(capturedBody.params.name).toBe('remember');
-      expect(capturedBody.params.arguments.key).toBe('transit_pref');
-      expect(capturedBody.params.arguments.value).toBe('drive');
-      expect(capturedBody.params.arguments.status).toBe('confirmed');
+      expect(capturedBody.key).toBe('transit_pref');
+      expect(capturedBody.value).toBe('drive');
+      expect(capturedBody.status).toBe('confirmed');
     });
 
     it('writeBack returns error object on 401/5xx/network failure without throwing', async () => {

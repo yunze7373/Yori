@@ -9,9 +9,13 @@
  * 3. Zero credentials or tokens in browser storage, bundle, repo, or logs.
  * 4. Minimal scopes: exactly 'memory:read memory:write'.
  * 5. Data surface: MCP-over-HTTP at https://xmemo.dev/mcp with Bearer authorization.
- * 6. Revocation/disconnect path supported (mocked in tests).
- * 7. Security guards: loopback bind, local Origin/Host validation (403), 8KB body cap (413),
- *    application/json requirement (415), and rate limiting (429).
+ * 6. Isolated UNVERIFIED MCP tool mapping: server constructs JSON-RPC internally.
+ *    No arbitrary client MCP passthrough allowed.
+ * 7. Server-enforced confirm-only write-back (INV-107): non-confirmed writes rejected 400.
+ * 8. OAuth callback handling: GET /api/xmemo/callback permits top-level cross-site redirect
+ *    with local host check and one-time cryptographically random state verification.
+ * 9. Security guards on all API routes: loopback bind, local Origin/Host validation (403),
+ *    8KB body cap (413), application/json requirement (415), and rate limiting (429).
  */
 
 import * as crypto from 'node:crypto';
@@ -22,6 +26,25 @@ import {
   RateLimiter,
   loadEnvLocal,
 } from '../model/server-proxy.js';
+
+/**
+ * Isolated UNVERIFIED XMemo MCP Tool Mapping
+ * Governed by XMEMO_AUTH_DECISION.md Section 5 and AC-203-2.
+ *
+ * Subject to owner-authorized live probe verification in Phase 2 live rollout.
+ * Client code never invokes MCP directly; the dev proxy constructs JSON-RPC envelopes.
+ */
+export const UNVERIFIED_XMEMO_MCP_MAPPING = {
+  readTool: 'recall',
+  readQueryArg: 'query',
+  readDefaultQuery: 'preferences',
+  writeTool: 'remember',
+  writeKeyArg: 'key',
+  writeValueArg: 'value',
+  writeStatusArg: 'status',
+  writeTagArg: 'tag',
+  writeTagValue: 'yori:living-context',
+} as const;
 
 export interface XMemoProxyConfig {
   readonly enabled: boolean;
@@ -290,11 +313,11 @@ export class XMemoDevProxy {
   }
 
   /**
-   * Proxies MCP JSON-RPC tool calls to https://xmemo.dev/mcp with Bearer token.
-   * On upstream 401: clears session and triggers fallback response.
+   * Server-built read preferences route.
+   * Constructs JSON-RPC call from isolated UNVERIFIED_XMEMO_MCP_MAPPING.
    */
-  public async proxyMcp(
-    requestBody: unknown,
+  public async readPreferences(
+    query?: string,
     fetchFn: typeof fetch = fetch
   ): Promise<{ status: number; data: unknown }> {
     if (!this.config.enabled) {
@@ -304,6 +327,19 @@ export class XMemoDevProxy {
       return { status: 401, data: { error: 'Not connected to XMemo' } };
     }
 
+    const payload = {
+      jsonrpc: '2.0',
+      id: Date.now(),
+      method: 'tools/call',
+      params: {
+        name: UNVERIFIED_XMEMO_MCP_MAPPING.readTool,
+        arguments: {
+          [UNVERIFIED_XMEMO_MCP_MAPPING.readQueryArg]:
+            query || UNVERIFIED_XMEMO_MCP_MAPPING.readDefaultQuery,
+        },
+      },
+    };
+
     try {
       const resp = await fetchFn(this.config.mcpUrl, {
         method: 'POST',
@@ -311,11 +347,10 @@ export class XMemoDevProxy {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.session.accessToken}`,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(payload),
       });
 
       if (resp.status === 401) {
-        // Upstream token expired/revoked: clear server session immediately
         this.session = {};
         this.logger('[XMemoProxy] Upstream 401: access token expired/revoked; session cleared');
         return {
@@ -340,6 +375,103 @@ export class XMemoDevProxy {
   }
 
   /**
+   * Server-built write confirmed fact route.
+   * Enforces server-side confirm-only validation (INV-107).
+   * Constructs JSON-RPC call from isolated UNVERIFIED_XMEMO_MCP_MAPPING.
+   */
+  public async writeConfirmedFact(
+    fact: unknown,
+    fetchFn: typeof fetch = fetch
+  ): Promise<{ status: number; data: unknown }> {
+    if (!this.config.enabled) {
+      return { status: 403, data: { error: 'XMemo OAuth disabled' } };
+    }
+    if (!this.session.accessToken) {
+      return { status: 401, data: { error: 'Not connected to XMemo' } };
+    }
+
+    // Server-side validation
+    if (!fact || typeof fact !== 'object') {
+      return { status: 400, data: { error: 'Bad Request: fact object required' } };
+    }
+
+    const { key, value, status, provenance } = fact as any;
+
+    // Strict server-side invariant check: INV-107 & AC-106-3
+    if (status !== 'confirmed') {
+      return {
+        status: 400,
+        data: {
+          error: `Server invariant violation (INV-107): only confirmed facts can be written to remote vault. Got status '${status}'.`,
+        },
+      };
+    }
+
+    if (typeof key !== 'string' || !key.trim() || key.length > 100) {
+      return {
+        status: 400,
+        data: { error: 'Bad Request: key must be a non-empty string <= 100 characters' },
+      };
+    }
+
+    if (!provenance || typeof provenance !== 'object') {
+      return {
+        status: 400,
+        data: { error: 'Bad Request: provenance object is required' },
+      };
+    }
+
+    const payload = {
+      jsonrpc: '2.0',
+      id: Date.now(),
+      method: 'tools/call',
+      params: {
+        name: UNVERIFIED_XMEMO_MCP_MAPPING.writeTool,
+        arguments: {
+          [UNVERIFIED_XMEMO_MCP_MAPPING.writeKeyArg]: key,
+          [UNVERIFIED_XMEMO_MCP_MAPPING.writeValueArg]:
+            typeof value === 'string' ? value : JSON.stringify(value),
+          [UNVERIFIED_XMEMO_MCP_MAPPING.writeStatusArg]: 'confirmed',
+          [UNVERIFIED_XMEMO_MCP_MAPPING.writeTagArg]: UNVERIFIED_XMEMO_MCP_MAPPING.writeTagValue,
+          provenance,
+        },
+      },
+    };
+
+    try {
+      const resp = await fetchFn(this.config.mcpUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.session.accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (resp.status === 401) {
+        this.session = {};
+        this.logger('[XMemoProxy] Upstream 401: access token expired/revoked; session cleared');
+        return {
+          status: 401,
+          data: { error: 'XMemo authorization expired or revoked', disconnected: true },
+        };
+      }
+
+      if (!resp.ok) {
+        return {
+          status: resp.status >= 500 ? 502 : resp.status,
+          data: { error: `Upstream XMemo MCP returned error status ${resp.status}` },
+        };
+      }
+
+      return { status: 200, data: { success: true } };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { status: 502, data: { error: `Failed to connect to XMemo MCP: ${msg}` } };
+    }
+  }
+
+  /**
    * Handles incoming HTTP requests for XMemo proxy routes with strict security guards.
    */
   public async handleHttpRequest(req: any, res: any): Promise<boolean> {
@@ -351,12 +483,13 @@ export class XMemoDevProxy {
       urlPath !== '/api/xmemo/auth-url' &&
       urlPath !== '/api/xmemo/callback' &&
       urlPath !== '/api/xmemo/disconnect' &&
-      urlPath !== '/api/xmemo/mcp'
+      urlPath !== '/api/xmemo/preferences' &&
+      urlPath !== '/api/xmemo/confirmed-facts'
     ) {
       return false;
     }
 
-    // 1. Host header validation
+    // 1. Host header validation: local loopback host required on ALL routes
     const hostHeader = (req.headers?.['host'] || req.headers?.[':authority']) as string | undefined;
     if (!isLocalHost(hostHeader)) {
       res.statusCode = 403;
@@ -365,7 +498,54 @@ export class XMemoDevProxy {
       return true;
     }
 
-    // 2. Origin validation
+    // 2. Device testing mode isolation
+    if (process.env.DEV_DEVICE_TESTING === 'true') {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Forbidden: XMemo proxy disabled in device-testing mode' }));
+      return true;
+    }
+
+    // Special Route: GET /api/xmemo/callback (Browser OAuth redirect navigation from XMemo auth server)
+    // For this top-level GET redirect, loopback Host check and one-time state token guard apply,
+    // while skipping cross-site / external Referer guards that would otherwise reject top-level browser redirects.
+    if (urlPath === '/api/xmemo/callback' && req.method === 'GET') {
+      if (!this.config.enabled) {
+        res.statusCode = 403;
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end('<h1>403 Forbidden: XMemo OAuth disabled</h1>');
+        return true;
+      }
+
+      const queryIdx = rawUrl.indexOf('?');
+      const queryParams = new URLSearchParams(queryIdx >= 0 ? rawUrl.slice(queryIdx + 1) : '');
+      const code = queryParams.get('code');
+      const state = queryParams.get('state');
+
+      if (!code || !state) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end('<h1>400 Bad Request: Missing code or state</h1>');
+        return true;
+      }
+
+      const result = await this.exchangeCode(code, state);
+      if (!result.success) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end(`<h1>Authentication Failed</h1><p>${result.error}</p>`);
+        return true;
+      }
+
+      // Redirect browser back to living context app with success query
+      res.statusCode = 302;
+      res.setHeader('Location', '/?tab=me&xmemo=connected');
+      res.end();
+      return true;
+    }
+
+    // Full cross-site and origin security guards for all API operational routes:
+    // 3. Origin validation
     const originHeader = req.headers?.['origin'] as string | undefined;
     if (originHeader && !isLocalOrigin(originHeader)) {
       res.statusCode = 403;
@@ -374,7 +554,7 @@ export class XMemoDevProxy {
       return true;
     }
 
-    // 3. Sec-Fetch-Site validation
+    // 4. Sec-Fetch-Site validation
     const secFetchSite = req.headers?.['sec-fetch-site'] as string | undefined;
     if (secFetchSite === 'cross-site') {
       res.statusCode = 403;
@@ -383,20 +563,12 @@ export class XMemoDevProxy {
       return true;
     }
 
-    // 4. Referer validation
+    // 5. Referer validation
     const referer = req.headers?.['referer'] as string | undefined;
     if (referer && !isLocalReferer(referer)) {
       res.statusCode = 403;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ error: 'Forbidden: non-local referer is blocked' }));
-      return true;
-    }
-
-    // 5. Device testing mode isolation
-    if (process.env.DEV_DEVICE_TESTING === 'true') {
-      res.statusCode = 403;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ error: 'Forbidden: XMemo proxy disabled in device-testing mode' }));
       return true;
     }
 
@@ -410,11 +582,12 @@ export class XMemoDevProxy {
       }
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
       res.end(JSON.stringify(this.getStatus()));
       return true;
     }
 
-    // If disabled, all operational endpoints return 403 Forbidden
+    // If disabled, all other operational endpoints return 403 Forbidden
     if (!this.config.enabled) {
       res.statusCode = 403;
       res.setHeader('Content-Type', 'application/json');
@@ -467,36 +640,7 @@ export class XMemoDevProxy {
       return true;
     }
 
-    // Route: GET /api/xmemo/callback (Browser redirect flow)
-    if (urlPath === '/api/xmemo/callback' && req.method === 'GET') {
-      const queryIdx = rawUrl.indexOf('?');
-      const queryParams = new URLSearchParams(queryIdx >= 0 ? rawUrl.slice(queryIdx + 1) : '');
-      const code = queryParams.get('code');
-      const state = queryParams.get('state');
-
-      if (!code || !state) {
-        res.statusCode = 400;
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end('<h1>400 Bad Request: Missing code or state</h1>');
-        return true;
-      }
-
-      const result = await this.exchangeCode(code, state);
-      if (!result.success) {
-        res.statusCode = 400;
-        res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        res.end(`<h1>Authentication Failed</h1><p>${result.error}</p>`);
-        return true;
-      }
-
-      // Redirect browser back to living context app with success query
-      res.statusCode = 302;
-      res.setHeader('Location', '/?tab=me&xmemo=connected');
-      res.end();
-      return true;
-    }
-
-    // For POST /api/xmemo/callback and POST /api/xmemo/mcp: Read JSON payload with 8KB cap
+    // For POST endpoints: Validate application/json Content-Type & Read request body with 8KB cap
     const contentType = ((req.headers?.['content-type'] as string) || '').toLowerCase();
     if (!contentType.startsWith('application/json')) {
       res.statusCode = 415;
@@ -538,8 +682,8 @@ export class XMemoDevProxy {
       return true;
     }
 
-    // Route: POST /api/xmemo/mcp
-    if (urlPath === '/api/xmemo/mcp') {
+    // Route: POST /api/xmemo/preferences (Narrow server-built read route)
+    if (urlPath === '/api/xmemo/preferences') {
       if (req.method !== 'POST') {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
@@ -547,10 +691,34 @@ export class XMemoDevProxy {
         return true;
       }
 
-      const proxyResult = await this.proxyMcp(payload);
-      res.statusCode = proxyResult.status;
+      const query = (payload as any)?.query;
+      if (query !== undefined && (typeof query !== 'string' || query.length > 100)) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Bad Request: query must be string <= 100 characters' }));
+        return true;
+      }
+
+      const readResult = await this.readPreferences(query);
+      res.statusCode = readResult.status;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(proxyResult.data));
+      res.end(JSON.stringify(readResult.data));
+      return true;
+    }
+
+    // Route: POST /api/xmemo/confirmed-facts (Narrow server-built write route, confirm-only enforced)
+    if (urlPath === '/api/xmemo/confirmed-facts') {
+      if (req.method !== 'POST') {
+        res.statusCode = 405;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return true;
+      }
+
+      const writeResult = await this.writeConfirmedFact(payload);
+      res.statusCode = writeResult.status;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(writeResult.data));
       return true;
     }
 

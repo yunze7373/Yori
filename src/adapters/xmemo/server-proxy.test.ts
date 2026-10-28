@@ -10,6 +10,7 @@ import {
   generatePkcePair,
   generateState,
   resolveXMemoConfig,
+  UNVERIFIED_XMEMO_MCP_MAPPING,
 } from './server-proxy.js';
 import { RateLimiter } from '../model/server-proxy.js';
 
@@ -96,6 +97,12 @@ describe('PKCE & Config Helpers', () => {
     const config = resolveXMemoConfig(() => {}, { XMEMO_OAUTH_ENABLED: 'true' });
     expect(config.enabled).toBe(true);
   });
+
+  it('exposes isolated UNVERIFIED MCP mapping with expected tool names and args', () => {
+    expect(UNVERIFIED_XMEMO_MCP_MAPPING.readTool).toBe('recall');
+    expect(UNVERIFIED_XMEMO_MCP_MAPPING.writeTool).toBe('remember');
+    expect(UNVERIFIED_XMEMO_MCP_MAPPING.writeTagValue).toBe('yori:living-context');
+  });
 });
 
 describe('XMemoDevProxy: Flag OFF by default', () => {
@@ -124,12 +131,13 @@ describe('XMemoDevProxy: Flag OFF by default', () => {
     expect(json.connected).toBe(false);
   });
 
-  it('operational endpoints return 403 Forbidden when flag is off', async () => {
+  it('operational endpoints return 403 Forbidden and make zero xmemo.dev calls when flag is off', async () => {
     const endpoints = [
       { url: '/api/xmemo/auth-url', method: 'POST' },
       { url: '/api/xmemo/callback', method: 'POST', body: '{}' },
       { url: '/api/xmemo/disconnect', method: 'POST' },
-      { url: '/api/xmemo/mcp', method: 'POST', body: '{}' },
+      { url: '/api/xmemo/preferences', method: 'POST', body: '{}' },
+      { url: '/api/xmemo/confirmed-facts', method: 'POST', body: '{}' },
     ];
 
     for (const ep of endpoints) {
@@ -145,6 +153,18 @@ describe('XMemoDevProxy: Flag OFF by default', () => {
       expect(res.statusCode).toBe(403);
       expect(res.body).toContain('XMemo OAuth disabled');
     }
+  });
+
+  it('arbitrary or legacy /api/xmemo/mcp passthrough is not handled (404/pass to next)', async () => {
+    const req = createMockReq({
+      url: '/api/xmemo/mcp',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/call' }),
+    });
+    const res = createMockRes();
+    const handled = await proxy.handleHttpRequest(req, res);
+    expect(handled).toBe(false);
   });
 });
 
@@ -199,150 +219,341 @@ describe('XMemoDevProxy: Flag ON', () => {
     expect((json as any).code_verifier).toBeUndefined();
   });
 
-  it('POST /api/xmemo/callback rejects invalid or unknown state with 400', async () => {
-    const req = createMockReq({
-      url: '/api/xmemo/callback',
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ code: 'auth-code-123', state: 'unknown-state' }),
+  describe('OAuth Callback & Cross-Site Redirect Order (Finding 2)', () => {
+    it('GET /api/xmemo/callback allows top-level cross-site redirect from xmemo.dev with valid state', async () => {
+      const { state } = proxy.createAuthUrl();
+
+      // Mock upstream token endpoint
+      let tokenExchangeCalled = false;
+      const mockFetch = (async (url: string) => {
+        if (url === 'https://xmemo.dev/oauth/token') {
+          tokenExchangeCalled = true;
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              access_token: 'redirect-acquired-token',
+              token_type: 'Bearer',
+              expires_in: 3600,
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      // Simulate top-level browser redirect navigation from xmemo.dev
+      const req = createMockReq({
+        url: `/api/xmemo/callback?code=mock-code&state=${state}`,
+        method: 'GET',
+        headers: {
+          host: '127.0.0.1:5173',
+          'sec-fetch-site': 'cross-site', // from https://xmemo.dev
+          referer: 'https://xmemo.dev/oauth/authorize',
+        },
+      });
+      const res = createMockRes();
+
+      // Inject mock fetch for exchangeCode
+      proxy['exchangeCode'] = (code: string, st: string) =>
+        XMemoDevProxy.prototype.exchangeCode.call(proxy, code, st, mockFetch);
+
+      const handled = await proxy.handleHttpRequest(req, res);
+      expect(handled).toBe(true);
+      expect(res.statusCode).toBe(302);
+      expect(res.headers['Location']).toBe('/?tab=me&xmemo=connected');
+      expect(tokenExchangeCalled).toBe(true);
+      expect(proxy.isConnected()).toBe(true);
     });
-    const res = createMockRes();
 
-    await proxy.handleHttpRequest(req, res);
-    expect(res.statusCode).toBe(400);
-    expect(res.body).toContain('Invalid or expired state');
-  });
+    it('GET /api/xmemo/callback rejects replayed or unknown state with 400', async () => {
+      const req = createMockReq({
+        url: '/api/xmemo/callback?code=mock-code&state=unknown-replayed-state',
+        method: 'GET',
+        headers: {
+          host: '127.0.0.1:5173',
+          'sec-fetch-site': 'cross-site',
+          referer: 'https://xmemo.dev/',
+        },
+      });
+      const res = createMockRes();
 
-  it('POST /api/xmemo/callback handles successful token exchange and stores token in server memory', async () => {
-    const { state } = proxy.createAuthUrl();
-
-    // Mock upstream token exchange endpoint
-    let capturedBody = '';
-    const mockFetch = (async (url: string, init: any) => {
-      expect(url).toBe('https://xmemo.dev/oauth/token');
-      capturedBody = init.body;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          access_token: 'secret-token-xyz-123',
-          token_type: 'Bearer',
-          expires_in: 3600,
-          scope: 'memory:read memory:write',
-        }),
-      };
-    }) as any;
-
-    const exchangeResult = await proxy.exchangeCode('valid-auth-code', state, mockFetch);
-    expect(exchangeResult.success).toBe(true);
-    expect(proxy.isConnected()).toBe(true);
-    expect(proxy.getStatus().connected).toBe(true);
-    expect(capturedBody).toContain('code=valid-auth-code');
-    expect(capturedBody).toContain('grant_type=authorization_code');
-    expect(capturedBody).toContain('code_verifier=');
-  });
-
-  it('POST /api/xmemo/mcp returns 401 when disconnected', async () => {
-    const req = createMockReq({
-      url: '/api/xmemo/mcp',
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call' }),
+      const handled = await proxy.handleHttpRequest(req, res);
+      expect(handled).toBe(true);
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toContain('Authentication Failed');
     });
-    const res = createMockRes();
 
-    await proxy.handleHttpRequest(req, res);
-    expect(res.statusCode).toBe(401);
-    expect(res.body).toContain('Not connected to XMemo');
+    it('POST /api/xmemo/callback rejects invalid or unknown state with 400', async () => {
+      const req = createMockReq({
+        url: '/api/xmemo/callback',
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ code: 'auth-code-123', state: 'unknown-state' }),
+      });
+      const res = createMockRes();
+
+      await proxy.handleHttpRequest(req, res);
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toContain('Invalid or expired state');
+    });
+
+    it('POST /api/xmemo/callback handles successful token exchange and stores token in server memory', async () => {
+      const { state } = proxy.createAuthUrl();
+
+      // Mock upstream token exchange endpoint
+      let capturedBody = '';
+      const mockFetch = (async (url: string, init: any) => {
+        expect(url).toBe('https://xmemo.dev/oauth/token');
+        capturedBody = init.body;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: 'secret-token-xyz-123',
+            token_type: 'Bearer',
+            expires_in: 3600,
+            scope: 'memory:read memory:write',
+          }),
+        };
+      }) as any;
+
+      const exchangeResult = await proxy.exchangeCode('valid-auth-code', state, mockFetch);
+      expect(exchangeResult.success).toBe(true);
+      expect(proxy.isConnected()).toBe(true);
+      expect(proxy.getStatus().connected).toBe(true);
+      expect(capturedBody).toContain('code=valid-auth-code');
+      expect(capturedBody).toContain('grant_type=authorization_code');
+      expect(capturedBody).toContain('code_verifier=');
+    });
   });
 
-  it('POST /api/xmemo/mcp proxies request to upstream with Bearer token on 200', async () => {
-    const { state } = proxy.createAuthUrl();
-    await proxy.exchangeCode(
-      'code-1',
-      state,
-      (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ access_token: 'valid-bearer-token' }),
-      })) as any
-    );
+  describe('Narrow Read Preferences Route (Finding 1)', () => {
+    it('POST /api/xmemo/preferences returns 401 when disconnected', async () => {
+      const req = createMockReq({
+        url: '/api/xmemo/preferences',
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: 'preferences' }),
+      });
+      const res = createMockRes();
 
-    let capturedHeaders: Record<string, string> = {};
-    const mockMcpFetch = (async (url: string, init: any) => {
-      expect(url).toBe('https://xmemo.dev/mcp');
-      capturedHeaders = init.headers;
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          jsonrpc: '2.0',
-          id: 1,
-          result: {
-            content: [{ type: 'text', text: 'confirmed' }],
-          },
-        }),
-      };
-    }) as any;
+      await proxy.handleHttpRequest(req, res);
+      expect(res.statusCode).toBe(401);
+      expect(res.body).toContain('Not connected to XMemo');
+    });
 
-    const mcpResult = await proxy.proxyMcp(
-      { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'recall' } },
-      mockMcpFetch
-    );
+    it('POST /api/xmemo/preferences builds JSON-RPC from UNVERIFIED mapping and passes Bearer token', async () => {
+      const { state } = proxy.createAuthUrl();
+      await proxy.exchangeCode(
+        'code-1',
+        state,
+        (async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ access_token: 'valid-bearer-token' }),
+        })) as any
+      );
 
-    expect(mcpResult.status).toBe(200);
-    expect(capturedHeaders['Authorization']).toBe('Bearer valid-bearer-token');
-    expect((mcpResult.data as any).result.content[0].text).toBe('confirmed');
+      let capturedHeaders: Record<string, string> = {};
+      let capturedPayload: any;
+      const mockMcpFetch = (async (url: string, init: any) => {
+        expect(url).toBe('https://xmemo.dev/mcp');
+        capturedHeaders = init.headers;
+        capturedPayload = JSON.parse(init.body);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              memories: [{ key: 'transit_habit', value: 'drive' }],
+            },
+          }),
+        };
+      }) as any;
+
+      const readResult = await proxy.readPreferences('custom-pref', mockMcpFetch);
+      expect(readResult.status).toBe(200);
+      expect(capturedHeaders['Authorization']).toBe('Bearer valid-bearer-token');
+      expect(capturedPayload.params.name).toBe(UNVERIFIED_XMEMO_MCP_MAPPING.readTool);
+      expect(capturedPayload.params.arguments[UNVERIFIED_XMEMO_MCP_MAPPING.readQueryArg]).toBe(
+        'custom-pref'
+      );
+    });
+
+    it('POST /api/xmemo/preferences rejects invalid query types with 400', async () => {
+      const req = createMockReq({
+        url: '/api/xmemo/preferences',
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: 'a'.repeat(150) }), // > 100 chars
+      });
+      const res = createMockRes();
+
+      await proxy.handleHttpRequest(req, res);
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toContain('query must be string <= 100');
+    });
   });
 
-  it('POST /api/xmemo/mcp on upstream 401 clears server session and returns 401 fallback', async () => {
-    const { state } = proxy.createAuthUrl();
-    await proxy.exchangeCode(
-      'code-1',
-      state,
-      (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ access_token: 'expired-token' }),
-      })) as any
-    );
-    expect(proxy.isConnected()).toBe(true);
+  describe('Narrow Write Confirmed Fact Route & Server-Side Confirm-Only (Finding 1)', () => {
+    beforeEach(async () => {
+      const { state } = proxy.createAuthUrl();
+      await proxy.exchangeCode(
+        'code-1',
+        state,
+        (async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ access_token: 'valid-bearer-token' }),
+        })) as any
+      );
+    });
 
-    const mockMcp401 = (async () => ({
-      ok: false,
-      status: 401,
-      json: async () => ({ error: 'invalid_token' }),
-    })) as any;
+    it('rejects pending fact write with 400 and NEVER calls upstream fetch (Server-Side INV-107)', async () => {
+      let upstreamCalled = false;
+      const mockFetch = (async () => {
+        upstreamCalled = true;
+        return { ok: true, status: 200 };
+      }) as any;
 
-    const mcpResult = await proxy.proxyMcp({ method: 'tools/call' }, mockMcp401);
-    expect(mcpResult.status).toBe(401);
-    expect((mcpResult.data as any).disconnected).toBe(true);
-    // Verified: server session cleared
-    expect(proxy.isConnected()).toBe(false);
-    expect(proxy.getStatus().connected).toBe(false);
-  });
+      const writeResult = await proxy.writeConfirmedFact(
+        {
+          key: 'transit_pref',
+          value: 'drive',
+          status: 'pending', // FORBIDDEN!
+          provenance: { source: 'user_feedback', recordedAt: '2026-10-28T10:00:00Z' },
+        },
+        mockFetch
+      );
 
-  it('POST /api/xmemo/mcp on upstream 5xx returns 502 Bad Gateway without crashing', async () => {
-    const { state } = proxy.createAuthUrl();
-    await proxy.exchangeCode(
-      'code-1',
-      state,
-      (async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ access_token: 'valid-token' }),
-      })) as any
-    );
+      expect(writeResult.status).toBe(400);
+      expect((writeResult.data as any).error).toContain('INV-107');
+      expect(upstreamCalled).toBe(false);
+    });
 
-    const mockMcp500 = (async () => ({
-      ok: false,
-      status: 500,
-      json: async () => ({ error: 'Internal Server Error' }),
-    })) as any;
+    it('rejects rejected fact write with 400 and NEVER calls upstream fetch (Server-Side INV-107)', async () => {
+      let upstreamCalled = false;
+      const mockFetch = (async () => {
+        upstreamCalled = true;
+        return { ok: true, status: 200 };
+      }) as any;
 
-    const mcpResult = await proxy.proxyMcp({ method: 'tools/call' }, mockMcp500);
-    expect(mcpResult.status).toBe(502);
-    expect((mcpResult.data as any).error).toContain('error status 500');
+      const writeResult = await proxy.writeConfirmedFact(
+        {
+          key: 'transit_pref',
+          value: 'drive',
+          status: 'rejected', // FORBIDDEN!
+          provenance: { source: 'user_feedback', recordedAt: '2026-10-28T10:00:00Z' },
+        },
+        mockFetch
+      );
+
+      expect(writeResult.status).toBe(400);
+      expect((writeResult.data as any).error).toContain('INV-107');
+      expect(upstreamCalled).toBe(false);
+    });
+
+    it('rejects fact with missing or oversize key with 400 and NEVER calls upstream fetch', async () => {
+      let upstreamCalled = false;
+      const mockFetch = (async () => {
+        upstreamCalled = true;
+        return { ok: true, status: 200 };
+      }) as any;
+
+      const writeResult = await proxy.writeConfirmedFact(
+        {
+          key: 'x'.repeat(150), // oversize
+          value: 'drive',
+          status: 'confirmed',
+          provenance: { source: 'user_confirmed', recordedAt: '2026-10-28T10:00:00Z' },
+        },
+        mockFetch
+      );
+
+      expect(writeResult.status).toBe(400);
+      expect(upstreamCalled).toBe(false);
+    });
+
+    it('accepts confirmed fact, builds scoped JSON-RPC payload, and dispatches to upstream', async () => {
+      let capturedPayload: any;
+      const mockFetch = (async (url: string, init: any) => {
+        expect(url).toBe('https://xmemo.dev/mcp');
+        capturedPayload = JSON.parse(init.body);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ jsonrpc: '2.0', id: 1, result: { success: true } }),
+        };
+      }) as any;
+
+      const writeResult = await proxy.writeConfirmedFact(
+        {
+          key: 'rain_habit',
+          value: 'drive',
+          status: 'confirmed',
+          provenance: { source: 'user_confirmed', recordedAt: '2026-10-28T10:00:00Z' },
+        },
+        mockFetch
+      );
+
+      expect(writeResult.status).toBe(200);
+      expect((writeResult.data as any).success).toBe(true);
+      expect(capturedPayload.params.name).toBe(UNVERIFIED_XMEMO_MCP_MAPPING.writeTool);
+      expect(capturedPayload.params.arguments[UNVERIFIED_XMEMO_MCP_MAPPING.writeKeyArg]).toBe(
+        'rain_habit'
+      );
+      expect(capturedPayload.params.arguments[UNVERIFIED_XMEMO_MCP_MAPPING.writeStatusArg]).toBe(
+        'confirmed'
+      );
+      expect(capturedPayload.params.arguments[UNVERIFIED_XMEMO_MCP_MAPPING.writeTagArg]).toBe(
+        UNVERIFIED_XMEMO_MCP_MAPPING.writeTagValue
+      );
+    });
+
+    it('upstream 401 on write clears server session and returns 401 fallback', async () => {
+      const mock401 = (async () => ({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: 'invalid_token' }),
+      })) as any;
+
+      const writeResult = await proxy.writeConfirmedFact(
+        {
+          key: 'rain_habit',
+          value: 'drive',
+          status: 'confirmed',
+          provenance: { source: 'user_confirmed', recordedAt: '2026-10-28T10:00:00Z' },
+        },
+        mock401
+      );
+
+      expect(writeResult.status).toBe(401);
+      expect((writeResult.data as any).disconnected).toBe(true);
+      expect(proxy.isConnected()).toBe(false);
+    });
+
+    it('upstream 5xx on write returns 502 Bad Gateway without crashing', async () => {
+      const mock500 = (async () => ({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'Internal Server Error' }),
+      })) as any;
+
+      const writeResult = await proxy.writeConfirmedFact(
+        {
+          key: 'rain_habit',
+          value: 'drive',
+          status: 'confirmed',
+          provenance: { source: 'user_confirmed', recordedAt: '2026-10-28T10:00:00Z' },
+        },
+        mock500
+      );
+
+      expect(writeResult.status).toBe(502);
+      expect((writeResult.data as any).error).toContain('error status 500');
+    });
   });
 
   it('POST /api/xmemo/disconnect calls upstream revoke endpoint and clears session', async () => {
@@ -387,7 +598,7 @@ describe('XMemoDevProxy: Flag ON', () => {
       expect(res.body).toContain('non-local host access is blocked');
     });
 
-    it('rejects cross-origin Origin header with 403', async () => {
+    it('rejects cross-origin Origin header with 403 on API routes', async () => {
       const req = createMockReq({
         url: '/api/xmemo/status',
         headers: { origin: 'https://attacker.example.com' },
@@ -399,7 +610,7 @@ describe('XMemoDevProxy: Flag ON', () => {
       expect(res.body).toContain('cross-origin access is blocked');
     });
 
-    it('rejects Sec-Fetch-Site: cross-site with 403', async () => {
+    it('rejects Sec-Fetch-Site: cross-site with 403 on API routes', async () => {
       const req = createMockReq({
         url: '/api/xmemo/status',
         headers: { 'sec-fetch-site': 'cross-site' },
@@ -411,7 +622,7 @@ describe('XMemoDevProxy: Flag ON', () => {
       expect(res.body).toContain('cross-site requests are blocked');
     });
 
-    it('rejects non-local Referer with 403', async () => {
+    it('rejects non-local Referer with 403 on API routes', async () => {
       const req = createMockReq({
         url: '/api/xmemo/status',
         headers: { referer: 'https://malicious.org/exploit' },
@@ -438,9 +649,9 @@ describe('XMemoDevProxy: Flag ON', () => {
     });
 
     it('rejects payload exceeding 8KB cap with 413', async () => {
-      const hugeBody = JSON.stringify({ data: 'x'.repeat(10000) });
+      const hugeBody = JSON.stringify({ key: 'x'.repeat(10000) });
       const req = createMockReq({
-        url: '/api/xmemo/mcp',
+        url: '/api/xmemo/confirmed-facts',
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: hugeBody,

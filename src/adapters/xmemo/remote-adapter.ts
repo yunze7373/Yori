@@ -75,19 +75,11 @@ export class XMemoRemoteAdapter implements MemoryPort {
         headers['Authorization'] = `Bearer ${this.appAuthToken}`;
       }
 
-      const response = await this.fetchFn(`${this.proxyEndpoint}/mcp`, {
+      const response = await this.fetchFn(`${this.proxyEndpoint}/preferences`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: Date.now(),
-          method: 'tools/call',
-          params: {
-            name: 'recall',
-            arguments: {
-              query: 'preferences',
-            },
-          },
+          query: 'preferences',
         }),
       });
 
@@ -102,11 +94,14 @@ export class XMemoRemoteAdapter implements MemoryPort {
           items?: Array<Record<string, any>>;
           content?: Array<{ type?: string; text?: string }>;
         };
+        items?: Array<Record<string, any>>;
       };
 
       const items: Array<Record<string, any>> = [];
 
-      if (Array.isArray(json?.result?.memories)) {
+      if (Array.isArray(json?.items)) {
+        items.push(...json.items);
+      } else if (Array.isArray(json?.result?.memories)) {
         items.push(...json.result.memories);
       } else if (Array.isArray(json?.result?.items)) {
         items.push(...json.result.items);
@@ -184,22 +179,14 @@ export class XMemoRemoteAdapter implements MemoryPort {
         headers['Authorization'] = `Bearer ${this.appAuthToken}`;
       }
 
-      const response = await this.fetchFn(`${this.proxyEndpoint}/mcp`, {
+      const response = await this.fetchFn(`${this.proxyEndpoint}/confirmed-facts`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: Date.now(),
-          method: 'tools/call',
-          params: {
-            name: 'remember',
-            arguments: {
-              key: fact.key,
-              value: fact.value,
-              status: fact.status,
-              provenance: fact.provenance,
-            },
-          },
+          key: fact.key,
+          value: fact.value,
+          status: fact.status,
+          provenance: fact.provenance,
         }),
       });
 
