@@ -167,7 +167,7 @@ export function deriveMapVM(
       const weatherSignal = plan.why?.evidenceSignals?.find(s => s.kind === 'weather');
       const issuedTime = weatherSignal?.issuedAt ? formatTime(weatherSignal.issuedAt, plan.timezone) : undefined;
       weatherCallout = {
-        x: 160,
+        x: 135,
         y: 40,
         text: 'Rain forecast · simulated',
         subtext: issuedTime ? `Issued ${issuedTime}` : 'Travel window',

@@ -40,6 +40,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
         colorAccent: style.getPropertyValue('--color-accent').trim(),
         colorMapBg: style.getPropertyValue('--color-map-bg').trim(),
         colorWeatherBg: style.getPropertyValue('--color-weather-banner-bg').trim(),
+        colorChipBg: style.getPropertyValue('--color-chip-bg').trim(),
         fontDisplay: style.getPropertyValue('--font-display').trim(),
         textDisplay: style.getPropertyValue('--text-display').trim(),
         textTitle: style.getPropertyValue('--text-title').trim(),
@@ -67,6 +68,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     expect(rootTokens.colorAccent.toUpperCase()).toBe('#2F6F64');
     expect(rootTokens.colorMapBg.toUpperCase()).toBe('#E9F1E8');
     expect(rootTokens.colorWeatherBg.toUpperCase()).toBe('#E3EFFD');
+    expect(rootTokens.colorChipBg.toUpperCase()).toBe('#EDF7F0');
     expect(rootTokens.fontDisplay.toLowerCase()).toContain('newsreader');
     expect(rootTokens.textDisplay).toBe('1.875rem');
     expect(rootTokens.textTitle).toBe('1.25rem');
@@ -439,6 +441,83 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     // Verify text is completely inside rect horizontally with positive margins
     expect(textBox!.x).toBeGreaterThanOrEqual(rectBox!.x);
     expect(textBox!.x + textBox!.width).toBeLessThanOrEqual(rectBox!.x + rectBox!.width);
+  });
+
+  test('V3 390px Mobile Hero: single-line ask-bar placeholder, header chip, and section heading with ask-bar height <= 56px', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+    await page.selectOption('#scene-select', 'rain');
+    await page.waitForTimeout(300);
+
+    // 1. Ask bar height <= 56px
+    const askBar = page.locator('#ask-bar');
+    await expect(askBar).toBeVisible();
+    const askBarBox = await askBar.boundingBox();
+    expect(askBarBox).not.toBeNull();
+    expect(askBarBox!.height).toBeLessThanOrEqual(56);
+
+    // 2. Ask bar placeholder box single line (height <= 26px)
+    const askBarText = page.locator('#ask-bar .ask-bar-text');
+    await expect(askBarText).toBeVisible();
+    const askBarTextBox = await askBarText.boundingBox();
+    expect(askBarTextBox).not.toBeNull();
+    expect(askBarTextBox!.height).toBeLessThanOrEqual(26);
+
+    // 3. Card-header chip ("Schematic · simulated") single line (height <= 28px)
+    const headerChip = page.locator('.map-header .card-badge').first();
+    await expect(headerChip).toBeVisible();
+    const chipBox = await headerChip.boundingBox();
+    expect(chipBox).not.toBeNull();
+    expect(chipBox!.height).toBeLessThanOrEqual(28);
+
+    // 4. Section heading ("SPATIAL CONTEXT MAP") single line (height <= 26px)
+    const sectionHeading = page.locator('.map-header .section-label').first();
+    await expect(sectionHeading).toBeVisible();
+    const headingBox = await sectionHeading.boundingBox();
+    expect(headingBox).not.toBeNull();
+    expect(headingBox!.height).toBeLessThanOrEqual(26);
+  });
+
+  test('V3 Map Callout vs Node Label Collision: callout rect and node labels do not intersect at 390x844 and 1280x800 in Rain and Clear scenes', async ({
+    page,
+  }) => {
+    for (const vp of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {
+      await page.setViewportSize(vp);
+      for (const scene of ['rain', 'clear']) {
+        await page.goto('/?ui=v2');
+        await page.waitForSelector('.app-layout');
+        await page.selectOption('#scene-select', scene);
+        await page.waitForTimeout(200);
+
+        const calloutRects = page.locator('.v2-map-weather-callout rect, .v2-map-canvas svg g:has(text) > rect');
+        const calloutCount = await calloutRects.count();
+        if (calloutCount > 0) {
+          const cRect = await calloutRects.first().boundingBox();
+          expect(cRect).not.toBeNull();
+
+          const markerLabels = page.locator('.v2-map-marker text');
+          const labelCount = await markerLabels.count();
+          for (let i = 0; i < labelCount; i++) {
+            const lBox = await markerLabels.nth(i).boundingBox();
+            if (lBox && cRect) {
+              // Check NO intersection
+              const intersects =
+                cRect.x < lBox.x + lBox.width &&
+                cRect.x + cRect.width > lBox.x &&
+                cRect.y < lBox.y + lBox.height &&
+                cRect.y + cRect.height > lBox.y;
+              expect(
+                intersects,
+                `Map callout rect [${cRect.x}, ${cRect.x + cRect.width}] intersects marker label [${lBox.x}, ${lBox.x + lBox.width}] at ${vp.width}x${vp.height} (${scene} scene)`
+              ).toBe(false);
+            }
+          }
+        }
+      }
+    }
   });
 
   test('V3 Truthful Engine Status: conversation displays truthful "Offline fallback · deterministic" and "Scripted model fixture · not a live model call"', async ({

@@ -56,12 +56,12 @@ function renderMapSvg(map: MapVM): string {
         ${
           map.weatherCallout
             ? `
-          <g transform="translate(${map.weatherCallout.x - 55}, ${map.weatherCallout.y - 18})">
-            <rect width="110" height="34" rx="8" fill="#1C382F" opacity="0.9"/>
-            <text x="55" y="14" fill="#FFFFFF" font-size="10" font-weight="700" text-anchor="middle" font-family="sans-serif">
+          <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 66}, ${map.weatherCallout.y - 17})">
+            <rect width="132" height="34" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
+            <text x="66" y="14" fill="#FFFFFF" font-size="9" font-weight="700" text-anchor="middle" font-family="var(--font-sans)">
               ${escapeHtml(map.weatherCallout.text)}
             </text>
-            <text x="55" y="27" fill="#E2EAE5" font-size="8" text-anchor="middle" font-family="sans-serif">
+            <text x="66" y="26" fill="#E2EAE5" font-size="8" text-anchor="middle" font-family="var(--font-sans)">
               ${escapeHtml(map.weatherCallout.subtext || '')}
             </text>
           </g>

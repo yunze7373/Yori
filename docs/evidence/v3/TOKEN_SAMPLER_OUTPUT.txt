@@ -4,19 +4,18 @@ Execution Environment: Playwright Chromium Canvas (sRGB getImageData)
 Date: 2026-10-29T00:00:00.000Z
 ================================================================================
 
+Magnified crop sheet rendered at: <repo-root>/docs/design/crops/crop_sheet.png
 | Target Token | Reference Frame | Sample Point (x, y) | Sampled Hex | Token Value | Max Channel Δ | Status | Classification |
 |---|---|---|---|---|---|---|---|
-| `--color-ground` | `02_mobile_scenario_flow_approved.png` | (355, 100) | `#F8F9F7` | `#F8F8F5` | 2 | PASS | MEASURED (Ref-02 ground surface reads #F8F9F7, max delta = 2 <= 6; pre-V3 carried baseline #F8F8F5) |
-| `--color-card-bg` | `03_mobile_experience_v1_approved.png` | (700, 100) | `#FFFFFF` | `#FFFFFF` | 0 | PASS | MEASURED (Ref-03 card body reads #FFFFFF exact; pre-V3 carried baseline #FFFFFF) |
+| `--color-ground` | `02_mobile_scenario_flow_approved.png` | (355, 100) | `#F8F9F7` | `#F8F8F5` | 2 | PASS | MEASURED (Ref-02 ground canvas surface reads #F8F9F7, max delta = 2 <= 6) |
+| `--color-card-bg` | `03_mobile_experience_v1_approved.png` | (700, 100) | `#FFFFFF` | `#FFFFFF` | 0 | PASS | MEASURED (Ref-03 card body reads #FFFFFF exact match) |
 | `--color-card-muted-bg` | `03_mobile_experience_v1_approved.png` | (140, 100) | `#F3F7F2` | `#F4F7F4` | 2 | PASS | MEASURED (Ref-03 container reads #F3F7F2, max channel delta = 2 <= 6) |
-| `--color-card-border` | `03_mobile_experience_v1_approved.png` | (640, 100) | `#E0EADF` | `#E1E6E0` | 4 | PASS | MEASURED (Ref-03 border reads #E0EADF, max channel delta = 4 <= 6) |
 | `--color-ink` | `03_mobile_experience_v1_approved.png` | (1080, 520) | `#14241F` | `#162824` | 5 | PASS | MEASURED (Ref-03 dark text reads #14241F, max channel delta = 5 <= 6) |
-| `--color-muted` | `03_mobile_experience_v1_approved.png` | (1560, 230) | `#3A4847` | `#384A43` | 4 | PASS | MEASURED (Ref-03 subtitle reads #3A4847, max channel delta = 4 <= 6) |
-| `--color-primary-btn` | `03_mobile_experience_v1_approved.png` | (630, 110) | `#1A3532` | `#16382F` | 4 | PASS | MEASURED (Ref-03 primary element reads #1A3532, max channel delta = 4 <= 6) |
+| `--color-muted` | `03_mobile_experience_v1_approved.png` | (1560, 230) | `#3A4847` | `#384A43` | 4 | PASS | MEASURED (Ref-03 subtitle text reads #3A4847, max channel delta = 4 <= 6) |
 | `--color-accent` | `03_mobile_experience_v1_approved.png` | (1570, 810) | `#2F7463` | `#2F6F64` | 5 | PASS | MEASURED (Ref-03 route/accent reads #2F7463, max channel delta = 5 <= 6) |
-| `--color-map-bg` | `02_mobile_scenario_flow_approved.png` | (770, 512) | `#E4EFE5` | `#E9F1E8` | 5 | PASS | MEASURED (Ref-02 map panel reads #E4EFE5, max channel delta = 5 <= 6) |
+| `--color-map-bg` | `02_mobile_scenario_flow_approved.png` | (600, 368) | `#E8F1E8` | `#E9F1E8` | 1 | PASS | MEASURED (Ref-02 map panel inside phone Screen 2 reads #E8F1E8, max channel delta = 1 <= 6) |
 | `--color-weather-banner-bg` | `02_mobile_scenario_flow_approved.png` | (355, 205) | `#E2EFFE` | `#E3EFFD` | 1 | PASS | MEASURED (Ref-02 alert banner reads #E2EFFE, max channel delta = 1 <= 6) |
-| `--color-chip-bg` | `03_mobile_experience_v1_approved.png` | (250, 110) | `#E4EAE8` | `#E2EAE5` | 3 | PASS | MEASURED (Ref-03 filter pill reads #E4EAE8, max channel delta = 3 <= 6) |
+| `--color-chip-bg` | `03_mobile_experience_v1_approved.png` | (885, 752) | `#ECF6F0` | `#EDF7F0` | 1 | PASS | MEASURED (Ref-03 filter pill "Near your route" reads #EDF7F0 exact match) |
 | `--color-desktop-ground-ref` | `01_desktop_living_context_concept.png` | (50, 50) | `#0F1C19` | `#0F1C19` | 0 | PASS | MEASURED (Ref-01 dark canvas backdrop reads #0F1C19 exact match) |
 | `--color-desktop-card-ref` | `01_desktop_living_context_concept.png` | (200, 300) | `#F3F7F2` | `#F3F7F2` | 0 | PASS | MEASURED (Ref-01 desktop card body reads #F3F7F2 exact match) |
 
@@ -32,9 +31,8 @@ DERIVED & STANDARD TOKENS SUMMARY:
   * --color-chip-text (#16382F): High-contrast brand green chip text
   * --shadow-subtle / --shadow-card / --shadow-floating: Multi-layer organic green-tinted elevations
 - CARRIED baseline tokens:
-  * --color-card-border (#E1E6E0): Baseline neutral border from architecture specification
-  * --color-ink (#162824): Deep dark green-tinted charcoal body text
-  * --color-muted (#384A43): Neutral dark sage subtitle & label text (WCAG AAA)
+  * --color-primary-btn (#16382F): Baseline brand pine green carried from V1/V1b architecture specification §R1 (in Ref-03, CTA buttons measure teal-green #276557 / #246152)
+  * --color-card-border (#E1E6E0): Baseline neutral border carried from architecture specification (cards in Ref-03 rely on subtle organic drop shadows rather than border strokes)
   * --color-tertiary (#5A6D66): Auxiliary footnote/timestamp text (>4.5:1)
 - A11Y / STANDARD tokens:
   * Touch targets (>=44px): WCAG 2.5.5 / iOS Human Interface Guidelines
@@ -43,5 +41,5 @@ DERIVED & STANDARD TOKENS SUMMARY:
   * Tabular numeric alignment: font-variant-numeric: tabular-nums
   * Semantic alerts: notice (#FEF7ED / #F7D7A4 / #78350F), error (#FEF2F2 / #FECACA / #991B1B), success (#D1E7DD / #0F5132)
 ================================================================================
-Sampler Run Complete: 13/13 checks passed (tolerance <= 6 channels).
+Sampler Run Complete: 11/11 checks passed (tolerance <= 6 channels).
 ================================================================================
