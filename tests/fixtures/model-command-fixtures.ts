@@ -91,7 +91,7 @@ export const FIXTURE_CMD_CHANGE_ROUTE_BUS: ModelCommandDecisionOutput = {
   },
   citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
   citedFactKeys: ['rain_transport_preference'],
-  reasonCodes: ['weather_adjusted', 'matches_confirmed_preference'],
+  reasonCodes: ['weather_adjusted', 'shorter_trip'],
   explanation: 'Switch travel mode to bus.',
 };
 
@@ -110,7 +110,7 @@ export const FIXTURE_CMD_CHANGE_ROUTE_DRIVE: ModelCommandDecisionOutput = {
   },
   citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
   citedFactKeys: ['rain_transport_preference'],
-  reasonCodes: ['shorter_trip', 'matches_confirmed_preference'],
+  reasonCodes: ['shorter_trip', 'time_critical'],
   explanation: 'Switch travel mode to drive.',
 };
 

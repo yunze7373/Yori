@@ -62,6 +62,7 @@ export interface CommandInterpretationContext {
   readonly availableModes?: readonly string[];
   readonly currentPlanIntent?: string;
   readonly availableSignalIds?: readonly string[];
+  readonly knownFactKeys?: readonly string[];
   readonly confirmedFactKeys?: readonly string[];
   readonly validTimes?: readonly string[];
   readonly validPlaces?: readonly string[];

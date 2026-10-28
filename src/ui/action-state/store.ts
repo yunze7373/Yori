@@ -454,11 +454,35 @@ export class DefaultActionStateStore implements ActionStateStore {
       }
     }
 
+    // Gather known facts from memory and plan (any provenance)
+    const knownFactKeysSet = new Set<string>();
+    if (ctx?.memory) {
+      for (const f of ctx.memory) {
+        knownFactKeysSet.add(f.key);
+      }
+    }
+    if (ctx?.plan?.why?.memoryFactsUsed) {
+      for (const f of ctx.plan.why.memoryFactsUsed) {
+        knownFactKeysSet.add(f.key);
+      }
+    }
+    const knownFactKeys = Array.from(knownFactKeysSet);
+
     // Gather confirmed facts using the central provenance classifier (amendment R1)
     const confirmedFactKeys: string[] = [];
     if (ctx?.memory) {
       for (const f of ctx.memory) {
         if (classifyFactSource(f, ctx.userConfirmedKeys) === 'user_confirmed') {
+          confirmedFactKeys.push(f.key);
+        }
+      }
+    }
+    if (ctx?.plan?.why?.memoryFactsUsed) {
+      for (const f of ctx.plan.why.memoryFactsUsed) {
+        if (
+          classifyFactSource(f, ctx.userConfirmedKeys) === 'user_confirmed' &&
+          !confirmedFactKeys.includes(f.key)
+        ) {
           confirmedFactKeys.push(f.key);
         }
       }
@@ -479,6 +503,7 @@ export class DefaultActionStateStore implements ActionStateStore {
       availableModes: availableModes.length > 0 ? availableModes : ['drive', 'bus'],
       currentPlanIntent: ctx?.plan?.intentId,
       availableSignalIds,
+      knownFactKeys,
       confirmedFactKeys,
       validTimes,
       validPlaces,

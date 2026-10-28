@@ -197,20 +197,22 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       }
     }
 
-    // 4. Validate citedFactKeys
+    // 4. Validate citedFactKeys (existence against knownFactKeys, always enforced)
     if (!Array.isArray(obj.citedFactKeys)) {
       return { valid: false, reason: 'schema_invalid', error: "'citedFactKeys' must be an array" };
     }
-    if (context?.confirmedFactKeys && context.confirmedFactKeys.length > 0) {
-      const allowedFactSet = new Set(context.confirmedFactKeys);
-      for (const factKey of obj.citedFactKeys) {
-        if (!allowedFactSet.has(factKey)) {
-          return {
-            valid: false,
-            reason: 'unknown_fact_key',
-            error: `Fact citation '${factKey}' not found in confirmedFactKeys`,
-          };
-        }
+    const knownFactList =
+      context?.knownFactKeys !== undefined
+        ? context.knownFactKeys
+        : (context?.confirmedFactKeys ?? []);
+    const knownFactSet = new Set(knownFactList);
+    for (const factKey of obj.citedFactKeys) {
+      if (!knownFactSet.has(factKey)) {
+        return {
+          valid: false,
+          reason: 'unknown_fact_key',
+          error: `Fact citation '${factKey}' not found in knownFactKeys`,
+        };
       }
     }
 
@@ -225,16 +227,6 @@ export class ModelCommandInterpreter implements CommandInterpreter {
           reason: 'invalid_reason_code',
           error: `Reason code '${String(code)}' is not in VALID_REASON_CODES`,
         };
-      }
-      if (code === 'matches_confirmed_preference') {
-        const hasConfirmed = context?.confirmedFactKeys && context.confirmedFactKeys.length > 0;
-        if (!hasConfirmed) {
-          return {
-            valid: false,
-            reason: 'unconfirmed_fact_used',
-            error: "Reason code 'matches_confirmed_preference' requires confirmed facts in context",
-          };
-        }
       }
     }
 
@@ -267,13 +259,41 @@ export class ModelCommandInterpreter implements CommandInterpreter {
           error: `situationAttribution reasonCode '${String(sa.reasonCode)}' is not valid`,
         };
       }
-      if (sa.reasonCode === 'matches_confirmed_preference') {
-        const hasConfirmed = context?.confirmedFactKeys && context.confirmedFactKeys.length > 0;
-        if (!hasConfirmed) {
+      if (Array.isArray(sa.citedFactKeys)) {
+        for (const factKey of sa.citedFactKeys) {
+          if (!knownFactSet.has(factKey)) {
+            return {
+              valid: false,
+              reason: 'unknown_fact_key',
+              error: `situationAttribution fact citation '${factKey}' not found in knownFactKeys`,
+            };
+          }
+        }
+      }
+    }
+
+    // 6b. Validate confirmed preference discipline:
+    // matches_confirmed_preference (reason code or attribution) must require citedFactKeys
+    // to be non-empty and a subset of confirmedFactKeys.
+    const confirmedFactSet = new Set(context?.confirmedFactKeys ?? []);
+    const hasConfirmedPrefReason = obj.reasonCodes.includes('matches_confirmed_preference');
+    const saReasonCode = (obj.situationAttribution as Record<string, unknown> | undefined)?.reasonCode;
+    const hasConfirmedPrefAttribution = saReasonCode === 'matches_confirmed_preference';
+
+    if (hasConfirmedPrefReason || hasConfirmedPrefAttribution) {
+      if (obj.citedFactKeys.length === 0) {
+        return {
+          valid: false,
+          reason: 'unconfirmed_fact_used',
+          error: "Reason code 'matches_confirmed_preference' requires non-empty citedFactKeys",
+        };
+      }
+      for (const factKey of obj.citedFactKeys) {
+        if (!confirmedFactSet.has(factKey)) {
           return {
             valid: false,
             reason: 'unconfirmed_fact_used',
-            error: "situationAttribution reasonCode 'matches_confirmed_preference' requires confirmed facts in context",
+            error: `Reason code 'matches_confirmed_preference' requires all cited facts to be confirmed; '${factKey}' is unconfirmed`,
           };
         }
       }

@@ -20,6 +20,7 @@ import {
 } from '../../src/ui/conversation/conversation-view.js';
 import { renderWhySheet } from '../../src/ui/review/why-sheet.js';
 import {
+  type ModelCommandDecisionOutput,
   FIXTURE_FAULT_OUT_OF_SET_INTENT,
   FIXTURE_FAULT_UNCITED_SIGNAL,
   FIXTURE_FAULT_UNCITED_FACT,
@@ -213,6 +214,136 @@ describe('V2a-2: Muse Spark Constrained Decision Engine & Decision Log', () => {
       const latest = logger.getLatest()!;
       expect(latest.validationResult.valid).toBe(false);
       expect(latest.validationResult.reason).toBe('unknown_fact_key');
+    });
+
+    it('(a) an invented citation with zero confirmed facts -> offline_deterministic', () => {
+      const logger = new DecisionLogger();
+      const fixtureWithInventedFact: ModelCommandDecisionOutput = {
+        intent: 'FIND_LUNCH',
+        slots: { filters: ['quieter', 'vegetarian'] },
+        situationAttribution: {
+          signalId: 'mock_places:2026-10-28T19:10:00.000Z',
+          reasonCode: 'free_window_fit',
+          explanation: 'Prioritizing quiet atmosphere.',
+        },
+        citedSignalIds: ['mock_places:2026-10-28T19:10:00.000Z'],
+        citedFactKeys: ['invented_allergy_peanut'],
+        reasonCodes: ['free_window_fit'],
+        explanation: 'Candidate places filtered by quiet atmosphere.',
+      };
+      const interpreter = new ModelCommandInterpreter({
+        mode: 'replay',
+        fixtures: { 'quieter vegetarian': fixtureWithInventedFact },
+        logger,
+      });
+
+      const result = interpreter.interpret('quieter vegetarian', {
+        availableSignalIds: ['mock_places:2026-10-28T19:10:00.000Z'],
+        knownFactKeys: ['sample_taste_key'],
+        confirmedFactKeys: [],
+      });
+
+      expect(result.engineStatus).toBe('offline_deterministic');
+      const latest = logger.getLatest()!;
+      expect(latest.validationResult.valid).toBe(false);
+      expect(latest.validationResult.reason).toBe('unknown_fact_key');
+    });
+
+    it('(b) a sample citation without the confirmed reason code -> accepted', () => {
+      const logger = new DecisionLogger();
+      const fixtureWithSampleFact: ModelCommandDecisionOutput = {
+        intent: 'FIND_LUNCH',
+        slots: { filters: ['quieter', 'vegetarian'] },
+        situationAttribution: {
+          signalId: 'mock_places:2026-10-28T19:10:00.000Z',
+          reasonCode: 'free_window_fit',
+          explanation: 'Prioritizing quiet atmosphere.',
+        },
+        citedSignalIds: ['mock_places:2026-10-28T19:10:00.000Z'],
+        citedFactKeys: ['sample_taste_key'],
+        reasonCodes: ['free_window_fit'],
+        explanation: 'Candidate places filtered by quiet atmosphere.',
+      };
+      const interpreter = new ModelCommandInterpreter({
+        mode: 'replay',
+        fixtures: { 'quieter vegetarian': fixtureWithSampleFact },
+        logger,
+      });
+
+      const result = interpreter.interpret('quieter vegetarian', {
+        availableSignalIds: ['mock_places:2026-10-28T19:10:00.000Z'],
+        knownFactKeys: ['sample_taste_key'],
+        confirmedFactKeys: [],
+      });
+
+      expect(result.engineStatus).toBe('scripted_fixture');
+      const latest = logger.getLatest()!;
+      expect(latest.validationResult.valid).toBe(true);
+    });
+
+    it('(c) matches_confirmed_preference citing a sample key while another fact is confirmed -> rejected', () => {
+      const logger = new DecisionLogger();
+      const fixtureWithConfirmedReasonOnSample: ModelCommandDecisionOutput = {
+        intent: 'FIND_LUNCH',
+        slots: { filters: ['quieter', 'vegetarian'] },
+        situationAttribution: {
+          signalId: 'mock_places:2026-10-28T19:10:00.000Z',
+          reasonCode: 'matches_confirmed_preference',
+          explanation: 'Prioritizing quiet atmosphere.',
+        },
+        citedSignalIds: ['mock_places:2026-10-28T19:10:00.000Z'],
+        citedFactKeys: ['sample_taste_key'],
+        reasonCodes: ['matches_confirmed_preference'],
+        explanation: 'Candidate places filtered by quiet atmosphere.',
+      };
+      const interpreter = new ModelCommandInterpreter({
+        mode: 'replay',
+        fixtures: { 'quieter vegetarian': fixtureWithConfirmedReasonOnSample },
+        logger,
+      });
+
+      const result = interpreter.interpret('quieter vegetarian', {
+        availableSignalIds: ['mock_places:2026-10-28T19:10:00.000Z'],
+        knownFactKeys: ['sample_taste_key', 'confirmed_prep_buffer'],
+        confirmedFactKeys: ['confirmed_prep_buffer'],
+      });
+
+      expect(result.engineStatus).toBe('offline_deterministic');
+      const latest = logger.getLatest()!;
+      expect(latest.validationResult.valid).toBe(false);
+      expect(latest.validationResult.reason).toBe('unconfirmed_fact_used');
+    });
+
+    it('(d) the same citing a confirmed key -> accepted', () => {
+      const logger = new DecisionLogger();
+      const fixtureWithConfirmedReasonOnConfirmed: ModelCommandDecisionOutput = {
+        intent: 'FIND_LUNCH',
+        slots: { filters: ['quieter', 'vegetarian'] },
+        situationAttribution: {
+          signalId: 'mock_places:2026-10-28T19:10:00.000Z',
+          reasonCode: 'matches_confirmed_preference',
+          explanation: 'Prioritizing quiet atmosphere.',
+        },
+        citedSignalIds: ['mock_places:2026-10-28T19:10:00.000Z'],
+        citedFactKeys: ['confirmed_prep_buffer'],
+        reasonCodes: ['matches_confirmed_preference'],
+        explanation: 'Candidate places filtered by quiet atmosphere.',
+      };
+      const interpreter = new ModelCommandInterpreter({
+        mode: 'replay',
+        fixtures: { 'quieter vegetarian': fixtureWithConfirmedReasonOnConfirmed },
+        logger,
+      });
+
+      const result = interpreter.interpret('quieter vegetarian', {
+        availableSignalIds: ['mock_places:2026-10-28T19:10:00.000Z'],
+        knownFactKeys: ['sample_taste_key', 'confirmed_prep_buffer'],
+        confirmedFactKeys: ['confirmed_prep_buffer'],
+      });
+
+      expect(result.engineStatus).toBe('scripted_fixture');
+      const latest = logger.getLatest()!;
+      expect(latest.validationResult.valid).toBe(true);
     });
 
     it('discards hallucinated reason code to deterministic fallback', () => {
