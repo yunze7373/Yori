@@ -16,6 +16,7 @@ import { DefaultActionStateStore } from '../../src/ui/action-state/store.js';
 import { YoriStorage, InMemoryStorageDriver } from '../../src/core/storage/index.js';
 import { LocalMemoryAdapter } from '../../src/adapters/xmemo/index.js';
 import { DepartPreparer } from '../../src/plugins/depart/preparer.js';
+import { renderWhySheet } from '../../src/ui/review/why-sheet.js';
 import {
   d2Scenario,
   d2MemoryFacts,
@@ -189,5 +190,109 @@ describe('V2a-1 Negative Tests & Integration Suite', () => {
     expect(undone).not.toBeNull();
     expect(store.getCurrentOverride()).toBeNull();
     expect(store.getActionState().plan?.headline).toBe(priorHeadline);
+  });
+
+  it('(f) C1 Invariant: After Dismiss (suppression stored), LEAVE_LATER and CHANGE_ROUTE do NOT resurrect plan', () => {
+    // When plan is dismissed, pipeline produces null now plan, and no candidate is admitted
+    store.setCommandContext({
+      plan: null,
+      candidate: undefined,
+      snapshot: d2Snapshot,
+      memory: [],
+      sceneId: 'rain',
+    });
+    store.openConversation();
+
+    // Attempting to shift departure
+    const resLater = store.submitMessage('Leave 3 minutes later');
+    expect(resLater.rule).toBe('degraded_failure');
+    expect(resLater.response).toContain("There's no departure plan to adjust right now.");
+    expect(resLater.plan).toBeUndefined();
+    expect(store.getActionState().plan).toBeUndefined();
+
+    // Attempting to change route
+    const resBus = store.submitMessage('Take the bus');
+    expect(resBus.rule).toBe('degraded_failure');
+    expect(resBus.response).toContain("There's no departure plan to adjust right now.");
+    expect(resBus.plan).toBeUndefined();
+    expect(store.getActionState().plan).toBeUndefined();
+  });
+
+  it('(g) C1 Invariant: In lunch / quiet / busy scenes, depart plans are NEVER synthesized', () => {
+    store.setCommandContext({
+      plan: null,
+      candidate: undefined,
+      snapshot: d2Snapshot,
+      memory: [],
+      sceneId: 'busy-lunch',
+    });
+    store.openConversation();
+
+    const res = store.submitMessage('Can I leave 15 minutes later?');
+    expect(res.rule).toBe('degraded_failure');
+    expect(res.response).toContain("There's no departure plan to adjust right now.");
+    expect(store.getActionState().plan).toBeUndefined();
+  });
+
+  it('(h) LEAVE_LATER comparison: unconstrained query derives latest on-time and late-risk options from arrival margin', () => {
+    store.openConversation();
+
+    // In D2 rain, appt is 3:00 PM, drive travel time 25m, leave 2:30 PM arrives 2:55 PM (margin = 5 min)
+    const result = store.submitMessage('Can I leave later?');
+    expect(result.rule).toBe('needs_confirmation');
+    expect(result.collapsed).toBe(false);
+
+    const transcript = store.getTranscript();
+    const lastMsg = transcript[transcript.length - 1];
+    expect(lastMsg).toBeDefined();
+    expect(lastMsg!.comparisonOptions).toBeDefined();
+    expect(lastMsg!.comparisonOptions!.length).toBe(2);
+
+    const safeOpt = lastMsg!.comparisonOptions![0];
+    const lateOpt = lastMsg!.comparisonOptions![1];
+    expect(safeOpt).toBeDefined();
+    expect(lateOpt).toBeDefined();
+
+    // Safe option: delta = 5 min (leave 2:35 PM, arrive 3:00 PM, margin = 0 min)
+    expect(safeOpt!.deltaMinutes).toBe(5);
+    expect(safeOpt!.isLateRisk).toBe(false);
+    expect(safeOpt!.marginMinutes).toBe(0);
+    expect(safeOpt!.leaveTime).toContain('2:35 PM');
+
+    // Late option: delta = 15 min (leave 2:45 PM, arrive 3:10 PM, late by 10m)
+    expect(lateOpt!.deltaMinutes).toBe(15);
+    expect(lateOpt!.isLateRisk).toBe(true);
+    expect(lateOpt!.marginMinutes).toBe(-10);
+    expect(lateOpt!.leaveTime).toContain('2:45 PM');
+
+    // Assistant response presents the honest comparison
+    expect(lastMsg!.text).toContain('You can leave up to 5 minutes later');
+    expect(lastMsg!.text).toContain('arrive on time (0m buffer)');
+    expect(lastMsg!.text).toContain('Leaving 15 minutes later');
+    expect(lastMsg!.text).toContain('arrives 10m late');
+
+    // Selecting the safe option resolves executable and auto-collapses
+    const chooseResult = store.submitMessage('Leave 5 minutes later');
+    expect(chooseResult.rule).toBe('executable_determinate');
+    expect(chooseResult.collapsed).toBe(true);
+    expect(store.getSnapshot().interactionState).toBe('HOME');
+    expect(store.getActionState().plan?.headline).toContain('2:35 PM');
+  });
+
+  it('(i) C2: Why sheet renders user_request distinctly without SIMULATED badge', () => {
+    store.openConversation();
+    const result = store.submitMessage('Leave 3 minutes later');
+    expect(result.plan).toBeDefined();
+
+    const html = renderWhySheet(result.plan!);
+    expect(html).toContain('Your request · this time only');
+    expect(html).toContain('THIS SESSION');
+    expect(html).toContain('badge-user-request');
+
+    // Ensure the user request row does NOT carry the SIMULATED badge
+    const userReqRowMatch = html.match(/<div class="why-item-row why-item-user-request">[\s\S]*?<\/div>/);
+    expect(userReqRowMatch).not.toBeNull();
+    expect(userReqRowMatch![0]).not.toContain('SIMULATED');
+    expect(userReqRowMatch![0]).not.toContain('badge-simulated');
   });
 });

@@ -97,6 +97,37 @@ function renderTranscriptItems(transcript: readonly MessageItem[]): string {
           <div class="chat-bubble">
             <p class="chat-text">${escapeHtml(msg.text)}</p>
             ${
+              msg.comparisonOptions && msg.comparisonOptions.length > 0
+                ? `
+              <div class="chat-comparison-box">
+                <div class="chat-comparison-title">Departure options compared:</div>
+                <div class="chat-comparison-options">
+                  ${msg.comparisonOptions
+                    .map(
+                      (opt) => `
+                    <div class="chat-comparison-card ${opt.isLateRisk ? 'is-late' : 'is-on-time'}">
+                      <div class="chat-comparison-card-header">
+                        <span class="chat-comparison-tag">${opt.isLateRisk ? 'Late Risk' : 'Latest On-Time'}</span>
+                        <span class="chat-comparison-margin">${
+                          opt.isLateRisk ? `Late by ${Math.abs(opt.marginMinutes)}m` : 'On time · 0m buffer'
+                        }</span>
+                      </div>
+                      <div class="chat-comparison-times">
+                        Leave <strong>${escapeHtml(opt.leaveTime)}</strong> · Arrive by <strong>${escapeHtml(opt.arrivalTime)}</strong>
+                      </div>
+                      <button type="button" class="btn btn-outline btn-sm btn-select-comparison" data-delta="${opt.deltaMinutes}">
+                        Choose: Leave ${opt.deltaMinutes}m later
+                      </button>
+                    </div>
+                  `
+                    )
+                    .join('')}
+                </div>
+              </div>
+            `
+                : ''
+            }
+            ${
               msg.needsConfirmation && msg.pendingPlan
                 ? `
               <div class="chat-confirm-box">
@@ -191,6 +222,22 @@ export function attachConversationEvents(
         transcriptEl.scrollTop = transcriptEl.scrollHeight;
       });
     }
+
+    const comparisonButtons = transcriptEl.querySelectorAll<HTMLButtonElement>('.btn-select-comparison');
+    comparisonButtons.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const delta = btn.dataset.delta;
+        if (!delta) return;
+        const res = store.submitMessage(`Leave ${delta} minutes later`);
+        transcriptEl.innerHTML = renderTranscriptItems(store.getTranscript());
+        transcriptEl.scrollTop = transcriptEl.scrollHeight;
+        wireTranscriptButtons();
+        if (res.collapsed) {
+          safeClose('auto_collapse');
+        }
+      });
+    });
   };
 
   wireTranscriptButtons();

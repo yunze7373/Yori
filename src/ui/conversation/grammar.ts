@@ -48,7 +48,6 @@ export interface CommandInterpreter {
   interpret(input: string, context?: CommandInterpretationContext): InterpretedCommand;
 }
 
-const DEFAULT_LEAVE_LATER_DELTA = 15;
 
 const HONEST_CAPABILITY_GENERAL =
   "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
@@ -170,8 +169,8 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
       return {
         intent: 'LEAVE_LATER',
         rawText,
-        slots: { deltaMinutes: DEFAULT_LEAVE_LATER_DELTA },
-        explanation: `Compare leaving ${DEFAULT_LEAVE_LATER_DELTA} minutes later.`,
+        slots: {},
+        explanation: 'Comparing departure options for leaving later.',
       };
     }
 

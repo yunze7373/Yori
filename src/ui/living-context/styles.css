@@ -821,6 +821,12 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   border: 1px solid #FDE68A;
 }
 
+.badge-user-request {
+  background-color: #E0F2FE;
+  color: #0369A1;
+  border: 1px solid #BAE6FD;
+}
+
 .badge-rejected {
   background-color: #FEE2E2;
   color: #7F1D1D;
@@ -1382,6 +1388,77 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.chat-comparison-box {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-comparison-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #16382F;
+}
+
+.chat-comparison-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-comparison-card {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #F4F7F5;
+  border: 1px solid #CAD6D0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-comparison-card.is-on-time {
+  border-color: #A3D9C9;
+  background: #F0FDF4;
+}
+
+.chat-comparison-card.is-late {
+  border-color: #FCD34D;
+  background: #FFFBEB;
+}
+
+.chat-comparison-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+}
+
+.chat-comparison-tag {
+  font-weight: 700;
+  color: #16382F;
+}
+
+.chat-comparison-margin {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #52796F;
+}
+
+.chat-comparison-card.is-late .chat-comparison-margin {
+  color: #B45309;
+}
+
+.chat-comparison-times {
+  font-size: 0.8125rem;
+  color: #16382F;
+}
+
+.btn-select-comparison {
+  align-self: flex-start;
+  margin-top: 2px;
 }
 
 .chat-placeholder-tag {

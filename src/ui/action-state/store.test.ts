@@ -4,6 +4,7 @@ import type { ActionHistorySnapshot, AutoCollapseRule } from './types.js';
 import { d2Scenario, d2MemoryFacts } from '../../../tests/fixtures/index.js';
 import { createFixedClock, replayScenarioTimeline } from '../../app/scenario-player/index.js';
 import { departPreparer } from '../../plugins/depart/preparer.js';
+import type { IntentCandidate } from '../../core/contracts/index.js';
 
 describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
   describe('2.1 Action States & Guarded Transitions Lifecycle', () => {
@@ -295,18 +296,20 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       const d2Clock = createFixedClock('2026-10-28T20:35:00.000Z');
       const d2Snapshots = replayScenarioTimeline(d2Scenario, d2Clock);
       const d2Snapshot = d2Snapshots[d2Snapshots.length - 1]!;
+      const candidate: IntentCandidate = {
+        intent: 'depart',
+        confidence: 1.0,
+        evidence: d2Snapshot.signals.filter(s => s.kind === 'calendar'),
+      };
       const d2Plan = departPreparer.prepare(
-        {
-          intent: 'depart',
-          confidence: 1.0,
-          evidence: d2Snapshot.signals.filter(s => s.kind === 'calendar'),
-        },
+        candidate,
         d2Snapshot,
         d2MemoryFacts
       )!;
 
       store.setCommandContext({
         plan: d2Plan,
+        candidate,
         snapshot: d2Snapshot,
         memory: d2MemoryFacts,
         sceneId: 'rain',
@@ -345,18 +348,20 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       const d2Clock = createFixedClock('2026-10-28T20:35:00.000Z');
       const d2Snapshots = replayScenarioTimeline(d2Scenario, d2Clock);
       const d2Snapshot = d2Snapshots[d2Snapshots.length - 1]!;
+      const candidate: IntentCandidate = {
+        intent: 'depart',
+        confidence: 1.0,
+        evidence: d2Snapshot.signals.filter(s => s.kind === 'calendar'),
+      };
       const d2Plan = departPreparer.prepare(
-        {
-          intent: 'depart',
-          confidence: 1.0,
-          evidence: d2Snapshot.signals.filter(s => s.kind === 'calendar'),
-        },
+        candidate,
         d2Snapshot,
         d2MemoryFacts
       )!;
 
       store.setCommandContext({
         plan: d2Plan,
+        candidate,
         snapshot: d2Snapshot,
         memory: d2MemoryFacts,
         sceneId: 'rain',

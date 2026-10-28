@@ -79,6 +79,13 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       'Because you asked: leave 15 min later · this time only'
     );
 
+    // C2: Distinct user request provenance without SIMULATED badge
+    const userReqRow = page.locator('.why-item-user-request');
+    await expect(userReqRow).toBeVisible();
+    await expect(userReqRow).toContainText('Your request · this time only');
+    await expect(userReqRow).toContainText('THIS SESSION');
+    await expect(userReqRow.locator('.badge-simulated')).toHaveCount(0);
+
     // Close Why sheet
     await page.locator('#btn-close-why').click();
     await expect(whySheet).toHaveCount(0);
@@ -133,5 +140,78 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       ? 'v2-before-you-ask-mobile.png'
       : 'v2-before-you-ask-desktop.png';
     await page.screenshot({ path: path.join(EVIDENCE_DIR, filename), fullPage: false });
+  });
+
+  test('V2a-1 comparison: "Can I leave later?" shows on-time vs late options comparison', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+
+    const sceneSelect = page.locator('#scene-select');
+    await sceneSelect.selectOption('rain');
+
+    const askBar = page.locator('#ask-bar');
+    await askBar.click();
+
+    const input = page.locator('#conversation-input');
+    await input.fill('Can I leave later?');
+    await page.locator('#conversation-send-btn').click();
+
+    // Verify comparison box appears with both options
+    const compBox = page.locator('.chat-comparison-box');
+    await expect(compBox).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#conversation-transcript')).toContainText('You can leave up to 5 minutes later');
+    await expect(page.locator('#conversation-transcript')).toContainText('arrive on time');
+
+    // Click safe option button
+    const safeBtn = page.locator('.btn-select-comparison[data-delta="5"]');
+    await expect(safeBtn).toBeVisible();
+    await safeBtn.click();
+
+    // Auto-collapses to updated home on-time (2:35 PM leave)
+    await expect(page.locator('#conversation-overlay')).toHaveCount(0, { timeout: 5000 });
+    const nowCard = page.locator('.now-card');
+    await expect(nowCard).toContainText('2:35 PM');
+  });
+
+  test('V2a-1 C1 non-resurrection: dismissed plan cannot be resurrected by chat', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+
+    const sceneSelect = page.locator('#scene-select');
+    await sceneSelect.selectOption('rain');
+
+    // Dismiss the plan
+    const dismissBtn = page.locator('#btn-dismiss');
+    await expect(dismissBtn).toBeVisible();
+    await dismissBtn.click();
+
+    // Confirm dismiss modal
+    const confirmDismiss = page.locator('#btn-confirm-dismiss');
+    await expect(confirmDismiss).toBeVisible();
+    await confirmDismiss.click();
+
+    // Now card is removed (quiet state)
+    await expect(page.locator('.now-card')).toHaveCount(0);
+
+    // Ask to leave later via chat
+    const askBar = page.locator('#ask-bar');
+    await askBar.click();
+
+    const input = page.locator('#conversation-input');
+    await input.fill('Leave 3 minutes later');
+    await page.locator('#conversation-send-btn').click();
+
+    // Receives honest notice, no plan synthesized
+    await expect(page.locator('#conversation-transcript')).toContainText(
+      "There's no departure plan to adjust right now."
+    );
+
+    // Close conversation and verify home is still quiet (no NOW card resurrected)
+    await page.locator('#conversation-close-btn').click();
+    await expect(page.locator('.now-card')).toHaveCount(0);
   });
 });

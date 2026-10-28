@@ -740,9 +740,19 @@ export function renderApp(
     }
     const userConfirmedKeys = new Set(activeStoredConfirmed.map(f => f.key));
 
-    // Keep ActionStateStore command context synchronized
+    // Keep ActionStateStore command context synchronized with the pipeline-admitted depart plan and candidate
+    const admittedDepartCandidate =
+      nowPlan && nowPlan.intentId === 'depart'
+        ? {
+            intent: 'depart' as const,
+            confidence: 1.0,
+            evidence: snapshot.signals.filter(s => s.kind === 'calendar'),
+          }
+        : undefined;
+
     actionStore.setCommandContext({
-      plan: nowPlan,
+      plan: nowPlan && nowPlan.intentId === 'depart' ? nowPlan : null,
+      candidate: admittedDepartCandidate,
       snapshot,
       memory: combinedMemory,
       sceneId: currentScene,

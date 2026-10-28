@@ -51,6 +51,16 @@ export type AutoCollapseRule =
   | 'pinned'
   | 'degraded_failure';
 
+export interface DepartureComparisonItem {
+  readonly deltaMinutes: number;
+  readonly headline: string;
+  readonly leaveTime: string;
+  readonly arrivalTime: string;
+  readonly marginMinutes: number;
+  readonly isLateRisk: boolean;
+  readonly plan: PreparedPlan;
+}
+
 export interface MessageItem {
   id: string;
   sender: 'user' | 'assistant' | 'system';
@@ -60,6 +70,7 @@ export interface MessageItem {
   needsConfirmation?: boolean;
   pendingPlan?: PreparedPlan;
   workingDetail?: string;
+  comparisonOptions?: readonly DepartureComparisonItem[];
 }
 
 export interface ActionHistorySnapshot {

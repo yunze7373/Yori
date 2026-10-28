@@ -206,27 +206,37 @@ export function renderWhySheet(
                 signals.length > 0
                   ? signals
                       .map(sig => {
+                        const isUserRequest = sig.kind === 'user_request';
                         const timeStr = formatTime(sig.issuedAt, tz);
                         const isSim = sig.source === 'simulated';
                         const desc = humanizeSignalDescription(sig, tz);
+                        const label = isUserRequest
+                          ? 'Your request · this time only'
+                          : humanizeSignalKind(sig.kind);
                         return `
-                        <div class="why-item-row">
+                        <div class="why-item-row ${isUserRequest ? 'why-item-user-request' : ''}">
                           <div class="why-item-main">
-                            <span class="why-item-label">${escapeHtml(humanizeSignalKind(sig.kind))}</span>
+                            <span class="why-item-label">${escapeHtml(label)}</span>
                             ${
                               desc
                                 ? `<span class="why-item-desc">${escapeHtml(desc)}</span>`
                                 : ''
                             }
                             ${
-                              timeStr
+                              timeStr && !isUserRequest
                                 ? `<span class="why-item-time">Recorded at ${escapeHtml(timeStr)}</span>`
                                 : ''
                             }
                           </div>
-                          <span class="card-badge ${isSim ? 'badge-simulated' : 'badge-real'}">
-                            ${escapeHtml(isSim ? STRINGS.header.simulatedBadge : 'REAL')}
-                          </span>
+                          ${
+                            isUserRequest
+                              ? `<span class="card-badge badge-user-request">THIS SESSION</span>`
+                              : `
+                              <span class="card-badge ${isSim ? 'badge-simulated' : 'badge-real'}">
+                                ${escapeHtml(isSim ? STRINGS.header.simulatedBadge : 'REAL')}
+                              </span>
+                              `
+                          }
                         </div>
                       `;
                       })

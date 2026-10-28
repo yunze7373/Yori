@@ -11,17 +11,19 @@ import type {
   ActionStoreSnapshot,
   ActionHistorySnapshot,
   AutoCollapseRule,
+  DepartureComparisonItem,
   InteractionState,
   MessageItem,
   WorkingSubstate,
 } from './types.js';
-import type { PreparedPlan, IntentCandidate } from '../../core/contracts/index.js';
+import type { PreparedPlan } from '../../core/contracts/index.js';
 import { defaultCommandInterpreter } from '../conversation/grammar.js';
 import { departPreparer } from '../../plugins/depart/preparer.js';
 import {
   createUserRequestOverride,
   type UserRequestOverride,
 } from '../../plugins/depart/request-override.js';
+import { formatTime } from '../living-context/presentation.js';
 
 function checkSystemReducedMotion(): boolean {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -470,40 +472,119 @@ export class DefaultActionStateStore implements ActionStateStore {
 
     // 4. LEAVE_LATER ('Can I leave later?', 'Leave 15 minutes later')
     if (cmd.intent === 'LEAVE_LATER') {
-      const deltaMinutes = cmd.slots.deltaMinutes ?? 15;
+      if (!ctx || !ctx.plan || ctx.plan.intentId !== 'depart' || !ctx.candidate || !ctx.snapshot || !ctx.memory) {
+        const noPlanMsg = "There's no departure plan to adjust right now.";
+        this.resolveDegraded(noPlanMsg);
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: noPlanMsg,
+          timestamp: new Date().toISOString(),
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: noPlanMsg };
+      }
+
+      // Comparison flow when deltaMinutes is not specified
+      if (cmd.slots.deltaMinutes === undefined) {
+        this.beginCommand(
+          trimmed,
+          'Comparing departure options · Checking forecast · simulated',
+          'comparing'
+        );
+
+        const apptMs = new Date(ctx.plan.apptAt || 0).getTime();
+        const leaveMs = new Date(ctx.plan.leaveAt || 0).getTime();
+        const recOpt = (ctx.plan.optionsOrSteps as any[])?.find(o => o.mode === 'drive') ?? ctx.plan.optionsOrSteps[0];
+        const travelMins = recOpt?.travelMinutes ?? recOpt?.estimatedMinutes ?? 25;
+        const arrivalMs = leaveMs + travelMins * 60000;
+        const currentMarginMinutes = Math.max(0, Math.round((apptMs - arrivalMs) / 60000));
+
+        // Latest on-time option: delta equals current margin (e.g. 5m in rain, 10m in clear)
+        const safeDelta = currentMarginMinutes > 0 ? currentMarginMinutes : 0;
+        // Later option with late risk: safeDelta + 10m (e.g. 15m in rain)
+        const lateDelta = safeDelta > 0 ? safeDelta + 10 : 15;
+
+        const safeOverride = createUserRequestOverride({
+          kind: 'leave_later',
+          deltaMinutes: safeDelta,
+          at: now,
+        });
+        const lateOverride = createUserRequestOverride({
+          kind: 'leave_later',
+          deltaMinutes: lateDelta,
+          at: now,
+        });
+
+        const safePlan = departPreparer.prepareWithRequest(ctx.candidate, ctx.snapshot, ctx.memory, safeOverride);
+        const latePlan = departPreparer.prepareWithRequest(ctx.candidate, ctx.snapshot, ctx.memory, lateOverride);
+
+        const safeLeaveStr = safePlan?.leaveAt ? formatTime(safePlan.leaveAt, ctx.plan.timezone) : `${safeDelta}m later`;
+        const lateLeaveStr = latePlan?.leaveAt ? formatTime(latePlan.leaveAt, ctx.plan.timezone) : `${lateDelta}m later`;
+
+        const comparisonOptions: DepartureComparisonItem[] = [];
+        if (safePlan) {
+          comparisonOptions.push({
+            deltaMinutes: safeDelta,
+            headline: safePlan.headline,
+            leaveTime: safeLeaveStr,
+            arrivalTime: formatTime(safePlan.apptAt, ctx.plan.timezone),
+            marginMinutes: 0,
+            isLateRisk: false,
+            plan: safePlan,
+          });
+        }
+        if (latePlan) {
+          comparisonOptions.push({
+            deltaMinutes: lateDelta,
+            headline: latePlan.headline,
+            leaveTime: lateLeaveStr,
+            arrivalTime: formatTime(safePlan?.apptAt ?? ctx.plan.apptAt, ctx.plan.timezone),
+            marginMinutes: -10,
+            isLateRisk: true,
+            plan: latePlan,
+          });
+        }
+
+        const comparisonText = `Comparing departure options: You can leave up to ${safeDelta} minutes later (${safeLeaveStr}) and still arrive on time (0m buffer). Leaving ${lateDelta} minutes later (${lateLeaveStr}) arrives 10m late for ${ctx.plan.subjectTitle}. Which option would you prefer?`;
+
+        this.resolveNeedsConfirmation(comparisonText, safePlan ?? undefined);
+
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: comparisonText,
+          timestamp: new Date().toISOString(),
+          needsConfirmation: true,
+          pendingPlan: safePlan ?? undefined,
+          comparisonOptions,
+        });
+
+        this.notify();
+        return {
+          collapsed: false,
+          rule: 'needs_confirmation',
+          response: comparisonText,
+          plan: safePlan ?? undefined,
+        };
+      }
+
+      // Explicit delta flow
+      const deltaMinutes = cmd.slots.deltaMinutes;
       this.beginCommand(
         trimmed,
         'Comparing departure options · Checking forecast · simulated',
         'comparing'
       );
 
-      if (!ctx || !ctx.snapshot || !ctx.memory) {
-        const errorMsg = 'No active departure context available to adjust.';
-        this.resolveDegraded(errorMsg);
-        this.transcriptList.push({
-          id: `msg-${Date.now()}-a`,
-          sender: 'assistant',
-          text: errorMsg,
-          timestamp: new Date().toISOString(),
-        });
-        this.notify();
-        return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
-      }
-
       const override = createUserRequestOverride({
         kind: 'leave_later',
         deltaMinutes,
-        at: ctx.snapshot.asOf,
+        at: now,
       });
 
-      const candidate: IntentCandidate = ctx.candidate ?? {
-        intent: 'depart',
-        confidence: 1.0,
-        evidence: ctx.snapshot.signals.filter(s => s.kind === 'calendar'),
-      };
-
       const newPlan = departPreparer.prepareWithRequest(
-        candidate,
+        ctx.candidate,
         ctx.snapshot,
         ctx.memory,
         override
@@ -579,39 +660,33 @@ export class DefaultActionStateStore implements ActionStateStore {
     // 5. CHANGE_ROUTE ('Take the bus', 'Change route to driving')
     if (cmd.intent === 'CHANGE_ROUTE') {
       const mode = cmd.slots.mode ?? 'drive';
+      if (!ctx || !ctx.plan || ctx.plan.intentId !== 'depart' || !ctx.candidate || !ctx.snapshot || !ctx.memory) {
+        const noPlanMsg = "There's no departure plan to adjust right now.";
+        this.resolveDegraded(noPlanMsg);
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: noPlanMsg,
+          timestamp: new Date().toISOString(),
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: noPlanMsg };
+      }
+
       this.beginCommand(
         trimmed,
         'Comparing departure options · Checking forecast · simulated',
         'comparing'
       );
 
-      if (!ctx || !ctx.snapshot || !ctx.memory) {
-        const errorMsg = 'No active route context available.';
-        this.resolveDegraded(errorMsg);
-        this.transcriptList.push({
-          id: `msg-${Date.now()}-a`,
-          sender: 'assistant',
-          text: errorMsg,
-          timestamp: new Date().toISOString(),
-        });
-        this.notify();
-        return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
-      }
-
       const override = createUserRequestOverride({
         kind: 'route_preference',
         mode,
-        at: ctx.snapshot.asOf,
+        at: now,
       });
 
-      const candidate: IntentCandidate = ctx.candidate ?? {
-        intent: 'depart',
-        confidence: 1.0,
-        evidence: ctx.snapshot.signals.filter(s => s.kind === 'calendar'),
-      };
-
       const newPlan = departPreparer.prepareWithRequest(
-        candidate,
+        ctx.candidate,
         ctx.snapshot,
         ctx.memory,
         override

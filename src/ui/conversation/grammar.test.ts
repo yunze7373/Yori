@@ -12,16 +12,16 @@ describe('Closed Command Grammar & Total Parser (LIVING_CONTEXT_V2.md §3)', () 
   const interpreter = new DeterministicCommandInterpreter();
 
   describe('LEAVE_LATER Intent', () => {
-    it("interprets 'Can I leave later?' with default 15m delta", () => {
+    it("interprets 'Can I leave later?' without explicit delta (comparison mode)", () => {
       const res = interpreter.interpret('Can I leave later?');
       expect(res.intent).toBe('LEAVE_LATER');
-      expect(res.slots.deltaMinutes).toBe(15);
+      expect(res.slots.deltaMinutes).toBeUndefined();
     });
 
-    it("interprets 'leave later' (case-insensitive)", () => {
+    it("interprets 'leave later' (case-insensitive) without explicit delta", () => {
       const res = interpreter.interpret('LEAVE LATER');
       expect(res.intent).toBe('LEAVE_LATER');
-      expect(res.slots.deltaMinutes).toBe(15);
+      expect(res.slots.deltaMinutes).toBeUndefined();
     });
 
     it("interprets explicit 'Leave 15 minutes later'", () => {
