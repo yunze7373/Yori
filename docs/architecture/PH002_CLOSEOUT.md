@@ -33,19 +33,22 @@ git diff --stat f43c6c1d74c4bc1159300fed9d62aec9447b886e HEAD -- src/core
 
 ## 2. Shipped Slices & Review Audits
 
-All slices within Phase 2 were reviewed, verified, and approved through formal DevFlow Review Gates:
+All slices within Phase 2 were reviewed, verified, and approved through formal DevFlow Review Gates. The authoritative record of approved slices from the review queues:
 
-| Slice ID | Title & Deliverables | Primary Commit | Review Request ID | Review Status |
-| :---: | :--- | :---: | :---: | :---: |
-| **PH-002 A1** | Phase 2 Architecture Alignment & Specification Freeze (`ARCHITECTURE.md` Rev 3.0, `goals.yaml`, `PHASE_PLAN.md`) | `d8ee07b` | `63da6dfa-9772-466d-a169-236b856358db` | **APPROVED** |
-| **PH-002 B1** | Constrained Reasoning Contract & Wording Refinement Engine (`ModelPort`, `MUSE_SPARK_SPEC.md`, hallucination filter) | `b10214a` | Subsumed in B2 | **APPROVED** |
-| **PH-002 B2** | Reasoning App Integration, Offline Fixtures & Why-Order UI (`app.ts`, `why-sheet.ts`, 10 recorded fixtures) | `2487e46` / `5bcefb7` | `aa935f78-eaf0-47e8-a29d-15b1cefb9d60` | **APPROVED** |
-| **PH-002 C1** | XMemo OAuth Existence Spike & Auditable Decision Record (`XMEMO_AUTH_DECISION.md`) | `19d651c` | `13cc0988-0ec9-4401-badb-d490d306211c` | **APPROVED** |
-| **PH-002 C2** | XMemo MemoryPort Server-Side OAuth + MCP Adapter & Fallback (`server-proxy.ts`, `memory.ts`, `me-view.ts`) | `f3205aaf` / `10fcd8a` | `f3205aaf-e85a-4902-9ad7-e6fb7717bea7` | **APPROVED** |
-| **PH-002 D1** | First Real Provider Increment: Real Clock + Keyless Weather (`clock.ts`, `open-meteo-adapter.ts`, `PROVIDERS.md`) | `056118f` / `64074a0` | `6a0cc56b-9970-4d9d-95c0-882e0c61bc2e` | **APPROVED** |
-| **PH-002 D2** | Calendar & Route Consent & Data-Flow Design Blueprint (`CALENDAR_ROUTE_DESIGN.md`, static check test) | `7ada070` | `1cf738a7-0c0e-448b-99bb-a7e54c5ee3af` | **APPROVED** |
-| **PH-002 E1** | Living Context UI Visual Regression & Accessibility Polish (`CHECKLIST.md`, 24 screenshots in `ph2-e1/`) | `830f453` | `e74338f6-c96d-4e07-ad87-da1d0381c07e` | **APPROVED** |
-| **PH-002 E2** | Submission Package, Video Script & Public Hygiene (`PROJECT_DESCRIPTION.md`, `VIDEO_SCRIPT.md`, `CHECKLIST.md`) | `758baa5` | Incorporated in E1/Closeout | **APPROVED** |
+| Slice ID | Title & Deliverables | Approved Request ID | Approved Head SHA | Notes |
+| :---: | :--- | :---: | :---: | :--- |
+| **Plan** | Phase 2 Execution Plan (`PHASE_2_PLAN.plan.json`) | `a08476c8` | — | Initial plan approval |
+| **PH-002 A1** | Phase 2 Architecture Alignment & Goals Freeze (`ARCHITECTURE.md` Rev 3, `goals.yaml`) | `ea6ee36c` | `6761d8a5` | Approved baseline alignment |
+| **PH-002 A2** | Plan Ingress & Task Graph Construction | `469bf8ee` | `471822ec` | Approved graph decomposition |
+| **OWNER_GATE_1** | Owner Authorization Gate (Phase 2 release) | `52bf7749` | `ae3b7640` | Approved owner gate release |
+| **PH-002 B1** | ModelPort Contract & Constrained Reasoning Spec (`MUSE_SPARK_SPEC.md`, filter) | `dec2d875` | `2a655e2b` | Approved contract specification |
+| **PH-002 B2** | Reasoning App Integration, Offline Fixtures & Why-Order UI | `c42058b8` | `893e8192` | Approved (rework of `aa935f78`) |
+| **PH-002 C1** | XMemo OAuth Existence Spike & Decision Record (`XMEMO_AUTH_DECISION.md`) | `9ec6fd22` | `7592322a` | Approved (rework of `13cc0988`) |
+| **PH-002 C2** | XMemo MemoryPort Server-Side OAuth + MCP Adapter & Me UI | `5540ae07` | `10fcd8a8` | Approved (rework of `f3205aaf`) |
+| **PH-002 D1** | First Real Provider: Real Clock + Keyless Weather (`PROVIDERS.md`) | `6a0cc56b` | `64074a0b` | Approved (rework of `5650f07b`) |
+| **PH-002 D2** | Calendar & Route Consent & Data-Flow Design (`CALENDAR_ROUTE_DESIGN.md`) | `1cf738a7` | `7ada0706` | Approved design specification |
+| **PH-002 E1** | Living Context UI Visual Regression & Accessibility Polish (`CHECKLIST.md`, 24 screens) | `e74338f6` | `830f4533` | Approved dual-width regression |
+| **PH-002 E2** | Submission Package, Video Script & Public Hygiene (`PROJECT_DESCRIPTION.md`, `VIDEO_SCRIPT.md`) | `c5f04302` | `758baa54` | Approved submission package |
 
 ---
 
@@ -55,7 +58,7 @@ To ensure safety, zero cloud credential leakage, zero cost, and zero unsolicited
 
 | Feature / Integration | Default State | Rationale & Safety Safeguards |
 | :--- | :---: | :--- |
-| **Meta Muse Spark (`ModelPort`)** | **OFF** (`MODEL_API_KEY` unset) | Operates behind loopback dev-server proxy (`127.0.0.1:5173`). In the default demo state, candidate reordering and wording refinement run on deterministic offline fixtures (`tests/fixtures/reasoning-fixtures.ts`). No live model calls occur unless the owner provides an API key. |
+| **Meta Muse Spark (`ModelPort`)** | **OFF** (`MODEL_API_KEY` unset) | Operates behind loopback dev-server proxy (`127.0.0.1:5173`). With the model off, the demo keeps the engine's deterministic candidate order and templates. Recorded offline fixtures exist strictly in the test suite (`tests/fixtures/reasoning-fixtures.ts`) and mock integration tests. No live model calls occur unless the owner provides an API key. |
 | **XMemo OAuth & MCP (`MemoryPort`)** | **OFF** (`XMEMO_OAUTH_ENABLED=false`) | Server-side PKCE token custody and MCP client (`https://xmemo.dev/mcp`) are fully implemented and mock-tested, but remain disabled until the owner authorizes live registration. Local memory (`LocalMemoryAdapter`) serves as the active source of truth. |
 | **Open-Meteo Weather (`OpenMeteoWeatherAdapter`)** | **OFF** (`WEATHER_LIVE_ENABLED=false`) | Uses a keyless, free REST API (`https://api.open-meteo.com/v1/forecast`) with fixed coordinates (`37.7749, -122.4194`). When disabled, Yori runs entirely on deterministic scenario snapshots (D1–D6). When enabled, real signals are tagged `source: 'real'` with Open-Meteo attribution. |
 | **Calendar & Transit Providers** | **OFF** (Design Only) | Zero real calendar or route network code exists in `src/`. Full architectural specification completed in `docs/architecture/CALENDAR_ROUTE_DESIGN.md` pending owner authorization. |
@@ -68,9 +71,12 @@ To ensure safety, zero cloud credential leakage, zero cost, and zero unsolicited
 The following 8 decision gates and operational actions are **strictly owner-gated** and require explicit action by the project owner (**Han**) before public release or commercial deployment:
 
 1. **`MODEL_API_KEY` Configuration & Billed Calls**:
-   - Provide a valid Meta Muse Spark API key if live LLM generation is desired during the live video recording. Otherwise, demo runs 100% on offline fixtures.
+   - Provide a valid Meta Muse Spark API key if live LLM generation is desired during the live video recording. When the model is off, Yori operates 100% on its deterministic pipeline engine.
 2. **XMemo App Registration & Consent Flow**:
-   - Register a client application on `xmemo.dev`, configure the local redirect URI (`http://127.0.0.1:5173/api/xmemo/callback`), and verify the UNVERIFIED MCP mapping tools (`remember`, `search_knowledge`, `recall_context`) with real account credentials.
+   - Register a client application on `xmemo.dev`, configure the local redirect URI (`http://127.0.0.1:5173/api/xmemo/callback`), and verify the code's exact isolated mapping (`UNVERIFIED_XMEMO_MCP_MAPPING`):
+     - Read tool: `'recall'` (argument `query`, default `'preferences'`)
+     - Write tool: `'remember'` (arguments `key`, `value`, `status: 'confirmed'`, `tag: 'yori:living-context'`)
+     with real account credentials in an owner-authorized live probe.
 3. **Open-Meteo Commercial Terms Qualification**:
    - Confirm that hackathon evaluation and demonstration qualify under Open-Meteo's non-commercial use terms (<10,000 calls/day, <5,000/hour, <600/minute). If deploying commercially, acquire a commercial API license or switch to a commercial weather provider.
 4. **Calendar & Route Decisions (OD-1 through OD-6)**:
@@ -84,7 +90,7 @@ The following 8 decision gates and operational actions are **strictly owner-gate
 5. **License Confirmation**:
    - Confirm the proposed **MIT License** in [`LICENSE`](../../LICENSE) or substitute preferred proprietary/open-source terms.
 6. **Remote Repository Creation & Visibility**:
-   - Create the remote GitHub repository (`https://github.com/Yonro/Yori`), push commits, and update repository visibility from **Private** to **Public**. (The AI agent has published nothing).
+   - Create the remote GitHub repository ([OWNER TO CHOOSE]), push commits, and update repository visibility from **Private** to **Public**. (The AI agent has published nothing).
 7. **3-Minute Video Recording**:
    - Follow [`docs/submission/VIDEO_SCRIPT.md`](../submission/VIDEO_SCRIPT.md) to record the timed 3-minute walkthrough demonstrating the Living Context loop, review actions, and terminal verification. Upload to YouTube or Loom.
 8. **Hackathon Form Submission**:

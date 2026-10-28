@@ -46,7 +46,7 @@ Yori is engineered with strict invariants governed by formal specifications:
 
 ### 1. Installation
 ```bash
-git clone https://github.com/Yonro/Yori.git
+git clone <owner-repo-url> # [OWNER TO CHOOSE]
 cd Yori
 npm install
 ```

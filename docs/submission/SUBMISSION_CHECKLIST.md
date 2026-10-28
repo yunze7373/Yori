@@ -71,7 +71,7 @@
   - Project Title: `Yori`
   - Short Tagline: `A calm, proactive context-aware assistant. A little ahead. By your side.`
   - Video Demonstration Link: *(Insert recorded 3-minute video URL)*
-  - Public GitHub Repository URL: `https://github.com/Yonro/Yori` [OWNER TO CONFIRM]
+  - Public GitHub Repository URL: [OWNER TO CHOOSE]
   - Description: *(Copy approved copy from `PROJECT_DESCRIPTION.md`)*
 - [ ] **Submit Form**: Owner submits before the official deadline: **2026-11-05 11:00 JST**. Nothing is submitted by AI.
 
