@@ -13,11 +13,15 @@ import {
   type SimulatedSignal,
 } from '../../core/contracts/index.js';
 
+export type PlaceNoiseLevel = 'quiet' | 'moderate' | 'lively';
+
 export interface MockPlaceItem {
-  readonly id: string;
+  readonly id?: string;
   readonly name: string;
   readonly cuisine: string;
   readonly distanceMinutes: number;
+  readonly noiseLevel?: PlaceNoiseLevel;
+  readonly vegetarian?: boolean;
 }
 
 export const DEFAULT_MOCK_PLACES: readonly MockPlaceItem[] = Object.freeze([
@@ -26,24 +30,32 @@ export const DEFAULT_MOCK_PLACES: readonly MockPlaceItem[] = Object.freeze([
     name: 'Placeholder Place Alpha (Ramen)',
     cuisine: 'japanese',
     distanceMinutes: 5,
+    noiseLevel: 'lively',
+    vegetarian: false,
   }),
   Object.freeze({
     id: 'mock-place-2',
     name: 'Placeholder Place Beta (Salad)',
     cuisine: 'salad',
     distanceMinutes: 7,
+    noiseLevel: 'quiet',
+    vegetarian: true,
   }),
   Object.freeze({
     id: 'mock-place-3',
     name: 'Placeholder Place Gamma (Japanese Cuisine)',
     cuisine: 'japanese',
     distanceMinutes: 10,
+    noiseLevel: 'quiet',
+    vegetarian: false,
   }),
   Object.freeze({
     id: 'mock-place-4',
     name: 'Placeholder Place Delta (General Dining)',
     cuisine: 'fast_food',
     distanceMinutes: 8,
+    noiseLevel: 'moderate',
+    vegetarian: false,
   }),
 ]);
 

@@ -143,10 +143,10 @@ describe('V2a-1 Negative Tests & Integration Suite', () => {
     // Home plan is untouched
     expect(store.getActionState().plan).toEqual(originalPlan);
 
-    // 2. Future V2b capability query (honest deferred answer)
-    const lunchRes = store.submitMessage('Find lunch nearby');
+    // 2. Unsupported lunch filter query (honest capability answer)
+    const lunchRes = store.submitMessage('Find cheap lunch');
     expect(lunchRes.rule).toBe('unsupported_ask');
-    expect(lunchRes.response).toContain('Finding lunch spots arrives in the next update (V2b)');
+    expect(lunchRes.response).toContain('The filter "cheap" is not supported in this offline demo');
     expect(store.getActionState().plan).toEqual(originalPlan);
 
     // 3. Future V5-FUEL capability query (honest deferred answer)

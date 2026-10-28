@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createActionStateStore } from './store.js';
 import type { ActionHistorySnapshot, AutoCollapseRule } from './types.js';
-import { d2Scenario, d2MemoryFacts } from '../../../tests/fixtures/index.js';
+import { d2Scenario, d2MemoryFacts, d3Scenario, d3MemoryFacts } from '../../../tests/fixtures/index.js';
 import { createFixedClock, replayScenarioTimeline } from '../../app/scenario-player/index.js';
 import { departPreparer } from '../../plugins/depart/preparer.js';
+import { lunchPreparer } from '../../plugins/lunch/preparer.js';
 import type { IntentCandidate } from '../../core/contracts/index.js';
 
 describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
@@ -381,6 +382,65 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       const result = store.submitMessage('   \n  ');
       expect(result.collapsed).toBe(false);
       expect(store.getTranscript().length).toBe(countBefore);
+    });
+
+    it('handles FIND_LUNCH: re-ranks lunch candidates, auto-collapses on success, and supports Undo (V2b)', () => {
+      const store = createActionStateStore();
+      store.openConversation();
+
+      const d3Clock = createFixedClock('2026-10-28T19:10:00.000Z');
+      const d3Snapshots = replayScenarioTimeline(d3Scenario, d3Clock);
+      const d3Snapshot = d3Snapshots[d3Snapshots.length - 1]!;
+      const candidate: IntentCandidate = {
+        intent: 'lunch',
+        confidence: 1.0,
+        evidence: d3Snapshot.signals.filter(s => s.kind === 'mock_places'),
+      };
+      const d3Plan = lunchPreparer.prepare(candidate, d3Snapshot, d3MemoryFacts)!;
+      expect(d3Plan).not.toBeNull();
+      // Initially, Demo Place A is #1
+      expect((d3Plan.optionsOrSteps[0] as any).name).toContain('Place A');
+
+      store.setCommandContext({
+        plan: d3Plan,
+        candidate,
+        snapshot: d3Snapshot,
+        memory: d3MemoryFacts,
+        sceneId: 'away-lunch',
+      });
+
+      // User asks for quieter + vegetarian spot
+      const res = store.submitMessage('quieter + vegetarian');
+      expect(res.collapsed).toBe(true);
+      expect(res.rule).toBe('executable_determinate');
+      expect(res.response).toContain('Demo Place B · Salad');
+      expect(res.response).toContain('top recommendation');
+
+      // The new plan has Place B as top recommendation
+      const updatedPlan = store.getActionState().plan!;
+      expect(updatedPlan).toBeDefined();
+      expect((updatedPlan.optionsOrSteps[0] as any).name).toContain('Place B');
+      expect((updatedPlan.optionsOrSteps[0] as any).vegetarian).toBe(true);
+      expect((updatedPlan.optionsOrSteps[0] as any).noiseLevel).toBe('quiet');
+
+      // Why explanation includes override note
+      const whyRes = store.submitMessage('Why?');
+      expect(whyRes.response).toContain('Because you asked: quieter, vegetarian · this time only');
+
+      // Undo reverts to prior plan
+      const undoRes = store.submitMessage('Undo');
+      expect(undoRes.collapsed).toBe(true);
+      expect((store.getActionState().plan!.optionsOrSteps[0] as any).name).toContain('Place A');
+    });
+
+    it('rejects FIND_LUNCH with degraded response when no lunch plan is active', () => {
+      const store = createActionStateStore();
+      store.openConversation();
+      // No lunch plan in context
+      const res = store.submitMessage('quieter + vegetarian');
+      expect(res.collapsed).toBe(false);
+      expect(res.rule).toBe('degraded_failure');
+      expect(res.response).toContain("There's no active lunch recommendation to filter right now");
     });
   });
 

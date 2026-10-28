@@ -44,6 +44,14 @@ export function humanizeSignalId(signalId: string, timezone: string): string {
       ? 'Weather forecast'
       : kind === 'calendar'
       ? 'Calendar event'
+      : kind === 'mock_places'
+      ? 'Nearby places'
+      : kind === 'location_status'
+      ? 'Location status'
+      : kind === 'schedule_window'
+      ? 'Schedule window'
+      : kind === 'eating_status'
+      ? 'Meal status'
       : kind.charAt(0).toUpperCase() + kind.slice(1);
 
   if (parts.length > 1) {
@@ -198,7 +206,9 @@ export function buildHumanDerivation(plan: PreparedPlan): string {
   }
 
   if (plan.intentId === 'lunch') {
-    return 'Detected that you are away from home during a free schedule window. Recommended places within walking distance that align with your confirmed taste preferences.';
+    const userReq = plan.why?.evidenceSignals?.find(s => s.kind === 'user_request');
+    const requestNote = userReq ? ` (${userReq.description})` : '';
+    return `Detected that you are away from home during a free schedule window. Recommended places within walking distance that align with your confirmed taste preferences.${requestNote}`;
   }
 
   // Fallback: sanitize any raw derivation string from internal formulas

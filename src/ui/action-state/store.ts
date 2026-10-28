@@ -27,6 +27,7 @@ import {
   type EngineStatus,
 } from '../../adapters/model/decision-log.js';
 import { departPreparer } from '../../plugins/depart/preparer.js';
+import { lunchPreparer } from '../../plugins/lunch/preparer.js';
 import {
   createUserRequestOverride,
   type UserRequestOverride,
@@ -209,10 +210,12 @@ export class DefaultActionStateStore implements ActionStateStore {
     if (this.actionState.status === 'working') {
       return false;
     }
+    const priorPlan = this.actionState.plan;
     this.actionState = {
       status: 'working',
       substate,
       detail,
+      plan: priorPlan,
       timestamp: new Date().toISOString(),
     };
     this.interactionState = 'PROCESSING';
@@ -552,19 +555,20 @@ export class DefaultActionStateStore implements ActionStateStore {
       this.beginCommand(trimmed);
 
       let explanation: string;
-      if (!ctx || !ctx.plan) {
+      const activePlan = this.actionState.plan ?? ctx?.plan;
+      if (!activePlan) {
         explanation = "There is no active plan right now.";
       } else {
-        const baseDerivation = buildHumanDerivation(ctx.plan);
+        const baseDerivation = buildHumanDerivation(activePlan);
         const userConfirmed =
-          ctx.userConfirmedKeys ??
+          ctx?.userConfirmedKeys ??
           new Set(
-            ctx.memory
+            ctx?.memory
               ?.filter(f => f.status === 'confirmed' && (f.provenance as any)?.source === 'user_confirmed')
               .map(f => f.key) ?? []
           );
 
-        const memoryFactsUsed = ctx.plan.why?.memoryFactsUsed ?? [];
+        const memoryFactsUsed = activePlan.why?.memoryFactsUsed ?? [];
         if (memoryFactsUsed.length > 0) {
           const notes = memoryFactsUsed.map(f => {
             const isConfirmed = userConfirmed.has(f.key);
@@ -883,7 +887,96 @@ export class DefaultActionStateStore implements ActionStateStore {
       };
     }
 
-    // 6. UNSUPPORTED (Honest capability answers)
+    // 6. FIND_LUNCH ('Find a quieter vegetarian lunch spot', 'Find lunch nearby', 'quieter + vegetarian')
+    if (cmd.intent === 'FIND_LUNCH') {
+      const filters = cmd.slots.filters ?? [];
+      const filtersDesc = filters.length > 0 ? filters.join(' and ') : 'lunch';
+
+      if (!ctx || !ctx.plan || ctx.plan.intentId !== 'lunch' || !ctx.candidate || !ctx.snapshot || !ctx.memory) {
+        const noPlanMsg = "There's no active lunch recommendation to filter right now.";
+        this.resolveDegraded(noPlanMsg);
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: noPlanMsg,
+          timestamp: new Date().toISOString(),
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: noPlanMsg };
+      }
+
+      this.beginCommand(
+        trimmed,
+        'Filtering lunch options · simulated',
+        'comparing'
+      );
+
+      const override = createUserRequestOverride({
+        kind: 'lunch_filter',
+        filters,
+        at: now,
+      });
+
+      const newPlan = lunchPreparer.prepareWithRequest(
+        ctx.candidate,
+        ctx.snapshot,
+        ctx.memory,
+        override
+      );
+
+      if (!newPlan) {
+        const errorMsg = 'Could not find lunch options matching your requested filter.';
+        this.resolveDegraded(errorMsg);
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: errorMsg,
+          timestamp: new Date().toISOString(),
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
+      }
+
+      this.pushHistory({
+        planState: ctx.plan ?? null,
+        sceneId: ctx.sceneId ?? 'current',
+        actionState: { ...this.actionState },
+        override: this.currentOverride,
+        timestamp: now,
+      });
+
+      this.currentOverride = override;
+
+      this.resolveExecutable(
+        `Lunch recommendations updated to prioritize ${filtersDesc}.`,
+        newPlan
+      );
+
+      const topOption = newPlan.optionsOrSteps?.[0];
+      const topName =
+        typeof topOption === 'object' && topOption !== null
+          ? (topOption as { name?: string; label?: string }).name || (topOption as { name?: string; label?: string }).label
+          : 'top recommendation';
+
+      const successMsg = `Updated lunch options based on your request (${filtersDesc}): ${topName} is now your top recommendation.`;
+      this.transcriptList.push({
+        id: `msg-${Date.now()}-a`,
+        sender: 'assistant',
+        text: successMsg,
+        timestamp: new Date().toISOString(),
+      });
+
+      const collapsed = this.evaluateAutoCollapse('executable_determinate');
+      this.notify();
+      return {
+        collapsed,
+        rule: 'executable_determinate',
+        response: successMsg,
+        plan: newPlan,
+      };
+    }
+
+    // 7. UNSUPPORTED (Honest capability answers)
     this.beginCommand(trimmed);
     const responseText =
       cmd.honestAnswer ??

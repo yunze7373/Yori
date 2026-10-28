@@ -105,6 +105,8 @@ export interface CandidateCardVM {
   readonly basis: string;
   readonly photo: PhotoVM;
   readonly isSelected: boolean;
+  readonly noiseLevel?: string;
+  readonly vegetarian?: boolean;
 }
 
 export type HomeLayoutKind = 'journey' | 'candidates' | 'quiet' | 'generic';

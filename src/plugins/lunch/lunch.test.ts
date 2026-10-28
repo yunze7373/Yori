@@ -180,10 +180,34 @@ describe('Lunch Preparer (AC-103-1, INV-103, INV-104)', () => {
       createSimulatedSignal({
         kind: 'mock_places',
         value: [
-          { name: 'Ramen Ichiko', cuisine: 'japanese', distanceMinutes: 5 },
-          { name: 'Green Salad Co', cuisine: 'salad', distanceMinutes: 7 },
-          { name: 'Sushi Kura', cuisine: 'japanese', distanceMinutes: 10 },
-          { name: 'Burger Joint', cuisine: 'fast_food', distanceMinutes: 8 },
+          {
+            name: 'Ramen Ichiko',
+            cuisine: 'japanese',
+            distanceMinutes: 5,
+            noiseLevel: 'lively',
+            vegetarian: false,
+          },
+          {
+            name: 'Green Salad Co',
+            cuisine: 'salad',
+            distanceMinutes: 7,
+            noiseLevel: 'quiet',
+            vegetarian: true,
+          },
+          {
+            name: 'Sushi Kura',
+            cuisine: 'japanese',
+            distanceMinutes: 10,
+            noiseLevel: 'quiet',
+            vegetarian: false,
+          },
+          {
+            name: 'Burger Joint',
+            cuisine: 'fast_food',
+            distanceMinutes: 8,
+            noiseLevel: 'moderate',
+            vegetarian: false,
+          },
         ],
         issuedAt: '2026-10-28T19:10:00.000Z',
         validFor: 3600000,
@@ -251,6 +275,114 @@ describe('Lunch Preparer (AC-103-1, INV-103, INV-104)', () => {
     const plan2 = lunchPreparer.prepare(candidate, validSnapshot, confirmedMemory);
 
     expect(plan1).toEqual(plan2);
+  });
+
+  describe('UserRequestOverride & prepareWithRequest (LIVING_CONTEXT_V2.md §2.3, §8 D1/D4, V2b)', () => {
+    const memoryWithJapanese: readonly MemoryFact[] = [
+      ...confirmedMemory,
+      createMemoryFact(
+        'favorite_cuisine',
+        'japanese',
+        'confirmed',
+        { source: 'user_confirmed', recordedAt: '2026-10-25T10:00:00.000Z' },
+        '2026-10-25T10:00:00.000Z'
+      ),
+    ];
+
+    it('re-ranks candidates when quieter + vegetarian filters are applied via request override', () => {
+      const candidate = lunchDetector.detect(validSnapshot, memoryWithJapanese)!;
+      // Base plan without override: Ramen Ichiko is #1 (same score 3 as Green Salad Co, but closer: 5m vs 7m)
+      const basePlan = lunchPreparer.prepare(candidate, validSnapshot, memoryWithJapanese)!;
+      expect(basePlan).not.toBeNull();
+      const baseFirst = basePlan.optionsOrSteps[0] as any;
+      expect(baseFirst.name).toContain('Ramen Ichiko');
+
+      // Override with quieter and vegetarian filters
+      const override = {
+        kind: 'lunch_filter' as const,
+        filters: ['quieter', 'vegetarian'] as const,
+        provenance: {
+          source: 'user_request' as const,
+          at: '2026-10-28T19:15:00.000Z',
+          scope: 'this_time_only' as const,
+        },
+      };
+
+      const filteredPlan = lunchPreparer.prepareWithRequest(
+        candidate,
+        validSnapshot,
+        memoryWithJapanese,
+        override
+      )!;
+
+      expect(filteredPlan).not.toBeNull();
+      const filteredFirst = filteredPlan.optionsOrSteps[0] as any;
+      // Green Salad Co is quiet and vegetarian, so it becomes #1
+      expect(filteredFirst.name).toContain('Green Salad Co');
+      expect(filteredFirst.vegetarian).toBe(true);
+      expect(filteredFirst.noiseLevel).toBe('quiet');
+
+      // Sushi Kura is quiet but not vegetarian, so it is #2
+      const filteredSecond = filteredPlan.optionsOrSteps[1] as any;
+      expect(filteredSecond.name).toContain('Sushi Kura');
+
+      // Ramen Ichiko is neither quiet nor vegetarian, so it ranks #3
+      const filteredThird = filteredPlan.optionsOrSteps[2] as any;
+      expect(filteredThird.name).toContain('Ramen Ichiko');
+
+      // Why cites user_request provenance
+      const userReqSignal = filteredPlan.why.evidenceSignals.find(s => s.kind === 'user_request');
+      expect(userReqSignal).toBeDefined();
+      expect(userReqSignal!.description).toContain('Because you asked: quieter, vegetarian · this time only');
+      expect(filteredPlan.why.derivation).toContain('Because you asked: quieter, vegetarian · this time only');
+    });
+
+    it('enforces non-resurrection invariant (C1): unadmitted places are never resurrected by filters', () => {
+      const candidate = lunchDetector.detect(validSnapshot, confirmedMemory)!;
+      const override = {
+        kind: 'lunch_filter' as const,
+        filters: ['nearer'] as const,
+        provenance: {
+          source: 'user_request' as const,
+          at: '2026-10-28T19:15:00.000Z',
+          scope: 'this_time_only' as const,
+        },
+      };
+
+      const plan = lunchPreparer.prepareWithRequest(
+        candidate,
+        validSnapshot,
+        confirmedMemory,
+        override
+      )!;
+
+      expect(plan).not.toBeNull();
+      // Burger Joint has 0 match with taste and must never appear
+      for (const opt of plan.optionsOrSteps) {
+        expect((opt as any).name).not.toContain('Burger Joint');
+        expect((opt as any).cuisine).not.toBe('fast_food');
+      }
+    });
+
+    it('does not mutate confirmed memory facts (INV-107)', () => {
+      const candidate = lunchDetector.detect(validSnapshot, confirmedMemory)!;
+      const memoryBefore = JSON.stringify(confirmedMemory);
+
+      const override = {
+        kind: 'lunch_filter' as const,
+        filters: ['quieter', 'vegetarian'] as const,
+        provenance: {
+          source: 'user_request' as const,
+          at: '2026-10-28T19:15:00.000Z',
+          scope: 'this_time_only' as const,
+        },
+      };
+
+      lunchPreparer.prepareWithRequest(candidate, validSnapshot, confirmedMemory, override);
+
+      const memoryAfter = JSON.stringify(confirmedMemory);
+      expect(memoryAfter).toBe(memoryBefore);
+    });
   });
 });
 

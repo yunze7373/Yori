@@ -375,6 +375,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   <div class="v2-candidate-tags">
                     <span class="v2-cuisine-chip">${escapeHtml(c.cuisine)}</span>
                     <span class="v2-distance-chip">${escapeHtml(c.distanceText)}</span>
+                    ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip">Quiet</span>` : ''}
+                    ${c.vegetarian ? `<span class="v2-veg-chip">Vegetarian</span>` : ''}
                   </div>
                   <div class="v2-candidate-basis">${escapeHtml(c.basis)}</div>
                   <div class="v2-candidate-footer">

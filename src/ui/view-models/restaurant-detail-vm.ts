@@ -104,13 +104,24 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     }
   }
 
-  // Fixture attribute chips only (cuisine, distance, lunch window if present; quiet/vegetarian deferred to V2b)
+  // Fixture attribute chips only (cuisine, distance, lunch window if present; quiet, vegetarian)
   const attributeChips: string[] = [cuisine];
   if (distanceText) {
     attributeChips.push(distanceText);
   }
   if (lunchWindowText) {
     attributeChips.push(lunchWindowText);
+  }
+  const noiseLevel = (targetOpt as any)?.noiseLevel;
+  if (noiseLevel === 'quiet') {
+    attributeChips.push('Quiet');
+  } else if (noiseLevel === 'moderate') {
+    attributeChips.push('Moderate noise');
+  } else if (noiseLevel === 'lively') {
+    attributeChips.push('Lively');
+  }
+  if ((targetOpt as any)?.vegetarian) {
+    attributeChips.push('Vegetarian');
   }
 
   // Taste preference basis with honest provenance

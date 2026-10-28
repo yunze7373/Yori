@@ -17,6 +17,7 @@ import type {
   MemoryCitation,
 } from '../../core/contracts/index.js';
 import { mockPlaceAdapter, type MockPlaceItem } from '../../adapters/mock/index.js';
+import type { UserRequestOverride } from '../depart/request-override.js';
 
 export interface RankedPlaceOption {
   readonly id: string;
@@ -25,6 +26,8 @@ export interface RankedPlaceOption {
   readonly cuisine: string;
   readonly distanceMinutes: number;
   readonly requiresConfirmation: boolean;
+  readonly noiseLevel?: string;
+  readonly vegetarian?: boolean;
 }
 
 export class LunchPreparer implements Preparer {
@@ -35,6 +38,15 @@ export class LunchPreparer implements Preparer {
     candidate: IntentCandidate,
     snapshot: ContextSnapshot,
     memory: readonly MemoryFact[]
+  ): PreparedPlan | null {
+    return this.prepareWithRequest(candidate, snapshot, memory, null);
+  }
+
+  public prepareWithRequest(
+    candidate: IntentCandidate,
+    snapshot: ContextSnapshot,
+    memory: readonly MemoryFact[],
+    override?: UserRequestOverride | null
   ): PreparedPlan | null {
     if (!candidate || candidate.intent !== 'lunch' || !snapshot) {
       return null;
@@ -105,17 +117,41 @@ export class LunchPreparer implements Preparer {
       };
     });
 
-    // Filter to places matching at least one taste keyword
+    // Filter to places matching at least one taste keyword (Non-resurrection invariant C1)
     const matchingPlaces = scoredPlaces.filter(p => p.matchScore > 0);
     if (matchingPlaces.length === 0) {
       // If none match confirmed taste, fail closed rather than proposing unsuitable options
       return null;
     }
 
-    // Sort: highest taste match first, then closest distance, then alphabetical by name
-    matchingPlaces.sort((a, b) => {
-      if (b.matchScore !== a.matchScore) {
-        return b.matchScore - a.matchScore;
+    // 5. Evaluate filters from UserRequestOverride if present
+    const filters = override?.kind === 'lunch_filter' && Array.isArray(override.filters)
+      ? override.filters
+      : [];
+
+    const scoredWithOverride = matchingPlaces.map(item => {
+      let filterScore = 0;
+      if (filters.length > 0) {
+        if (filters.includes('quieter') && item.place.noiseLevel === 'quiet') {
+          filterScore += 100;
+        }
+        if (filters.includes('vegetarian') && item.place.vegetarian === true) {
+          filterScore += 100;
+        }
+        if (filters.includes('nearer')) {
+          filterScore += Math.max(0, 30 - item.place.distanceMinutes) * 2;
+        }
+      }
+      return {
+        ...item,
+        totalScore: item.matchScore + filterScore,
+      };
+    });
+
+    // Sort: highest total score first, then closest distance, then alphabetical by name
+    scoredWithOverride.sort((a, b) => {
+      if (b.totalScore !== a.totalScore) {
+        return b.totalScore - a.totalScore;
       }
       if (a.place.distanceMinutes !== b.place.distanceMinutes) {
         return a.place.distanceMinutes - b.place.distanceMinutes;
@@ -123,22 +159,42 @@ export class LunchPreparer implements Preparer {
       return a.place.name.localeCompare(b.place.name);
     });
 
-    // 5. Select at most 3 options (Section 7 outcome)
-    const selected = matchingPlaces.slice(0, 3).map(m => m.place);
+    // 6. Select at most 3 options (Section 7 outcome)
+    const selected = scoredWithOverride.slice(0, 3).map(m => m.place);
 
-    const optionsOrSteps: RankedPlaceOption[] = selected.map((p, idx) =>
-      Object.freeze({
+    const optionsOrSteps: RankedPlaceOption[] = selected.map((p, idx) => {
+      const extraTags: string[] = [];
+      if (p.noiseLevel) extraTags.push(p.noiseLevel);
+      if (p.vegetarian) extraTags.push('vegetarian');
+      const tagsSuffix = extraTags.length > 0 ? ` · ${extraTags.join(' · ')}` : '';
+
+      return Object.freeze({
         id: `opt-${idx + 1}-${p.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-        label: `${p.name} (${p.cuisine}) · ${p.distanceMinutes}m away`,
+        label: `${p.name} (${p.cuisine}) · ${p.distanceMinutes}m away${tagsSuffix}`,
         name: p.name,
         cuisine: p.cuisine,
         distanceMinutes: p.distanceMinutes,
         requiresConfirmation: false,
-      })
-    );
+        noiseLevel: p.noiseLevel,
+        vegetarian: p.vegetarian,
+      });
+    });
 
-    // 6. Assemble evidence signals for Explainable Why (INV-103)
+    // 7. Assemble evidence signals for Explainable Why (INV-103)
     const evidenceSignals: EvidenceCitation[] = [];
+
+    if (override && override.kind === 'lunch_filter' && filters.length > 0) {
+      const filterLabels = filters.join(', ');
+      evidenceSignals.push(
+        Object.freeze({
+          kind: 'user_request',
+          source: 'simulated',
+          issuedAt: override.provenance.at,
+          description: `Because you asked: ${filterLabels} · this time only`,
+        })
+      );
+    }
+
     for (const sig of candidate.evidence) {
       evidenceSignals.push(
         Object.freeze({
@@ -172,10 +228,18 @@ export class LunchPreparer implements Preparer {
       .map(f => `${f.key}=${String(f.value)}`)
       .join(', ');
 
+    const filterNote = filters.length > 0
+      ? `Because you asked: ${filters.join(', ')} · this time only; `
+      : '';
+
+    const headline = filters.length > 0
+      ? `Lunch options near you (${selected.length} places matching ${filters.join(' and ')} and your tastes)`
+      : `Lunch options near you (${selected.length} places matching your tastes)`;
+
     return Object.freeze({
       id: `plan-lunch-${snapshot.asOf.replace(/[^0-9]/g, '')}`,
       intentId: 'lunch',
-      headline: `Lunch options near you (${selected.length} places matching your tastes)`,
+      headline,
       optionsOrSteps: Object.freeze(optionsOrSteps),
       requiresConfirmation: false, // Informational recommendation card; not a booking or payment (INV-104)
       timezone: snapshot.timezone,
@@ -183,7 +247,7 @@ export class LunchPreparer implements Preparer {
       why: Object.freeze({
         evidenceSignals: Object.freeze(evidenceSignals),
         memoryFactsUsed: Object.freeze(memoryFactsUsed),
-        derivation: `Recommended ${selected.length} options matching confirmed taste preferences (${tasteFactSummary}).`,
+        derivation: `${filterNote}Recommended ${selected.length} options matching confirmed taste preferences (${tasteFactSummary}).`,
       }),
     });
   }

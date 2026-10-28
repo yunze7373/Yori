@@ -22,16 +22,19 @@ import type { EngineStatus } from '../../adapters/model/decision-log.js';
 export type CommandIntent =
   | 'LEAVE_LATER'
   | 'CHANGE_ROUTE'
+  | 'FIND_LUNCH'
   | 'WHY'
   | 'ACCEPT'
   | 'UNDO'
   | 'UNSUPPORTED';
 
 export type SupportedMode = 'drive' | 'bus';
+export type SupportedLunchFilter = 'quieter' | 'vegetarian' | 'nearer';
 
 export interface CommandSlotValues {
   readonly deltaMinutes?: number;
   readonly mode?: SupportedMode;
+  readonly filters?: readonly SupportedLunchFilter[];
 }
 
 export interface SituationAttribution {
@@ -70,13 +73,18 @@ export interface CommandInterpreter {
 
 
 const HONEST_CAPABILITY_GENERAL =
-  "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
-
-const HONEST_LUNCH_DEFERRED =
-  "Finding lunch spots arrives in the next update (V2b). For this offline demo, I can help you adjust departure times ('Leave 15 minutes later') or switch route options ('Take the bus').";
+  "I can help adjust your departure plan ('Leave 15 minutes later', 'Take the bus') or find lunch spots ('Find a quieter vegetarian lunch spot', 'Find lunch nearby'). You can also ask 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
 
 const HONEST_FUEL_DEFERRED =
   "Finding fuel or charging stops arrives in V5-FUEL. For this offline demo, I can help you adjust departure times or switch route options.";
+
+const LUNCH_STOP_WORDS: ReadonlySet<string> = new Set([
+  'find', 'me', 'a', 'an', 'the', 'spot', 'spots', 'place', 'places',
+  'for', 'to', 'eat', 'eating', 'food', 'lunch', 'restaurant', 'restaurants',
+  'options', 'and', 'with', 'in', 'around', 'here', 'can', 'i', 'get', 'have',
+  'some', 'where', 'is', 'what', 'are', 'please', 'show', 'suggest', 'recommend',
+  'go', 'at', 'dining', 'spot?'
+]);
 
 /**
  * Clean and normalize raw input string for deterministic pattern matching.
@@ -100,16 +108,6 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
         rawText,
         slots: {},
         honestAnswer: HONEST_CAPABILITY_GENERAL,
-      };
-    }
-
-    // Explicit deferred intents (V2b lunch, V5 fuel)
-    if (/\b(?:lunch|restaurant|vegetarian|cafe|food|eat|dinner)\b/i.test(normalized)) {
-      return {
-        intent: 'UNSUPPORTED',
-        rawText,
-        slots: {},
-        honestAnswer: HONEST_LUNCH_DEFERRED,
       };
     }
 
@@ -240,7 +238,59 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
       };
     }
 
-    // 6. TOTAL PARSER FALLBACK -> UNSUPPORTED
+    // 6. FIND_LUNCH ('Find a quieter vegetarian lunch spot', 'Find lunch nearby', 'quieter + vegetarian')
+    const isLunchQuery =
+      /\b(?:lunch|restaurant|restaurants|cafe|food|eat|dining|vegetarian|quieter)\b/i.test(normalized) ||
+      /\b(?:quieter\s*\+\s*vegetarian|vegetarian\s*\+\s*quieter)\b/i.test(normalized) ||
+      /^(?:quiet\s+place(?:\s+for\s+lunch)?|quieter\s+place)$/i.test(normalized);
+
+    if (isLunchQuery) {
+      // Split tokens on whitespace, commas, +, &
+      const rawTokens = normalized
+        .replace(/[+&/,]+/g, ' ')
+        .split(/\s+/)
+        .map(t => t.trim())
+        .filter(t => t.length > 0);
+
+      const filtersSet = new Set<SupportedLunchFilter>();
+      const unsupportedFilters: string[] = [];
+
+      for (const token of rawTokens) {
+        if (token === 'quieter' || token === 'quiet') {
+          filtersSet.add('quieter');
+        } else if (token === 'vegetarian' || token === 'veggie' || token === 'vegan') {
+          filtersSet.add('vegetarian');
+        } else if (token === 'nearer' || token === 'nearby' || token === 'close' || token === 'closer' || token === 'near') {
+          filtersSet.add('nearer');
+        } else if (LUNCH_STOP_WORDS.has(token)) {
+          // Allowed structural / stop words
+          continue;
+        } else {
+          unsupportedFilters.push(token);
+        }
+      }
+
+      if (unsupportedFilters.length > 0) {
+        return {
+          intent: 'UNSUPPORTED',
+          rawText,
+          slots: {},
+          honestAnswer: `The filter "${unsupportedFilters[0]}" is not supported in this offline demo. Supported lunch filters: quieter, vegetarian, nearer.`,
+        };
+      }
+
+      const filters = Array.from(filtersSet);
+      const filterDesc = filters.length > 0 ? filters.join(' and ') : 'lunch';
+
+      return {
+        intent: 'FIND_LUNCH',
+        rawText,
+        slots: { filters: filters.length > 0 ? filters : undefined },
+        explanation: `Finding lunch options matching ${filterDesc}.`,
+      };
+    }
+
+    // 7. TOTAL PARSER FALLBACK -> UNSUPPORTED
     return {
       intent: 'UNSUPPORTED',
       rawText,

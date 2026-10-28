@@ -87,10 +87,34 @@ export const d3Scenario: Scenario = {
       signal: createSimulatedSignal({
         kind: 'mock_places',
         value: [
-          { name: 'Demo Place A · Ramen', cuisine: 'japanese', distanceMinutes: 5 },
-          { name: 'Demo Place B · Salad', cuisine: 'salad', distanceMinutes: 7 },
-          { name: 'Demo Place C · Sushi', cuisine: 'japanese', distanceMinutes: 10 },
-          { name: 'Demo Place D · Fast Food', cuisine: 'fast_food', distanceMinutes: 8 },
+          {
+            name: 'Demo Place A · Ramen',
+            cuisine: 'japanese',
+            distanceMinutes: 5,
+            noiseLevel: 'lively',
+            vegetarian: false,
+          },
+          {
+            name: 'Demo Place B · Salad',
+            cuisine: 'salad',
+            distanceMinutes: 7,
+            noiseLevel: 'quiet',
+            vegetarian: true,
+          },
+          {
+            name: 'Demo Place C · Sushi',
+            cuisine: 'japanese',
+            distanceMinutes: 10,
+            noiseLevel: 'quiet',
+            vegetarian: false,
+          },
+          {
+            name: 'Demo Place D · Fast Food',
+            cuisine: 'fast_food',
+            distanceMinutes: 8,
+            noiseLevel: 'moderate',
+            vegetarian: false,
+          },
         ],
         issuedAt: '2026-10-28T19:10:00.000Z',
         validFor: 3600000,

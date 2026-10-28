@@ -183,6 +183,8 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
             basis,
             photo,
             isSelected: i === 0,
+            noiseLevel: (opt as any).noiseLevel,
+            vegetarian: (opt as any).vegetarian,
           });
         }
       }

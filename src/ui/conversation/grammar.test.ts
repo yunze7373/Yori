@@ -162,12 +162,61 @@ describe('Closed Command Grammar & Total Parser (LIVING_CONTEXT_V2.md §3)', () 
     });
   });
 
-  describe('UNSUPPORTED Intent & Capability Answers', () => {
-    it("maps lunch requests to honest deferred notice (V2b non-goal)", () => {
+  describe('FIND_LUNCH Intent (V2b)', () => {
+    it("interprets 'Find a quieter vegetarian lunch spot' with quieter and vegetarian filters", () => {
       const res = interpreter.interpret('Find a quieter vegetarian lunch spot');
-      expect(res.intent).toBe('UNSUPPORTED');
-      expect(res.honestAnswer).toContain('Finding lunch spots arrives in the next update (V2b)');
+      expect(res.intent).toBe('FIND_LUNCH');
+      expect(res.slots.filters).toEqual(expect.arrayContaining(['quieter', 'vegetarian']));
+      expect(res.slots.filters).toHaveLength(2);
     });
+
+    it("interprets 'quieter + vegetarian' shorthand", () => {
+      const res = interpreter.interpret('quieter + vegetarian');
+      expect(res.intent).toBe('FIND_LUNCH');
+      expect(res.slots.filters).toEqual(expect.arrayContaining(['quieter', 'vegetarian']));
+      expect(res.slots.filters).toHaveLength(2);
+    });
+
+    it("interprets 'Find lunch nearby' with nearer filter", () => {
+      const res = interpreter.interpret('Find lunch nearby');
+      expect(res.intent).toBe('FIND_LUNCH');
+      expect(res.slots.filters).toEqual(['nearer']);
+    });
+
+    it("interprets 'Quiet place for lunch' with quieter filter", () => {
+      const res = interpreter.interpret('Quiet place for lunch');
+      expect(res.intent).toBe('FIND_LUNCH');
+      expect(res.slots.filters).toEqual(['quieter']);
+    });
+
+    it("interprets 'Find vegetarian lunch' with vegetarian filter", () => {
+      const res = interpreter.interpret('Find vegetarian lunch');
+      expect(res.intent).toBe('FIND_LUNCH');
+      expect(res.slots.filters).toEqual(['vegetarian']);
+    });
+
+    it("interprets generic 'Find a lunch spot' without filters", () => {
+      const res = interpreter.interpret('Find a lunch spot');
+      expect(res.intent).toBe('FIND_LUNCH');
+      expect(res.slots.filters).toBeUndefined();
+    });
+
+    it("maps unknown filter 'cheap' to UNSUPPORTED with honest answer", () => {
+      const res = interpreter.interpret('Find cheap lunch');
+      expect(res.intent).toBe('UNSUPPORTED');
+      expect(res.honestAnswer).toContain('The filter "cheap" is not supported in this offline demo');
+      expect(res.honestAnswer).toContain('Supported lunch filters: quieter, vegetarian, nearer');
+    });
+
+    it("maps unknown filter 'italian' to UNSUPPORTED with honest answer", () => {
+      const res = interpreter.interpret('Find italian restaurant');
+      expect(res.intent).toBe('UNSUPPORTED');
+      expect(res.honestAnswer).toContain('The filter "italian" is not supported in this offline demo');
+      expect(res.honestAnswer).toContain('Supported lunch filters: quieter, vegetarian, nearer');
+    });
+  });
+
+  describe('UNSUPPORTED Intent & Capability Answers', () => {
 
     it("maps fuel/charging requests to honest deferred notice (V5-FUEL non-goal)", () => {
       const res = interpreter.interpret('Find a gas station');

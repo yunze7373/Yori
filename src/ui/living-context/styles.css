@@ -2007,6 +2007,17 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   color: #16382F;
 }
 
+.v2-noise-chip,
+.v2-veg-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #EBF3EE;
+  color: #1B4D3E;
+  border: 1px solid rgba(27, 77, 62, 0.15);
+}
+
 .v2-distance-chip {
   font-size: 0.75rem;
   color: #354540;

@@ -8,13 +8,14 @@
  */
 
 import type { ReasoningReasonCode } from '../../src/adapters/model/reasoning.js';
-import type { CommandIntent, SupportedMode } from '../../src/ui/conversation/grammar.js';
+import type { CommandIntent, SupportedMode, SupportedLunchFilter } from '../../src/ui/conversation/grammar.js';
 
 export interface ModelCommandDecisionOutput {
   readonly intent: CommandIntent;
   readonly slots: {
     readonly deltaMinutes?: number;
     readonly mode?: SupportedMode;
+    readonly filters?: readonly SupportedLunchFilter[];
   };
   readonly situationAttribution?: {
     readonly signalId: string;
@@ -152,6 +153,114 @@ export const FIXTURE_CMD_WHY: ModelCommandDecisionOutput = {
   citedFactKeys: ['rain_transport_preference'],
   reasonCodes: ['weather_adjusted'],
   explanation: 'Why derivation for current rain plan.',
+};
+
+/**
+ * 8. Find Lunch (generic): "Find a lunch spot"
+ */
+export const FIXTURE_CMD_FIND_LUNCH_GENERIC: ModelCommandDecisionOutput = {
+  intent: 'FIND_LUNCH',
+  slots: {},
+  situationAttribution: {
+    signalId: 'mock_places:2026-10-28T19:10:00.000Z',
+    reasonCode: 'free_window_fit',
+    explanation: 'Lunch window identified away from home.',
+  },
+  citedSignalIds: [
+    'mock_places:2026-10-28T19:10:00.000Z',
+    'location_status:2026-10-28T19:10:00.000Z',
+  ],
+  citedFactKeys: ['taste_preference', 'favorite_cuisine'],
+  reasonCodes: ['free_window_fit', 'matches_confirmed_preference'],
+  explanation: 'Candidate places ranked by confirmed taste preferences.',
+};
+
+/**
+ * 9. Find Lunch (quieter + vegetarian): "Find a quieter vegetarian lunch spot" / "quieter + vegetarian"
+ */
+export const FIXTURE_CMD_FIND_LUNCH_QUIET_VEG: ModelCommandDecisionOutput = {
+  intent: 'FIND_LUNCH',
+  slots: {
+    filters: ['quieter', 'vegetarian'],
+  },
+  situationAttribution: {
+    signalId: 'mock_places:2026-10-28T19:10:00.000Z',
+    reasonCode: 'matches_confirmed_preference',
+    explanation: 'Prioritizing quiet atmosphere and vegetarian options.',
+  },
+  citedSignalIds: [
+    'mock_places:2026-10-28T19:10:00.000Z',
+    'location_status:2026-10-28T19:10:00.000Z',
+  ],
+  citedFactKeys: ['taste_preference', 'favorite_cuisine'],
+  reasonCodes: ['matches_confirmed_preference', 'shorter_trip'],
+  explanation: 'Candidate places filtered by quiet atmosphere and vegetarian options.',
+};
+
+/**
+ * 10. Find Lunch (nearby): "Find lunch nearby"
+ */
+export const FIXTURE_CMD_FIND_LUNCH_NEARBY: ModelCommandDecisionOutput = {
+  intent: 'FIND_LUNCH',
+  slots: {
+    filters: ['nearer'],
+  },
+  situationAttribution: {
+    signalId: 'mock_places:2026-10-28T19:10:00.000Z',
+    reasonCode: 'shorter_trip',
+    explanation: 'Prioritizing closest walking distance.',
+  },
+  citedSignalIds: [
+    'mock_places:2026-10-28T19:10:00.000Z',
+    'location_status:2026-10-28T19:10:00.000Z',
+  ],
+  citedFactKeys: ['taste_preference', 'favorite_cuisine'],
+  reasonCodes: ['shorter_trip', 'matches_confirmed_preference'],
+  explanation: 'Candidate places ranked by closest distance.',
+};
+
+/**
+ * 11. Find Lunch (vegetarian): "Find vegetarian lunch"
+ */
+export const FIXTURE_CMD_FIND_LUNCH_VEGETARIAN: ModelCommandDecisionOutput = {
+  intent: 'FIND_LUNCH',
+  slots: {
+    filters: ['vegetarian'],
+  },
+  situationAttribution: {
+    signalId: 'mock_places:2026-10-28T19:10:00.000Z',
+    reasonCode: 'matches_confirmed_preference',
+    explanation: 'Prioritizing vegetarian options.',
+  },
+  citedSignalIds: [
+    'mock_places:2026-10-28T19:10:00.000Z',
+    'location_status:2026-10-28T19:10:00.000Z',
+  ],
+  citedFactKeys: ['taste_preference', 'favorite_cuisine'],
+  reasonCodes: ['matches_confirmed_preference', 'free_window_fit'],
+  explanation: 'Candidate places filtered by vegetarian options.',
+};
+
+/**
+ * 12. Find Lunch (quieter): "Quiet place for lunch"
+ */
+export const FIXTURE_CMD_FIND_LUNCH_QUIET: ModelCommandDecisionOutput = {
+  intent: 'FIND_LUNCH',
+  slots: {
+    filters: ['quieter'],
+  },
+  situationAttribution: {
+    signalId: 'mock_places:2026-10-28T19:10:00.000Z',
+    reasonCode: 'matches_confirmed_preference',
+    explanation: 'Prioritizing quiet atmosphere.',
+  },
+  citedSignalIds: [
+    'mock_places:2026-10-28T19:10:00.000Z',
+    'location_status:2026-10-28T19:10:00.000Z',
+  ],
+  citedFactKeys: ['taste_preference', 'favorite_cuisine'],
+  reasonCodes: ['matches_confirmed_preference', 'free_window_fit'],
+  explanation: 'Candidate places filtered by quiet atmosphere.',
 };
 
 // ============================================================================

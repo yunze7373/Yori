@@ -36,6 +36,11 @@ import {
   FIXTURE_CMD_ACCEPT,
   FIXTURE_CMD_UNDO,
   FIXTURE_CMD_WHY,
+  FIXTURE_CMD_FIND_LUNCH_GENERIC,
+  FIXTURE_CMD_FIND_LUNCH_QUIET_VEG,
+  FIXTURE_CMD_FIND_LUNCH_NEARBY,
+  FIXTURE_CMD_FIND_LUNCH_VEGETARIAN,
+  FIXTURE_CMD_FIND_LUNCH_QUIET,
 } from '../../../tests/fixtures/model-command-fixtures.js';
 
 export type ModelInterpreterMode =
@@ -57,6 +62,7 @@ export interface ModelInterpreterOptions {
 const CLOSED_INTENTS: ReadonlySet<string> = new Set([
   'LEAVE_LATER',
   'CHANGE_ROUTE',
+  'FIND_LUNCH',
   'WHY',
   'ACCEPT',
   'UNDO',
@@ -83,6 +89,18 @@ const DEFAULT_RECORDED_FIXTURES: Record<string, ModelCommandDecisionOutput> = {
   'why': FIXTURE_CMD_WHY,
   'why this plan': FIXTURE_CMD_WHY,
   'why this one': FIXTURE_CMD_WHY,
+  'find lunch': FIXTURE_CMD_FIND_LUNCH_GENERIC,
+  'find a lunch spot': FIXTURE_CMD_FIND_LUNCH_GENERIC,
+  'find a quieter vegetarian lunch spot': FIXTURE_CMD_FIND_LUNCH_QUIET_VEG,
+  'quieter + vegetarian': FIXTURE_CMD_FIND_LUNCH_QUIET_VEG,
+  'quieter vegetarian': FIXTURE_CMD_FIND_LUNCH_QUIET_VEG,
+  'find lunch nearby': FIXTURE_CMD_FIND_LUNCH_NEARBY,
+  'lunch nearby': FIXTURE_CMD_FIND_LUNCH_NEARBY,
+  'find vegetarian lunch': FIXTURE_CMD_FIND_LUNCH_VEGETARIAN,
+  'vegetarian lunch': FIXTURE_CMD_FIND_LUNCH_VEGETARIAN,
+  'quiet place for lunch': FIXTURE_CMD_FIND_LUNCH_QUIET,
+  'quiet lunch': FIXTURE_CMD_FIND_LUNCH_QUIET,
+  'quieter lunch': FIXTURE_CMD_FIND_LUNCH_QUIET,
 };
 
 function normalizeKey(str: string): string {
@@ -148,6 +166,17 @@ export class ModelCommandInterpreter implements CommandInterpreter {
     if (slots.deltaMinutes !== undefined) {
       if (typeof slots.deltaMinutes !== 'number' || slots.deltaMinutes <= 0 || slots.deltaMinutes > 240) {
         return { valid: false, reason: 'schema_invalid', error: `Invalid deltaMinutes '${String(slots.deltaMinutes)}'` };
+      }
+    }
+    if (slots.filters !== undefined) {
+      if (!Array.isArray(slots.filters)) {
+        return { valid: false, reason: 'schema_invalid', error: "'filters' must be an array" };
+      }
+      const allowedFilters = new Set(['quieter', 'vegetarian', 'nearer']);
+      for (const f of slots.filters) {
+        if (typeof f !== 'string' || !allowedFilters.has(f)) {
+          return { valid: false, reason: 'unknown_filter', error: `Unsupported filter '${String(f)}'` };
+        }
       }
     }
 
