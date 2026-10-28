@@ -102,20 +102,20 @@ To protect user privacy and guarantee deterministic testing:
 
 Governed by Plan `YORI_SUBMIT` (Task `FALLBACK-VERIFY`, AC-205-2). When running in the default fallback mode with all flags OFF (`WEATHER_LIVE_ENABLED=false`, `MODEL_API_KEY` unset, `XMEMO_OAUTH_ENABLED=false`), every surface used in the video demonstration script was rigorously audited to guarantee honest simulated labelling:
 
-| Surface / Screen | Visual Element | Displayed Label / Copy | Live Weather Present? | Verification Method |
+| Surface / Screen | Visual Element | Verbatim Displayed Label / Copy | Live Weather Present? | Verification Method |
 |---|---|---|---|---|
 | **Global App Header** | Top-left demo chip | `Demo · simulated context` | **NO** (`#chip-live-weather` count = 0) | E2E DOM assertion & visual render |
 | **Global App Header** | Weather attribution | *Omitted from DOM* | **NO** (`#weather-attribution` count = 0) | E2E DOM assertion & visual render |
-| **Scene D1 (Clear)** | NOW card | Badge: `SIMULATED` | **NO** (Simulated calendar & weather) | E2E data-plan-id & visual render |
-| **Scene D2 (Rain Re-Plan)** | NOW card | Badge: `SIMULATED` | **NO** (Simulated rain forecast at 1:35 PM) | E2E DOM assertion & visual render |
-| **Scene D2 (Rain Re-Plan)** | Umbrella checklist chip | `Grab umbrella · rain in forecast` | **NO** (Checklist item derived from mock signal) | E2E checklist item text match |
-| **Scene D2 (Rain Re-Plan)** | Ranked transit tiles | Drive (2:30 PM) / Bus (2:15 PM) `SIMULATED` | **NO** (Ranked by confirmed memory habit) | E2E transit option tile match |
-| **Why Sheet (Rain D2)** | Evidence signal row | `Weather · Rain starting at 1:35 PM (Simulated data)` | **NO** (Explicit simulated data qualifier) | E2E `#why-signals-list` inspection |
-| **Scene D3 (Away Lunch)** | NOW card options | Badges: `SIMULATED` + mock venue disclosure | **NO** (Mock place adapter) | E2E mock disclosure chip check |
-| **Scene D4 (Busy Lunch)** | Quiet state | `Nothing needs your attention right now.` | **NO** (Suppressed by core policy) | E2E quiet box visible check |
-| **Scene D6 (Missing Weather)**| Fail-closed notice | `The weather forecast isn't available right now, so I won't guess.` | **NO** (Fail-closed notice without guessing) | E2E notice-box text match |
-| **Reasoning Demo (Model Off)**| NOW & AHEAD cards | Badges: `SIMULATED` (Piano lesson NOW, Lunch AHEAD) | **NO** (Deterministic pipeline order) | E2E deterministic order check |
-| **Me Tab (`/me`)** | Memory facts & budget | Sovereign local storage envelope | **NO** (Zero external telemetry) | E2E storage inspection |
+| **Scene D1 (Clear)** | NOW card | Subject: `Piano lesson at 3:00 PM`<br>Timing: `Get ready at 2:05 PM, leave by 2:25 PM`<br>Badge: `SIMULATED` | **NO** (Simulated calendar & weather signals) | E2E text match & visual render |
+| **Scene D2 (Rain Re-Plan)** | NOW card | Rain banner: `What changed: rain forecast`<br>Badge: `SIMULATED` | **NO** (Simulated rain forecast at 1:35 PM) | E2E DOM assertion & visual render |
+| **Scene D2 (Rain Re-Plan)** | Checklist chip | `Umbrella` | **NO** (Checklist item derived from mock rain signal) | E2E `#chip-umbrella` exact text match |
+| **Scene D2 (Rain Re-Plan)** | Ranked transit tiles | Option 1: `Drive · leave 2:30` (30m drive)<br>Option 2: `Bus · leave 2:15` (45m bus)<br>Habit note: `You usually prefer driving when it rains.` | **NO** (Ranked by confirmed memory habit) | E2E `.option-tile` text match |
+| **Why Sheet (Rain D2)** | Weather evidence row | Label: `Weather forecast`<br>Description: `Forecast conditions`<br>Time: `Recorded at 1:35 PM`<br>Badge: `SIMULATED` | **NO** (Explicit simulated qualifier & badge) | E2E `.why-section` row inspection |
+| **Scene D3 (Away Lunch)** | NOW card | Subject: `Lunch options near you`<br>Headline: `Places matching what you like, within walking distance`<br>Notice: `Simulated mock places for demo; real recommendations would query nearby venues.`<br>Badge: `SIMULATED` | **NO** (Mock place adapter) | E2E `.mock-places-notice` check |
+| **Scene D4 (Busy Lunch)** | Quiet state | Title: `Nothing needs your attention right now.`<br>Subtitle: `You're all caught up. We'll let you know when something comes up.` | **NO** (Suppressed by core policy) | E2E `.quiet-title` text match |
+| **Scene D6 (Missing Weather)**| Fail-closed notice | Notice: `The weather forecast isn't available right now, so I won't guess.`<br>Badge: `SIMULATED` | **NO** (Fail-closed notice without guessing) | E2E `.notice-box` text match |
+| **Reasoning Demo (Model Off)**| NOW & AHEAD cards | NOW: `Piano lesson at 3:00 PM` (Get ready at 2:05 PM, leave by 2:25 PM)<br>AHEAD: `Lunch options near you`<br>Badge: `SIMULATED` | **NO** (Deterministic pipeline order) | E2E deterministic order check |
+| **Me Tab (`/me`)** | Memory facts & budget | Budget badge: `0 of 3 used today`<br>Sovereign local storage envelope | **NO** (Zero external telemetry) | E2E storage & badge inspection |
 
 **Audit Conclusion:** Across all script steps and test viewports, **zero** simulated or recorded weather data is ever presented as live weather. The live weather chip and Open-Meteo attribution only appear when `WEATHER_LIVE_ENABLED=true` is explicitly configured.
 

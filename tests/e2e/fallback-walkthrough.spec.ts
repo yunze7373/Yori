@@ -189,8 +189,9 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     // Verify weather evidence in Why Sheet has explicit simulated labelling
     const evidenceSection = page.locator('.why-section', { hasText: 'Evidence & Signals' });
     await expect(evidenceSection).toContainText('Weather forecast');
+    await expect(evidenceSection).toContainText('Forecast conditions');
+    await expect(evidenceSection).toContainText('Recorded at 1:35 PM');
     await expect(evidenceSection).toContainText('SIMULATED');
-    await expect(evidenceSection).toContainText('1:35 PM');
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);

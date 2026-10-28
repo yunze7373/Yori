@@ -39,7 +39,7 @@ Browser open to `http://127.0.0.1:5173`. Scene D1 (Clear Departure) is selected.
 ### Part 2: Thinking Ahead & Environmental Adaptation (`0:25 – 0:50` · 25s)
 
 **[ON SCREEN]**:  
-Cursor moves to top-right scenario picker and switches to **Rain Re-Plan (D2)**. The NOW card smoothly updates: an **Umbrella** checklist chip appears (*"Grab umbrella · rain in forecast"*), and two transit options are ranked—Drive first at 2:30 PM, then Bus at 2:15 PM, citing your confirmed rainy-day preference.
+Cursor moves to top-right scenario picker and switches to **Rain Re-Plan (D2)**. The NOW card smoothly updates: an **Umbrella** checklist chip appears (*"Umbrella"*), and two transit options are ranked—Drive first at 2:30 PM, then Bus at 2:15 PM, citing your confirmed rainy-day preference.
 
 **[VOICEOVER / NARRATION]**:  
 *(0:25)* "Watch what happens when conditions change.  
@@ -68,7 +68,7 @@ Return to D2. Tap **Why** button on NOW card. The **Why Sheet** slides up, showi
 
 **[VOICEOVER / NARRATION]**:  
 *(1:15)* "Every suggestion in Yori is fully explainable.  
-*(1:19)* Tap 'Why' to see exactly where recommendations came from—citing real snapshot signals and habits in plain language.  
+*(1:19)* Tap 'Why' to see exactly where recommendations came from—citing the scenario's signals and your confirmed habits in plain language.  
 *(1:27)* When you adjust a buffer time, you can choose 'For this time only' or 'Remember as preference'.  
 *(1:36)* But remembering never silently alters your preferences. It creates a proposal that waits for your explicit confirmation."
 
