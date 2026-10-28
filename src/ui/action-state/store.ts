@@ -89,7 +89,7 @@ export class DefaultActionStateStore implements ActionStateStore {
       this.transcriptList.push({
         id: `msg-${Date.now()}-welcome`,
         sender: 'assistant',
-        text: 'Hello! I am Yori. You can ask me to leave later, find lunch, or explore your day.',
+        text: 'Hello! I am Yori. This preview introduces the conversation shell and focus management. Commands will arrive in the next build (V2a).',
         timestamp: new Date().toISOString(),
       });
     }
@@ -120,58 +120,184 @@ export class DefaultActionStateStore implements ActionStateStore {
     return false;
   }
 
-  public startWorking(detail?: string, substate?: WorkingSubstate): void {
+  // ---------------------------------------------------------------------------
+  // Guarded Transitions (§2.1 Action States & §2.2 Interaction States)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * idle / settled / updated ──command──▶ working (substate: default | comparing)
+   * interactionState: CONVERSATION ──▶ PROCESSING
+   */
+  public beginCommand(text: string, detail?: string, substate?: WorkingSubstate): boolean {
+    const current = this.actionState.status;
+    if (current === 'working' || current === 'needs-confirmation') {
+      // Cannot start a new command while already working or awaiting user confirmation
+      return false;
+    }
+
     this.actionState = {
       status: 'working',
       substate: substate ?? 'default',
-      detail,
+      detail: detail ?? text,
       timestamp: new Date().toISOString(),
     };
+    this.interactionState = 'PROCESSING';
     this.notify();
+    return true;
   }
 
-  public setUpdated(summary: string, plan?: PreparedPlan): void {
+  /**
+   * working ──result──▶ updated
+   * interactionState: PROCESSING ──▶ auto-collapse ──▶ HOME (or stays CONVERSATION if pinned)
+   */
+  public resolveExecutable(summary: string, plan?: PreparedPlan): boolean {
+    if (this.actionState.status !== 'working') {
+      return false;
+    }
+
     this.actionState = {
       status: 'updated',
       resultSummary: summary,
       plan,
       timestamp: new Date().toISOString(),
     };
+
+    if (this.pinned) {
+      this.interactionState = 'CONVERSATION';
+    } else {
+      this.interactionState = 'HOME';
+    }
+
     this.notify();
+    return true;
   }
 
-  public setNeedsConfirmation(detail: string): void {
+  /**
+   * working ──needs input──▶ needs-confirmation
+   * interactionState: PROCESSING ──▶ CONVERSATION (stays open until confirm/reject)
+   */
+  public resolveNeedsConfirmation(detail: string): boolean {
+    if (this.actionState.status !== 'working') {
+      return false;
+    }
+
     this.actionState = {
       status: 'needs-confirmation',
       detail,
       timestamp: new Date().toISOString(),
     };
+    this.interactionState = 'CONVERSATION';
     this.notify();
+    return true;
   }
 
-  public setDegraded(notice: string): void {
+  /**
+   * needs-confirmation ──confirm──▶ updated
+   * interactionState: CONVERSATION ──▶ auto-collapse ──▶ HOME (or stays CONVERSATION if pinned)
+   */
+  public confirmPending(summary: string, plan?: PreparedPlan): boolean {
+    if (this.actionState.status !== 'needs-confirmation') {
+      return false;
+    }
+
+    this.actionState = {
+      status: 'updated',
+      resultSummary: summary,
+      plan,
+      timestamp: new Date().toISOString(),
+    };
+
+    if (this.pinned) {
+      this.interactionState = 'CONVERSATION';
+    } else {
+      this.interactionState = 'HOME';
+    }
+
+    this.notify();
+    return true;
+  }
+
+  /**
+   * needs-confirmation ──reject──▶ idle (no change)
+   * interactionState: stays CONVERSATION
+   */
+  public rejectPending(): boolean {
+    if (this.actionState.status !== 'needs-confirmation') {
+      return false;
+    }
+
+    this.actionState = {
+      status: 'idle',
+      timestamp: new Date().toISOString(),
+    };
+    this.interactionState = 'CONVERSATION';
+    this.notify();
+    return true;
+  }
+
+  /**
+   * working ──failure──▶ degraded (honest notice, home unchanged)
+   * interactionState: stays CONVERSATION
+   */
+  public resolveDegraded(notice: string): boolean {
+    if (this.actionState.status !== 'working') {
+      return false;
+    }
+
     this.actionState = {
       status: 'degraded',
       notice,
       timestamp: new Date().toISOString(),
     };
+    this.interactionState = 'CONVERSATION';
     this.notify();
+    return true;
   }
 
-  public setSettled(): void {
+  /**
+   * working ──long-form / discussion──▶ settled / CONVERSATION (stays open)
+   */
+  public resolveLongForm(_response: string): boolean {
+    if (this.actionState.status !== 'working') {
+      return false;
+    }
+
+    this.actionState = {
+      status: 'settled',
+      timestamp: new Date().toISOString(),
+    };
+    this.interactionState = 'CONVERSATION';
+    this.notify();
+    return true;
+  }
+
+  /**
+   * updated / degraded ──settle──▶ settled
+   */
+  public settle(): boolean {
+    const current = this.actionState.status;
+    if (current !== 'updated' && current !== 'degraded') {
+      return false;
+    }
+
     this.actionState = {
       status: 'settled',
       timestamp: new Date().toISOString(),
     };
     this.notify();
+    return true;
   }
 
-  public resetToIdle(): void {
+  /**
+   * Reset store action state to idle
+   */
+  public resetToIdle(): boolean {
     this.actionState = {
       status: 'idle',
       timestamp: new Date().toISOString(),
     };
     this.notify();
+    return true;
   }
 
   /**
@@ -210,8 +336,10 @@ export class DefaultActionStateStore implements ActionStateStore {
       timestamp: now,
     });
 
-    // In V0, command parsing is intentionally not yet wired (V2a goal).
-    // Show an honest capability placeholder stating commands arrive in next build.
+    // Enter PROCESSING state via beginCommand guard
+    this.beginCommand(trimmed);
+
+    // In V0, command parsing arrives in V2a. Present honest capability placeholder.
     const responseText = 'Commands arrive in the next build (V2a). You can explore the full-page conversation shell, pin toggling, and Esc/close navigation.';
     this.transcriptList.push({
       id: `msg-${Date.now()}-a`,
@@ -221,11 +349,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       isPlaceholder: true,
     });
 
-    const rule: AutoCollapseRule = this.pinned ? 'pinned' : 'unsupported_ask';
-    const collapsed = this.evaluateAutoCollapse(rule);
+    // Resolve as long-form / unsupported preview (stays open in CONVERSATION)
+    this.resolveLongForm(responseText);
 
+    const rule: AutoCollapseRule = this.pinned ? 'pinned' : 'unsupported_ask';
     this.notify();
-    return { collapsed, rule, response: responseText };
+    return { collapsed: false, rule, response: responseText };
   }
 
   public pushHistory(snapshot: ActionHistorySnapshot): void {

@@ -1084,6 +1084,9 @@ export function renderApp(
             </svg>
             <span>${escapeHtml(STRINGS.tabs.today)}</span>
           </button>
+          ${
+            uiVersion === 'v1'
+              ? `
           <button type="button" class="tab-item disabled" disabled aria-disabled="true" title="Coming soon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
               <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
@@ -1096,6 +1099,9 @@ export function renderApp(
             </svg>
             <span>${escapeHtml(STRINGS.tabs.ask)}</span>
           </button>
+          `
+              : ''
+          }
           <button type="button" class="tab-item ${activeTab === 'me' ? 'active' : ''}" id="tab-me" aria-current="${activeTab === 'me' ? 'page' : 'false'}">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -1598,12 +1604,36 @@ export function renderApp(
         update();
       });
 
+      const headerEl = root.querySelector<HTMLElement>('.header-bar');
+      const mainEl = root.querySelector<HTMLElement>('main.main-container');
+      const navEl = root.querySelector<HTMLElement>('.bottom-tab-bar');
+
       if (actionStore.getInteractionState() === 'CONVERSATION') {
+        headerEl?.setAttribute('inert', '');
+        headerEl?.setAttribute('aria-hidden', 'true');
+        mainEl?.setAttribute('inert', '');
+        mainEl?.setAttribute('aria-hidden', 'true');
+        navEl?.setAttribute('inert', '');
+        navEl?.setAttribute('aria-hidden', 'true');
+
         conversationCleanup = attachConversationEvents(root, actionStore, () => {
+          headerEl?.removeAttribute('inert');
+          headerEl?.removeAttribute('aria-hidden');
+          mainEl?.removeAttribute('inert');
+          mainEl?.removeAttribute('aria-hidden');
+          navEl?.removeAttribute('inert');
+          navEl?.removeAttribute('aria-hidden');
           update();
           const askBarEl = root.querySelector<HTMLButtonElement>('#ask-bar');
           askBarEl?.focus();
         });
+      } else {
+        headerEl?.removeAttribute('inert');
+        headerEl?.removeAttribute('aria-hidden');
+        mainEl?.removeAttribute('inert');
+        mainEl?.removeAttribute('aria-hidden');
+        navEl?.removeAttribute('inert');
+        navEl?.removeAttribute('aria-hidden');
       }
     }
 

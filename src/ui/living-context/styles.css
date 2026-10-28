@@ -50,6 +50,13 @@ html, body {
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   overflow-x: hidden;
+  scroll-padding-bottom: 140px;
+}
+
+@media (min-width: 1024px) {
+  html, body {
+    scroll-padding-bottom: 80px;
+  }
 }
 
 /* Prefers reduced motion */
@@ -1060,14 +1067,28 @@ button:focus-visible, a:focus-visible, select:focus-visible {
    V0 Ask Bar & Full-Page Conversation Shell (LIVING_CONTEXT_V2.md §2)
    ========================================================================== */
 
+/* V2 layout adjustments */
+.app-layout[data-ui-version="v2"] .main-container {
+  padding-bottom: 160px;
+}
+
+@media (min-width: 1024px) {
+  .app-layout[data-ui-version="v2"] .main-container {
+    padding-bottom: 100px;
+  }
+}
+
 .ask-bar-dock {
-  position: sticky;
-  bottom: 64px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(68px + env(safe-area-inset-bottom, 0px) + 8px);
   width: 100%;
   max-width: 600px;
-  margin: 20px auto 0 auto;
+  margin: 0 auto;
   padding: 0 16px;
-  z-index: 40;
+  z-index: 95;
+  pointer-events: none;
 }
 
 @media (min-width: 1024px) {
@@ -1079,6 +1100,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 
 .ask-bar-container {
   width: 100%;
+  pointer-events: auto;
 }
 
 .ask-bar {
@@ -1135,7 +1157,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 .conversation-overlay {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 1500;
   background: rgba(15, 23, 42, 0.45);
   backdrop-filter: blur(6px);
   display: flex;

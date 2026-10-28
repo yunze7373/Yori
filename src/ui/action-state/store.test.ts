@@ -3,7 +3,7 @@ import { createActionStateStore } from './store.js';
 import type { ActionHistorySnapshot, AutoCollapseRule } from './types.js';
 
 describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
-  describe('2.1 Action States & Undo Lifecycle', () => {
+  describe('2.1 Action States & Guarded Transitions Lifecycle', () => {
     it('initializes to idle action state and HOME interaction state', () => {
       const store = createActionStateStore();
       const state = store.getActionState();
@@ -14,54 +14,109 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       expect(store.canUndo()).toBe(false);
     });
 
-    it('transitions idle -> working (default & comparing substates) -> updated -> settled', () => {
+    it('enforces legal sequence: idle -> beginCommand (PROCESSING) -> resolveExecutable -> settle', () => {
       const store = createActionStateStore();
 
-      store.startWorking('Recomputing departure');
-      let state = store.getActionState();
-      expect(state.status).toBe('working');
-      expect(state.substate).toBe('default');
-      expect(state.detail).toBe('Recomputing departure');
+      // 1. idle -> working / PROCESSING
+      expect(store.beginCommand('Leave 15m later', 'Shifting departure')).toBe(true);
+      expect(store.getActionState().status).toBe('working');
+      expect(store.getActionState().detail).toBe('Shifting departure');
+      expect(store.getInteractionState()).toBe('PROCESSING');
 
-      store.startWorking('Comparing departure options', 'comparing');
-      state = store.getActionState();
-      expect(state.status).toBe('working');
-      expect(state.substate).toBe('comparing');
-      expect(state.detail).toBe('Comparing departure options');
+      // 2. working -> updated / HOME (auto-collapse)
+      expect(store.resolveExecutable('Departure shifted 15m')).toBe(true);
+      expect(store.getActionState().status).toBe('updated');
+      expect(store.getActionState().resultSummary).toBe('Departure shifted 15m');
+      expect(store.getInteractionState()).toBe('HOME');
 
-      store.setUpdated('Depart shifted 15 min later');
-      state = store.getActionState();
-      expect(state.status).toBe('updated');
-      expect(state.resultSummary).toBe('Depart shifted 15 min later');
-
-      store.setSettled();
-      state = store.getActionState();
-      expect(state.status).toBe('settled');
+      // 3. updated -> settled
+      expect(store.settle()).toBe(true);
+      expect(store.getActionState().status).toBe('settled');
     });
 
-    it('transitions working -> needs-confirmation', () => {
+    it('handles comparing substate during working', () => {
       const store = createActionStateStore();
-      store.startWorking('Adjusting preference');
-      store.setNeedsConfirmation('Confirm buffer 10 min preference?');
-
-      const state = store.getActionState();
-      expect(state.status).toBe('needs-confirmation');
-      expect(state.detail).toBe('Confirm buffer 10 min preference?');
+      expect(store.beginCommand('Compare routes', 'Comparing transit options', 'comparing')).toBe(true);
+      expect(store.getActionState().status).toBe('working');
+      expect(store.getActionState().substate).toBe('comparing');
     });
 
-    it('transitions working -> degraded with honest failure notice', () => {
+    it('enforces needs-confirmation lifecycle: working -> resolveNeedsConfirmation -> confirmPending -> updated', () => {
       const store = createActionStateStore();
-      store.startWorking('Fetching transit schedule');
-      store.setDegraded('Schedule provider unreachable; current departure preserved');
+      expect(store.beginCommand('Save rain preference')).toBe(true);
 
-      const state = store.getActionState();
-      expect(state.status).toBe('degraded');
-      expect(state.notice).toBe('Schedule provider unreachable; current departure preserved');
+      // working -> needs-confirmation / CONVERSATION
+      expect(store.resolveNeedsConfirmation('Confirm buffer 10 min preference?')).toBe(true);
+      expect(store.getActionState().status).toBe('needs-confirmation');
+      expect(store.getActionState().detail).toBe('Confirm buffer 10 min preference?');
+      expect(store.getInteractionState()).toBe('CONVERSATION');
+
+      // confirmPending -> updated / HOME
+      expect(store.confirmPending('Preference confirmed')).toBe(true);
+      expect(store.getActionState().status).toBe('updated');
+      expect(store.getInteractionState()).toBe('HOME');
+    });
+
+    it('enforces needs-confirmation rejection: working -> resolveNeedsConfirmation -> rejectPending -> idle', () => {
+      const store = createActionStateStore();
+      store.beginCommand('Save rain preference');
+      store.resolveNeedsConfirmation('Confirm preference?');
+
+      // rejectPending -> idle / CONVERSATION
+      expect(store.rejectPending()).toBe(true);
+      expect(store.getActionState().status).toBe('idle');
+      expect(store.getInteractionState()).toBe('CONVERSATION');
+    });
+
+    it('enforces degraded failure path: working -> resolveDegraded -> degraded (stays CONVERSATION)', () => {
+      const store = createActionStateStore();
+      store.beginCommand('Fetch live schedule');
+
+      expect(store.resolveDegraded('Schedule provider unreachable; current departure preserved')).toBe(true);
+      expect(store.getActionState().status).toBe('degraded');
+      expect(store.getActionState().notice).toBe('Schedule provider unreachable; current departure preserved');
+      expect(store.getInteractionState()).toBe('CONVERSATION');
+
+      // degraded -> settle
+      expect(store.settle()).toBe(true);
+      expect(store.getActionState().status).toBe('settled');
+    });
+
+    it('guards and rejects illegal transitions', () => {
+      const store = createActionStateStore();
+
+      // Illegal: resolveExecutable from idle
+      expect(store.resolveExecutable('Should fail')).toBe(false);
+
+      // Illegal: confirmPending from idle
+      expect(store.confirmPending('Should fail')).toBe(false);
+
+      // Illegal: rejectPending from idle
+      expect(store.rejectPending()).toBe(false);
+
+      // Illegal: resolveDegraded from idle
+      expect(store.resolveDegraded('Should fail')).toBe(false);
+
+      // Illegal: settle from idle
+      expect(store.settle()).toBe(false);
+
+      // Transition to working
+      store.beginCommand('Working task');
+
+      // Illegal: beginCommand while already working
+      expect(store.beginCommand('Concurrent task')).toBe(false);
+
+      // Illegal: confirmPending while working (requires needs-confirmation)
+      expect(store.confirmPending('Premature confirm')).toBe(false);
+
+      // Illegal: rejectPending while working
+      expect(store.rejectPending()).toBe(false);
     });
 
     it('resets to idle cleanly', () => {
       const store = createActionStateStore();
-      store.setDegraded('Failure');
+      store.beginCommand('Test');
+      store.resolveDegraded('Error');
       store.resetToIdle();
       expect(store.getActionState().status).toBe('idle');
     });
@@ -81,7 +136,8 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       store.pushHistory(snapshot1);
       expect(store.canUndo()).toBe(true);
 
-      store.setUpdated('Plan modified');
+      store.beginCommand('Modify plan');
+      store.resolveExecutable('Plan modified');
       expect(store.getActionState().status).toBe('updated');
 
       const restored = store.undo();
@@ -93,7 +149,7 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
   });
 
   describe('2.2 Interaction State Machine & Navigation', () => {
-    it('opens and closes conversation with subscriber notification', () => {
+    it('opens and closes conversation with subscriber notification and honest welcome text', () => {
       const store = createActionStateStore();
       const listener = vi.fn();
       store.subscribe(listener);
@@ -102,6 +158,7 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       expect(store.getInteractionState()).toBe('CONVERSATION');
       expect(store.getTranscript().length).toBeGreaterThan(0);
       expect(store.getTranscript()[0]?.sender).toBe('assistant');
+      expect(store.getTranscript()[0]?.text).toContain('V2a');
       expect(listener).toHaveBeenCalled();
 
       store.closeConversation();
@@ -130,6 +187,18 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
 
       store.setPinned(true);
       expect(store.isPinned()).toBe(true);
+    });
+
+    it('when pinned, resolveExecutable stays in CONVERSATION rather than collapsing to HOME', () => {
+      const store = createActionStateStore();
+      store.openConversation();
+      store.setPinned(true);
+
+      store.beginCommand('Executable task');
+      expect(store.getInteractionState()).toBe('PROCESSING');
+
+      store.resolveExecutable('Task complete');
+      expect(store.getInteractionState()).toBe('CONVERSATION'); // Pinned prevents collapse
     });
   });
 
@@ -199,7 +268,7 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
   });
 
   describe('V0 Message Submission (Honest Capability Placeholder)', () => {
-    it('appends user message and honest placeholder without fake processing animation', () => {
+    it('appends user message, enters PROCESSING, and presents honest placeholder', () => {
       const store = createActionStateStore();
       store.openConversation();
 
@@ -214,6 +283,7 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       expect(transcript[1]?.text).toBe('Leave 15 minutes later');
       expect(transcript[2]?.sender).toBe('assistant');
       expect(transcript[2]?.isPlaceholder).toBe(true);
+      expect(store.getInteractionState()).toBe('CONVERSATION');
     });
 
     it('ignores whitespace-only submissions', () => {

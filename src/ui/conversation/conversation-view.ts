@@ -1,6 +1,6 @@
 /**
  * Full-page Conversation Shell Component (V0 - LIVING_CONTEXT_V2.md §2)
- * Manages full-page conversation overlay, transcript, composer, pin, Esc, and focus return.
+ * Manages full-page conversation overlay, transcript, composer, focus trap, Esc, Back, and focus return.
  */
 
 import { escapeHtml } from '../living-context/presentation.js';
@@ -93,11 +93,17 @@ export function attachConversationEvents(
   store: ActionStateStore,
   onClose: () => void
 ): () => void {
+  const overlay = container.querySelector<HTMLElement>('#conversation-overlay');
   const closeBtn = container.querySelector<HTMLButtonElement>('#conversation-close-btn');
   const pinBtn = container.querySelector<HTMLButtonElement>('#conversation-pin-btn');
   const form = container.querySelector<HTMLFormElement>('#conversation-composer-form');
   const input = container.querySelector<HTMLInputElement>('#conversation-input');
   const transcriptEl = container.querySelector<HTMLElement>('#conversation-transcript');
+
+  // Push history state if not already pushed (for browser back navigation)
+  if (typeof window !== 'undefined' && window.history && !window.history.state?.yoriConversationOpen) {
+    window.history.pushState({ yoriConversationOpen: true }, '', window.location.href);
+  }
 
   // Focus composer immediately on mount
   if (input) {
@@ -111,21 +117,72 @@ export function attachConversationEvents(
     transcriptEl.scrollTop = transcriptEl.scrollHeight;
   }
 
-  const handleEscKey = (e: KeyboardEvent) => {
+  let isClosed = false;
+  const performClose = (reason: string) => {
+    if (isClosed) return;
+    isClosed = true;
+    store.closeConversation(reason);
+    onClose();
+  };
+
+  const safeClose = (reason: string) => {
+    if (isClosed) return;
+    if (typeof window !== 'undefined' && window.history && window.history.state?.yoriConversationOpen) {
+      performClose(reason);
+      window.history.back();
+    } else {
+      performClose(reason);
+    }
+  };
+
+  // Popstate listener for system / browser Back navigation
+  const handlePopState = () => {
+    if (isClosed) return;
+    performClose('system_back');
+  };
+  window.addEventListener('popstate', handlePopState);
+
+  // Focus trap inside modal overlay
+  const focusableSelector =
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  const handleKeydown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
-      if (store.handleEsc()) {
-        onClose();
+      safeClose('esc_pressed');
+      return;
+    }
+
+    if (e.key === 'Tab' && overlay) {
+      const focusables = Array.from(overlay.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+        el => el.offsetParent !== null || el === input
+      );
+      if (focusables.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusables[0]!;
+      const last = focusables[focusables.length - 1]!;
+
+      if (e.shiftKey) {
+        if (document.activeElement === first || !overlay.contains(document.activeElement)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last || !overlay.contains(document.activeElement)) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     }
   };
-  window.addEventListener('keydown', handleEscKey);
+  window.addEventListener('keydown', handleKeydown);
 
   if (closeBtn) {
     closeBtn.addEventListener('click', (e) => {
       e.preventDefault();
-      store.closeConversation('close_button');
-      onClose();
+      safeClose('close_button');
     });
   }
 
@@ -157,7 +214,7 @@ export function attachConversationEvents(
       }
 
       if (result.collapsed) {
-        onClose();
+        safeClose('auto_collapse');
       } else {
         input.focus();
       }
@@ -166,6 +223,7 @@ export function attachConversationEvents(
 
   // Cleanup handler
   return () => {
-    window.removeEventListener('keydown', handleEscKey);
+    window.removeEventListener('keydown', handleKeydown);
+    window.removeEventListener('popstate', handlePopState);
   };
 }

@@ -79,12 +79,16 @@ export interface ActionStateStore {
   setPinned(pinned: boolean): void;
   handleEsc(): boolean;
 
-  startWorking(detail?: string, substate?: WorkingSubstate): void;
-  setUpdated(summary: string, plan?: PreparedPlan): void;
-  setNeedsConfirmation(detail: string): void;
-  setDegraded(notice: string): void;
-  setSettled(): void;
-  resetToIdle(): void;
+  // Guarded transition methods (§2.1 & §2.2)
+  beginCommand(text: string, detail?: string, substate?: WorkingSubstate): boolean;
+  resolveExecutable(summary: string, plan?: PreparedPlan): boolean;
+  resolveNeedsConfirmation(detail: string): boolean;
+  confirmPending(summary: string, plan?: PreparedPlan): boolean;
+  rejectPending(): boolean;
+  resolveDegraded(notice: string): boolean;
+  resolveLongForm(response: string): boolean;
+  settle(): boolean;
+  resetToIdle(): boolean;
 
   evaluateAutoCollapse(rule: AutoCollapseRule): boolean;
   submitMessage(text: string): { collapsed: boolean; rule: AutoCollapseRule; response: string };
