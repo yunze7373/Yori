@@ -470,6 +470,17 @@ specifics stay PROVISIONAL, visual-dependent acceptance in the plan
 is gated on the reference-arrival task, and no concept image is
 described as an implemented screen.
 
+### 7.1 OWNER_REF_GATE Executor Receipt (2026-10-29)
+
+Executor verified all five reference files at `docs/design/v2-reference/`:
+- `00_current_yori_baseline.png`: SHA-256 `9b11cb6633edba5f14dccbfa04798e7bc76241cde6a8ac499f1ee51ae3bbd396`, 1537×834
+- `01_desktop_living_context_concept.png`: SHA-256 `7c7f6fc637dd4db5ce8dc1ae9067c0270163de8a8fb651c46133141a67320a7a`, 1448×1086
+- `02_mobile_scenario_flow_approved.png`: SHA-256 `efa2d9b61ecb575a68ff0b5971cf736946c79ea1253e4feeabed14e6d327c317`, 1536×1024
+- `03_mobile_experience_v1_approved.png`: SHA-256 `257a988c9ad14eb5e650ae15e09b032e6ff1590d62564207e3b4e33dc7b9403b`, 1672×941
+- `YORI_LIVING_CONTEXT_V2_UI_HANDOFF.md`: SHA-256 `116f07422cc6c1b03b8116603305b1c3b0916e9f881c6f1a935562f11b975747`
+
+All names, hashes, and pixel dimensions match the plan exactly with zero mismatch. Git status, `git ls-files`, and `git log` confirm zero staged or committed reference files; files remain strictly git-excluded (.git/info/exclude). OWNER_REF_GATE is fulfilled (passed).
+
 ## 11. Cut-Line Decision Record (CUTLINE_CHECK_V2)
 
 - **Date:** 2026-10-29 (evaluated ahead of the 2026-11-01 12:00 JST deadline).
