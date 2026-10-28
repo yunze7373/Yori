@@ -2,7 +2,7 @@
 
 > **Auditable Decision Record for Slice PH-002 C1 (AC-203-1)**  
 > **Governed by Plan:** `yori_ph002_001` (Workstream C, Goal G-203)  
-> **Status:** APPROVED DECISION  
+> **Status:** PROPOSED — pending Reviewer  
 > **Date:** 2026-10-28  
 > **Author:** DevFlow Resident Project Executor AI  
 
@@ -15,10 +15,11 @@
 Based on inspectable live metadata and published documentation retrieved on **2026-10-28**, XMemo provides an official, standards-compliant **OAuth 2.0 (RFC 8414 / RFC 7636 PKCE)** end-user application authorization path at `https://xmemo.dev`.
 
 A third-party web application such as Yori can integrate with XMemo using:
-1. **Protocol:** OAuth 2.0 Authorization Code Flow with PKCE (`S256`) and optional Dynamic Client Registration (RFC 7591).
+1. **Protocol:** OAuth 2.0 Authorization Code Flow with PKCE (`S256`) and Dynamic Client Registration (RFC 7591).
 2. **Minimal Scopes Required:** `memory:read` (to retrieve user preferences and confirmed memories) and `memory:write` (to write back user-confirmed preferences upon explicit approval).
-3. **Token Placement:** Server-side proxy / session storage only; **zero agent tokens or client secrets in the browser bundle or repository** (enforcing Invariant INV-107, AC-106-3, AC-203-2, and HB-3).
-4. **Deterministic Fallback:** If XMemo OAuth is not configured, fails, or is rejected, the application seamlessly falls back to `LocalMemoryAdapter` as the sole source of truth, preserving 100% feature fidelity across all scenes (D1–D6) without degradation.
+3. **Data Access Surface:** Streamable MCP-over-HTTP at `https://xmemo.dev/mcp` (the declared protected resource) using bearer authorization (`Authorization: Bearer <token>`).
+4. **Token Placement:** Server-side proxy / session storage only; **zero agent tokens or client secrets in the browser bundle or repository** (enforcing Invariant INV-107, AC-106-3, AC-203-2, and HB-3).
+5. **Deterministic Fallback:** If XMemo OAuth is unconfigured, fails, or is rejected, the application seamlessly falls back to `LocalMemoryAdapter` as the sole source of truth, preserving 100% feature fidelity across all scenes (D1–D6) without degradation.
 
 ---
 
@@ -27,9 +28,9 @@ A third-party web application such as Yori can integrate with XMemo using:
 > [!IMPORTANT]
 > **The agent-side MCP access in this workspace is NOT an end-user application auth path.**
 
-- In the current workspace, the agent communicates via a local/stdio or managed MCP configuration using a provisioned agent identity (`Client ID: xmemo-skill`, `Owner ID: usr_XSTA_36JMlsi8A`, `Tool Profile: ordinary-full`).
+- In the current workspace, the agent communicates via an internal development MCP configuration using a provisioned agent identity used by the owner's developer tooling.
 - This workspace capability is strictly an **internal developer/agent operational channel**.
-- Shipping or embedding this agent token into Yori's client or web distribution would violate **HB-3** and **AC-106-3**.
+- Shipping or embedding agent tokens or provisioning details into Yori's client or web distribution is prohibited under **HB-3** and **AC-106-3**.
 - End-user integration must instead use the user-authorized OAuth 2.0 flow where the end user explicitly grants permissions via XMemo's consent screen.
 
 ---
@@ -80,7 +81,20 @@ Retrieved from `https://xmemo.dev/.well-known/oauth-authorization-server`:
 }
 ```
 
-#### B. Official Authentication Guide (`https://xmemo.dev/auth.md`)
+#### B. Protected Resource Metadata
+Retrieved from `https://xmemo.dev/.well-known/oauth-protected-resource`:
+```json
+{
+  "resource": "https://xmemo.dev/mcp",
+  "authorization_servers": ["https://xmemo.dev"],
+  "scopes_supported": ["memory:read", "memory:write", "knowledge:read", "knowledge:write"],
+  "bearer_methods_supported": ["header"],
+  "resource_documentation": "https://docs.xmemo.dev",
+  "token_endpoint_auth_methods_supported": ["none", "client_secret_post", "client_secret_basic"]
+}
+```
+
+#### C. Official Authentication Guide (`https://xmemo.dev/auth.md`)
 > *"For dynamic client integrations, XMemo supports the OAuth 2.0 authorization code flow with Proof Key for Code Exchange (PKCE).*  
 > *Discovery endpoint: `https://xmemo.dev/.well-known/oauth-authorization-server`*  
 > *Steps:*  
@@ -89,12 +103,14 @@ Retrieved from `https://xmemo.dev/.well-known/oauth-authorization-server`:
 > *3. Exchange the authorization code for an access token*  
 > *4. Use the access token as a Bearer token in the Authorization header"*
 
-#### C. API & Security Documentation (`docs.xmemo.dev`)
-> *"Unverified dynamic clients must request memory and knowledge scopes explicitly; verified clients retain the existing default when scope is omitted. The grant supplies only the approved scopes."*  
+#### D. API & Security Documentation (`docs.xmemo.dev`)
+> *"The hosted MCP endpoint and the REST API authenticate differently. Pick the one that matches the client you are wiring, and never place a credential in public configuration or a generated URL.*  
+> *- MCP — OAuth where the client supports it, otherwise Authorization: Bearer ${XMEMO_KEY}.*  
+> *- REST data plane — X-API-Key: <your-assigned-api-key> (Authorization: Bearer <token> is also accepted by the server)."*  
 > (`docs/api/authentication.md`)
 
-> *"The authentication boundary separates OAuth consent, bearer-token storage, non-secret identity headers, and the access decision itself. Mixing them is the most common cause of a leaked token. OAuth consent lives in the client; XMemo never sees a pasted token on that path. XMEMO_KEY lives in the environment or a supported secret store, never in a config file committed to git."*  
-> (`docs/security/authentication.md`)
+> *"Unverified dynamic clients must request memory and knowledge scopes explicitly; verified clients retain the existing default when scope is omitted. The grant supplies only the approved scopes."*  
+> (`docs/api/authentication.md`)
 
 ---
 
@@ -103,29 +119,42 @@ Retrieved from `https://xmemo.dev/.well-known/oauth-authorization-server`:
 | Item | Finding / Claim | Evidence Source | Status |
 |---|---|---|---|
 | **Auth Protocol** | OAuth 2.0 Authorization Code Grant with PKCE (`code_challenge_method=S256`) | `oauth-authorization-server` metadata, `auth.md` | **VERIFIED** |
-| **Public Client Support** | `token_endpoint_auth_methods_supported` includes `"none"`, supporting browser/SPA PKCE without pre-shared client secrets | `oauth-authorization-server` metadata | **VERIFIED** |
-| **Client Registration** | Dynamic Client Registration (RFC 7591) supported at `https://xmemo.dev/oauth/register` | `oauth-authorization-server` metadata, `auth.md` | **VERIFIED** |
-| **Token Exchange** | `POST https://xmemo.dev/oauth/token` handles `grant_type=authorization_code` and `grant_type=refresh_token` | `oauth-authorization-server` metadata | **VERIFIED** |
-| **Token Revocation** | `POST https://xmemo.dev/oauth/revoke` handles RFC 7009 token revocation | `oauth-authorization-server` metadata, `auth.md` | **VERIFIED** |
-| **Minimal Read Scope** | `memory:read` authorizes memory recall, search, and reading confirmed facts | `docs/api/authentication.md`, `docs/concepts/scopes.md` | **VERIFIED** |
-| **Minimal Write Scope** | `memory:write` authorizes memory writes and mutations | `docs/api/authentication.md`, `docs/concepts/scopes.md` | **VERIFIED** |
-| **Unneeded Scopes** | `knowledge:read`, `knowledge:write`, `openid`, `profile`, `email` are not required for Yori's memory loop and MUST be omitted to satisfy Principle of Least Privilege | Principle of Least Privilege, `docs/api/authentication.md` | **VERIFIED** |
-| **Standalone OIDC IdP** | `/.well-known/openid-configuration` returns 404; identity tokens are optional claims, not standalone SSO endpoint | HTTP response check | **VERIFIED** |
-| **Client App Secret Exemption** | Pure browser SPAs can use PKCE with `token_endpoint_auth_method: none`; or server proxy can custody client secret | RFC 8414 metadata, `auth.md` | **VERIFIED** |
+| **Public Client Support** | `token_endpoint_auth_methods_supported` includes `"none"`, supporting PKCE without pre-shared client secrets | `oauth-authorization-server` metadata | **VERIFIED** |
+| **Dynamic Client Registration** | RFC 7591 dynamic registration supported at `https://xmemo.dev/oauth/register` | `oauth-authorization-server` metadata, `auth.md` | **VERIFIED** |
+| **Token Exchange & Revocation** | `POST /oauth/token` (code & refresh grants); `POST /oauth/revoke` (revocation) | `oauth-authorization-server` metadata, `auth.md` | **VERIFIED** |
+| **Minimal Scopes** | `memory:read` (recall/search) and `memory:write` (write-back confirmed facts) | `docs/api/authentication.md`, `docs/concepts/scopes.md` | **VERIFIED** |
+| **Unneeded Scopes** | `knowledge:read`, `knowledge:write`, `openid`, `profile`, `email` omitted for least privilege | Principle of Least Privilege | **VERIFIED** |
+| **Target Data Surface** | The token audience/resource is strictly the MCP endpoint `https://xmemo.dev/mcp` | `oauth-protected-resource` metadata, `docs/api/authentication.md` | **VERIFIED** |
+| **Loopback Redirect Acceptance** | Acceptance of `http://127.0.0.1:<port>/...` as dynamic registration redirect URI | Not stated in metadata or docs | **UNVERIFIED** (Requires live probe in C2) |
+| **Console OAuth Registration UI** | User-facing self-service app registration form in Memory Console | Docs describe Console for memory inspection/export only | **UNVERIFIED** (No source documents this UI) |
+| **REST Data Surface with OAuth Token** | Direct REST data calls (`/v1/memories/...`) using dynamic OAuth access token | Docs state REST uses `X-API-Key` (though Bearer accepted) | **UNVERIFIED** (MCP is the documented OAuth surface) |
 
 ---
 
-## 5. Architectural Integration Model for Yori (Workstream C)
+## 5. Target Data Access Surface: MCP-over-HTTP
+
+The metadata from `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` establishes that:
+- The declared `resource` is `https://xmemo.dev/mcp`.
+- The primary authenticated data surface for OAuth clients is the **hosted Model Context Protocol (MCP) endpoint** at `https://xmemo.dev/mcp`.
+
+### Consequences for Slice C2
+1. **Protocol:** C2 must interact with XMemo via **Streamable MCP-over-HTTP** sending `Authorization: Bearer <access_token>`.
+2. **Operations:** Operations use standard, documented MCP tools (`recall` to read confirmed preferences and `remember` to write back user-confirmed facts).
+3. **No Invented Endpoints:** Yori must NOT invent arbitrary REST paths (e.g. `/v1/preferences` or `/v1/oauth/userinfo`) that are not backed by evidence.
+
+---
+
+## 6. Architectural Integration Model for Yori (Workstream C)
 
 To satisfy **Architecture Rev3 Section 9.2**, **ADR-103**, **AC-203-1**, and **AC-203-2**:
 
 ### 1. Zero Client Credential Exposure (HB-3)
-- Static tokens (`XMEMO_KEY`) and long-lived OAuth client secrets MUST NEVER be bundled into frontend JavaScript (`dist/`) or committed to the repository.
-- Live token handling in development or production is conducted through a local backend proxy or dev-server middleware (e.g. `POST /api/xmemo/token` or local session cookie), never exposed to client storage.
+- Static tokens (`XMEMO_KEY`) and long-lived credentials MUST NEVER be bundled into frontend JavaScript (`dist/`) or committed to the repository.
+- Token exchange in development is conducted through a local backend proxy / dev-server middleware (e.g. `POST /api/xmemo/token`), never exposed in client storage.
 
 ### 2. Confirm-Only Memory Write-Back (INV-107, AC-106-3)
 - `MemoryPort.writeBack(fact)` strictly validates `fact.status === 'confirmed'`.
-- Any attempt to write back `pending` proposals or `rejected` insights throws immediately without network dispatch.
+- Any attempt to write back `pending` proposals or `rejected` insights throws immediately without dispatch.
 
 ### 3. Graceful Deterministic Fallback (AC-203-2)
 - If the OAuth flow has not been completed, or the access token has expired/revoked, `XMemoRemoteAdapter` reports `isRemoteConfigured: false`.
@@ -134,23 +163,19 @@ To satisfy **Architecture Rev3 Section 9.2**, **ADR-103**, **AC-203-1**, and **A
 
 ---
 
-## 6. Single Minimal Owner Action (for Slice C2 Gate)
+## 7. Single Minimal Owner Action (for Slice C2 Gate)
 
 When ready to enable live XMemo sync in slice C2:
 
-1. **Option A (Dynamic Client Registration via Local Proxy — Recommended):**
-   - The local dev proxy registers a client dynamically with `POST https://xmemo.dev/oauth/register` specifying `redirect_uri: http://127.0.0.1:5173/auth/callback`.
-   - The owner is redirected to `https://xmemo.dev/oauth/authorize?client_id=...&scope=memory:read%20memory:write&response_type=code&code_challenge=...` and clicks **Authorize**.
-   - **Owner action:** Exactly **1 click** in the browser to approve consent.
-
-2. **Option B (Static App Registration in Console):**
-   - If dynamic registration is restricted by deployment policy, the owner creates an application in the XMemo Console (`Settings -> API & Integrations -> Register OAuth App`).
-   - The owner puts `XMEMO_CLIENT_ID=<client_id>` in `.env.local` (local only; git-ignored).
-   - **Owner action:** Provide client ID in `.env.local` and complete browser sign-in.
+- **Dynamic Client Registration Flow:**
+  1. The local dev proxy registers a client dynamically with `POST https://xmemo.dev/oauth/register`.
+  2. The browser navigates to `https://xmemo.dev/oauth/authorize?client_id=...&scope=memory:read%20memory:write&response_type=code&code_challenge=...`.
+  3. The owner clicks **Authorize** on the XMemo consent screen.
+  - **Owner action:** Exactly **1 click** in the browser to approve consent.
 
 ---
 
-## 7. Fallback Demo Path (If Owner Chooses Not to Enable Live OAuth)
+## 8. Fallback Demo Path (If Owner Chooses Not to Enable Live OAuth)
 
 If the owner chooses not to configure live OAuth credentials during C2:
 1. **Local Truth Source:** `LocalMemoryAdapter` remains the active implementation of `MemoryPort`.
@@ -161,10 +186,9 @@ If the owner chooses not to configure live OAuth credentials during C2:
 
 ---
 
-## 8. Conclusion
+## 9. Open Questions for Slice C2 Live Probe
 
-The existence spike for **PH-002 C1** is concluded:
-- **Verified:** A standards-based OAuth 2.0 PKCE flow exists at `https://xmemo.dev` with minimal scopes `memory:read` and `memory:write`.
-- **Verified:** No agent tokens are leaked or used for end-user auth.
-- **Verified:** Deterministic local fallback is fully specified and preserved.
-- **Release:** Slice C2 may proceed with either the live server-mediated OAuth integration or the documented fallback demo path.
+Slice C2 must resolve the following open questions through an owner-authorized live test:
+1. **Redirect URI Validation:** Does `https://xmemo.dev/oauth/register` accept local loopback redirect URIs (`http://127.0.0.1:<port>/callback` or `http://localhost:<port>/callback`) for dynamic public clients?
+2. **DCR Expiry/Quotas:** Are dynamic client credentials ephemeral or persistent across server restarts?
+3. **MCP Tool Invocation Format:** Confirm the exact JSON-RPC payload envelope accepted by `POST https://xmemo.dev/mcp` with Bearer authentication for `recall` and `remember`.
