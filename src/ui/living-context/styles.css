@@ -1263,6 +1263,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   background-color: #16382F !important;
   color: #FFFFFF !important;
   border-color: #16382F !important;
+  transition: none !important;
 }
 
 .conversation-pin-btn.is-pinned span {
@@ -1405,5 +1406,309 @@ button:focus-visible, a:focus-visible, select:focus-visible {
     transition: none !important;
     transform: none !important;
   }
+}
+
+/* ==========================================================================
+   V1 Scene-Driven Home Composition & Carrier Cards (LIVING_CONTEXT_V2.md §4)
+   ========================================================================== */
+
+.v2-home-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Insight Banner */
+.v2-insight-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  background: #EFF5F1;
+  border: 1px solid #C8DDD0;
+  border-radius: var(--radius-card);
+  padding: 18px 20px;
+  color: #16382F;
+}
+
+.v2-insight-icon {
+  flex-shrink: 0;
+  color: #2D6A4F;
+  margin-top: 2px;
+}
+
+.v2-insight-body {
+  flex: 1;
+}
+
+.v2-insight-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+  color: #16382F;
+}
+
+.v2-insight-desc {
+  font-size: 0.9375rem;
+  color: #354540;
+  margin: 0 0 10px 0;
+}
+
+/* Journey Grid (Mobile: Stacked, Desktop: 2 Columns) */
+.v2-journey-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+@media (min-width: 1024px) {
+  .v2-journey-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+}
+
+/* Map Card */
+.v2-map-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 20px 20px 20px;
+}
+
+.v2-map-card.prominent .v2-map-canvas {
+  height: 220px;
+}
+
+.v2-map-card.compact .v2-map-canvas {
+  height: 160px;
+}
+
+@media (min-width: 1024px) {
+  .v2-map-card.prominent .v2-map-canvas {
+    height: 320px;
+  }
+}
+
+.v2-map-canvas {
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 8px 0 12px 0;
+}
+
+/* Timeline */
+.v2-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 16px 0;
+  padding: 12px 14px;
+  background: #F9FAF9;
+  border-radius: 14px;
+  border: 1px solid #E1E6E0;
+}
+
+.v2-timeline-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.v2-step-time {
+  width: 68px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #16382F;
+  text-align: right;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.v2-step-node {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #CAD6D0;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.v2-timeline-step.primary .v2-step-node {
+  background: #2D6A4F;
+  box-shadow: 0 0 0 3px #D1E7DD;
+}
+
+.v2-timeline-step.event .v2-step-node {
+  background: #16382F;
+}
+
+.v2-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.v2-step-label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #16382F;
+}
+
+.v2-step-detail {
+  font-size: 0.8125rem;
+  color: #354540;
+}
+
+/* Transit Options Grid */
+.v2-options-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.v2-option-card {
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid #D5DDD8;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.v2-option-card.selected {
+  border-color: #2D6A4F;
+  background: #F4F8F5;
+}
+
+.v2-option-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.v2-option-label {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #16382F;
+}
+
+.v2-option-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #E2EAE5;
+  color: #16382F;
+}
+
+.v2-option-badge.recommended {
+  background: #D1E7DD;
+  color: #0F5132;
+}
+
+.v2-option-meta {
+  font-size: 0.8125rem;
+  color: #354540;
+}
+
+.v2-option-basis {
+  font-size: 0.75rem;
+  color: #2D6A4F;
+  font-weight: 500;
+}
+
+/* Candidate Cards (Lunch) */
+.v2-candidate-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin: 16px 0;
+}
+
+@media (min-width: 640px) {
+  .v2-candidate-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.v2-candidate-card {
+  border: 1px solid #D5DDD8;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.v2-candidate-card.selected {
+  border-color: #2D6A4F;
+  box-shadow: 0 4px 12px rgba(45, 106, 79, 0.12);
+}
+
+.v2-candidate-art {
+  position: relative;
+  width: 100%;
+  height: 120px;
+  background: #F4F7F4;
+}
+
+.v2-illustration-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(22, 56, 47, 0.75);
+  color: #FFFFFF;
+  letter-spacing: 0.02em;
+}
+
+.v2-candidate-info {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.v2-candidate-name {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  margin: 0;
+  color: #16382F;
+}
+
+.v2-candidate-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.v2-cuisine-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #E2EAE5;
+  color: #16382F;
+}
+
+.v2-distance-chip {
+  font-size: 0.75rem;
+  color: #354540;
+}
+
+.v2-candidate-basis {
+  font-size: 0.75rem;
+  color: #2D6A4F;
+  margin: 0;
+  line-height: 1.35;
 }
 

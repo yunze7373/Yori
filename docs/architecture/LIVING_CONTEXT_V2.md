@@ -234,6 +234,65 @@ approved by 2026-11-01 noon JST, stop V2 UI work and record the
 already-approved PH-001/PH-002 UI.** The fallback is a decision
 point in the plan, not an improvisation.
 
+## 8. Amendment Rev3 — verified references folded in (ARCH-V2-002)
+
+Arrival receipt (Architect-verified by opening every file, not
+transcribed): all four PNGs and the handoff doc are at
+`docs/design/v2-reference/`, SHA-256 and dimensions exactly matching
+the coordinator manifest (`00 9b11cb66…bd396 1537×834`,
+`01 7c7f6fc6…0a7a 1448×1086`, `02 efa2d9b6…c317 1536×1024`,
+`03 257a988c…403b 1672×941`, handoff `116f0742…`). The images are
+git-excluded concept art and are never committed. `03` is the
+primary visual reference, supported by `02` (storyboard) and `01`
+(desktop). OWNER_REF_GATE is therefore **arrived**; token values in
+§5 are now derived from the references (ivory/off-white surfaces,
+deep green primary, serif display greeting, rounded cards with soft
+elevation, green primary action buttons, pale blue rain banner) and
+are finalized in slice V3 with side-by-side evidence.
+
+Decisions added by this amendment (slices in `YORI_V2.plan.json`):
+
+- **D1 Detail views (new slice V1b, after V1).** Rain: TripDetail
+  with mode tabs (drive, bus; walk only if a fixture exists), large
+  schematic map, current/recommended plan row, "Why this plan?".
+  Lunch: RestaurantDetail with a local labelled illustration,
+  attribute chips, Save, and in-app Directions showing the schematic
+  route only — external maps are never opened. `TripDetailVM` /
+  `RestaurantDetailVM` join §4. Back navigation returns focus to the
+  originating card.
+- **D2 Nav decided.** Bottom nav is **Home / Plans / For You / Me**
+  — four tabs, every one functional (Plans = upcoming AHEAD list;
+  no Explore, since no explore surface exists). The ask bar
+  ("Ask Yori anything…") docks above the nav. No disabled
+  placeholders anywhere; **no mic icon** (voice input does not
+  exist in the demo).
+- **D3 Honest processing copy.** Working-state copy names the actual
+  recomputation and never claims real-time data:
+  "Checking forecast · simulated", "Comparing departure options",
+  "Updating your plan". The reference wording ("Checking real-time
+  weather/traffic") is explicitly not adopted.
+- **D4 Data honesty (gate-enforced).** Only fixture values render:
+  appointment 3:00 PM, drive 25 min, bus 40 min, buffer/prep from
+  confirmed facts. The references' own numbers (02: 28/32/40;
+  03: 44/52/18) are concept artefacts and are never copied. Star
+  ratings and review counts are **omitted** (fixture attributes —
+  quiet, vegetarian, distance — show instead). Restaurant names are
+  fictional fixture data, labelled. Weather values (temperature)
+  come only from the mock weather fixture, labelled. The Yori
+  avatar is a **mark/logo, never a person's photo**. The chat header
+  reads **"Offline demo · simulated"**, never "Online".
+- **D5 Desktop conversation.** On desktop the conversation expands
+  from the input as a floating/overlay panel (reference 01), never a
+  permanent column. Map overlays (rain area, route options with
+  durations) and context chips are derived only from plan data.
+- **D6 Tokens.** Derived per §5 from `03` (primary), `02`, `01`;
+  V3 evidence must include side-by-side comparisons against the
+  reference frames.
+
+Time impact: V1b adds ≈5h after V1 and before V2a. The 11/1 noon
+cut line is unchanged and remains achievable: V1 is already
+executing under rev2, and V2a/V2b simply shift behind V1b.
+
 ## 7. Blocked visual finalization and image channel
 
 R0–R3 are not on this Mac and the Bridge cannot carry binaries.

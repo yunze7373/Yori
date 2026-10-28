@@ -75,6 +75,8 @@ import {
   renderConversationOverlay,
   attachConversationEvents,
 } from '../conversation/index.js';
+import { buildHomeComposition } from '../view-models/index.js';
+import { renderV2Home } from './v2-home-view.js';
 
 export type DemoSceneId =
   | 'clear'
@@ -727,6 +729,50 @@ export function renderApp(
         isPersistent: storage.isPersistent(),
         xmemoStatus,
       });
+    } else if (uiVersion === 'v2') {
+      const v2Composition = buildHomeComposition({
+        plan: nowPlan,
+        spatialEvidence: spatialMapEvidence,
+        aheadPlans,
+        proposals: living.forYou.map(f => ({ key: f.key, value: f.value })),
+        acceptedPlanIds,
+      });
+
+      mainContentHtml = `
+        ${
+          storageError
+            ? `
+          <div class="error-box" role="alert" aria-live="assertive">
+            <h2 class="error-title">${escapeHtml(STRINGS.storageError.title)}</h2>
+            <p>${escapeHtml(STRINGS.storageError.message)}</p>
+            <div class="error-actions">
+              <button type="button" class="btn btn-secondary" id="btn-export-storage">${escapeHtml(STRINGS.storageError.exportBtn)}</button>
+              <button type="button" class="btn btn-danger" id="btn-reset-storage">${escapeHtml(STRINGS.storageError.resetBtn)}</button>
+            </div>
+            <div id="storage-action-feedback" class="storage-feedback" role="status">
+              ${actionFeedbackMessage ? escapeHtml(actionFeedbackMessage) : ''}
+            </div>
+          </div>
+        `
+            : ''
+        }
+
+        ${
+          notices.length > 0
+            ? notices
+                .map(
+                  n => `
+          <div class="notice-box" role="status">
+            <strong>${escapeHtml(STRINGS.notices.degradedNoticeHeader)}</strong> ${escapeHtml(formatNoticeMessage(n))}
+          </div>
+        `
+                )
+                .join('')
+            : ''
+        }
+
+        ${renderV2Home(v2Composition)}
+      `;
     } else {
       mainContentHtml = `
         ${

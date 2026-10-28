@@ -123,6 +123,46 @@
       ]
     },
     {
+      "id": "V1b",
+      "slice": 1,
+      "title": "Expanded detail views (TripDetail/RestaurantDetail) and decided bottom nav",
+      "priority": "P0",
+      "goal": "Add step-2 detail views from storyboards 02/03: TripDetail (mode tabs drive/bus, walk only if a fixture exists; large schematic map; current/recommended plan row; Why this plan?) and RestaurantDetail (local labelled illustration, attribute chips, Save, in-app Directions showing the schematic route only, never external maps), via TripDetailVM/RestaurantDetailVM with back navigation and focus return to the originating card. Land the decided bottom nav Home/Plans/For You/Me (all functional, Plans = AHEAD list) with the ask bar docked above it and no mic icon; no disabled placeholders anywhere.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 5,
+      "dependencies": [
+        "V1"
+      ],
+      "goal_ids": [
+        "G-105",
+        "G-102",
+        "G-103"
+      ],
+      "acceptance_ids": [
+        "AC-105-1",
+        "AC-102-1",
+        "AC-103-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/view-models",
+        "src/ui/living-context/app.ts",
+        "src/ui/living-context/styles.css"
+      ],
+      "checks": [
+        "Gate: core zero diff; golden 10/10; detail screens render only fixture values (3:00 PM, drive 25, bus 40, buffer/prep from facts); no star ratings or review counts anywhere; Directions never leaves the app (no external map link/call)",
+        "Nav audit: every visible control in nav and ask bar functions; no disabled tabs, no mic icon; back from detail returns focus to the originating card; e2e + axe at 390x844 and 1280x800 with screenshots",
+        "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V1b --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
       "id": "INBOX_CHECK_V2_A",
       "title": "📬 INBOX checkpoint",
       "type": "checkpoint",
@@ -131,7 +171,7 @@
       "auto_trigger": true,
       "status": "pending",
       "dependencies": [
-        "V1"
+        "V1b"
       ],
       "inbox_checkpoint": {
         "actions": [
@@ -155,7 +195,7 @@
       "pipeline": "ui_redesign",
       "estimated_hours": 5,
       "dependencies": [
-        "V1",
+        "V1b",
         "INBOX_CHECK_V2_A"
       ],
       "goal_ids": [
@@ -178,6 +218,7 @@
       "checks": [
         "Gate: core zero diff; golden 10/10; grammar unit tests for LEAVE_LATER/CHANGE_ROUTE/WHY/ACCEPT/UNDO plus unknown mode mapping to UNSUPPORTED",
         "Negative test: after 'leave 15 minutes later' (this time only), storage contains no new or changed confirmed fact, and Why shows user_request provenance distinct from confirmed facts; Undo restores the prior plan and clears the override",
+        "Honest copy and identity: working-state strings name the actual recomputation with simulated labelling (no 'real-time' claims); chat header reads 'Offline demo · simulated'; Yori avatar is the mark/logo, not a person photo; on desktop the conversation expands as a floating overlay panel, not a permanent column",
         "Interaction e2e at 390x844 and 1280x800: home->chat->send->processing->comparison->confirm->updated home->Undo; axe green; screenshots per state",
         "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id V2a --plan-ref docs/architecture/YORI_V2.plan.json"
@@ -219,6 +260,7 @@
       "checks": [
         "Gate: core zero diff; golden 10/10 (attributes added only); FIND_LUNCH filter tests incl. unknown filter -> UNSUPPORTED",
         "Interaction e2e at both viewports: proactive card->chat quieter+vegetarian->re-rank->selected on home; negative storage test as in V2a; axe green; screenshots per state",
+        "Data honesty: lunch detail and cards show fixture attributes only (quiet/vegetarian/distance), no ratings; weather values only from the mock weather fixture with labels",
         "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id V2b --plan-ref docs/architecture/YORI_V2.plan.json"
       ]
@@ -228,7 +270,7 @@
       "slice": 3,
       "title": "OWNER GATE: place reference images R1-R3 at docs/design/v2-reference/",
       "priority": "P1",
-      "goal": "Owner/coordinator action: drop the approved reference PNGs into docs/design/v2-reference/ (the Bridge cannot carry binaries). The executor verifies arrival by reporting SHA-256 and byte size per file in the review thread. Until then token values and layout specifics remain PROVISIONAL and V3 must not claim visual finality.",
+      "goal": "ARRIVED (verified by Architect + Reviewer): R0-R3 and YORI_LIVING_CONTEXT_V2_UI_HANDOFF.md are at docs/design/v2-reference/ with sha256 00=9b11cb6633edba5f14dccbfa04798e7bc76241cde6a8ac499f1ee51ae3bbd396 (1537x834), 01=7c7f6fc637dd4db5ce8dc1ae9067c0270163de8a8fb651c46133141a67320a7a (1448x1086), 02=efa2d9b61ecb575a68ff0b5971cf736946c79ea1253e4feeabed14e6d327c317 (1536x1024), 03=257a988c9ad14eb5e650ae15e09b032e6ff1590d62564207e3b4e33dc7b9403b (1672x941), handoff=116f07422cc6c1b03b8116603305b1c3b0916e9f881c6f1a935562f11b975747. This task now only records the executor-side receipt confirmation; images are git-excluded and must never be committed.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
@@ -252,8 +294,8 @@
         "docs/design/v2-reference"
       ],
       "checks": [
-        "Expected assets (coordinator manifest): 00 sha256 9b11cb66...bd396 1537x834; 01 7c7f6fc6...0a7a 1448x1086; 02 efa2d9b6...c317 1536x1024; 03 257a988c...403b 1672x941; plus YORI_LIVING_CONTEXT_V2_UI_HANDOFF.md - compare full sha256 and dimensions on arrival and report any mismatch by name",
-        "Arrival receipt: sha256 and byte size of each received file recorded; missing files listed by name, never described as seen",
+        "Executor confirms the five files exist with the recorded sha256/dimensions before V3 token work; any mismatch is reported by name, never silently accepted",
+        "git status shows no v2-reference image staged or committed",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id OWNER_REF_GATE --plan-ref docs/architecture/YORI_V2.plan.json"
       ]
     },
@@ -325,6 +367,7 @@
       "checks": [
         "Gate: core zero diff; golden 10/10; axe 0 violations; touch targets >=44px; reduced-motion run shows instant swaps with no motion-only information",
         "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
+        "Token evidence includes side-by-side comparisons against reference frames 03 (primary), 02 and 01 for home, detail, conversation and updated-home states",
         "Real 390x844 and 1280x800 screenshot set for both scenes; evidence states PROVISIONAL or FINAL token status truthfully, matching OWNER_REF_GATE outcome",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id V3 --plan-ref docs/architecture/YORI_V2.plan.json"
       ]

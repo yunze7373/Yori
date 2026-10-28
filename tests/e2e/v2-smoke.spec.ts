@@ -204,6 +204,9 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
 
+    const viewport = page.viewportSize();
+    const isMobile = (viewport?.width ?? 0) < 600;
+
     // Clear D1
     await expect(page.locator('.now-card')).toContainText('Piano lesson at 3:00 PM');
 
@@ -213,9 +216,29 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(page.locator('.now-card')).toContainText('Umbrella');
     await expect(page.locator('.now-card')).toContainText('Drive · leave 2:30 PM');
 
+    // Verify V2 Journey components (prominent map and timeline)
+    await expect(page.locator('.v2-map-card.prominent')).toBeVisible();
+    await expect(page.locator('.v2-timeline')).toBeVisible();
+    await expect(page.locator('.v2-options-grid')).toBeVisible();
+
+    // Rain axe check & screenshot
+    await checkAxe(page);
+    const rainFilename = isMobile ? 'v2-rain-mobile-390x844.png' : 'v2-rain-desktop-1280x800.png';
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, rainFilename), fullPage: false });
+
     // Switch to Away Lunch D3
     await page.selectOption('#scene-select', 'away-lunch');
     await expect(page.locator('.now-card')).toContainText('Lunch options near you');
+
+    // Verify V2 Candidate components (local illustrations and compact map)
+    await expect(page.locator('.v2-candidate-card')).toHaveCount(3);
+    await expect(page.locator('.v2-illustration-badge')).toHaveCount(3);
+    await expect(page.locator('.v2-map-card.compact')).toBeVisible();
+
+    // Lunch axe check & screenshot
+    await checkAxe(page);
+    const lunchFilename = isMobile ? 'v2-lunch-mobile-390x844.png' : 'v2-lunch-desktop-1280x800.png';
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, lunchFilename), fullPage: false });
   });
 
   test('Invalid UI version tokens fail closed to v1 without crash', async ({ page }) => {
