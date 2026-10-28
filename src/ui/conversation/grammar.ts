@@ -67,6 +67,7 @@ export interface CommandInterpretationContext {
   readonly validTimes?: readonly string[];
   readonly validPlaces?: readonly string[];
   readonly sceneId?: string;
+  readonly evidenceBundle?: { getRecord(id: string): unknown; hasRecord?(id: string): boolean } | null;
 }
 
 export interface CommandInterpreter {

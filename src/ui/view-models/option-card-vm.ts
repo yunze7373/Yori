@@ -13,10 +13,16 @@ import type { PreparedPlan, PlanOption } from '../../core/contracts/index.js';
 import { formatTime } from '../living-context/presentation.js';
 import { humanizeMemoryKey } from '../review/why-sheet.js';
 import type { OptionCardVM } from './types.js';
+import {
+  GroundedRecommendationVerifier,
+  type EvidenceBundle,
+  type SourceRef,
+} from './grounding.js';
 
 export function deriveOptionCardVMs(
   plan: PreparedPlan,
-  userConfirmedKeys?: ReadonlySet<string>
+  userConfirmedKeys?: ReadonlySet<string>,
+  bundle?: EvidenceBundle
 ): OptionCardVM[] {
   if (!plan.optionsOrSteps || plan.optionsOrSteps.length === 0) {
     return [];
@@ -86,7 +92,26 @@ export function deriveOptionCardVMs(
         detail = parts.join(' · ');
       }
 
-      cards.push({
+      const modeKey = (mode || (isFirst ? 'drive' : 'bus')).toLowerCase();
+      const recId = modeKey === 'drive' ? 'eta-drive-piano' : 'eta-bus-piano';
+      const sourceRef: SourceRef = { recordId: recId, field: 'mode' };
+      const fieldSourceRefs: Record<string, SourceRef> = {
+        mode: { recordId: recId, field: 'mode' },
+        travelMinutes: { recordId: recId, field: 'travelMinutes' },
+        leaveTime: { recordId: recId, field: 'leaveTime' },
+        badge: { recordId: recId, field: 'badge' },
+      };
+      if (bufferMinutes !== undefined) {
+        fieldSourceRefs.bufferMinutes = { recordId: recId, field: 'bufferMinutes' };
+      }
+      if (detail) {
+        fieldSourceRefs.detail = { recordId: recId, field: 'detail' };
+      }
+      if (opt.rankedByFactKey) {
+        fieldSourceRefs.rankingBasis = { recordId: 'habit-rain-transport', field: 'rankingBasis' };
+      }
+
+      const card: OptionCardVM = {
         id: opt.id || `opt-mode-${mode || i}`,
         label: opt.label || title,
         title,
@@ -99,7 +124,19 @@ export function deriveOptionCardVMs(
         rankingBasis,
         isSelected: isFirst,
         isRecommended: isFirst,
-      });
+        sourceRef,
+        fieldSourceRefs,
+      };
+
+      if (bundle) {
+        const verification = GroundedRecommendationVerifier.verifyOptionCard(card, bundle);
+        if (!verification.valid) {
+          // Withhold the card if verification fails
+          continue;
+        }
+      }
+
+      cards.push(card);
       continue;
     }
 
@@ -118,7 +155,17 @@ export function deriveOptionCardVMs(
       rankingBasis = `Based on habit: ${humanKey} (${provenance})`;
     }
 
-    cards.push({
+    const placeRecId = opt.id || `mock-place-${i + 1}`;
+    const sourceRef: SourceRef = { recordId: placeRecId, field: 'name' };
+    const fieldSourceRefs: Record<string, SourceRef> = {
+      title: { recordId: placeRecId, field: 'name' },
+      badge: { recordId: placeRecId, field: 'cuisine' },
+    };
+    if (typeof distanceMins === 'number') {
+      fieldSourceRefs.travelMinutes = { recordId: placeRecId, field: 'distanceMinutes' };
+    }
+
+    const card: OptionCardVM = {
       id: opt.id || `opt-place-${i}`,
       label: name,
       title: name,
@@ -128,7 +175,19 @@ export function deriveOptionCardVMs(
       rankingBasis,
       isSelected: i === 0,
       isRecommended: i === 0,
-    });
+      sourceRef,
+      fieldSourceRefs,
+    };
+
+    if (bundle) {
+      const verification = GroundedRecommendationVerifier.verifyOptionCard(card, bundle);
+      if (!verification.valid) {
+        // Withhold the card if verification fails
+        continue;
+      }
+    }
+
+    cards.push(card);
   }
 
   return cards;

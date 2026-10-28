@@ -3,6 +3,7 @@
  */
 
 export * from './types.js';
+export * from './grounding.js';
 export * from './photo-vm.js';
 export * from './timeline-vm.js';
 export * from './option-card-vm.js';

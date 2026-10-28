@@ -11,6 +11,7 @@
  */
 
 import type { PlanAction } from '../../core/contracts/index.js';
+import type { SourceRef, EvidenceBundle } from './grounding.js';
 
 export interface TimelineStepVM {
   readonly id: string;
@@ -20,6 +21,7 @@ export interface TimelineStepVM {
   readonly isPrimary?: boolean;
   readonly isEvent?: boolean;
   readonly iconType: 'prep' | 'leave' | 'arrive' | 'event';
+  readonly sourceRef?: SourceRef;
 }
 
 export interface TimelineVM {
@@ -28,6 +30,7 @@ export interface TimelineVM {
   readonly eventTime: string;
   readonly steps: readonly TimelineStepVM[];
   readonly departureNotice?: string;
+  readonly sourceRef?: SourceRef;
 }
 
 export interface OptionCardVM {
@@ -44,6 +47,8 @@ export interface OptionCardVM {
   readonly rankingBasis?: string;
   readonly isSelected: boolean;
   readonly isRecommended: boolean;
+  readonly sourceRef?: SourceRef;
+  readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
 }
 
 export interface MapMarkerVM {
@@ -54,6 +59,7 @@ export interface MapMarkerVM {
   readonly sublabel?: string;
   readonly type: 'origin' | 'destination' | 'place' | 'transit_stop';
   readonly isHighlight?: boolean;
+  readonly sourceRef?: SourceRef;
 }
 
 export interface MapPolylineVM {
@@ -65,6 +71,7 @@ export interface MapPolylineVM {
   readonly strokeDasharray?: string;
   readonly strokeWidth: number;
   readonly travelMinutes?: number;
+  readonly sourceRef?: SourceRef;
 }
 
 export interface MapWeatherCalloutVM {
@@ -72,6 +79,7 @@ export interface MapWeatherCalloutVM {
   readonly y: number;
   readonly text: string;
   readonly subtext?: string;
+  readonly sourceRef?: SourceRef;
 }
 
 export interface MapVM {
@@ -85,6 +93,7 @@ export interface MapVM {
   readonly polylines: readonly MapPolylineVM[];
   readonly weatherCallout?: MapWeatherCalloutVM;
   readonly ariaDescription: string;
+  readonly sourceRef?: SourceRef;
 }
 
 export interface PhotoVM {
@@ -107,6 +116,8 @@ export interface CandidateCardVM {
   readonly isSelected: boolean;
   readonly noiseLevel?: string;
   readonly vegetarian?: boolean;
+  readonly sourceRef?: SourceRef;
+  readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
 }
 
 export type HomeLayoutKind = 'journey' | 'candidates' | 'quiet' | 'generic';
@@ -149,6 +160,11 @@ export interface HomeCompositionVM {
   // Collapse empty blocks (only populated if non-empty)
   readonly aheadItems: readonly AheadItemVM[];
   readonly proposals: readonly ProposalItemVM[];
+
+  // Grounding
+  readonly evidenceBundle?: EvidenceBundle;
+  readonly sourceRef?: SourceRef;
+  readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
 }
 
 // -------------------------------------------------------------
@@ -163,6 +179,8 @@ export interface TripModeTabVM {
   readonly arriveTime: string;
   readonly durationMinutes?: number;
   readonly isSelected: boolean;
+  readonly sourceRef?: SourceRef;
+  readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
 }
 
 export interface TripWhyProvenanceVM {
@@ -170,6 +188,7 @@ export interface TripWhyProvenanceVM {
   readonly value: string;
   readonly provenanceText: string;
   readonly isConfirmed: boolean;
+  readonly sourceRef?: SourceRef;
 }
 
 export interface TripDetailVM {
@@ -190,6 +209,9 @@ export interface TripDetailVM {
   readonly whyDerivation: string;
   readonly isAccepted: boolean;
   readonly actions: readonly PlanAction[];
+  readonly evidenceBundle?: EvidenceBundle;
+  readonly sourceRef?: SourceRef;
+  readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
 }
 
 export interface RestaurantDirectionStepVM {
@@ -212,4 +234,8 @@ export interface RestaurantDetailVM {
   readonly isSaved: boolean;
   readonly directions: readonly RestaurantDirectionStepVM[];
   readonly simulatedNotice: string;
+  readonly navigateUrl?: string;
+  readonly evidenceBundle?: EvidenceBundle;
+  readonly sourceRef?: SourceRef;
+  readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
 }

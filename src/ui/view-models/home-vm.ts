@@ -26,6 +26,13 @@ import { deriveOptionCardVMs } from './option-card-vm.js';
 import { deriveMapVM } from './map-vm.js';
 import { getLocalIllustration } from './photo-vm.js';
 import { classifyFactSource } from './provenance.js';
+import {
+  GroundedRecommendationVerifier,
+  createRainEvidenceBundle,
+  createLunchEvidenceBundle,
+  type EvidenceBundle,
+  type SourceRef,
+} from './grounding.js';
 import type {
   HomeCompositionVM,
   CandidateCardVM,
@@ -42,6 +49,7 @@ export interface BuildHomeCompositionOptions {
   userConfirmedKeys?: ReadonlySet<string>;
   snapshot?: ContextSnapshot | null;
   canUndo?: boolean;
+  evidenceBundle?: EvidenceBundle;
 }
 
 export function buildHomeComposition(options: BuildHomeCompositionOptions): HomeCompositionVM {
@@ -54,7 +62,26 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     userConfirmedKeys,
     snapshot,
     canUndo,
+    evidenceBundle,
   } = options;
+
+  const bundle =
+    evidenceBundle ??
+    (plan?.intentId === 'depart'
+      ? createRainEvidenceBundle({
+          plan,
+          sceneClockIso: snapshot?.asOf ?? '2026-10-28T20:35:00.000Z',
+          timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+          isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
+        })
+      : plan?.intentId === 'lunch'
+        ? createLunchEvidenceBundle({
+            plan,
+            sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
+            timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+            isConfirmedTaste: userConfirmedKeys?.has('taste_preference_lunch_cuisine'),
+          })
+        : undefined);
 
   // 1. Quiet State (D4: 0 prompts is valid; honest quiet state)
   if (!plan) {
@@ -117,7 +144,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
 
     const map = deriveMapVM(plan, spatialEvidence, 'prominent', { snapshot });
     const timeline = deriveTimelineVM(plan, snapshot);
-    const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys);
+    const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys, bundle);
 
     return {
       layoutKind: 'journey',
@@ -138,6 +165,13 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       actions,
       aheadItems: compileAheadItems(aheadPlans),
       proposals: compileProposals(proposals),
+      evidenceBundle: bundle,
+      sourceRef: { recordId: 'cal-piano', field: 'subjectTitle' },
+      fieldSourceRefs: {
+        prepareTime: { recordId: 'cal-piano', field: 'prepareTime' },
+        leaveTime: { recordId: 'cal-piano', field: 'leaveTime' },
+        apptTime: { recordId: 'cal-piano', field: 'apptTime' },
+      },
     };
   }
 
@@ -177,7 +211,18 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
           const basis = `Based on taste: ${cuisine} (${provenance})`;
 
-          candidateCards.push({
+          const recId = opt.id || `mock-place-${i + 1}`;
+          const sourceRef: SourceRef = { recordId: recId, field: 'name' };
+          const fieldSourceRefs: Record<string, SourceRef> = {
+            name: { recordId: recId, field: 'name' },
+            cuisine: { recordId: recId, field: 'cuisine' },
+          };
+          if (typeof distMins === 'number') {
+            fieldSourceRefs.distanceMinutes = { recordId: recId, field: 'distanceMinutes' };
+            fieldSourceRefs.distanceText = { recordId: recId, field: 'distanceText' };
+          }
+
+          const card: CandidateCardVM = {
             id: opt.id || `candidate-${i}`,
             name,
             cuisine,
@@ -188,13 +233,25 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
             isSelected: i === 0,
             noiseLevel: (opt as any).noiseLevel,
             vegetarian: (opt as any).vegetarian,
-          });
+            sourceRef,
+            fieldSourceRefs,
+          };
+
+          if (bundle) {
+            const verification = GroundedRecommendationVerifier.verifyCandidateCard(card, bundle);
+            if (!verification.valid) {
+              // Withhold candidate card if verification fails
+              continue;
+            }
+          }
+
+          candidateCards.push(card);
         }
       }
     }
 
     const map = deriveMapVM(plan, spatialEvidence, 'compact', { snapshot });
-    const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys);
+    const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys, bundle);
 
     return {
       layoutKind: 'candidates',
@@ -211,6 +268,8 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       actions,
       aheadItems: compileAheadItems(aheadPlans),
       proposals: compileProposals(proposals),
+      evidenceBundle: bundle,
+      sourceRef: { recordId: 'loc-downtown', field: 'name' },
     };
   }
 

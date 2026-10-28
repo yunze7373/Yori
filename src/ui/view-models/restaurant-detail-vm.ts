@@ -15,6 +15,13 @@ import { formatTime } from '../living-context/presentation.js';
 import { getLocalIllustration } from './photo-vm.js';
 import { classifyFactSource } from './provenance.js';
 import { deriveMapVM } from './map-vm.js';
+import {
+  GroundedRecommendationVerifier,
+  createLunchEvidenceBundle,
+  buildNavigateUrl,
+  type EvidenceBundle,
+  type SourceRef,
+} from './grounding.js';
 import type { RestaurantDetailVM, RestaurantDirectionStepVM } from './types.js';
 
 export interface DeriveRestaurantDetailOptions {
@@ -28,6 +35,7 @@ export interface DeriveRestaurantDetailOptions {
     timezone?: string;
   } | null;
   timezone?: string;
+  evidenceBundle?: EvidenceBundle;
 }
 
 export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions): RestaurantDetailVM {
@@ -39,7 +47,16 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     userConfirmedKeys,
     snapshot,
     timezone,
+    evidenceBundle,
   } = options;
+
+  const bundle =
+    evidenceBundle ??
+    createLunchEvidenceBundle({
+      plan,
+      timezone: timezone ?? plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+      isConfirmedTaste: userConfirmedKeys?.has('taste_preference_lunch_cuisine'),
+    });
 
   // Locate the target candidate option in plan.optionsOrSteps
   let targetOpt: PlanOption | undefined;
@@ -161,12 +178,68 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     },
   ];
 
+  const placeRecId = candidateId;
+  const sourceRef: SourceRef = { recordId: placeRecId, field: 'name' };
+  const fieldSourceRefs: Record<string, SourceRef> = {
+    name: { recordId: placeRecId, field: 'name' },
+    cuisine: { recordId: placeRecId, field: 'cuisine' },
+  };
+  if (distanceMinutes !== undefined) {
+    fieldSourceRefs.distanceMinutes = { recordId: placeRecId, field: 'distanceMinutes' };
+  }
+
+  let verifiedName = name;
+  let verifiedDistanceText = distanceText;
+
+  if (bundle) {
+    const verification = GroundedRecommendationVerifier.verifyCandidateCard(
+      {
+        id: candidateId,
+        name,
+        cuisine,
+        distanceMinutes,
+        distanceText,
+        sourceRef,
+        fieldSourceRefs,
+      },
+      bundle
+    );
+    if (!verification.valid) {
+      if (verification.reason === 'tampered_value') {
+        if (verification.field === 'name') verifiedName = 'unknown';
+        if (verification.field === 'distanceMinutes' && distanceText !== undefined) {
+          verifiedDistanceText = 'unknown';
+        }
+      } else {
+        verifiedName = 'unknown';
+        if (distanceText !== undefined) {
+          verifiedDistanceText = 'unknown';
+        }
+      }
+    }
+  }
+
+  const navigateUrl = bundle
+    ? buildNavigateUrl(
+        {
+          id: candidateId,
+          name: verifiedName,
+          cuisine,
+          distanceMinutes,
+          distanceText: verifiedDistanceText,
+          sourceRef,
+          fieldSourceRefs,
+        },
+        bundle
+      )
+    : undefined;
+
   return {
     id: candidateId,
-    name,
+    name: verifiedName,
     cuisine,
     distanceMinutes,
-    distanceText,
+    distanceText: verifiedDistanceText,
     photo,
     attributeChips: Object.freeze(attributeChips),
     basis,
@@ -174,5 +247,9 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     isSaved,
     directions: Object.freeze(directions),
     simulatedNotice: 'Demonstration place · simulated context',
+    navigateUrl,
+    evidenceBundle: bundle,
+    sourceRef,
+    fieldSourceRefs,
   };
 }

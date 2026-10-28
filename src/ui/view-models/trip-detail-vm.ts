@@ -25,6 +25,12 @@ import {
 import { deriveMapVM } from './map-vm.js';
 import { deriveTimelineVM } from './timeline-vm.js';
 import { derivePlanTimingFacts } from './timing.js';
+import {
+  GroundedRecommendationVerifier,
+  createRainEvidenceBundle,
+  type EvidenceBundle,
+  type SourceRef,
+} from './grounding.js';
 import type {
   TripDetailVM,
   TripModeTabVM,
@@ -41,6 +47,7 @@ export interface DeriveTripDetailOptions {
     timezone?: string;
   } | null;
   acceptedPlanIds?: readonly string[];
+  evidenceBundle?: EvidenceBundle;
 }
 
 export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetailVM {
@@ -51,7 +58,15 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     userConfirmedKeys,
     snapshot,
     acceptedPlanIds = [],
+    evidenceBundle,
   } = options;
+
+  const bundle =
+    evidenceBundle ??
+    createRainEvidenceBundle({
+      timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+      isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
+    });
 
   const tz = plan.timezone ?? snapshot?.timezone;
   const apptTime = plan.apptAt ? formatTime(plan.apptAt, tz) : '';
@@ -241,12 +256,28 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
   const isAccepted = acceptedPlanIds.includes(plan.id);
   const actions: PlanAction[] = plan.actions ? [...plan.actions] : [];
 
+  const sourceRef: SourceRef = { recordId: 'cal-piano', field: 'subjectTitle' };
+  const fieldSourceRefs: Record<string, SourceRef> = {
+    destinationName: { recordId: 'cal-piano', field: 'subjectTitle' },
+    apptTime: { recordId: 'cal-piano', field: 'apptTime' },
+    bufferText: { recordId: 'habit-rain-transport', field: 'bufferText' },
+    prepText: { recordId: 'habit-rain-transport', field: 'prepText' },
+  };
+
+  let verifiedApptTime = apptTime;
+  if (bundle && apptTime) {
+    const res = GroundedRecommendationVerifier.verifyField(fieldSourceRefs.apptTime, apptTime, bundle);
+    if (!res.valid) {
+      verifiedApptTime = 'unknown';
+    }
+  }
+
   return {
     planId: plan.id,
     title,
     headline: plan.headline,
     destinationName,
-    apptTime,
+    apptTime: verifiedApptTime,
     leaveTime: selectedTab.leaveTime,
     arriveTime: selectedTab.arriveTime,
     bufferText,
@@ -259,5 +290,8 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     whyDerivation: buildHumanDerivation(plan),
     isAccepted,
     actions: Object.freeze(actions),
+    evidenceBundle: bundle,
+    sourceRef,
+    fieldSourceRefs,
   };
 }

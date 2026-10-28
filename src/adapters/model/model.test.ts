@@ -2180,6 +2180,7 @@ describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpr
         readonly confirmedFactKeys?: readonly string[];
         readonly validTimes?: readonly string[];
         readonly validPlaces?: readonly string[];
+        readonly evidenceBundle?: { getRecord(recordId: string): unknown };
       };
       readonly expectValid: boolean;
       readonly expectedReason?: string;
@@ -2418,6 +2419,163 @@ describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpr
           },
           citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
           citedFactKeys: ['confirmed_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: true,
+      },
+      // Signal Citation Parity Cases
+      {
+        name: 'rejects signal citations when availableSignalIds is empty',
+        context: {
+          availableSignalIds: [],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_signal_id',
+      },
+      {
+        name: 'rejects unknown signal id when availableSignalIds is populated',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['unknown_signal_123'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_signal_id',
+      },
+      {
+        name: 'rejects non-string items in citedSignalIds',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: [9999],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'schema_invalid',
+      },
+      {
+        name: "rejects '__proto__' signal id",
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['__proto__'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_signal_id',
+      },
+      {
+        name: "rejects 'constructor' signal id",
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['constructor'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_signal_id',
+      },
+      {
+        name: 'rejects SA signalId when availableSignalIds is empty',
+        context: {
+          availableSignalIds: [],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          situationAttribution: {
+            signalId: 'weather:2026-10-28T20:35:00.000Z',
+            reasonCode: 'free_window_fit',
+          },
+          citedSignalIds: [],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_signal_id',
+      },
+      {
+        name: 'rejects SA signalId when missing from evidenceBundle',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+          evidenceBundle: {
+            getRecord: (id: string) => (id === 'other_sig' ? {} : undefined),
+          },
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          situationAttribution: {
+            signalId: 'weather:2026-10-28T20:35:00.000Z',
+            reasonCode: 'free_window_fit',
+          },
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_signal_id',
+      },
+      {
+        name: 'accepts valid signal citations and SA signalId resolving in bundle',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+          evidenceBundle: {
+            getRecord: (id: string) =>
+              id === 'weather:2026-10-28T20:35:00.000Z'
+                ? { recordId: id, kind: 'weather' }
+                : undefined,
+          },
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          situationAttribution: {
+            signalId: 'weather:2026-10-28T20:35:00.000Z',
+            reasonCode: 'free_window_fit',
+          },
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['sample_key_one'],
           reasonCodes: ['free_window_fit'],
         },
         expectValid: true,

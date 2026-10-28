@@ -13,6 +13,7 @@
 
 import { STRINGS } from './strings.js';
 import type { PreparedPlan, PlanOption } from '../../core/contracts/index.js';
+import type { SourceRef } from '../view-models/grounding.js';
 
 /**
  * Escapes characters that are special in HTML to prevent XSS.
@@ -96,6 +97,7 @@ export function getGreeting(
 export interface FormattedNowOption {
   readonly label: string;
   readonly meta?: string;
+  readonly sourceRef?: SourceRef;
 }
 
 export interface FormattedNowPlan {
@@ -108,6 +110,7 @@ export interface FormattedNowPlan {
   readonly habitNote?: string;
   readonly options: readonly FormattedNowOption[];
   readonly mockPlacesNotice?: string;
+  readonly sourceRef?: SourceRef;
 }
 
 /**
@@ -163,7 +166,9 @@ export function formatNowPlan(plan: PreparedPlan): FormattedNowPlan {
             typeof planOpt.travelMinutes === 'number'
               ? `${planOpt.travelMinutes}m ${planOpt.mode || 'travel'}`
               : undefined;
-          options.push({ label, meta });
+          const modeKey = (planOpt.mode || 'drive').toLowerCase();
+          const recId = modeKey === 'drive' ? 'eta-drive-piano' : 'eta-bus-piano';
+          options.push({ label, meta, sourceRef: { recordId: recId, field: 'mode' } });
         }
       }
     }
@@ -177,11 +182,12 @@ export function formatNowPlan(plan: PreparedPlan): FormattedNowPlan {
       umbrellaChip: hasRainChecklist ? STRINGS.rain.umbrellaChip : undefined,
       habitNote,
       options: Object.freeze(options),
+      sourceRef: { recordId: 'cal-piano', field: 'subjectTitle' },
     });
   }
 
   if (plan.intentId === 'lunch') {
-    const formattedOptions: FormattedNowOption[] = plan.optionsOrSteps.map(opt => {
+    const formattedOptions: FormattedNowOption[] = plan.optionsOrSteps.map((opt, idx) => {
       if (typeof opt === 'string') {
         return { label: opt };
       }
@@ -196,9 +202,11 @@ export function formatNowPlan(plan: PreparedPlan): FormattedNowPlan {
           : undefined;
 
       const meta = [cuisineTag, distance].filter(Boolean).join(' · ');
+      const placeRecId = optionObj.id || `mock-place-${idx + 1}`;
       return {
         label: rawName,
         meta: meta || undefined,
+        sourceRef: { recordId: placeRecId, field: 'name' },
       };
     });
 
@@ -209,6 +217,7 @@ export function formatNowPlan(plan: PreparedPlan): FormattedNowPlan {
       isRain: false,
       options: Object.freeze(formattedOptions),
       mockPlacesNotice: STRINGS.lunch.mockPlacesNotice,
+      sourceRef: { recordId: 'loc-downtown', field: 'name' },
     });
   }
 

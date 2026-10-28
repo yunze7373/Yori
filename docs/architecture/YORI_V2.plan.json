@@ -668,7 +668,7 @@
       "priority": "P0",
       "goal": "Implement EvidenceRecord/EvidenceBundle + sourceRef over the existing Rain/Lunch fixture and simulated records (calendar, weather, travel estimate, mock places, sample habits) and call GroundedRecommendationVerifier inside those scenes' render view-models, using the section 12 freshness windows (scene clock for simulated/recorded) and normalize rules. This makes the V4 recordings audit passable without depending on the optional V5 chain; V5-FUEL later extends the same verifier to PlacesProvider results and the navigate-URL builder.",
       "type": "implementation",
-      "status": "pending",
+      "status": "done",
       "agent": "agent-orchestrator",
       "pipeline": "new_feature",
       "estimated_hours": 4,

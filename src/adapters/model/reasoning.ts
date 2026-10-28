@@ -869,6 +869,7 @@ export interface DecisionCommandValidationContext {
   readonly confirmedFactKeys?: readonly string[];
   readonly validTimes?: readonly string[];
   readonly validPlaces?: readonly string[];
+  readonly evidenceBundle?: { getRecord(id: string): unknown; hasRecord?(id: string): boolean } | null;
 }
 
 /**
@@ -928,7 +929,23 @@ export function validateDecisionCommandOutput(
   if (!Array.isArray(obj.citedSignalIds)) {
     return { valid: false, reason: 'schema_invalid', error: "'citedSignalIds' must be an array" };
   }
-  if (context?.availableSignalIds && context.availableSignalIds.length > 0) {
+  for (const sigId of obj.citedSignalIds) {
+    if (typeof sigId !== 'string') {
+      return {
+        valid: false,
+        reason: 'schema_invalid',
+        error: "Items in 'citedSignalIds' must be strings",
+      };
+    }
+    if (sigId === '__proto__' || sigId === 'constructor' || sigId === 'prototype') {
+      return {
+        valid: false,
+        reason: 'unknown_signal_id',
+        error: `Invalid signal citation '${sigId}'`,
+      };
+    }
+  }
+  if (context?.availableSignalIds !== undefined) {
     const allowedSignalSet = new Set(context.availableSignalIds);
     for (const sigId of obj.citedSignalIds) {
       if (!allowedSignalSet.has(sigId)) {
@@ -999,12 +1016,30 @@ export function validateDecisionCommandOutput(
     if (typeof sa.signalId !== 'string') {
       return { valid: false, reason: 'schema_invalid', error: 'situationAttribution.signalId must be a string' };
     }
-    if (context?.availableSignalIds && context.availableSignalIds.length > 0) {
-      if (!context.availableSignalIds.includes(sa.signalId)) {
+    if (sa.signalId === '__proto__' || sa.signalId === 'constructor' || sa.signalId === 'prototype') {
+      return {
+        valid: false,
+        reason: 'unknown_signal_id',
+        error: `situationAttribution signalId '${sa.signalId}' is invalid`,
+      };
+    }
+    if (context?.availableSignalIds !== undefined) {
+      const allowedSignalSet = new Set(context.availableSignalIds);
+      if (!allowedSignalSet.has(sa.signalId)) {
         return {
           valid: false,
           reason: 'unknown_signal_id',
           error: `situationAttribution signalId '${sa.signalId}' not in availableSignalIds`,
+        };
+      }
+    }
+    if (context?.evidenceBundle && typeof context.evidenceBundle.getRecord === 'function') {
+      const rec = context.evidenceBundle.getRecord(sa.signalId);
+      if (!rec) {
+        return {
+          valid: false,
+          reason: 'unknown_signal_id',
+          error: `situationAttribution signalId '${sa.signalId}' not found in evidenceBundle`,
         };
       }
     }

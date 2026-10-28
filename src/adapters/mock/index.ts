@@ -75,6 +75,36 @@ export class MockPlaceAdapter implements SimulatedProviderAdapter {
     return this.options.places ?? DEFAULT_MOCK_PLACES;
   }
 
+  public getEvidenceRecords(asOfIso?: string): readonly {
+    readonly id: string;
+    readonly provider: string;
+    readonly kind: 'poi';
+    readonly fetchedAt: string;
+    readonly provenance: 'simulated';
+    readonly fields: Record<string, unknown>;
+  }[] {
+    const fetchedAt = this.options.issuedAt ?? asOfIso ?? '2026-10-28T19:10:00.000Z';
+    return this.getPlaces().map((place, idx) => {
+      const placeId = place.id || `mock-place-${idx + 1}`;
+      return Object.freeze({
+        id: placeId,
+        provider: 'mock-place-adapter',
+        kind: 'poi' as const,
+        fetchedAt,
+        provenance: 'simulated' as const,
+        fields: Object.freeze({
+          id: placeId,
+          name: place.name,
+          cuisine: place.cuisine,
+          distanceMinutes: place.distanceMinutes,
+          distanceText: `${place.distanceMinutes}m away`,
+          noiseLevel: place.noiseLevel,
+          vegetarian: place.vegetarian,
+        }),
+      });
+    });
+  }
+
   public signals(asOfIso?: string): readonly SimulatedSignal[] {
     const issuedAt = this.options.issuedAt ?? asOfIso ?? '1970-01-01T00:00:00.000Z';
     const validFor = this.options.validFor ?? 3600000;
