@@ -127,11 +127,13 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     // Ranked transit options: Drive first (2:30 PM), Bus second (2:15 PM)
     const transitOptions = nowCardD2.locator('.options-grid .option-tile');
     await expect(transitOptions).toHaveCount(2);
-    await expect(transitOptions.nth(0)).toContainText('Drive · leave 2:30');
-    await expect(transitOptions.nth(1)).toContainText('Bus · leave 2:15');
+    await expect(transitOptions.nth(0)).toContainText('Drive · leave 2:30 PM');
+    await expect(transitOptions.nth(0)).toContainText('25m drive');
+    await expect(transitOptions.nth(1)).toContainText('Bus · leave 2:15 PM');
+    await expect(transitOptions.nth(1)).toContainText('40m bus');
 
     // Habit note: driving preference when it rains
-    await expect(nowCardD2.locator('.habit-note')).toContainText('You usually prefer driving when it rains.');
+    await expect(nowCardD2.locator('.habit-note')).toHaveText('You usually prefer driving when it rains.');
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
@@ -149,7 +151,9 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await expect(nowCardD3).toBeVisible();
     await expect(nowCardD3.locator('.now-subject')).toContainText('Lunch options near you');
     // Simulated dining suggestions disclosure
-    await expect(nowCardD3.locator('.mock-places-notice')).toBeVisible();
+    await expect(nowCardD3.locator('.mock-places-notice')).toHaveText(
+      'Mock places for this demo; real listings come from a place provider.'
+    );
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
@@ -170,6 +174,13 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
       path: path.join(EVIDENCE_DIR, `04-busy-lunch-d4-${viewName}.png`),
       fullPage: true,
     });
+
+    // Verify Scene D6 (Missing Weather): fail-closed notice and 0 SIMULATED badges in scene
+    await sceneSelect.selectOption('missing-weather');
+    const noticeBox = page.locator('.notice-box');
+    await expect(noticeBox).toBeVisible();
+    await expect(noticeBox).toContainText("Notice: The weather forecast isn't available right now, so I won't guess.");
+    await expect(page.locator('.card-badge:has-text("SIMULATED")')).toHaveCount(0);
 
     // -------------------------------------------------------------------------
     // Step 4: The Explainable Review Loop (Why Sheet & Adjust Dialog)
