@@ -40,6 +40,7 @@ export interface BuildHomeCompositionOptions {
   acceptedPlanIds?: readonly string[];
   userConfirmedKeys?: ReadonlySet<string>;
   snapshot?: ContextSnapshot | null;
+  canUndo?: boolean;
 }
 
 export function buildHomeComposition(options: BuildHomeCompositionOptions): HomeCompositionVM {
@@ -51,6 +52,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     acceptedPlanIds = [],
     userConfirmedKeys,
     snapshot,
+    canUndo,
   } = options;
 
   // 1. Quiet State (D4: 0 prompts is valid; honest quiet state)
@@ -131,6 +133,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       timeline,
       options: optionCards,
       isAccepted,
+      canUndo,
       actions,
       aheadItems: compileAheadItems(aheadPlans),
       proposals: compileProposals(proposals),
@@ -199,6 +202,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       options: optionCards,
       candidateCards: Object.freeze(candidateCards),
       isAccepted,
+      canUndo,
       actions,
       aheadItems: compileAheadItems(aheadPlans),
       proposals: compileProposals(proposals),

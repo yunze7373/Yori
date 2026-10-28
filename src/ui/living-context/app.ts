@@ -716,7 +716,9 @@ export function renderApp(
     }
 
     const living = pipelineResult.livingContext;
-    const nowPlan = reasoningState && reasoningState.scene === currentScene ? reasoningState.now : living.now;
+    const baseNowPlan = reasoningState && reasoningState.scene === currentScene ? reasoningState.now : living.now;
+    const storePlan = actionStore.getActionState().plan;
+    const nowPlan = storePlan ?? baseNowPlan;
     const aheadPlans = reasoningState && reasoningState.scene === currentScene ? reasoningState.ahead : living.ahead;
     const notices = pipelineResult.notices;
     const acceptedPlanIds: readonly string[] = storedEnvelope?.payload.acceptedPlanIds ?? [];
@@ -737,6 +739,14 @@ export function renderApp(
       }
     }
     const userConfirmedKeys = new Set(activeStoredConfirmed.map(f => f.key));
+
+    // Keep ActionStateStore command context synchronized
+    actionStore.setCommandContext({
+      plan: nowPlan,
+      snapshot,
+      memory: combinedMemory,
+      sceneId: currentScene,
+    });
 
     const greeting = getGreeting(snapshotAsOf, snapshotTimezone);
     const nowPresentation = nowPlan ? formatNowPlan(nowPlan) : null;
@@ -811,6 +821,7 @@ export function renderApp(
           acceptedPlanIds,
           userConfirmedKeys,
           snapshot,
+          canUndo: actionStore.canUndo(),
         });
         v2BodyHtml = renderV2Home(v2Composition);
       }
@@ -1188,6 +1199,11 @@ export function renderApp(
                   <option value="corrupt-storage" ${currentScene === 'corrupt-storage' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.corruptStorage)}</option>
                   <option value="multi-candidate" ${currentScene === 'multi-candidate' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.multiCandidate)}</option>
                 </select>
+                ${
+                  uiVersion === 'v2'
+                    ? `<button type="button" class="btn btn-outline btn-sm v2-replay-btn" id="btn-replay-before-you-ask" aria-label="Replay Before You Ask transition">Replay: Before You Ask</button>`
+                    : ''
+                }
               </div>
             </div>
 
@@ -1323,11 +1339,48 @@ export function renderApp(
     if (selectEl) {
       selectEl.addEventListener('change', e => {
         currentScene = (e.target as HTMLSelectElement).value as DemoSceneId;
+        actionStore.resetToIdle();
+        actionStore.clearOverride();
         actionFeedbackMessage = null;
         coordinatedScene = null;
         reasoningRequestId++;
         reasoningState = null;
         update();
+      });
+    }
+
+    // 1b. Replay Before You Ask (R3: Clear -> Rain transition)
+    const replayBeforeYouAskBtn = root.querySelector('#btn-replay-before-you-ask') as HTMLButtonElement | null;
+    if (replayBeforeYouAskBtn) {
+      replayBeforeYouAskBtn.addEventListener('click', () => {
+        actionStore.resetToIdle();
+        actionStore.clearOverride();
+        actionFeedbackMessage = null;
+        coordinatedScene = null;
+        reasoningRequestId++;
+        reasoningState = null;
+
+        // Step 1: Switch to clear scene first
+        currentScene = 'clear';
+        update();
+
+        // Step 2: Transition to rain scene (delay 600ms, or instant 0ms if reduced motion)
+        const isReduced = actionStore.isReducedMotion();
+        const transitionDelay = isReduced ? 0 : 600;
+
+        setTimeout(() => {
+          currentScene = 'rain';
+          actionFeedbackMessage = 'Rain forecast arrived · Umbrella recommended';
+          update();
+
+          const nowCard = root.querySelector('.now-card');
+          if (nowCard && !isReduced) {
+            nowCard.classList.add('v2-highlight-changed');
+            setTimeout(() => {
+              nowCard.classList.remove('v2-highlight-changed');
+            }, 2500);
+          }
+        }, transitionDelay);
       });
     }
 
@@ -1576,10 +1629,16 @@ export function renderApp(
       });
     }
 
-    // 4. Plan Review Actions: Undo Accept
+    // 4. Plan Review Actions: Undo Accept or Session Override
     const undoAcceptBtn = root.querySelector('#btn-undo-accept') as HTMLButtonElement | null;
     if (undoAcceptBtn && nowPlan) {
       undoAcceptBtn.addEventListener('click', () => {
+        if (actionStore.canUndo()) {
+          actionStore.undo();
+          actionFeedbackMessage = 'Plan restored. Changes undone.';
+          update();
+          return;
+        }
         const envelope = sharedStorage.load();
         const existingAccepted = envelope?.payload.acceptedPlanIds ?? [];
         const updatedAccepted = existingAccepted.filter(id => id !== nowPlan.id);

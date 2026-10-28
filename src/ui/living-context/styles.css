@@ -1210,11 +1210,34 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   gap: 12px;
 }
 
+.conversation-avatar-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.conversation-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .conversation-title {
   margin: 0;
   font-size: 1.125rem;
   font-weight: 700;
   color: #16382F;
+}
+
+.v2-offline-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #52796F;
+  letter-spacing: 0.02em;
 }
 
 .conversation-btn-icon {
@@ -1296,6 +1319,18 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 
 .chat-bubble-assistant {
   justify-content: flex-start;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.chat-avatar-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  margin-top: 4px;
 }
 
 .chat-bubble-user {
@@ -1326,6 +1361,27 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 
 .chat-text {
   margin: 0;
+}
+
+.chat-confirm-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #F4F7F5;
+  border: 1px solid #D1DFD7;
+  border-radius: 10px;
+}
+
+.chat-confirm-notice {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #16382F;
+  margin-bottom: 8px;
+}
+
+.chat-confirm-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .chat-placeholder-tag {
@@ -1394,6 +1450,25 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   outline-offset: 2px;
 }
 
+/* Replay Before You Ask Button (R3) */
+.v2-replay-btn {
+  margin-left: 8px;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  min-height: 32px;
+  border-radius: 8px;
+  background: #FFFFFF;
+  border: 1px solid #CAD6D0;
+  color: #16382F;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.v2-replay-btn:hover {
+  background: #EAF2EE;
+  border-color: #2D6A4F;
+}
+
 /* Reduced Motion Override */
 @media (prefers-reduced-motion: reduce) {
   .ask-bar,
@@ -1401,11 +1476,30 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   .conversation-shell,
   .conversation-btn-icon,
   .conversation-pin-btn,
-  .conversation-send-btn {
+  .conversation-send-btn,
+  .v2-highlight-changed {
     animation: none !important;
     transition: none !important;
     transform: none !important;
   }
+}
+
+@keyframes v2PulseHighlight {
+  0% {
+    box-shadow: 0 0 0 0 rgba(45, 106, 79, 0.4);
+    background-color: #F0FDF4;
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(45, 106, 79, 0);
+    background-color: #DCFCE7;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(45, 106, 79, 0);
+  }
+}
+
+.v2-highlight-changed {
+  animation: v2PulseHighlight 1.5s ease;
 }
 
 /* ==========================================================================

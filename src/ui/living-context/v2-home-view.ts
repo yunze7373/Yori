@@ -132,10 +132,10 @@ export function renderMapCard(map: MapVM): string {
 
 function renderActionRow(vm: HomeCompositionVM): string {
   const planId = vm.planId || '';
-  if (vm.isAccepted) {
+  if (vm.isAccepted || vm.canUndo) {
     return `
       <div class="action-row" aria-label="Plan Actions">
-        <span class="badge-accepted">${escapeHtml(STRINGS.actions.accepted)}</span>
+        <span class="badge-accepted">${escapeHtml(vm.isAccepted ? STRINGS.actions.accepted : 'Updated')}</span>
         <button type="button" class="btn btn-outline" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}">
           ${escapeHtml(STRINGS.actions.undo)}
         </button>

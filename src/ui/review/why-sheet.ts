@@ -31,6 +31,8 @@ export function humanizeSignalKind(kind: string): string {
       return 'Schedule window';
     case 'eating_status':
       return 'Meal timing status';
+    case 'user_request':
+      return 'User request';
     default:
       return kind.replace(/[_-]/g, ' ');
   }
@@ -146,7 +148,9 @@ export function buildHumanDerivation(plan: PreparedPlan): string {
       );
       const isReal = travelSig?.source === 'real';
       const routeDesc = isReal ? 'live route estimates' : 'the route estimate (simulated)';
-      return `${subject} is scheduled at ${apptTime}. Based on ${routeDesc} and your preparation routine, we scheduled preparation to start at ${prepareTime} and departure by ${leaveTime}.`;
+      const userReq = plan.why?.evidenceSignals?.find(s => s.kind === 'user_request');
+      const requestNote = userReq ? ` (${userReq.description})` : '';
+      return `${subject} is scheduled at ${apptTime}. Based on ${routeDesc} and your preparation routine, we scheduled preparation to start at ${prepareTime} and departure by ${leaveTime}.${requestNote}`;
     }
   }
 

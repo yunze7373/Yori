@@ -134,7 +134,7 @@ export function deriveMapVM(
       }
 
       // Determine single mode from option override, signal, or fallback
-      let singleMode: 'drive' | 'bus' | 'walk' | string = 'drive';
+      let singleMode: 'drive' | 'bus' | 'walk' | string = 'travel';
       if (options?.mode && options.mode.trim()) {
         singleMode = options.mode.toLowerCase();
       } else if (options?.snapshot?.signals) {
@@ -278,7 +278,7 @@ export function deriveMapVM(
         {
           id: 'poly-generic',
           points: '50,100 150,100 250,50',
-          mode: 'drive',
+          mode: 'travel',
           label: 'Route',
           strokeColor: '#2D6A4F',
           strokeWidth: 3,

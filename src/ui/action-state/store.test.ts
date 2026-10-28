@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createActionStateStore } from './store.js';
 import type { ActionHistorySnapshot, AutoCollapseRule } from './types.js';
+import { d2Scenario, d2MemoryFacts } from '../../../tests/fixtures/index.js';
+import { createFixedClock, replayScenarioTimeline } from '../../app/scenario-player/index.js';
+import { departPreparer } from '../../plugins/depart/preparer.js';
 
 describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
   describe('2.1 Action States & Guarded Transitions Lifecycle', () => {
@@ -267,22 +270,101 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
     }
   });
 
-  describe('V0 Message Submission (Honest Capability Placeholder)', () => {
-    it('appends user message, enters PROCESSING, and presents honest placeholder', () => {
+  describe('V2a Message Submission & Command Execution (LIVING_CONTEXT_V2.md §2 & §3)', () => {
+    it('appends user message, enters PROCESSING, and presents honest capability answer for unsupported query', () => {
       const store = createActionStateStore();
       store.openConversation();
 
-      const result = store.submitMessage('Leave 15 minutes later');
+      const result = store.submitMessage('What is the weather in Paris?');
       expect(result.collapsed).toBe(false);
       expect(result.rule).toBe('unsupported_ask');
-      expect(result.response).toContain('Commands arrive in the next build (V2a)');
+      expect(result.response).toContain("I can help adjust your departure plan");
 
       const transcript = store.getTranscript();
       expect(transcript.length).toBe(3); // 1 welcome + 1 user + 1 assistant
       expect(transcript[1]?.sender).toBe('user');
-      expect(transcript[1]?.text).toBe('Leave 15 minutes later');
+      expect(transcript[1]?.text).toBe('What is the weather in Paris?');
       expect(transcript[2]?.sender).toBe('assistant');
-      expect(transcript[2]?.isPlaceholder).toBe(true);
+      expect(store.getInteractionState()).toBe('CONVERSATION');
+    });
+
+    it('executes LEAVE_LATER command with context: late shift yields needs-confirmation, accept collapses, undo restores', () => {
+      const store = createActionStateStore();
+      store.openConversation();
+
+      const d2Clock = createFixedClock('2026-10-28T20:35:00.000Z');
+      const d2Snapshots = replayScenarioTimeline(d2Scenario, d2Clock);
+      const d2Snapshot = d2Snapshots[d2Snapshots.length - 1]!;
+      const d2Plan = departPreparer.prepare(
+        {
+          intent: 'depart',
+          confidence: 1.0,
+          evidence: d2Snapshot.signals.filter(s => s.kind === 'calendar'),
+        },
+        d2Snapshot,
+        d2MemoryFacts
+      )!;
+
+      store.setCommandContext({
+        plan: d2Plan,
+        snapshot: d2Snapshot,
+        memory: d2MemoryFacts,
+        sceneId: 'rain',
+      });
+
+      // 1. Send late shift (+15m later): arrives at 3:10 PM for 3:00 PM appt -> needs-confirmation!
+      const resLate = store.submitMessage('Leave 15 minutes later');
+      expect(resLate.collapsed).toBe(false);
+      expect(resLate.rule).toBe('needs_confirmation');
+      expect(resLate.response).toContain('arrive late');
+      expect(store.getActionState().status).toBe('needs-confirmation');
+
+      // 2. Accept the late departure -> confirms for this time only and auto-collapses to updated home!
+      const resConfirm = store.submitMessage('Looks good');
+      expect(resConfirm.collapsed).toBe(true);
+      expect(resConfirm.rule).toBe('executable_determinate');
+      expect(store.getActionState().status).toBe('updated');
+      expect(store.getActionState().plan?.headline).toContain('2:45 PM');
+      expect(store.getActionState().plan?.why.derivation).toContain('Because you asked: leave 15 min later · this time only');
+
+      // 3. Negative test (a): Memory facts remain 100% unchanged in storage (this time only)
+      expect(d2MemoryFacts.find(f => f.key === 'prep_buffer_minutes')?.value).toBe(5);
+
+      // 4. Undo restores the exact prior plan
+      const resUndo = store.submitMessage('Undo');
+      expect(resUndo.collapsed).toBe(true);
+      expect(resUndo.rule).toBe('executable_determinate');
+      expect(store.getActionState().plan?.headline).toContain('2:30 PM');
+    });
+
+    it('Negative test (d): pinned conversation NEVER auto-collapses even on executable confirm', () => {
+      const store = createActionStateStore();
+      store.openConversation();
+      store.setPinned(true);
+
+      const d2Clock = createFixedClock('2026-10-28T20:35:00.000Z');
+      const d2Snapshots = replayScenarioTimeline(d2Scenario, d2Clock);
+      const d2Snapshot = d2Snapshots[d2Snapshots.length - 1]!;
+      const d2Plan = departPreparer.prepare(
+        {
+          intent: 'depart',
+          confidence: 1.0,
+          evidence: d2Snapshot.signals.filter(s => s.kind === 'calendar'),
+        },
+        d2Snapshot,
+        d2MemoryFacts
+      )!;
+
+      store.setCommandContext({
+        plan: d2Plan,
+        snapshot: d2Snapshot,
+        memory: d2MemoryFacts,
+        sceneId: 'rain',
+      });
+
+      store.submitMessage('Leave 15 minutes later');
+      const resConfirm = store.submitMessage('Confirm');
+      expect(resConfirm.collapsed).toBe(false); // PINNED: Never auto-collapses!
       expect(store.getInteractionState()).toBe('CONVERSATION');
     });
 

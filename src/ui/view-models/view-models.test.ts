@@ -335,14 +335,27 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
       expect(options).toHaveLength(0);
     });
 
-    it('draws only the Drive polyline for single-mode depart plan and NO bus polyline', () => {
-      const map = deriveMapVM(d1ClearPlan, mockSpatialEvidence, 'prominent');
-      expect(map).toBeDefined();
-      expect(map!.polylines).toHaveLength(1);
-      expect(map!.polylines[0]!.mode).toBe('drive');
-      expect(map!.polylines[0]!.travelMinutes).toBe(30);
-      expect(map!.polylines.some(p => p.mode === 'bus')).toBe(false);
-      expect(map!.weatherCallout).toBeUndefined();
+    it('draws single-mode polyline with neutral Travel default and NO bus polyline', () => {
+      // Default fallback without explicit mode signal or option
+      const mapDefault = deriveMapVM(d1ClearPlan, mockSpatialEvidence, 'prominent');
+      expect(mapDefault).toBeDefined();
+      expect(mapDefault!.polylines).toHaveLength(1);
+      expect(mapDefault!.polylines[0]!.mode).toBe('travel');
+      expect(mapDefault!.polylines[0]!.label).toBe('Travel · 30 min');
+      expect(mapDefault!.polylines[0]!.travelMinutes).toBe(30);
+      expect(mapDefault!.polylines.some(p => p.mode === 'bus')).toBe(false);
+      expect(mapDefault!.weatherCallout).toBeUndefined();
+
+      // With explicit drive mode snapshot
+      const driveSnapshot = {
+        signals: [
+          { kind: 'travel_estimate', value: { mode: 'drive', travelMinutes: 30 } },
+        ],
+      };
+      const mapDrive = deriveMapVM(d1ClearPlan, mockSpatialEvidence, 'prominent', { snapshot: driveSnapshot });
+      expect(mapDrive).toBeDefined();
+      expect(mapDrive!.polylines[0]!.mode).toBe('drive');
+      expect(mapDrive!.polylines[0]!.label).toBe('Drive · 30 min');
     });
 
     it('correctly adapts timeline to post-confirm 25m prep + 10m buffer facts', () => {

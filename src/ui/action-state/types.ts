@@ -3,7 +3,21 @@
  * Governed by LIVING_CONTEXT_V2.md Section 2.
  */
 
-import type { PreparedPlan } from '../../core/contracts/index.js';
+import type {
+  PreparedPlan,
+  ContextSnapshot,
+  MemoryFact,
+  IntentCandidate,
+} from '../../core/contracts/index.js';
+import type { UserRequestOverride } from '../../plugins/depart/request-override.js';
+
+export interface ActionCommandContext {
+  readonly plan: PreparedPlan | null;
+  readonly snapshot?: ContextSnapshot;
+  readonly memory?: readonly MemoryFact[];
+  readonly candidate?: IntentCandidate;
+  readonly sceneId?: string;
+}
 
 export type ActionStatus =
   | 'idle'
@@ -20,9 +34,11 @@ export interface ActionStateRecord {
   substate?: WorkingSubstate;
   detail?: string;
   plan?: PreparedPlan;
+  pendingPlan?: PreparedPlan;
   resultSummary?: string;
   notice?: string;
   timestamp: string;
+  override?: UserRequestOverride | null;
 }
 
 export type InteractionState = 'HOME' | 'CONVERSATION' | 'PROCESSING';
@@ -41,12 +57,16 @@ export interface MessageItem {
   text: string;
   timestamp: string;
   isPlaceholder?: boolean;
+  needsConfirmation?: boolean;
+  pendingPlan?: PreparedPlan;
+  workingDetail?: string;
 }
 
 export interface ActionHistorySnapshot {
   planState: PreparedPlan | null;
   sceneId: string;
   actionState: ActionStateRecord;
+  override?: UserRequestOverride | null;
   timestamp: string;
 }
 
@@ -72,6 +92,11 @@ export interface ActionStateStore {
   getTranscript(): readonly MessageItem[];
   getSnapshot(): ActionStoreSnapshot;
   isReducedMotion(): boolean;
+  getCurrentOverride(): UserRequestOverride | null;
+  clearOverride(): void;
+
+  setCommandContext(ctx: ActionCommandContext): void;
+  getCommandContext(): ActionCommandContext | undefined;
 
   openConversation(): void;
   closeConversation(reason?: string): void;
@@ -82,7 +107,7 @@ export interface ActionStateStore {
   // Guarded transition methods (§2.1 & §2.2)
   beginCommand(text: string, detail?: string, substate?: WorkingSubstate): boolean;
   resolveExecutable(summary: string, plan?: PreparedPlan): boolean;
-  resolveNeedsConfirmation(detail: string): boolean;
+  resolveNeedsConfirmation(detail: string, pendingPlan?: PreparedPlan): boolean;
   confirmPending(summary: string, plan?: PreparedPlan): boolean;
   rejectPending(): boolean;
   resolveDegraded(notice: string): boolean;
@@ -91,7 +116,10 @@ export interface ActionStateStore {
   resetToIdle(): boolean;
 
   evaluateAutoCollapse(rule: AutoCollapseRule): boolean;
-  submitMessage(text: string): { collapsed: boolean; rule: AutoCollapseRule; response: string };
+  submitMessage(
+    text: string,
+    contextOverride?: ActionCommandContext
+  ): { collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan };
   pushHistory(snapshot: ActionHistorySnapshot): void;
   undo(): ActionHistorySnapshot | null;
 

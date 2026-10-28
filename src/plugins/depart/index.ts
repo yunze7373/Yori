@@ -14,6 +14,7 @@ export * from './engine.js';
 export * from './detector.js';
 export * from './preparer.js';
 export * from './adapter.js';
+export * from './request-override.js';
 
 export const departPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
   id: 'depart',

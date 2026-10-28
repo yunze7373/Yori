@@ -1,5 +1,5 @@
 /**
- * Full-page Conversation Shell Component (V0 - LIVING_CONTEXT_V2.md §2)
+ * Full-page Conversation Shell Component (V2a - LIVING_CONTEXT_V2.md §2 & §8 D3/D4/D5)
  * Manages full-page conversation overlay, transcript, composer, focus trap, Esc, Back, and focus return.
  */
 
@@ -22,8 +22,16 @@ export function renderConversationOverlay(store: ActionStateStore): string {
                 <line x1="6" y1="6" x2="18" y2="18"></line>
               </svg>
             </button>
-            <h2 class="conversation-title">${escapeHtml(STRINGS.conversation.title)}</h2>
-            <span class="v2-preview-badge">${escapeHtml(STRINGS.header.v2Badge)}</span>
+            <div class="conversation-avatar-mark" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" fill="#16382F"/>
+                <path d="M7 12l3 3 7-7" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <div class="conversation-title-block">
+              <h2 class="conversation-title">${escapeHtml(STRINGS.conversation.title)}</h2>
+              <span class="v2-offline-badge" id="conversation-status-badge">Offline demo · simulated</span>
+            </div>
           </div>
           <div class="conversation-header-right">
             <button type="button" class="conversation-pin-btn ${isPinned ? 'is-pinned' : ''}" id="conversation-pin-btn" aria-label="${escapeHtml(STRINGS.conversation.pinAriaLabel)}" aria-pressed="${isPinned ? 'true' : 'false'}">
@@ -66,7 +74,7 @@ export function renderConversationOverlay(store: ActionStateStore): string {
 
 function renderTranscriptItems(transcript: readonly MessageItem[]): string {
   if (transcript.length === 0) {
-    return `<div class="transcript-empty">No messages yet.</div>`;
+    return `<div class="transcript-empty">No messages yet. Ask Yori about your departure or travel route.</div>`;
   }
 
   return transcript
@@ -74,11 +82,35 @@ function renderTranscriptItems(transcript: readonly MessageItem[]): string {
       const isUser = msg.sender === 'user';
       return `
         <article class="chat-bubble-wrapper ${isUser ? 'chat-bubble-user' : 'chat-bubble-assistant'}" id="${escapeHtml(msg.id)}">
+          ${
+            !isUser
+              ? `
+            <div class="chat-avatar-mark" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" fill="#16382F"/>
+                <path d="M7 12l3 3 7-7" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          `
+              : ''
+          }
           <div class="chat-bubble">
             <p class="chat-text">${escapeHtml(msg.text)}</p>
             ${
-              msg.isPlaceholder
-                ? `<span class="chat-placeholder-tag" aria-label="Notice">(V0 Preview: Command grammar arrives in V2a)</span>`
+              msg.needsConfirmation && msg.pendingPlan
+                ? `
+              <div class="chat-confirm-box">
+                <div class="chat-confirm-notice">Confirm change for this time only:</div>
+                <div class="chat-confirm-actions">
+                  <button type="button" class="btn btn-primary btn-sm" id="btn-chat-confirm" data-plan-id="${escapeHtml(msg.pendingPlan.id)}">
+                    Confirm for this time only
+                  </button>
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-chat-reject">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            `
                 : ''
             }
           </div>
@@ -134,6 +166,34 @@ export function attachConversationEvents(
       performClose(reason);
     }
   };
+
+  const wireTranscriptButtons = () => {
+    if (!transcriptEl) return;
+    const confirmBtn = transcriptEl.querySelector<HTMLButtonElement>('#btn-chat-confirm');
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const res = store.submitMessage('Looks good');
+        transcriptEl.innerHTML = renderTranscriptItems(store.getTranscript());
+        transcriptEl.scrollTop = transcriptEl.scrollHeight;
+        if (res.collapsed) {
+          safeClose('auto_collapse');
+        }
+      });
+    }
+
+    const rejectBtn = transcriptEl.querySelector<HTMLButtonElement>('#btn-chat-reject');
+    if (rejectBtn) {
+      rejectBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        store.rejectPending();
+        transcriptEl.innerHTML = renderTranscriptItems(store.getTranscript());
+        transcriptEl.scrollTop = transcriptEl.scrollHeight;
+      });
+    }
+  };
+
+  wireTranscriptButtons();
 
   // Popstate listener for system / browser Back navigation
   const handlePopState = () => {
@@ -211,6 +271,7 @@ export function attachConversationEvents(
       if (transcriptEl) {
         transcriptEl.innerHTML = renderTranscriptItems(store.getTranscript());
         transcriptEl.scrollTop = transcriptEl.scrollHeight;
+        wireTranscriptButtons();
       }
 
       if (result.collapsed) {

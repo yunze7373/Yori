@@ -141,6 +141,7 @@ export interface HomeCompositionVM {
 
   // Action controls
   readonly isAccepted: boolean;
+  readonly canUndo?: boolean;
   readonly actions: readonly PlanAction[];
 
   // Collapse empty blocks (only populated if non-empty)

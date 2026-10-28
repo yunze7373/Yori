@@ -155,18 +155,17 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(overlay).toBeVisible();
     await expect(composerInput).toBeFocused();
 
-    // Transcript displays honest V0 welcome text
+    // Transcript displays honest welcome text
     const transcript = page.locator('#conversation-transcript');
     await expect(transcript).toBeVisible();
-    await expect(transcript).toContainText('Hello! I am Yori');
-    await expect(transcript).toContainText('Commands will arrive in the next build (V2a)');
+    await expect(transcript).toContainText('I can help adjust your departure plan');
 
-    // 6. Send message: composer accepts input and presents honest V0 placeholder
+    // 6. Send message: composer accepts input and processes departure command
     await composerInput.fill('Can I leave 15 minutes later?');
     await page.locator('#conversation-send-btn').click();
 
     await expect(transcript).toContainText('Can I leave 15 minutes later?');
-    await expect(transcript).toContainText('Commands arrive in the next build (V2a)');
+    await expect(transcript).toContainText('arrive late');
 
     // 7. Pin button toggles pin state
     const pinBtn = page.locator('#conversation-pin-btn');

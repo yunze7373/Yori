@@ -19,10 +19,53 @@ import type {
   EvidenceCitation,
   MemoryCitation,
 } from '../../core/contracts/index.js';
-import { computeDepartTiming, validateCalendarDate } from './engine.js';
+import {
+  computeDepartTiming,
+  validateCalendarDate,
+  formatTime12,
+  formatTime24,
+  type DepartTimingResult,
+} from './engine.js';
+import type { UserRequestOverride } from './request-override.js';
 
 export interface DepartPreparerOptions {
   readonly defaultTimeZone?: string;
+}
+
+interface AdjustedTimingResult extends DepartTimingResult {
+  readonly arrivalMarginMinutes: number;
+  readonly arrivesLate: boolean;
+}
+
+function adjustTimingWithDelta(
+  base: DepartTimingResult,
+  travelMinutes: number,
+  deltaMinutes: number,
+  timeZone: string
+): AdjustedTimingResult {
+  const newLeaveMs = base.leaveMs + deltaMinutes * 60_000;
+  const newPrepareMs = base.prepareMs + deltaMinutes * 60_000;
+  const newArrivalMs = newLeaveMs + travelMinutes * 60_000;
+  const arrivalMarginMinutes = Math.round((base.apptMs - newArrivalMs) / 60_000);
+  const arrivesLate = arrivalMarginMinutes < 0;
+
+  const newLeaveDate = new Date(newLeaveMs);
+  const newPrepareDate = new Date(newPrepareMs);
+
+  return {
+    ...base,
+    leaveMs: newLeaveMs,
+    prepareMs: newPrepareMs,
+    leaveIso: newLeaveDate.toISOString(),
+    prepareIso: newPrepareDate.toISOString(),
+    leaveTime12: formatTime12(newLeaveMs, timeZone),
+    prepareTime12: formatTime12(newPrepareMs, timeZone),
+    leaveTime24: formatTime24(newLeaveMs, timeZone),
+    prepareTime24: formatTime24(newPrepareMs, timeZone),
+    alreadyDue: newPrepareMs <= base.nowMs,
+    arrivalMarginMinutes,
+    arrivesLate,
+  };
 }
 
 export class DepartPreparer implements Preparer {
@@ -35,6 +78,15 @@ export class DepartPreparer implements Preparer {
     candidate: IntentCandidate,
     snapshot: ContextSnapshot,
     memory: readonly MemoryFact[]
+  ): PreparedPlan | null {
+    return this.prepareWithRequest(candidate, snapshot, memory, null);
+  }
+
+  public prepareWithRequest(
+    candidate: IntentCandidate,
+    snapshot: ContextSnapshot,
+    memory: readonly MemoryFact[],
+    override?: UserRequestOverride | null
   ): PreparedPlan | null {
     if (!candidate || candidate.intent !== 'depart' || !snapshot || !Array.isArray(snapshot.signals)) {
       return null;
@@ -210,6 +262,19 @@ export class DepartPreparer implements Preparer {
     let alreadyDue = false;
     let derivation: string;
 
+    if (override) {
+      const overrideDesc =
+        override.kind === 'leave_later'
+          ? `Because you asked: leave ${override.deltaMinutes ?? 15} min later · this time only`
+          : `Because you asked: switch to ${override.mode ?? 'alternate mode'} · this time only`;
+      evidenceSignals.unshift({
+        kind: 'user_request',
+        source: 'simulated',
+        issuedAt: override.provenance.at,
+        description: overrideDesc,
+      });
+    }
+
     if (hasPrecipitationRisk && hasMultiModal) {
       // D2 Rain Re-plan branch (multi-modal)
       const driveMinutes = travelVal.driveMinutes as number;
@@ -233,28 +298,51 @@ export class DepartPreparer implements Preparer {
         nowTime: snapshot.asOf,
       });
 
+      const isLeaveLater = override?.kind === 'leave_later';
+      const deltaMinutes = isLeaveLater ? (override?.deltaMinutes ?? 15) : 0;
+
+      const effectiveDriveTiming: AdjustedTimingResult = isLeaveLater
+        ? adjustTimingWithDelta(driveTiming, driveMinutes, deltaMinutes, timeZone)
+        : {
+            ...driveTiming,
+            arrivalMarginMinutes: bufferMinutes,
+            arrivesLate: false,
+          };
+
+      const effectiveBusTiming: AdjustedTimingResult = isLeaveLater
+        ? adjustTimingWithDelta(busTiming, busMinutes, deltaMinutes, timeZone)
+        : {
+            ...busTiming,
+            arrivalMarginMinutes: bufferMinutes,
+            arrivesLate: false,
+          };
+
       const driveOption: PlanOption = {
         id: 'opt-drive',
-        label: `drive leave ${driveTiming.leaveTime12}`, // e.g. "drive leave 2:30 PM"
+        label: `drive leave ${effectiveDriveTiming.leaveTime12}`, // e.g. "drive leave 2:30 PM"
         mode: 'drive',
-        leaveAt: driveTiming.leaveIso,
+        leaveAt: effectiveDriveTiming.leaveIso,
         travelMinutes: driveMinutes,
         rankedByFactKey: 'rain_transport_preference',
-        details: `${driveMinutes} min drive + ${bufferMinutes} min buffer`,
+        details: effectiveDriveTiming.arrivesLate
+          ? `${driveMinutes} min drive · late by ${Math.abs(effectiveDriveTiming.arrivalMarginMinutes)}m`
+          : `${driveMinutes} min drive + ${effectiveDriveTiming.arrivalMarginMinutes}m margin`,
         estimatedMinutes: driveMinutes,
-        requiresConfirmation: false,
+        requiresConfirmation: effectiveDriveTiming.arrivesLate,
       };
 
       const busOption: PlanOption = {
         id: 'opt-bus',
-        label: `bus leave ${busTiming.leaveTime12}`, // e.g. "bus leave 2:15 PM"
+        label: `bus leave ${effectiveBusTiming.leaveTime12}`, // e.g. "bus leave 2:15 PM"
         mode: 'bus',
-        leaveAt: busTiming.leaveIso,
+        leaveAt: effectiveBusTiming.leaveIso,
         travelMinutes: busMinutes,
         rankedByFactKey: 'rain_transport_preference',
-        details: `${busMinutes} min bus + ${bufferMinutes} min buffer`,
+        details: effectiveBusTiming.arrivesLate
+          ? `${busMinutes} min bus · late by ${Math.abs(effectiveBusTiming.arrivalMarginMinutes)}m`
+          : `${busMinutes} min bus + ${effectiveBusTiming.arrivalMarginMinutes}m margin`,
         estimatedMinutes: busMinutes,
-        requiresConfirmation: false,
+        requiresConfirmation: effectiveBusTiming.arrivesLate,
       };
 
       if (rainPreferenceFact) {
@@ -265,18 +353,32 @@ export class DepartPreparer implements Preparer {
         });
       }
 
-      // Rank by confirmed rain habit
-      const prefersBus = rainPreferenceFact?.value === 'bus_first';
+      // Rank by confirmed rain habit or route_preference override
+      let prefersBus = rainPreferenceFact?.value === 'bus_first';
+      if (override?.kind === 'route_preference') {
+        if (override.mode === 'bus') prefersBus = true;
+        if (override.mode === 'drive') prefersBus = false;
+      }
+
       optionsOrSteps = prefersBus
         ? Object.freeze([busOption, driveOption])
         : Object.freeze([driveOption, busOption]);
 
-      const primaryTiming = prefersBus ? busTiming : driveTiming;
+      const primaryTiming = prefersBus ? effectiveBusTiming : effectiveDriveTiming;
       alreadyDue = primaryTiming.alreadyDue;
+      const requiresConfirmation = primaryTiming.arrivesLate;
 
       headline = `Rain re-plan for ${title}: prepare ${primaryTiming.prepareTime12}, leave ${primaryTiming.leaveTime12} (umbrella recommended)`;
 
-      derivation = `Rain re-plan: drive leave ${driveTiming.leaveTime12} (${driveTiming.leaveTime24} leave = ${driveTiming.apptTime24} appt - ${driveMinutes}m drive - ${bufferMinutes}m buffer); bus leave ${busTiming.leaveTime12} (${busTiming.leaveTime24} leave = ${busTiming.apptTime24} appt - ${busMinutes}m bus - ${bufferMinutes}m buffer); ranked by confirmed rain_transport_preference (${String(rainPreferenceFact?.value ?? 'drive_first')}); prepare ${primaryTiming.prepareTime12} (${primaryTiming.prepareTime24} prepare = ${primaryTiming.leaveTime24} leave - ${prepMinutes}m prep)`;
+      const baseDerivation = `Rain re-plan: drive leave ${effectiveDriveTiming.leaveTime12} (${effectiveDriveTiming.leaveTime24} leave = ${effectiveDriveTiming.apptTime24} appt - ${driveMinutes}m drive - ${bufferMinutes}m buffer); bus leave ${effectiveBusTiming.leaveTime12} (${effectiveBusTiming.leaveTime24} leave = ${effectiveBusTiming.apptTime24} appt - ${busMinutes}m bus - ${bufferMinutes}m buffer); ranked by ${override?.kind === 'route_preference' ? 'user_request (route_preference)' : `confirmed rain_transport_preference (${String(rainPreferenceFact?.value ?? 'drive_first')})`}; prepare ${primaryTiming.prepareTime12} (${primaryTiming.prepareTime24} prepare = ${primaryTiming.leaveTime24} leave - ${prepMinutes}m prep)`;
+
+      if (isLeaveLater) {
+        derivation = `Because you asked: leave ${deltaMinutes} min later · this time only; ${baseDerivation}`;
+      } else if (override?.kind === 'route_preference') {
+        derivation = `Because you asked: switch to ${override.mode} · this time only; ${baseDerivation}`;
+      } else {
+        derivation = baseDerivation;
+      }
 
       return Object.freeze({
         id: `depart-plan-${calendarSignal.issuedAt}-${snapshot.asOf}`,
@@ -284,7 +386,7 @@ export class DepartPreparer implements Preparer {
         headline,
         optionsOrSteps,
         checklist,
-        requiresConfirmation: false,
+        requiresConfirmation,
         alreadyDue,
         subjectTitle: title,
         apptAt: startTimeStr,
@@ -313,28 +415,46 @@ export class DepartPreparer implements Preparer {
         nowTime: snapshot.asOf,
       });
 
-      alreadyDue = timing.alreadyDue;
+      const isLeaveLater = override?.kind === 'leave_later';
+      const deltaMinutes = isLeaveLater ? (override?.deltaMinutes ?? 15) : 0;
+
+      const effectiveTiming: AdjustedTimingResult = isLeaveLater
+        ? adjustTimingWithDelta(timing, travelMinutes, deltaMinutes, timeZone)
+        : {
+            ...timing,
+            arrivalMarginMinutes: bufferMinutes,
+            arrivesLate: false,
+          };
+
+      alreadyDue = effectiveTiming.alreadyDue;
+      const requiresConfirmation = effectiveTiming.arrivesLate;
 
       headline = hasPrecipitationRisk
-        ? `Rain departure for ${title}: prepare ${timing.prepareTime12}, leave ${timing.leaveTime12} (umbrella recommended)`
-        : `Depart for ${title}: prepare ${timing.prepareTime12}, leave ${timing.leaveTime12}`;
+        ? `Rain departure for ${title}: prepare ${effectiveTiming.prepareTime12}, leave ${effectiveTiming.leaveTime12} (umbrella recommended)`
+        : `Depart for ${title}: prepare ${effectiveTiming.prepareTime12}, leave ${effectiveTiming.leaveTime12}`;
 
       optionsOrSteps = Object.freeze([
         {
           id: 'step-prepare',
-          label: `prepare ${timing.prepareTime12}`,
+          label: `prepare ${effectiveTiming.prepareTime12}`,
           requiresConfirmation: false,
         },
         {
           id: 'step-leave',
-          label: `leave ${timing.leaveTime12}`,
-          requiresConfirmation: false,
+          label: `leave ${effectiveTiming.leaveTime12}`,
+          requiresConfirmation: effectiveTiming.arrivesLate,
         },
       ]);
 
-      derivation = hasPrecipitationRisk
-        ? `Rain departure: ${timing.derivation}`
-        : timing.derivation;
+      const baseDerivation = hasPrecipitationRisk
+        ? `Rain departure: ${effectiveTiming.derivation}`
+        : effectiveTiming.derivation;
+
+      if (isLeaveLater) {
+        derivation = `Because you asked: leave ${deltaMinutes} min later · this time only; ${baseDerivation}`;
+      } else {
+        derivation = baseDerivation;
+      }
 
       return Object.freeze({
         id: `depart-plan-${calendarSignal.issuedAt}-${snapshot.asOf}`,
@@ -342,12 +462,12 @@ export class DepartPreparer implements Preparer {
         headline,
         optionsOrSteps,
         checklist,
-        requiresConfirmation: false,
+        requiresConfirmation,
         alreadyDue,
         subjectTitle: title,
         apptAt: startTimeStr,
-        prepareAt: timing.prepareIso,
-        leaveAt: timing.leaveIso,
+        prepareAt: effectiveTiming.prepareIso,
+        leaveAt: effectiveTiming.leaveIso,
         timezone: timeZone,
         why: Object.freeze({
           evidenceSignals: Object.freeze(evidenceSignals),
