@@ -1,0 +1,500 @@
+{
+  "schema_version": "1.0.0",
+  "plan": {
+    "id": "yori_submit_001",
+    "phase": "PH-002-closeout",
+    "title": "Submission readiness: owner-gated live verifications, zero-credential demo fallback, video/repo/submission gates (internal 2026-11-04, external 2026-11-05 11:00 JST)",
+    "source": "ARCH-SUBMIT-001 Phase R planning (docs/architecture/SUBMISSION_READINESS.md); planning only, no coding dispatch or live action authorized",
+    "created_at": "2026-10-28",
+    "status": "pending",
+    "description": "Every live/paid/publish step sits behind an explicit OWNER_GATE task; implementation slices are small, gated, and keep the AC-EXT-1 core diff vs f43c6c1d empty. The deterministic zero-credential demo path is verified first and never cut.",
+    "course_correction_summary": "previous_phase: PH-002 closeout approved (2c9e058d @ bb87efaf) | core_delivery: submission-readiness plan + status classification | deviation: none | INBOX_backlog: 0 P0, 0 P1 | next_phase_focus: fallback demo verification, then owner gates"
+  },
+  "tasks": [
+    {
+      "id": "FALLBACK-VERIFY",
+      "slice": "fallback",
+      "title": "Zero-credential demo path verification (guaranteed video fallback)",
+      "priority": "P0",
+      "goal": "Prove the guaranteed demo path with zero owner credentials: deterministic scenes D1-D6, recorded/labelled fixed-city weather fixtures, local memory, model off. This is the default recording path until a live gate clears, and it is never cut.",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 2,
+      "dependencies": [],
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/strings.ts",
+        "docs/DEMO.md",
+        "docs/submission/VIDEO_SCRIPT.md"
+      ],
+      "checks": [
+        "Clean run with MODEL_API_KEY unset and all flags OFF: golden 10/10 and the video-script walkthrough completable end to end (AC-205-2)",
+        "No fixture presents recorded weather as live: labelling audit on every weather surface used in the script",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id FALLBACK-VERIFY --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-S1",
+      "slice": "gate",
+      "title": "OWNER GATE: MODEL_API_KEY in .env.local + billed live-call approval",
+      "priority": "P0",
+      "goal": "Owner action only: place MODEL_API_KEY in Yori's .env.local (never read or copied from Muse Code private auth) and explicitly approve a small billed live-call budget for S1-LIVE. Latest safe date 2026-10-31. Agents never handle the secret value. Terminal states: DONE, or DECLINED/NOT-DONE by the latest safe date (recorded with date and reason) - a declined gate unblocks its branch as SKIPPED and never stalls the submission track.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "FALLBACK-VERIFY"
+      ],
+      "owner_gate": "Owner configures the key and approves billed calls; unmet gate means S1-LIVE is skipped and the demo stays deterministic (stated honestly in video/description)",
+      "goal_ids": [
+        "G-202"
+      ],
+      "acceptance_ids": [
+        "AC-202-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-102"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/server-proxy.ts"
+      ],
+      "checks": [
+        "Diagnostics reports enabled via MODEL_API_KEY without the value appearing in any log, file, or test output",
+        "If unmet by 2026-10-31, record gate-unmet and mark S1-LIVE cut; deterministic path already proven by FALLBACK-VERIFY",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-S1 --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "S1-LIVE",
+      "slice": "live",
+      "title": "Bounded Muse Spark live verification (behind GATE-S1)",
+      "priority": "P1",
+      "goal": "One small live verification: a fixed set of at most 10 recorded prompts, server-side only, max_tokens capped, through the template/facts proxy. Produce a fact-check pass-rate report (accepted vs discarded outputs) and confirm deterministic fallback on any failure. No other live usage is authorized by this task.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": [
+        "GATE-S1"
+      ],
+      "goal_ids": [
+        "G-202"
+      ],
+      "acceptance_ids": [
+        "AC-202-1",
+        "AC-202-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-102"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/index.ts",
+        "src/adapters/model/fact-checker.ts"
+      ],
+      "checks": [
+        "Live run record: at most 10 calls, server-side only, max_tokens cap evidenced; fact-check pass-rate report written (accepted/discarded with reasons) (AC-202-1)",
+        "D1-D6 golden outputs remain byte-identical with live mode on and off; git diff f43c6c1d -- src/core empty; no secret in repo or logs (AC-202-2)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S1-LIVE --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-X1",
+      "slice": "gate",
+      "title": "OWNER GATE: XMemo dynamic registration + one consent click",
+      "priority": "P1",
+      "goal": "Owner action only: authorize dynamic client registration for Yori and complete one OAuth consent click on the owner's own XMemo account. Latest safe date 2026-10-31. If not authorized, XMemo stays OFF with the local fallback (already the shipped default). Terminal states: DONE, or DECLINED/NOT-DONE by the latest safe date (recorded with date and reason) - a declined gate unblocks its branch as SKIPPED and never stalls the submission track.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "FALLBACK-VERIFY"
+      ],
+      "owner_gate": "Owner authorizes registration and consent; unmet gate means S2-LIVE is skipped",
+      "goal_ids": [
+        "G-203"
+      ],
+      "acceptance_ids": [
+        "AC-203-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-103"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/xmemo/remote-adapter.ts"
+      ],
+      "checks": [
+        "Registration and consent evidenced by the owner; tokens exist only server-side (no client bundle contains them)",
+        "If unmet by 2026-10-31, record gate-unmet and mark S2-LIVE cut; DEMO.md already states local fallback",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-X1 --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "S2-LIVE",
+      "slice": "live",
+      "title": "XMemo live mapping verification (behind GATE-X1)",
+      "priority": "P1",
+      "goal": "Confirm or correct the UNVERIFIED_XMEMO_MCP_MAPPING (read recall, write remember) against the real MCP server using only the owner's account: read minimal preference data, write exactly one clearly labelled test fact, verify it, then delete it if deletion is supported (and record whether it is). Correct the mapping and docs to the verified truth.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": [
+        "GATE-X1"
+      ],
+      "goal_ids": [
+        "G-203"
+      ],
+      "acceptance_ids": [
+        "AC-203-1",
+        "AC-203-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-103"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/xmemo/remote-adapter.ts",
+        "src/adapters/xmemo/types.ts"
+      ],
+      "checks": [
+        "Probe record: mapping confirmed or corrected with real-server evidence; the single labelled test fact is verified present, then deleted or its retention explicitly recorded (AC-203-1)",
+        "Only confirmed-status writes attempted; local fallback journeys unchanged; git diff f43c6c1d -- src/core empty (AC-203-2)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S2-LIVE --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-W1",
+      "slice": "gate",
+      "title": "OWNER GATE: Open-Meteo non-commercial qualification decision",
+      "priority": "P1",
+      "goal": "Owner decision only, latest safe 2026-11-02: hackathon evaluation qualifies under Open-Meteo non-commercial terms, or live weather stays out of recordings. No agent may make this qualification call. Terminal states: DONE, or DECLINED/NOT-DONE by the latest safe date (recorded with date and reason) - a declined gate unblocks its branch as SKIPPED and never stalls the submission track.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "FALLBACK-VERIFY"
+      ],
+      "owner_gate": "Owner confirms non-commercial qualification or directs recorded-fixture use; unmet gate means S3-LIVE is skipped",
+      "goal_ids": [
+        "G-204"
+      ],
+      "acceptance_ids": [
+        "AC-204-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/mock/index.ts"
+      ],
+      "checks": [
+        "Owner decision recorded verbatim (qualify / fixtures-only) with date",
+        "If unmet, WEATHER_LIVE_ENABLED remains false and recordings use the labelled recorded fixtures from FALLBACK-VERIFY",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-W1 --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "S3-LIVE",
+      "slice": "live",
+      "title": "Live weather enablement for recordings (behind GATE-W1)",
+      "priority": "P2",
+      "goal": "Enable WEATHER_LIVE_ENABLED for the recording build only: fixed demo-city coordinates, real signals labelled source real with Open-Meteo attribution, stale data still fails closed to the D6 notice, mock twins untouched.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 2,
+      "dependencies": [
+        "GATE-W1"
+      ],
+      "goal_ids": [
+        "G-204"
+      ],
+      "acceptance_ids": [
+        "AC-204-1",
+        "AC-204-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers",
+        "src/adapters/mock/index.ts"
+      ],
+      "checks": [
+        "Recording build shows real-labelled weather for the configured demo city; no geolocation API reference exists anywhere in the path (AC-204-2)",
+        "Kill-switch drill: flag off restores the deterministic recorded path byte-identically; git diff f43c6c1d -- src/core empty (AC-204-1)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S3-LIVE --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_SUBMIT_A",
+      "title": "📬 INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": [
+        "FALLBACK-VERIFY"
+      ],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "GATE-V0",
+      "slice": "gate",
+      "title": "OWNER GATE: visual evidence access option",
+      "priority": "P2",
+      "goal": "Owner chooses how visual evidence gets human review, since the coordinator cannot view screenshots (no artifact scope, Yori not allowlisted): (a) owner views docs/evidence locally, (b) grant artifact scope / allowlist, or (c) authorize an executor Telegram image send of selected screenshots. No ChatGPT visual review may be claimed under any option not taken.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "INBOX_CHECK_SUBMIT_A"
+      ],
+      "owner_gate": "Owner picks (a), (b), or (c), or explicitly defers visual sign-off to the Reviewer-verified evidence",
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/app.ts",
+        "docs/evidence"
+      ],
+      "checks": [
+        "Chosen option recorded; submission materials state visual verification provenance truthfully (Reviewer-verified, plus owner option if taken) (AC-205-1)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-V0 --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-R1",
+      "slice": "gate",
+      "title": "OWNER GATE: LICENSE holder confirmation, remote creation, public visibility",
+      "priority": "P0",
+      "goal": "Owner actions only, latest safe 2026-11-03: confirm the LICENSE copyright holder (currently [OWNER TO CONFIRM], MIT), create the remote repository, push, and set it public. Agents publish nothing.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "FALLBACK-VERIFY",
+        "GATE-V0"
+      ],
+      "owner_gate": "Owner confirms licence holder and performs remote creation/push/visibility; unmet gate blocks GATE-F1",
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/strings.ts",
+        "README.md"
+      ],
+      "checks": [
+        "LICENSE holder text matches the owner's confirmation verbatim; secret scan clean over repo and history before any push",
+        "Public URL recorded in the submission package once the owner creates it; nothing was published by an agent",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-R1 --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-V1",
+      "slice": "gate",
+      "title": "OWNER GATE: record and upload the 3-minute video",
+      "priority": "P0",
+      "goal": "Owner action only, latest safe 2026-11-03: record the walkthrough per docs/submission/VIDEO_SCRIPT.md on whichever demo path is live by then (deterministic fallback guaranteed), and upload it (YouTube/Loom). Agents do not record or publish.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "GATE-R1"
+      ],
+      "owner_gate": "Owner records and uploads; unmet gate means the submission files without video (weaker, still submittable)",
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/strings.ts",
+        "docs/submission/VIDEO_SCRIPT.md"
+      ],
+      "checks": [
+        "Video URL recorded in the submission package; runtime about 3 minutes; spoken claims match the status table (no live capability claimed that stayed off)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-V1 --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-F1",
+      "slice": "gate",
+      "title": "OWNER GATE: final hackathon submission (2026-11-05 11:00 JST hard deadline)",
+      "priority": "P0",
+      "goal": "Owner action only: complete and send the official submission form from docs/submission/PROJECT_DESCRIPTION.md and SUBMISSION_CHECKLIST.md, after an internal dry run on 2026-11-04. No form is auto-filled or auto-sent by any agent.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "GATE-V1"
+      ],
+      "owner_gate": "Owner submits; this task only prepares and dry-runs the checklist",
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/strings.ts",
+        "docs/submission/SUBMISSION_CHECKLIST.md"
+      ],
+      "checks": [
+        "Internal dry run on 2026-11-04: every checklist field has a verified value (repo URL, video URL, description) or an explicitly accepted gap",
+        "Submission confirmation (receipt/screenshot reference) recorded by the owner before 2026-11-05 11:00 JST",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-F1 --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "CLOSEOUT_SUBMIT",
+      "slice": "closeout",
+      "title": "Submission-readiness closeout: status truth audit",
+      "priority": "P0",
+      "goal": "Audit every public claim (video, description, README) against SUBMISSION_READINESS.md classes after the gates resolve: nothing LIVE-UNVERIFIED or OFF is described as live; PH-001 regression suites still green. A live branch satisfies this dependency in either terminal state (slice completed, or gate declined and slice skipped).",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 2,
+      "dependencies": [
+        "GATE-F1",
+        "S1-LIVE",
+        "S2-LIVE",
+        "S3-LIVE"
+      ],
+      "goal_ids": [
+        "G-201",
+        "G-202",
+        "G-203",
+        "G-204",
+        "G-205",
+        "G-101",
+        "G-102",
+        "G-103",
+        "G-104",
+        "G-105",
+        "G-106",
+        "G-107"
+      ],
+      "acceptance_ids": [
+        "AC-201-3",
+        "AC-202-2",
+        "AC-203-2",
+        "AC-204-2",
+        "AC-205-2",
+        "AC-101-2",
+        "AC-102-1",
+        "AC-103-1",
+        "AC-104-2",
+        "AC-105-1",
+        "AC-106-2",
+        "AC-EXT-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-101",
+        "ADR-102"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/index.ts",
+        "src/adapters/xmemo/remote-adapter.ts",
+        "src/adapters/providers",
+        "tests/golden"
+      ],
+      "checks": [
+        "Claim-by-claim audit signed off against the status table; git diff f43c6c1d -- src/core empty across all live slices (AC-EXT-1)",
+        "npm test, test:golden, test:drills, test:e2e green with zero credentials configured",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id CLOSEOUT_SUBMIT --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
+      ]
+    },
+    {
+      "id": "PHASE_R_SUBMIT_001",
+      "title": "🔥 Phase R planning + generate next phase plan",
+      "type": "meta",
+      "priority": "critical",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": [
+        "CLOSEOUT_SUBMIT"
+      ],
+      "goal": "Submission window closed -> Phase R -> assess outcome vs goals.yaml -> draft the next phase plan (PH-003 remains privacy-gated) and submit it for Reviewer plan review AND owner confirmation. Nothing executes before that gate.",
+      "phase_r_trigger": {
+        "auto_execute": true,
+        "tasks": [
+          "⚠️ Re-read .progress/AI_INSTRUCTIONS.md (ensure rules are not lost after model switch)",
+          "📬 R1: Read INBOX.md (scan mode command section first, then task section)",
+          "💤 R1.5: Convergence gate (no real pending → standby)",
+          "🎯 R2: Read docs/architecture/goals.yaml and PHASE_PLAN.md, execute target alignment assessment; 运行 phase_r_alignment_check.py 验证架构对齐锚点 (alignment anchor check)",
+          "📊 R3: Phase review: git diff confirm delivery + archive completed tasks + Git Commit",
+          "🗺️ R5: Intelligent planning: draft the next phase plan and submit it for Reviewer plan review AND owner confirmation (guarded autonomy); PH-003 requires the privacy-review gate and must not auto-start",
+          "Update PROGRESS_STATUS.json + TODOS.md",
+          "⏸️ R6: Execute NOTHING from the next plan before the Reviewer + owner gate passes; enter standby and wait for the gate result"
+        ]
+      }
+    }
+  ],
+  "success_criteria": [
+    "Every live/paid/publish step is behind an explicit OWNER_GATE task and no slice runs without its gate",
+    "Public claims match the SUBMISSION_READINESS.md status classes exactly (nothing OFF or LIVE-UNVERIFIED described as live)",
+    "AC-EXT-1 core diff vs f43c6c1d empty; deterministic zero-credential demo verified first and never cut"
+  ]
+}

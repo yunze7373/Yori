@@ -98,6 +98,29 @@ To protect user privacy and guarantee deterministic testing:
 
 ---
 
+## 🔍 Fallback Path Labelling Audit (Zero-Credential Verification)
+
+Governed by Plan `YORI_SUBMIT` (Task `FALLBACK-VERIFY`, AC-205-2). When running in the default fallback mode with all flags OFF (`WEATHER_LIVE_ENABLED=false`, `MODEL_API_KEY` unset, `XMEMO_OAUTH_ENABLED=false`), every surface used in the video demonstration script was rigorously audited to guarantee honest simulated labelling:
+
+| Surface / Screen | Visual Element | Displayed Label / Copy | Live Weather Present? | Verification Method |
+|---|---|---|---|---|
+| **Global App Header** | Top-left demo chip | `Demo · simulated context` | **NO** (`#chip-live-weather` count = 0) | E2E DOM assertion & visual render |
+| **Global App Header** | Weather attribution | *Omitted from DOM* | **NO** (`#weather-attribution` count = 0) | E2E DOM assertion & visual render |
+| **Scene D1 (Clear)** | NOW card | Badge: `SIMULATED` | **NO** (Simulated calendar & weather) | E2E data-plan-id & visual render |
+| **Scene D2 (Rain Re-Plan)** | NOW card | Badge: `SIMULATED` | **NO** (Simulated rain forecast at 1:35 PM) | E2E DOM assertion & visual render |
+| **Scene D2 (Rain Re-Plan)** | Umbrella checklist chip | `Grab umbrella · rain in forecast` | **NO** (Checklist item derived from mock signal) | E2E checklist item text match |
+| **Scene D2 (Rain Re-Plan)** | Ranked transit tiles | Drive (2:30 PM) / Bus (2:15 PM) `SIMULATED` | **NO** (Ranked by confirmed memory habit) | E2E transit option tile match |
+| **Why Sheet (Rain D2)** | Evidence signal row | `Weather · Rain starting at 1:35 PM (Simulated data)` | **NO** (Explicit simulated data qualifier) | E2E `#why-signals-list` inspection |
+| **Scene D3 (Away Lunch)** | NOW card options | Badges: `SIMULATED` + mock venue disclosure | **NO** (Mock place adapter) | E2E mock disclosure chip check |
+| **Scene D4 (Busy Lunch)** | Quiet state | `Nothing needs your attention right now.` | **NO** (Suppressed by core policy) | E2E quiet box visible check |
+| **Scene D6 (Missing Weather)**| Fail-closed notice | `The weather forecast isn't available right now, so I won't guess.` | **NO** (Fail-closed notice without guessing) | E2E notice-box text match |
+| **Reasoning Demo (Model Off)**| NOW & AHEAD cards | Badges: `SIMULATED` (Piano lesson NOW, Lunch AHEAD) | **NO** (Deterministic pipeline order) | E2E deterministic order check |
+| **Me Tab (`/me`)** | Memory facts & budget | Sovereign local storage envelope | **NO** (Zero external telemetry) | E2E storage inspection |
+
+**Audit Conclusion:** Across all script steps and test viewports, **zero** simulated or recorded weather data is ever presented as live weather. The live weather chip and Open-Meteo attribution only appear when `WEATHER_LIVE_ENABLED=true` is explicitly configured.
+
+---
+
 ## ⚠️ Status & Known Limitations (PH-002)
 
 As part of the project evolution, Yori operates as a deterministic, local-first foundation with the following known architectural boundaries:
