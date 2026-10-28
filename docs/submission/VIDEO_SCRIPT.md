@@ -40,7 +40,7 @@ Browser open to `http://127.0.0.1:5173/?ui=v2`. Scene D1 (Clear Departure) is se
 ### Part 2: Thinking Ahead & Environmental Adaptation (`0:25 – 0:50` · 25s)
 
 **[ON SCREEN]**:  
-Cursor moves to top-right scenario picker and switches to **Rain Re-Plan (D2)**. The NOW card smoothly updates: alert banner reads *"What changed: rain forecast"*, an **Umbrella** checklist chip appears (*"Umbrella"*), and the Route Map displays an organic weather callout: *"Rain forecast · simulated"* (*"Issued 1:35 PM"*). Two transit options are ranked: Drive first (*"Drive · leave 2:30 PM"*, *"25m drive · 5m buffer"*, ranked by habit: *"Ranked by habit: Rain travel habit (Demo profile · sample)"*), then Bus (*"Bus · leave 2:15 PM"*, *"40m bus · 5m buffer"*, *"Alternative route"*). Habit note cites: *"You usually prefer driving when it rains."*.
+Cursor moves to top-right scenario picker and switches to **Rain Re-Plan (D2)**. The NOW card smoothly updates: alert banner reads *"What changed: rain forecast"*, an **Umbrella** checklist chip appears (*"Umbrella"*), and the Route Map displays an organic weather callout: *"Rain forecast · simulated"* (*"Issued 1:35 PM"*). Two transit options are ranked: Drive first (*"Drive · leave 2:30 PM"*, badge *"Recommended"*, *"25 min drive + 5m margin"*, ranked by habit: *"Ranked by habit: Rain travel habit (Demo profile · sample)"*), then Bus (*"Bus · leave 2:15 PM"*, badge *"Alternative"*, *"40 min bus + 5m margin"*). Habit note cites: *"You usually prefer driving when it rains."*.
 
 **[VOICEOVER / NARRATION]**:  
 *(0:25)* "Watch what happens when conditions change.  
@@ -94,13 +94,13 @@ Return to the Today tab on Scene D2: the NOW card immediately recomputes its dep
 ### Part 6: Conversational Shell & Reasoning Demo (`2:18 – 2:46` · 28s)
 
 **[ON SCREEN]**:  
-Return to Today tab. Tap docked Ask Bar: full-page conversation overlay opens with title *"Ask Yori"*, status badge *"Offline demo · simulated"*, and engine status chip *"Offline fallback · deterministic"*. Type conversational query: *"Can I leave later?"* and tap send. Model interpreter executes the scripted model fixture command and status chip updates to *"Scripted model fixture · not a live model call"*. Close conversation overlay. Select **Reasoning demo** scene: show that even with external AI model turned off (`MODEL_API_KEY` unset), Yori handles competing candidates deterministically—keeping the time-critical Piano lesson as NOW and placing Lunch in AHEAD. Briefly highlight the terminal showing 418 passing unit tests, 18 golden fixtures, 53 drills, 16 Playwright e2e tests, and `git diff --stat f43c6c1d HEAD -- src/core` completely empty.
+Return to Today tab. Tap docked Ask Bar: full-page conversation overlay opens with title *"Ask Yori"*, status badge *"Offline demo · simulated"*, and engine status chip *"Offline fallback · deterministic"*. Type conversational query: *"Can I leave later?"* and tap send. Model interpreter executes the scripted model fixture command and status chip updates to *"Scripted model fixture · not a live model call"*. Close conversation overlay. Select **Reasoning demo** scene: show that even with external AI model turned off (`MODEL_API_KEY` unset), Yori handles competing candidates deterministically—keeping the time-critical Piano lesson as NOW and placing Lunch in AHEAD. Briefly highlight the terminal showing 418 passing unit tests, 18 golden fixtures, 53 drills, 118 Playwright e2e tests across the full suite, and `git diff --stat f43c6c1d HEAD -- src/core` completely empty.
 
 **[VOICEOVER / NARRATION]**:  
 *(2:18)* "Whenever you want to chat, the Ask Yori conversation shell opens instantly.  
 *(2:23)* You can ask natural questions like 'Can I leave later?'—running on deterministic fixtures with transparent engine disclosure.  
 *(2:30)* When multiple intents compete, Yori prioritizes time-critical commitments deterministically.  
-*(2:36)* Backed by 418 unit tests, 18 goldens, and 53 drills, our pure domain core is completely frozen with zero diffs."
+*(2:36)* Backed by 418 unit tests, 18 goldens, 53 drills, and 118 Playwright e2e tests, our pure domain core is completely frozen with zero diffs."
 
 ---
 
@@ -132,8 +132,13 @@ Every on-screen string and step sequence quoted in this script is verified verba
 | Part 2 (D2 Rain) | `What changed: rain forecast` | `.v2-insight-title, .rain-banner` | [`v2a-interaction.spec.ts:120`](../../tests/e2e/v2a-interaction.spec.ts#L120) |
 | Part 2 (D2 Rain) | `Umbrella` | `#chip-umbrella` | [`fallback-walkthrough.spec.ts:124`](../../tests/e2e/fallback-walkthrough.spec.ts#L124) |
 | Part 2 (D2 Rain) | `Rain forecast · simulated` / `Issued 1:35 PM` | `.v2-map-weather-callout text` | [`v3-tokens-motion-touch.spec.ts:420`](../../tests/e2e/v3-tokens-motion-touch.spec.ts#L420) |
-| Part 2 (D2 Rain) | `Drive · leave 2:30 PM` | `.v2-option-card:first-child .v2-option-label` | [`v2a-interaction.spec.ts:135`](../../tests/e2e/v2a-interaction.spec.ts#L135) |
-| Part 2 (D2 Rain) | `Bus · leave 2:15 PM` | `.v2-option-card:nth-child(2) .v2-option-label` | [`v2a-interaction.spec.ts:140`](../../tests/e2e/v2a-interaction.spec.ts#L140) |
+| Part 2 (D2 Rain) | `Drive · leave 2:30 PM` | `.v2-option-card:first-child .v2-option-label` | [`v2a-interaction.spec.ts:40`](../../tests/e2e/v2a-interaction.spec.ts#L40) |
+| Part 2 (D2 Rain) | `Recommended` | `.v2-option-card:first-child .v2-option-badge` | [`v2a-interaction.spec.ts:41`](../../tests/e2e/v2a-interaction.spec.ts#L41) |
+| Part 2 (D2 Rain) | `25 min drive + 5m margin` | `.v2-option-card:first-child .v2-option-meta` | [`v2a-interaction.spec.ts:42`](../../tests/e2e/v2a-interaction.spec.ts#L42) |
+| Part 2 (D2 Rain) | `Ranked by habit: Rain travel habit (Demo profile · sample)` | `.v2-option-card:first-child .v2-option-basis` | [`v2a-interaction.spec.ts:43-45`](../../tests/e2e/v2a-interaction.spec.ts#L43-L45) |
+| Part 2 (D2 Rain) | `Bus · leave 2:15 PM` | `.v2-option-card:nth-child(2) .v2-option-label` | [`v2a-interaction.spec.ts:48`](../../tests/e2e/v2a-interaction.spec.ts#L48) |
+| Part 2 (D2 Rain) | `Alternative` | `.v2-option-card:nth-child(2) .v2-option-badge` | [`v2a-interaction.spec.ts:49`](../../tests/e2e/v2a-interaction.spec.ts#L49) |
+| Part 2 (D2 Rain) | `40 min bus + 5m margin` | `.v2-option-card:nth-child(2) .v2-option-meta` | [`v2a-interaction.spec.ts:50`](../../tests/e2e/v2a-interaction.spec.ts#L50) |
 | Part 2 (D2 Rain) | `You usually prefer driving when it rains.` | `.habit-note` | [`fallback-walkthrough.spec.ts:135`](../../tests/e2e/fallback-walkthrough.spec.ts#L135) |
 | Part 3 (D3 Away) | `Lunch options near you` | `.v2-candidates-hero .now-subject` | [`v2b-lunch-loop.spec.ts:65`](../../tests/e2e/v2b-lunch-loop.spec.ts#L65) |
 | Part 3 (D3 Away) | `Places matching what you like, within walking distance` | `.v2-candidates-hero #now-title` | [`v2b-lunch-loop.spec.ts:68`](../../tests/e2e/v2b-lunch-loop.spec.ts#L68) |

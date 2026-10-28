@@ -34,7 +34,7 @@ npm run test:golden
 # Run degradation drills (53 fault-injection invariance tests)
 npm run test:drills
 
-# Run Playwright E2E verification (20 tests, mobile 390x844 & desktop 1280x800)
+# Run Playwright E2E verification (118 tests across full suite, mobile 390x844 & desktop 1280x800)
 npm run test:e2e
 
 # Run reproducible token pixel sampler (10/10 PASS)

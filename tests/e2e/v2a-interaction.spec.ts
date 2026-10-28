@@ -35,6 +35,23 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await expect(page.locator('.now-card')).toContainText('Piano lesson');
     await expect(page.locator('.now-card')).toContainText('2:30 PM');
 
+    // Assert V2 transit option cards verbatim in Rain scene (Part 2 of VIDEO_SCRIPT.md)
+    const optionCards = page.locator('.v2-options-grid .v2-option-card');
+    await expect(optionCards).toHaveCount(2);
+
+    const driveCard = optionCards.first();
+    await expect(driveCard.locator('.v2-option-label')).toHaveText('Drive · leave 2:30 PM');
+    await expect(driveCard.locator('.v2-option-badge')).toHaveText('Recommended');
+    await expect(driveCard.locator('.v2-option-meta')).toHaveText('25 min drive + 5m margin');
+    await expect(driveCard.locator('.v2-option-basis')).toHaveText(
+      'Ranked by habit: Rain travel habit (Demo profile · sample)'
+    );
+
+    const busCard = optionCards.nth(1);
+    await expect(busCard.locator('.v2-option-label')).toHaveText('Bus · leave 2:15 PM');
+    await expect(busCard.locator('.v2-option-badge')).toHaveText('Alternative');
+    await expect(busCard.locator('.v2-option-meta')).toHaveText('40 min bus + 5m margin');
+
     // 2. Open conversation via Ask bar
     const askBar = page.locator('#ask-bar');
     await expect(askBar).toBeVisible();
