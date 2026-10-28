@@ -12,12 +12,14 @@
 > **All submission actions listed below are strictly OWNER-GATED.**
 > 
 > The AI agent has **NOT** performed any of these actions:
+> - No remote repository created or published.
 > - No repository visibility changes (remains private).
 > - No external forms or registrations submitted.
 > - No video recorded or uploaded.
 > - No licenses applied without owner approval.
 > - No new paid cloud resources created.
 >
+> **Owner Responsibility**: Owner creates the remote repository, confirms the licence, makes it public and submits. Nothing is published or changed autonomously.
 > Every step below requires explicit human action by the project owner (Han).
 
 ---
@@ -30,7 +32,7 @@
 
 ### 2. Narrative & Description Review
 - [ ] **Review Project Description**: Inspect [`PROJECT_DESCRIPTION.md`](PROJECT_DESCRIPTION.md).
-- [ ] **Confirm Hackathon Track**: Verify track name (e.g. *Meta Muse Spark AI Application Track*) marked `[OWNER TO CONFIRM]`.
+- [ ] **Confirm Hackathon Details**: Verify Event (*Meta Global AI Developer Hackathon*), Theme (*Build for Your World*), and Track (*Startup Track*) marked `[OWNER TO CONFIRM]`.
 - [ ] **Approve Public Copy**: Ensure all claims align with personal vision and branding.
 
 ### 3. Video Recording & Editing
@@ -58,17 +60,20 @@
   npm run test:golden
   ```
 
-### 5. Repository Visibility
-- [ ] **Make Repository Public**: In GitHub repository settings, change visibility from **Private** to **Public**.
+### 5. Remote Repository Creation & Visibility
+- [ ] **Create Remote & Set Public**: Owner creates the remote repository, confirms the licence, makes it public and submits. Nothing is published or made public by AI.
 
 ### 6. Hackathon Submission Form
 - [ ] **Fill Submission Form**: Complete required fields on the hackathon submission portal:
+  - Event: `Meta Global AI Developer Hackathon`
+  - Theme: `Build for Your World`
+  - Track: `Startup Track` [OWNER TO CONFIRM]
   - Project Title: `Yori`
   - Short Tagline: `A calm, proactive context-aware assistant. A little ahead. By your side.`
   - Video Demonstration Link: *(Insert recorded 3-minute video URL)*
-  - Public GitHub Repository URL: `https://github.com/Yonro/Yori`
+  - Public GitHub Repository URL: `https://github.com/Yonro/Yori` [OWNER TO CONFIRM]
   - Description: *(Copy approved copy from `PROJECT_DESCRIPTION.md`)*
-- [ ] **Submit Form**: Submit before the official deadline: **2026-11-05 11:00 JST**.
+- [ ] **Submit Form**: Owner submits before the official deadline: **2026-11-05 11:00 JST**. Nothing is submitted by AI.
 
 ### 7. Provider Commercial Terms & Non-Commercial Qualification (AC-204-2)
 - [ ] **Review Open-Meteo API Terms**: Inspect [`PROVIDERS.md`](../architecture/PROVIDERS.md).

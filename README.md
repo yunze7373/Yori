@@ -3,7 +3,7 @@
 > *A little ahead. By your side.*  
 > A calm, privacy-first, proactive context-aware assistant.
 
-[![Tests](https://img.shields.io/badge/tests-231%20unit%20%7C%2010%20golden%20%7C%2021%20drills%20%7C%2038%20e2e-brightgreen)](package.json)
+[![Tests](https://img.shields.io/badge/tests-259%20unit%20%7C%2010%20golden%20%7C%2021%20drills%20%7C%2066%20e2e-brightgreen)](package.json)
 [![Architecture](https://img.shields.io/badge/architecture-zero--diff%20core-blue)](docs/architecture/ARCHITECTURE.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -13,7 +13,7 @@
 
 Most AI assistants today are either **reactive chatbots** waiting for prompts or **noisy notification engines** competing for attention. 
 
-**Yori** is built on a different premise: **calm proactivity**. It runs entirely locally, continuously synthesizing your schedule, current environment, transit conditions, and confirmed personal memories into a clean **Living Context**:
+**Yori** is built on a different premise: **calm proactivity**. In this demo, Yori runs entirely locally using simulated scenario snapshots to demonstrate context synthesis across schedule, ambient weather, transit conditions, and confirmed personal memories into a clean **Living Context** (with real clock and keyless weather providers available behind optional flags):
 - **At most 1 NOW Card**: Exactly one actionable item that needs your attention right now.
 - **Ranked AHEAD Cards**: What is coming up later, clearly organized.
 - **Honest Quiet State**: When you are busy or everything is handled, Yori stays completely quiet: *"Nothing needs your attention right now."*

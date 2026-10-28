@@ -1,7 +1,8 @@
 # Yori (ヨリ) — Project Description
 
-> **Submission for the Meta AI Hackathon**  
-> **Track:** Meta Muse Spark AI Application Track [OWNER TO CONFIRM]  
+> **Submission for the Meta Global AI Developer Hackathon**  
+> **Theme:** Build for Your World  
+> **Track:** Startup Track [OWNER TO CONFIRM]  
 > **Governed by Plan:** `yori_ph002_001` (Slice PH-002 E2, AC-205-2)  
 > **Author:** DevFlow Resident Project Executor AI  
 
@@ -129,7 +130,9 @@ To ensure honesty and transparent demonstration:
 
 ## 7. Model & Integration Details
 
-- **Event**: Meta AI Hackathon / Muse Spark Track [OWNER TO CONFIRM]
+- **Event**: Meta Global AI Developer Hackathon
+- **Theme**: Build for Your World
+- **Track**: Startup Track [OWNER TO CONFIRM]
 - **AI Model**: Meta Muse Spark 1.3 (`muse-spark-1.3`) via `https://api.meta.ai/v1` [OWNER TO CONFIRM]
 - **Memory Infrastructure**: XMemo Cloud Memory via OAuth 2.0 PKCE (`https://xmemo.dev`) and MCP (`https://xmemo.dev/mcp`)
 - **Default State**: Both integrations are **OFF by default**; Yori runs 100% deterministically and offline without requiring external API keys.

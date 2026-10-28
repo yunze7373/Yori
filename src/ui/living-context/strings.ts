@@ -109,7 +109,8 @@ export const STRINGS = Object.freeze({
     title: 'Me & Memory',
     subtitle: 'Manage your confirmed preferences, proposals, and privacy controls.',
     budgetTitle: "Today's Proactive Prompts",
-    budgetSubtitle: 'On-open Living Context updates dynamically; proactive notifications are capped per day.',
+    budgetSubtitle:
+      'Your Living Context refreshes smoothly whenever you check in. To protect your peace of mind, proactive suggestions are kept to a calm daily limit.',
     budgetUsage: '{used} of {max} used today',
     confirmedTitle: 'Confirmed Preferences',
     confirmedEmpty: 'No confirmed preferences yet.',

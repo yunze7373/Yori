@@ -62,10 +62,12 @@ export function resolveOpenMeteoIsoTimestamp(
     return null;
   }
 
-  const offsetSec =
-    typeof utcOffsetSeconds === 'number' && Number.isFinite(utcOffsetSeconds)
-      ? utcOffsetSeconds
-      : 0;
+  // utcOffsetSeconds is strictly required for wall clock times without embedded offset; fail closed if missing or invalid
+  if (typeof utcOffsetSeconds !== 'number' || !Number.isFinite(utcOffsetSeconds)) {
+    return null;
+  }
+
+  const offsetSec = utcOffsetSeconds;
 
   const year = parseInt(match[1]!, 10);
   const month = parseInt(match[2]!, 10) - 1;

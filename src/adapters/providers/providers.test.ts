@@ -172,6 +172,34 @@ describe('PH-002 D1: Open-Meteo Real Weather Adapter (AC-204-1, AC-204-2)', () =
     expect(resolveOpenMeteoIsoTimestamp('invalid-date-format', -25200)).toBeNull();
   });
 
+  it('resolveOpenMeteoIsoTimestamp fails closed (returns null) if utc_offset_seconds is missing or invalid', () => {
+    expect(resolveOpenMeteoIsoTimestamp('2026-10-28T10:00', undefined)).toBeNull();
+    expect(resolveOpenMeteoIsoTimestamp('2026-10-28T10:00', null)).toBeNull();
+    expect(resolveOpenMeteoIsoTimestamp('2026-10-28T10:00', NaN)).toBeNull();
+    expect(resolveOpenMeteoIsoTimestamp('2026-10-28T10:00', 'not-a-number')).toBeNull();
+    expect(resolveOpenMeteoIsoTimestamp('2026-10-28T10:00', Infinity)).toBeNull();
+  });
+
+  it('fails closed and yields 0 signals if provider response lacks valid utc_offset_seconds', async () => {
+    const corruptResponse = {
+      ...RECORDED_OPEN_METEO_CLEAR_RESPONSE,
+      utc_offset_seconds: undefined,
+    };
+    const mockFetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => corruptResponse,
+    }) as unknown as Response);
+
+    const adapter = new OpenMeteoWeatherAdapter({
+      enabled: true,
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    const signals = await adapter.signals();
+    expect(signals).toHaveLength(0);
+  });
+
   it('flag-off default makes ZERO network calls and returns empty array', async () => {
     const mockFetch = vi.fn();
     const adapter = new OpenMeteoWeatherAdapter({
