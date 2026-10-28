@@ -14,7 +14,8 @@ import type { TimelineVM, TimelineStepVM } from './types.js';
 
 export function deriveTimelineVM(
   plan: PreparedPlan,
-  snapshot?: { signals: readonly { kind: string; value?: unknown }[] } | null
+  snapshot?: { signals: readonly { kind: string; value?: unknown }[] } | null,
+  selectedMode?: string
 ): TimelineVM | undefined {
   if (plan.intentId !== 'depart') {
     return undefined;
@@ -25,9 +26,6 @@ export function deriveTimelineVM(
   const eventTitle = plan.subjectTitle
     ? (apptTimeStr ? `${plan.subjectTitle} at ${apptTimeStr}` : plan.subjectTitle)
     : plan.headline;
-
-  const prepareTimeStr = plan.prepareAt ? formatTime(plan.prepareAt, tz) : '';
-  const leaveTimeStr = plan.leaveAt ? formatTime(plan.leaveAt, tz) : '';
 
   // Extract memory facts used (buffer and prep duration)
   const bufferFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_buffer_minutes');
@@ -41,20 +39,30 @@ export function deriveTimelineVM(
       ? prepFact.value
       : undefined;
 
+  // Locate the selected or first option if multi-mode
+  let selectedOpt: PlanOption | undefined;
+  if (plan.optionsOrSteps && plan.optionsOrSteps.length > 0) {
+    const typedOpts = plan.optionsOrSteps.filter(
+      (o): o is PlanOption => typeof o !== 'string' && typeof (o as PlanOption).mode === 'string'
+    );
+    if (selectedMode) {
+      selectedOpt = typedOpts.find(o => o.mode?.toLowerCase() === selectedMode.toLowerCase());
+    }
+    if (!selectedOpt && typedOpts.length > 0) {
+      selectedOpt = typedOpts[0];
+    }
+  }
+
   // Determine primary route mode and travel duration
   let primaryMode: string | undefined;
   let travelDurationMinutes: number | undefined;
 
-  if (plan.optionsOrSteps && plan.optionsOrSteps.length > 0) {
-    const firstOpt = plan.optionsOrSteps[0];
-    if (typeof firstOpt !== 'string') {
-      const opt = firstOpt as PlanOption;
-      if (opt.mode) {
-        primaryMode = opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1);
-      }
-      if (typeof opt.travelMinutes === 'number' && Number.isFinite(opt.travelMinutes)) {
-        travelDurationMinutes = opt.travelMinutes;
-      }
+  if (selectedOpt) {
+    if (selectedOpt.mode) {
+      primaryMode = selectedOpt.mode.charAt(0).toUpperCase() + selectedOpt.mode.slice(1);
+    }
+    if (typeof selectedOpt.travelMinutes === 'number' && Number.isFinite(selectedOpt.travelMinutes)) {
+      travelDurationMinutes = selectedOpt.travelMinutes;
     }
   }
 
@@ -72,10 +80,13 @@ export function deriveTimelineVM(
     }
   }
 
-  // If bufferMinutes was not in memory facts, derive it from apptAt - (leaveAt + travel)
-  if (bufferMinutes === undefined && plan.apptAt && plan.leaveAt && travelDurationMinutes !== undefined) {
+  // Active leaveAt and arriveAt
+  const activeLeaveAt = selectedOpt?.leaveAt || plan.leaveAt;
+
+  // If buffer fact was present, derive option-specific buffer from apptAt - (activeLeaveAt + travel)
+  if (bufferMinutes !== undefined && plan.apptAt && activeLeaveAt && travelDurationMinutes !== undefined) {
     const apptMs = Date.parse(plan.apptAt);
-    const leaveMs = Date.parse(plan.leaveAt);
+    const leaveMs = Date.parse(activeLeaveAt);
     if (Number.isFinite(apptMs) && Number.isFinite(leaveMs)) {
       const arriveMs = leaveMs + travelDurationMinutes * 60000;
       if (apptMs >= arriveMs) {
@@ -93,6 +104,18 @@ export function deriveTimelineVM(
     }
   }
 
+  // Active prepareAt
+  let activePrepAt = plan.prepareAt;
+  if (activeLeaveAt && prepMinutes !== undefined) {
+    const leaveMs = Date.parse(activeLeaveAt);
+    if (Number.isFinite(leaveMs)) {
+      activePrepAt = new Date(leaveMs - prepMinutes * 60000).toISOString();
+    }
+  }
+
+  const prepareTimeStr = activePrepAt ? formatTime(activePrepAt, tz) : '';
+  const leaveTimeStr = activeLeaveAt ? formatTime(activeLeaveAt, tz) : '';
+
   // If primaryMode still not determined, check travel signal value if available
   if (!primaryMode && snapshot?.signals) {
     const travelSig = snapshot.signals.find(s => s.kind === 'travel_estimate');
@@ -105,10 +128,10 @@ export function deriveTimelineVM(
     primaryMode = 'Travel';
   }
 
-  // Derive arrival time from leaveAt + travelDurationMinutes
+  // Derive arrival time from activeLeaveAt + travelDurationMinutes
   let arriveTimeStr: string | undefined;
-  if (plan.leaveAt && travelDurationMinutes !== undefined) {
-    const leaveDate = new Date(plan.leaveAt);
+  if (activeLeaveAt && travelDurationMinutes !== undefined) {
+    const leaveDate = new Date(activeLeaveAt);
     if (Number.isFinite(leaveDate.getTime())) {
       const arriveDate = new Date(leaveDate.getTime() + travelDurationMinutes * 60 * 1000);
       arriveTimeStr = formatTime(arriveDate.toISOString(), tz);

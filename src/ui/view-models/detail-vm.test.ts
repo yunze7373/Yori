@@ -162,6 +162,114 @@ describe('V1b: TripDetailVM and RestaurantDetailVM Derivation (§8 D1/D4)', () =
       expect(vm.prepText).toBe('Take umbrella · 20m prep + 5m buffer');
     });
 
+    it('dynamically updates timeline steps based on selectedMode (e.g. Bus vs Drive)', () => {
+      // When Drive is selected (default)
+      const vmDrive = deriveTripDetailVM({
+        plan: d2RainPlan,
+        spatialEvidence,
+        selectedMode: 'drive',
+      });
+      expect(vmDrive.steps[0]!.label).toBe('Get ready');
+      expect(vmDrive.steps[1]!.label).toBe('Leave');
+      expect(vmDrive.steps[1]!.detail).toBe('Drive · 25 min');
+      expect(vmDrive.steps[1]!.time).toBe('2:30 PM');
+      expect(vmDrive.steps[2]!.label).toBe('Arrive at destination');
+      expect(vmDrive.steps[2]!.time).toBe('2:55 PM');
+
+      // When Bus is selected: dynamically recomputes prepare, leave, and arrive times
+      const vmBus = deriveTripDetailVM({
+        plan: d2RainPlan,
+        spatialEvidence,
+        selectedMode: 'bus',
+      });
+      expect(vmBus.selectedMode).toBe('bus');
+      expect(vmBus.modeTabs[1]!.isSelected).toBe(true);
+      // Bus leaves at 2:15 PM; prep is 20m -> prepare at 1:55 PM
+      expect(vmBus.steps[0]!.time).toBe('1:55 PM');
+      expect(vmBus.steps[0]!.label).toBe('Get ready');
+      // Bus leaves at 2:15 PM, 40 min travel
+      expect(vmBus.steps[1]!.time).toBe('2:15 PM');
+      expect(vmBus.steps[1]!.label).toBe('Leave');
+      expect(vmBus.steps[1]!.detail).toBe('Bus · 40 min');
+      // Bus arrives at 2:55 PM (5m buffer before 3:00 PM appointment)
+      expect(vmBus.steps[2]!.time).toBe('2:55 PM');
+      expect(vmBus.steps[2]!.label).toBe('Arrive at destination');
+      expect(vmBus.steps[2]!.detail).toBe('On time · 5m buffer');
+      expect(vmBus.steps[3]!.time).toBe('3:00 PM');
+    });
+
+    it('omits buffer text or says "On time" when buffer fact is missing', () => {
+      const planNoBuffer: PreparedPlan = {
+        ...d2RainPlan,
+        why: {
+          ...d2RainPlan.why,
+          memoryFactsUsed:
+            d2RainPlan.why?.memoryFactsUsed?.filter(f => f.key !== 'prep_buffer_minutes') ?? [],
+        },
+      };
+      const vmNoBuffer = deriveTripDetailVM({
+        plan: planNoBuffer,
+        spatialEvidence: null,
+      });
+      expect(vmNoBuffer.bufferText).toBe('On time');
+      expect(vmNoBuffer.prepText).not.toContain('buffer');
+    });
+
+    it('omits travelMinutes duration suffix rather than displaying "0 min" when missing', () => {
+      const planNoTravelMinutes: PreparedPlan = {
+        ...d2RainPlan,
+        optionsOrSteps: [
+          {
+            id: 'opt-drive',
+            label: 'Drive',
+            mode: 'drive',
+            leaveAt: '2026-10-28T21:30:00.000Z',
+            requiresConfirmation: false,
+          },
+        ],
+      };
+      const vmNoTravelMinutes = deriveTripDetailVM({
+        plan: planNoTravelMinutes,
+        spatialEvidence: null,
+      });
+      expect(vmNoTravelMinutes.modeTabs[0]!.label).toBe('Drive');
+      expect(vmNoTravelMinutes.modeTabs[0]!.label).not.toContain('0 min');
+      expect(vmNoTravelMinutes.modeTabs[0]!.durationMinutes).toBeUndefined();
+    });
+
+    it('shows neutral "Travel" rather than defaulting to "Drive" when travel mode is missing', () => {
+      const planNoMode: PreparedPlan = {
+        id: 'plan-no-mode',
+        intentId: 'travel',
+        headline: 'Meeting at 4:00 PM',
+        apptAt: '2026-10-28T23:00:00.000Z',
+        leaveAt: '2026-10-28T22:30:00.000Z',
+        timezone: 'America/Los_Angeles',
+        optionsOrSteps: [],
+        requiresConfirmation: false,
+        why: { evidenceSignals: [], memoryFactsUsed: [], derivation: '' },
+        createdAt: '2026-10-28T18:00:00.000Z',
+      };
+      const vmNoMode = deriveTripDetailVM({
+        plan: planNoMode,
+        spatialEvidence: null,
+        snapshot: null,
+      });
+      expect(vmNoMode.modeTabs[0]!.mode).toBe('travel');
+      expect(vmNoMode.modeTabs[0]!.label).toContain('Travel');
+      expect(vmNoMode.modeTabs[0]!.label).not.toContain('Drive');
+    });
+
+    it('produces human conversational derivation copy instead of raw formulas', () => {
+      const vm = deriveTripDetailVM({
+        plan: d2RainPlan,
+        spatialEvidence,
+      });
+      expect(vm.whyDerivation).toContain('Piano lesson is scheduled at 3:00 PM');
+      expect(vm.whyDerivation).not.toContain('appt - travel');
+      expect(vm.whyDerivation).not.toContain('14:25');
+    });
+
     it('updates active mode and times when selectedMode is specified', () => {
       const vm = deriveTripDetailVM({
         plan: d2RainPlan,
@@ -307,7 +415,7 @@ describe('V1b: TripDetailVM and RestaurantDetailVM Derivation (§8 D1/D4)', () =
       expect(vmSaved.isSaved).toBe(true);
     });
 
-    it('provides in-app schematic directions strictly without external links or URLs', () => {
+    it('provides in-app schematic directions strictly without external links or URLs and zero invented street names', () => {
       const vm = deriveRestaurantDetailVM({
         candidateId: 'cand-1',
         plan: d1LunchPlan,
@@ -315,14 +423,78 @@ describe('V1b: TripDetailVM and RestaurantDetailVM Derivation (§8 D1/D4)', () =
       });
 
       expect(vm.directions.length).toBeGreaterThan(1);
-      for (const step of vm.directions) {
-        expect(step.instruction).toBeDefined();
-        // Zero external URLs
-        expect(step.instruction).not.toContain('http://');
-        expect(step.instruction).not.toContain('https://');
-        expect(step.instruction).not.toContain('maps.google.com');
-      }
-      expect(vm.directions[vm.directions.length - 1]!.isFinal).toBe(true);
+      const allText = vm.directions.map(d => `${d.instruction} ${d.durationText ?? ''}`).join(' ').toLowerCase();
+
+      // Zero external URLs
+      expect(allText).not.toContain('http://');
+      expect(allText).not.toContain('https://');
+      expect(allText).not.toContain('maps.google.com');
+
+      // Zero invented street names or fake turns (P1 finding)
+      expect(allText).not.toContain('4th ave');
+      expect(allText).not.toContain('pine st');
+      expect(allText).not.toContain('turn left');
+      expect(allText).not.toContain('turn right');
+
+      // Strictly schematic route
+      expect(vm.directions[0]!.instruction).toBe('Start from your current location');
+      expect(vm.directions[0]!.durationText).toBe('About 5 min walk · simulated route');
+      expect(vm.directions[1]!.instruction).toBe('Follow schematic pedestrian route toward Menya Musashi');
+      expect(vm.directions[2]!.instruction).toBe('Arrive at Menya Musashi');
+      expect(vm.directions[2]!.isFinal).toBe(true);
+    });
+
+    it('omits distanceText and distance chip when distanceMinutes is missing', () => {
+      const planNoDist: PreparedPlan = {
+        ...d1LunchPlan,
+        optionsOrSteps: [
+          {
+            id: 'cand-no-dist',
+            name: 'Mystery Diner',
+            label: 'Mystery Diner',
+            cuisine: 'american',
+            requiresConfirmation: false,
+          },
+        ],
+      };
+      const vm = deriveRestaurantDetailVM({
+        candidateId: 'cand-no-dist',
+        plan: planNoDist,
+        spatialEvidence: null,
+      });
+
+      expect(vm.distanceMinutes).toBeUndefined();
+      expect(vm.distanceText).toBeUndefined();
+      expect(vm.attributeChips.some(c => c.includes('away'))).toBe(false);
+      expect(vm.directions[0]!.durationText).toBe('Simulated route');
+    });
+
+    it('derives lunch window chip from schedule_window signal and omits it when absent', () => {
+      // 1. When schedule_window is present
+      const vmWithWindow = deriveRestaurantDetailVM({
+        candidateId: 'cand-1',
+        plan: d1LunchPlan,
+        spatialEvidence: null,
+        snapshot: {
+          signals: [
+            {
+              kind: 'schedule_window',
+              issuedAt: '2026-10-28T19:10:00.000Z', // 12:10 PM PDT
+              value: { freeUntil: '2026-10-28T20:30:00.000Z' }, // 1:30 PM PDT
+            },
+          ],
+        },
+      });
+      expect(vmWithWindow.attributeChips).toContain('Lunch window 12:10 PM–1:30 PM');
+
+      // 2. When schedule_window is absent
+      const vmNoWindow = deriveRestaurantDetailVM({
+        candidateId: 'cand-1',
+        plan: d1LunchPlan,
+        spatialEvidence: null,
+        snapshot: { signals: [] },
+      });
+      expect(vmNoWindow.attributeChips.some(c => c.toLowerCase().includes('lunch window'))).toBe(false);
     });
 
     it('renders honest taste provenance with userConfirmedKeys', () => {

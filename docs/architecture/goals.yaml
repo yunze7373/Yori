@@ -299,6 +299,70 @@ goals:
           required: true
     owner_agent: "principal-architect"
 
+  - id: G-211
+    title: "经同意的单次定位：单一适配器、预算与降级（INV-111）"
+    priority: P1
+    requirement_ids: ["REQ-002"]
+    source:
+      file: "docs/architecture/LIVING_CONTEXT_V2.md"
+      lines: "357-375"
+    acceptance:
+      - id: AC-211-1
+        statement: "定位仅经单一同意门控适配器单次获取（含 accuracy/timestamp），拒绝/超时/过期各有明确降级与手动地点选项，全仓无 watchPosition"
+        verification: "unit-test"
+      - id: AC-211-2
+        statement: "坐标仅发送至 P-LOC 批准的 provider；模拟开关开启时真实链路整体禁用（静态与配置证明）"
+        verification: "static"
+    expected_code:
+      modules:
+        - path: "src/adapters/providers"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-212
+    title: "PlacesProvider 接缝 + fuel 插件 + 点击导航交接"
+    priority: P1
+    requirement_ids: ["REQ-002", "REQ-004"]
+    source:
+      file: "docs/architecture/LIVING_CONTEXT_V2.md"
+      lines: "376-405"
+    acceptance:
+      - id: AC-212-1
+        statement: "Places 结果恒带 placeId/coords/name/source/fetchedAt，营业状态仅在 provider 提供时出现；provider 不可用显著提示，零伪造商户/距离/ETA"
+        verification: "unit-test"
+      - id: AC-212-2
+        statement: "FIND_FUEL（含加油语境消歧）在零 core diff 下接入；Navigate 仅用户点击触发，Google/Apple URL 构建器坐标与编码单测精确"
+        verification: "unit-test"
+    expected_code:
+      modules:
+        - path: "src/adapters/providers"
+          required: true
+        - path: "src/plugins/fuel"
+          required: true
+    owner_agent: "principal-architect"
+
+  - id: G-213
+    title: "真实 POI 主动午餐（偏好匹配、去重、证据标注）"
+    priority: P2
+    requirement_ids: ["REQ-003", "REQ-004"]
+    source:
+      file: "docs/architecture/LIVING_CONTEXT_V2.md"
+      lines: "406-420"
+    acceptance:
+      - id: AC-213-1
+        statement: "GPS+饭点+已确认偏好+附近候选生成主动午餐建议，共享抑制保证不重复提醒；评分/营业/路线耗时仅凭 provider 证据展示"
+        verification: "e2e"
+      - id: AC-213-2
+        statement: "任一真实门未满足时模拟场景切换保持演示可复现，真实与模拟数据永不混排冒充"
+        verification: "e2e"
+    expected_code:
+      modules:
+        - path: "src/plugins/lunch"
+          required: true
+        - path: "src/adapters/providers"
+          required: true
+    owner_agent: "principal-architect"
+
 architecture_decisions:
   - id: ADR-101
     title: "通用主动管线 + 静态场景插件（detector/preparer/adapter），共享策略集中于 core"

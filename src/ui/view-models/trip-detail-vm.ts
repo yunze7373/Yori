@@ -17,7 +17,11 @@ import type {
   PlanAction,
 } from '../../core/contracts/index.js';
 import { formatTime } from '../living-context/presentation.js';
-import { humanizeMemoryKey, humanizeMemoryValue } from '../review/why-sheet.js';
+import {
+  humanizeMemoryKey,
+  humanizeMemoryValue,
+  buildHumanDerivation,
+} from '../review/why-sheet.js';
 import { deriveMapVM } from './map-vm.js';
 import { deriveTimelineVM } from './timeline-vm.js';
 import type {
@@ -52,7 +56,7 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     : plan.headline;
   const destinationName = plan.subjectTitle || 'Destination';
 
-  // Extract memory facts for buffer and prep
+  // Extract memory facts for buffer and prep (no hardcoded literal fallbacks)
   const bufferFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_buffer_minutes');
   const prepFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_duration_minutes');
   let bufferMinutes =
@@ -72,17 +76,20 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
 
   if (typedOptions.length > 0) {
     const activeMode =
-      selectedMode && typedOptions.some(o => o.mode === selectedMode)
-        ? selectedMode
-        : typedOptions[0]!.mode!;
+      selectedMode && typedOptions.some(o => o.mode?.toLowerCase() === selectedMode.toLowerCase())
+        ? selectedMode.toLowerCase()
+        : typedOptions[0]!.mode!.toLowerCase();
 
     for (const opt of typedOptions) {
       const mode = opt.mode!;
       const modeCap = mode.charAt(0).toUpperCase() + mode.slice(1);
-      const duration = opt.travelMinutes ?? 0;
+      const duration =
+        typeof opt.travelMinutes === 'number' && Number.isFinite(opt.travelMinutes)
+          ? opt.travelMinutes
+          : undefined;
       const leaveTime = opt.leaveAt ? formatTime(opt.leaveAt, tz) : '';
       let arriveTime = '';
-      if (opt.leaveAt && duration > 0) {
+      if (opt.leaveAt && duration !== undefined && duration > 0) {
         const leaveDate = new Date(opt.leaveAt);
         if (Number.isFinite(leaveDate.getTime())) {
           const arriveDate = new Date(leaveDate.getTime() + duration * 60000);
@@ -90,69 +97,77 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
         }
       }
 
+      // If travelMinutes is missing, omit rather than displaying "0 min"
+      const label = duration !== undefined ? `${modeCap} · ${duration} min` : modeCap;
+
       modeTabs.push({
         id: `mode-tab-${mode}`,
         mode,
-        label: `${modeCap} · ${duration} min`,
+        label,
         leaveTime,
         arriveTime,
         durationMinutes: duration,
-        isSelected: mode === activeMode,
+        isSelected: mode.toLowerCase() === activeMode,
       });
     }
   } else {
-    // Single-mode plan (e.g. D1)
-    let durationMinutes = 30;
-    if (plan.apptAt && plan.leaveAt) {
+    // Single-mode plan (e.g. D1) — derive travel duration and mode from signals/times without literal fallbacks
+    let travelDurationMinutes: number | undefined;
+    let singleMode = 'travel';
+    if (snapshot?.signals) {
+      const travelSig = snapshot.signals.find(s => s.kind === 'travel_estimate');
+      const val = travelSig?.value as Record<string, unknown> | undefined;
+      if (typeof val?.mode === 'string' && val.mode.trim()) {
+        singleMode = val.mode.toLowerCase();
+      }
+      if (typeof val?.travelMinutes === 'number' && Number.isFinite(val.travelMinutes)) {
+        travelDurationMinutes = val.travelMinutes;
+      }
+    }
+
+    if (travelDurationMinutes === undefined && plan.apptAt && plan.leaveAt) {
       const apptMs = Date.parse(plan.apptAt);
       const leaveMs = Date.parse(plan.leaveAt);
       if (Number.isFinite(apptMs) && Number.isFinite(leaveMs) && apptMs > leaveMs) {
         const diffMin = Math.round((apptMs - leaveMs) / 60000);
-        const buf = bufferMinutes ?? 5;
-        if (diffMin > buf) {
-          durationMinutes = diffMin - buf;
+        if (bufferMinutes !== undefined && diffMin > bufferMinutes) {
+          travelDurationMinutes = diffMin - bufferMinutes;
+        } else if (bufferMinutes === undefined) {
+          travelDurationMinutes = diffMin;
         }
       }
     }
 
     const leaveTime = plan.leaveAt ? formatTime(plan.leaveAt, tz) : '';
     let arriveTime = '';
-    if (plan.leaveAt && durationMinutes > 0) {
+    if (plan.leaveAt && travelDurationMinutes !== undefined && travelDurationMinutes > 0) {
       const leaveDate = new Date(plan.leaveAt);
       if (Number.isFinite(leaveDate.getTime())) {
-        const arriveDate = new Date(leaveDate.getTime() + durationMinutes * 60000);
+        const arriveDate = new Date(leaveDate.getTime() + travelDurationMinutes * 60000);
         arriveTime = formatTime(arriveDate.toISOString(), tz);
       }
     }
 
-    // Determine mode name from signal or fallback to Travel
-    let singleMode = 'drive';
-    if (snapshot?.signals) {
-      const travelSig = snapshot.signals.find(s => s.kind === 'travel_estimate');
-      const valMode = (travelSig?.value as Record<string, unknown>)?.mode;
-      if (typeof valMode === 'string') {
-        singleMode = valMode.toLowerCase();
-      }
-    }
     const singleModeCap = singleMode.charAt(0).toUpperCase() + singleMode.slice(1);
+    const label =
+      travelDurationMinutes !== undefined
+        ? `${singleModeCap} · ${travelDurationMinutes} min`
+        : singleModeCap;
 
     modeTabs.push({
       id: `mode-tab-${singleMode}`,
       mode: singleMode,
-      label: `${singleModeCap} · ${durationMinutes} min`,
+      label,
       leaveTime,
       arriveTime,
-      durationMinutes,
+      durationMinutes: travelDurationMinutes,
       isSelected: true,
     });
   }
 
   const selectedTab = modeTabs.find(t => t.isSelected) ?? modeTabs[0]!;
 
-  // Mathematical fallback for buffer and prep if not in memory facts
-  if (bufferMinutes === undefined && plan.apptAt && selectedTab.arriveTime) {
-    bufferMinutes = 5;
-  }
+  // Derive prep minutes from leaveAt - prepareAt if missing from facts
   if (prepMinutes === undefined && plan.leaveAt && plan.prepareAt) {
     const leaveMs = Date.parse(plan.leaveAt);
     const prepMs = Date.parse(plan.prepareAt);
@@ -161,24 +176,44 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     }
   }
 
+  // Selected option buffer derivation based on actual option arriveTime
+  let optionBufferMinutes: number | undefined;
+  if (bufferMinutes !== undefined) {
+    optionBufferMinutes = bufferMinutes;
+    const selectedOpt = typedOptions.find(
+      o => o.mode?.toLowerCase() === selectedTab.mode.toLowerCase()
+    );
+    const activeLeaveAt = selectedOpt?.leaveAt || plan.leaveAt;
+    const activeDuration = selectedTab.durationMinutes;
+
+    if (plan.apptAt && activeLeaveAt && activeDuration !== undefined) {
+      const apptMs = Date.parse(plan.apptAt);
+      const arriveMs = Date.parse(activeLeaveAt) + activeDuration * 60000;
+      if (Number.isFinite(apptMs) && Number.isFinite(arriveMs) && apptMs >= arriveMs) {
+        optionBufferMinutes = Math.round((apptMs - arriveMs) / 60000);
+      }
+    }
+  }
+
+  // If buffer fact/data is missing, omit buffer text or say 'On time'
   const bufferText =
-    bufferMinutes !== undefined ? `On time · ${bufferMinutes}m buffer` : 'On time';
+    optionBufferMinutes !== undefined ? `On time · ${optionBufferMinutes}m buffer` : 'On time';
 
   const hasUmbrella = plan.checklist?.includes('umbrella') ?? false;
   const prepParts: string[] = [];
   if (hasUmbrella) {
     prepParts.push('Take umbrella');
   }
-  if (prepMinutes !== undefined && bufferMinutes !== undefined) {
-    prepParts.push(`${prepMinutes}m prep + ${bufferMinutes}m buffer`);
+  if (prepMinutes !== undefined && optionBufferMinutes !== undefined) {
+    prepParts.push(`${prepMinutes}m prep + ${optionBufferMinutes}m buffer`);
   } else if (prepMinutes !== undefined) {
     prepParts.push(`${prepMinutes}m prep`);
   }
   const prepText = prepParts.join(' · ');
 
-  // Map and Timeline
+  // Map and Timeline dynamically synced with selected mode
   const map = deriveMapVM(plan, spatialEvidence, 'prominent')!;
-  const timeline = deriveTimelineVM(plan, snapshot);
+  const timeline = deriveTimelineVM(plan, snapshot, selectedTab.mode);
   const steps = timeline?.steps ?? [];
 
   // Why Provenance Section
@@ -216,7 +251,7 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     map,
     steps,
     whyHabits: Object.freeze(whyHabits),
-    whyDerivation: plan.why?.derivation ?? '',
+    whyDerivation: buildHumanDerivation(plan),
     isAccepted,
     actions: Object.freeze(actions),
   };

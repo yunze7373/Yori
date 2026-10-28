@@ -325,13 +325,24 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(tripDetail.locator('.v2-buffer-pill')).toContainText('5m buffer');
     await expect(tripDetail.locator('.v2-prep-pill')).toContainText('Take umbrella · 20m prep + 5m buffer');
 
-    // Switch to Bus Mode Tab
+    // Switch to Bus Mode Tab: verify timeline steps update dynamically (P2 finding)
     await busTab.click();
     await expect(busTab).toHaveAttribute('aria-selected', 'true');
     await expect(driveTab).toHaveAttribute('aria-selected', 'false');
     // Bus: leave 2:15 PM, arrive 2:55 PM
     await expect(leaveTimeEl).toHaveText('2:15 PM');
     await expect(arriveTimeEl).toHaveText('2:55 PM');
+
+    // Dynamic timeline steps for Bus: prepare 1:55 PM, leave 2:15 PM (Bus · 40 min), arrive 2:55 PM
+    const busTimelineSteps = tripDetail.locator('.v2-trip-step');
+    await expect(busTimelineSteps.nth(0)).toContainText('1:55 PM');
+    await expect(busTimelineSteps.nth(0)).toContainText('Get ready');
+    await expect(busTimelineSteps.nth(1)).toContainText('2:15 PM');
+    await expect(busTimelineSteps.nth(1)).toContainText('Leave');
+    await expect(busTimelineSteps.nth(1)).toContainText('Bus · 40 min');
+    await expect(busTimelineSteps.nth(2)).toContainText('2:55 PM');
+    await expect(busTimelineSteps.nth(2)).toContainText('Arrive at destination');
+    await expect(busTimelineSteps.nth(2)).toContainText('On time · 5m buffer');
 
     // Prominent Schematic Map with weather overlay
     const mapCard = tripDetail.locator('.v2-map-card.prominent');
@@ -445,6 +456,15 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     // Verify zero external map links in directions panel
     const externalLinks = await dirPanel.locator('a[href*="google"], a[href*="maps"], a[target="_blank"]').all();
     expect(externalLinks).toHaveLength(0);
+
+    // Verify zero invented street names or fake turns in directions (P1 finding)
+    const dirPanelText = (await dirPanel.innerText()).toLowerCase();
+    expect(dirPanelText).not.toContain('4th ave');
+    expect(dirPanelText).not.toContain('pine st');
+    expect(dirPanelText).not.toContain('turn left');
+    expect(dirPanelText).not.toContain('turn right');
+    expect(dirPanelText).toContain('start from your current location');
+    expect(dirPanelText).toContain('schematic pedestrian route');
 
     // Axe audit
     await checkAxe(page);

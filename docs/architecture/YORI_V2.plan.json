@@ -186,14 +186,14 @@
     {
       "id": "V2a",
       "slice": 2,
-      "title": "Closed grammar + rain loop (LEAVE_LATER/CHANGE_ROUTE via request override)",
+      "title": "Closed grammar, Muse Spark decision engine (ModelPort), rain loop, before-you-ask transition",
       "priority": "P0",
-      "goal": "Grammar and CommandInterpreter (model off) with the rain loop: LEAVE_LATER and CHANGE_ROUTE travel as a session-scoped UserRequestOverride into the depart preparer's extended prepareWithRequest entry (design section 2.3) - no synthetic memory facts, no fake signals, never persisted, Undo clears it, Why renders 'Because you asked ... this time only' with user_request provenance. WHY/ACCEPT/UNDO and honest UNSUPPORTED included.",
+      "goal": "Grammar and CommandInterpreter (model off) with the rain loop: LEAVE_LATER and CHANGE_ROUTE travel as a session-scoped UserRequestOverride into the depart preparer's extended prepareWithRequest entry (design section 2.3) - no synthetic memory facts, no fake signals, never persisted, Undo clears it, Why renders 'Because you asked ... this time only' with user_request provenance. WHY/ACCEPT/UNDO and honest UNSUPPORTED included. Rev4: Muse Spark implements the CommandInterpreter seam server-side via ModelPort (situation attribution, preference/constraint conflict resolution, candidate selection/ranking with enumerated reason codes; schema-validated and fact-checked; model never originates facts). Deterministic grammar/ranking is the fallback; the UI shows 'Meta model · live' vs 'Offline fallback · deterministic'; a redacted decision log (template id, input fact ids, output codes, validation result) is inspectable; tests use recorded fixtures and live calls stay behind the SUBMIT plan's S1 owner gate. Also: the replayable clear->rain before-you-ask scene transition (no typing, reduced-motion safe) and the Why provenance chain (timestamp, demo city, source, authorization status per signal).",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
       "pipeline": "ui_redesign",
-      "estimated_hours": 5,
+      "estimated_hours": 8,
       "dependencies": [
         "V1b",
         "INBOX_CHECK_V2_A"
@@ -219,6 +219,8 @@
         "Gate: core zero diff; golden 10/10; grammar unit tests for LEAVE_LATER/CHANGE_ROUTE/WHY/ACCEPT/UNDO plus unknown mode mapping to UNSUPPORTED",
         "Negative test: after 'leave 15 minutes later' (this time only), storage contains no new or changed confirmed fact, and Why shows user_request provenance distinct from confirmed facts; Undo restores the prior plan and clears the override",
         "Honest copy and identity: working-state strings name the actual recomputation with simulated labelling (no 'real-time' claims); chat header reads 'Offline demo · simulated'; Yori avatar is the mark/logo, not a person photo; on desktop the conversation expands as a floating overlay panel, not a permanent column",
+        "Rev4 causality golden G-RAIN (add-only): same user/lesson clear->rain changes departure and ranking with the weather signal cited in Why; the recorded chain signal->reasoning (model or fallback, labelled)->suggestion->confirm->state matches under recorded model fixtures AND with the model off (deterministic fallback), with the engine status honestly displayed in both runs",
+        "Decision-log test: each model decision appends a redacted entry (template id, input fact ids, output codes, validation result) containing no secret and no raw personal content; schema-invalid or uncited model output is discarded to deterministic ranking",
         "Interaction e2e at 390x844 and 1280x800: home->chat->send->processing->comparison->confirm->updated home->Undo; axe green; screenshots per state",
         "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id V2a --plan-ref docs/architecture/YORI_V2.plan.json"
@@ -234,7 +236,7 @@
       "status": "pending",
       "agent": "agent-orchestrator",
       "pipeline": "ui_redesign",
-      "estimated_hours": 4,
+      "estimated_hours": 5,
       "dependencies": [
         "V2a"
       ],
@@ -261,8 +263,220 @@
         "Gate: core zero diff; golden 10/10 (attributes added only); FIND_LUNCH filter tests incl. unknown filter -> UNSUPPORTED",
         "Interaction e2e at both viewports: proactive card->chat quieter+vegetarian->re-rank->selected on home; negative storage test as in V2a; axe green; screenshots per state",
         "Data honesty: lunch detail and cards show fixture attributes only (quiet/vegetarian/distance), no ratings; weather values only from the mock weather fixture with labels",
+        "Rev4 causality goldens (add-only): G-PREF same city/time with different confirmed preferences changes the lunch choice and explanation; G-QUIET produces no interruption with suppression recorded; both record the full signal->reasoning->suggestion->confirm->state chain with provenance (timestamp, demo city, source, authorization status)",
         "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id V2b --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-P-LOC",
+      "slice": 5,
+      "title": "OWNER GATE P-LOC: provider choice and coordinate-disclosure consent",
+      "priority": "P1",
+      "goal": "Owner decision only: choose the places provider (recommended: OpenStreetMap Overpass, free/no key, ODbL attribution) or Google Places (triggers GATE-P-BILL), and consent to device coordinates being sent to that provider after the in-app consent step. Terminal states: DONE, or DECLINED (recorded) - declined keeps the whole real chain off and the simulated demo untouched.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "V2b"
+      ],
+      "owner_gate": "P-LOC: owner names the provider and consents to coordinate disclosure; never assumed",
+      "goal_ids": [
+        "G-211"
+      ],
+      "acceptance_ids": [
+        "AC-211-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers"
+      ],
+      "checks": [
+        "Owner decision recorded verbatim (provider, date); without it no provider code path is enabled",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-P-LOC --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "V5-GEO",
+      "slice": 5,
+      "title": "Consented geolocation adapter with degradation and manual location",
+      "priority": "P1",
+      "goal": "Single adapter module owning navigator.geolocation (rescoped static guard: any reference outside it fails), one-shot fix with accuracy/timestamp behind the explicit in-app consent step; denied/timeout/stale degrade to a clear notice plus manual location; debounce, cache, refresh threshold, session request budget; no watchPosition. Real chain stays off unless GATE-P-LOC is DONE; the simulated-scenario switch disables it entirely. Build and test proceed WITHOUT waiting for GATE-P-LOC: geolocation is mocked in tests and no coordinate leaves the device in this slice.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 4,
+      "dependencies": [
+        "V2b"
+      ],
+      "goal_ids": [
+        "G-211"
+      ],
+      "acceptance_ids": [
+        "AC-211-1",
+        "AC-211-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers"
+      ],
+      "checks": [
+        "Unit tests with mocked geolocation: consent grant/deny/timeout/stale paths, budget exhaustion stops further requests, watchPosition absent repo-wide (AC-211-1)",
+        "Static guard: geolocation referenced only inside the adapter module; with the simulated switch on, zero real-chain calls occur (AC-211-2); core zero diff; golden 10/10",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V5-GEO --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "V5-FUEL",
+      "slice": 5,
+      "title": "PlacesProvider (Overpass default) + fuel plugin + FIND_FUEL + navigate handoff",
+      "priority": "P1",
+      "goal": "PlacesProvider seam shared by lunch (real mode) and the new fuel plugin (detector+preparer+adapter, zero core diff, AC-EXT-1 path). FIND_FUEL joins the closed grammar ('gas'/'find gas'/'加油' with context disambiguation and needs-confirmation when ambiguous). Navigate handoff only on user click via unit-tested Google/Apple Maps URL builders with platform fallback. Provider-unavailable is prominent; no fabricated merchants, distances, or ETAs (straight-line labelled, or OSRM with terms noted). If the owner chose Google Places, GATE-P-BILL must be DONE first and the key lives server-side only. Build and test against a recorded/simulated PlacesProvider fixture (clearly labelled simulated); the live provider call is NOT part of this slice.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": [
+        "V5-GEO"
+      ],
+      "owner_gate": "P-BILL applies only if Google Places is chosen at GATE-P-LOC: owner provides key + billing; otherwise Overpass needs no key",
+      "goal_ids": [
+        "G-212"
+      ],
+      "acceptance_ids": [
+        "AC-212-1",
+        "AC-212-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers",
+        "src/plugins/fuel",
+        "src/ui/conversation"
+      ],
+      "checks": [
+        "Fixture-based evidence (labelled simulated/recorded): POI candidates change after the fixture location changes, 'gas' resolves to gas_station results, and the built navigate URL targets the fixture coordinates exactly on desktop and mobile fallback (AC-212-1)",
+        "Negative tests: denied consent, empty result set, provider failure, and cost-off fallback each degrade prominently; URL builder unit tests pin exact coordinates and encoding; core zero diff and grocery AC-EXT-1 proof unregressed (AC-212-2)",
+        "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V5-FUEL --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "V5-LIVE-POI",
+      "slice": 5,
+      "title": "Live provider switch and real-run evidence (behind GATE-P-LOC)",
+      "priority": "P1",
+      "goal": "The ONLY slice that discloses real coordinates: enable the live PlacesProvider (Overpass by default; Google only if GATE-P-BILL is also DONE with the key server-side) behind the consent flow, and collect the real-run evidence. Until GATE-P-LOC is DONE this slice does not run and the real chain stays OFF by default.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": [
+        "GATE-P-LOC",
+        "V5-FUEL"
+      ],
+      "owner_gate": "P-LOC must be DONE (provider named, disclosure consented); P-BILL additionally if Google Places was chosen",
+      "goal_ids": [
+        "G-212",
+        "G-213"
+      ],
+      "acceptance_ids": [
+        "AC-212-1",
+        "AC-213-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers",
+        "src/plugins/fuel"
+      ],
+      "checks": [
+        "Real-run evidence with consent: real POI names and coordinates, candidates changing after a real location change, navigate URL opening the correct target; every real result labelled with source and fetchedAt (AC-212-1, AC-213-1)",
+        "Kill-switch drill: live flag off restores the fixture/simulated path byte-identically; no coordinate is sent with the flag off",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V5-LIVE-POI --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-P-HTTPS",
+      "slice": 5,
+      "title": "OWNER GATE P-HTTPS: tunnel or deploy for phone testing",
+      "priority": "P2",
+      "goal": "Owner decision only: any HTTPS tunnel or deploy so a phone can grant geolocation (secure context). Localhost Mac testing needs no gate. Terminal states: DONE or DECLINED (phone testing stays on manual location / desktop evidence).",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "V5-FUEL"
+      ],
+      "owner_gate": "P-HTTPS: owner authorizes any tunnel/deploy; never assumed, nothing is deployed by agents without it",
+      "goal_ids": [
+        "G-211"
+      ],
+      "acceptance_ids": [
+        "AC-211-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers"
+      ],
+      "checks": [
+        "Owner decision recorded verbatim; no tunnel or deploy exists that the owner did not authorize",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-P-HTTPS --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "V5-LUNCH",
+      "slice": 5,
+      "title": "Proactive lunch on real POIs (Spark ranking behind S1, dedup, evidence labels)",
+      "priority": "P2",
+      "goal": "Real-mode lunch: GPS fix + local mealtime + MemoryPort preferences (XMemo only if X1 authorized, otherwise local and labelled) + PlacesProvider candidates. Muse Spark ranks/explains behind the SUBMIT plan's S1 gate with the deterministic ranking as fallback; shared suppression prevents duplicate reminders. Open-now, ratings, and route times render only with provider evidence, labelled with source and fetchedAt, never blended with simulated cards.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 5,
+      "dependencies": [
+        "V5-FUEL"
+      ],
+      "goal_ids": [
+        "G-213"
+      ],
+      "acceptance_ids": [
+        "AC-213-1",
+        "AC-213-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-102",
+        "ADR-103"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/plugins/lunch",
+        "src/adapters/providers"
+      ],
+      "checks": [
+        "Evidence on Mac localhost (a secure context) at 390x844 emulation, stated honestly: a mealtime proactive lunch card from fixture/recorded POIs with preference-based ranking explanation; a second trigger in the same window produces no duplicate reminder. Phone-device evidence is optional and applies only if GATE-P-HTTPS is DONE (AC-213-1)",
+        "Simulated-scenario switch restores the fully reproducible recorded demo; real and simulated cards are never shown blended or mislabelled; core zero diff; golden 10/10 (AC-213-2)",
+        "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V5-LUNCH --plan-ref docs/architecture/YORI_V2.plan.json"
       ]
     },
     {
@@ -304,7 +518,7 @@
       "slice": 4,
       "title": "Cut-line decision point (2026-11-01 noon JST)",
       "priority": "P0",
-      "goal": "Hard decision checkpoint, evaluated at 2026-11-01 noon JST against V2a+V2b approval state (runs immediately after V2b, BEFORE V3): if the two core loops are not Reviewer-approved, stop V2 UI work, keep V3 unstarted, and the owner records the already-approved UI via the V-ANCHOR tag/flag (SUBMIT plan). Record the decision and its basis either way. Rough-cut target: both loops' real e2e usable by 11/2; 11/3-11/4 reserved for re-record and final polish.",
+      "goal": "Hard decision checkpoint, evaluated at 2026-11-01 noon JST against V2a+V2b approval state (runs immediately after V2b, BEFORE V3): if the two core loops are not Reviewer-approved, stop V2 UI work, keep V3 unstarted, and the owner records the already-approved UI via the V-ANCHOR tag/flag (SUBMIT plan). Record the decision and its basis either way. Rough-cut target: both loops' real e2e usable by 11/2; 11/3-11/4 reserved for re-record and final polish. At this same decision point the coordinator sets the Rev5 interleaving (see plan release_order): default is V3 -> DOC-RESYNC -> V4 first, V5 chain only while time permits before the 11/4 freeze.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
@@ -377,12 +591,12 @@
       "slice": 4,
       "title": "Submission doc re-sync for the V2 UI (verbatim quotes with e2e assertions)",
       "priority": "P1",
-      "goal": "Re-sync DEMO.md, docs/submission/VIDEO_SCRIPT.md and PROJECT_DESCRIPTION.md to the UI that will actually be recorded (V2 if it survived the cut line, otherwise the approved UI): every quoted label, button and flow step in the script is asserted verbatim by e2e (VIDEO-SCRIPT-SYNC pattern), so the owner never records from a stale script.",
+      "goal": "Re-sync DEMO.md, docs/submission/VIDEO_SCRIPT.md and PROJECT_DESCRIPTION.md to the UI that will actually be recorded (V2 if it survived the cut line, otherwise the approved UI): every quoted label, button and flow step in the script is asserted verbatim by e2e (VIDEO-SCRIPT-SYNC pattern), so the owner never records from a stale script. Rev4: also produce the rubric-to-evidence table (Impact 30, Meta Tooling 25, Demo 25, Technical 20, Best Agentic bonus), a 'built during hackathon' statement over commit range f7dd63d..HEAD (verified: f7dd63d is the 2026-10-28 03:56 JST initial scaffolding commit), and a feature-delta list.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
       "pipeline": "new_feature",
-      "estimated_hours": 3,
+      "estimated_hours": 4,
       "dependencies": [
         "CUTLINE_CHECK_V2"
       ],
@@ -404,6 +618,7 @@
       "checks": [
         "Script-to-UI verbatim assertions pass for every quoted string and step order in VIDEO_SCRIPT.md against the recording candidate build",
         "Docs state the live/off status of every integration exactly as SUBMISSION_READINESS.md classifies it",
+        "Rubric table maps every criterion to demonstrable, recorded evidence (no aspirational claims); the hackathon statement's commit range is verified against git log and the feature-delta list matches shipped slices",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id DOC-RESYNC --plan-ref docs/architecture/YORI_V2.plan.json"
       ]
     },
@@ -417,7 +632,7 @@
       "status": "pending",
       "agent": "software-test-engineer",
       "pipeline": "code_quality",
-      "estimated_hours": 5,
+      "estimated_hours": 7,
       "dependencies": [
         "DOC-RESYNC",
         "V3"
@@ -461,6 +676,7 @@
         "Final gate: git diff f43c6c1d -- src/core empty; golden 10/10; full e2e + axe green; preview runs locally with zero credentials (AC-EXT-1, AC-106-2)",
         "tests/golden changes in V2 are add-only: existing D1-D6 expectations byte-unchanged (diff over golden expectations shows additions only)",
         "Both recordings exist and match the owner loop scripts step for step; a static-looking build is explicitly not acceptance",
+        "Rev4 evidence: AC-EXT-1 grocery-stub zero-core-diff code diff and its passing tests are included in the evidence pack (not just asserted); an XMemo write-back moment in the recordings is labelled local-only while X1 is unauthorized; the engine-status honesty (live vs fallback) is visible in at least one recording",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id V4 --plan-ref docs/architecture/YORI_V2.plan.json"
       ]
     },
@@ -494,5 +710,6 @@
     "git diff f43c6c1d -- src/core empty across the whole V2 diff; golden D1-D6 10/10 and INV-107 unregressed",
     "Both owner loops demonstrable end to end on real viewports with recordings, or the 2026-11-01 noon JST cut line honestly falls back to the approved UI",
     "No concept-image data presented as real; token/layout finality claimed only if R1-R3 actually arrived with hash receipt"
-  ]
+  ],
+  "release_order": "After CUTLINE_CHECK_V2: V3 -> DOC-RESYNC -> V4 (recordable demo first). The V5 chain (V5-GEO -> V5-FUEL -> V5-LIVE-POI / V5-LUNCH) interleaves only while time permits before the 2026-11-04 freeze; the coordinator decides interleaving at the CUTLINE_CHECK_V2 decision point. Rev5 slices are first in the cut order."
 }

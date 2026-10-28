@@ -158,7 +158,7 @@ export interface TripModeTabVM {
   readonly label: string;
   readonly leaveTime: string;
   readonly arriveTime: string;
-  readonly durationMinutes: number;
+  readonly durationMinutes?: number;
   readonly isSelected: boolean;
 }
 
@@ -200,8 +200,8 @@ export interface RestaurantDetailVM {
   readonly id: string;
   readonly name: string;
   readonly cuisine: string;
-  readonly distanceMinutes: number;
-  readonly distanceText: string;
+  readonly distanceMinutes?: number;
+  readonly distanceText?: string;
   readonly photo: PhotoVM;
   readonly attributeChips: readonly string[];
   readonly basis: string;

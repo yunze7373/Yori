@@ -786,6 +786,7 @@ export function renderApp(
           spatialEvidence: spatialMapEvidence,
           isSaved: activeDetail.isSaved ?? false,
           userConfirmedKeys,
+          snapshot,
         });
         v2BodyHtml = renderRestaurantDetail(restaurantVM);
       } else if (activeTab === 'plans') {

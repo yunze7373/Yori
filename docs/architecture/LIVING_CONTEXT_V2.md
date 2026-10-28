@@ -293,6 +293,170 @@ Time impact: V1b adds ≈5h after V1 and before V2a. The 11/1 noon
 cut line is unchanged and remains achievable: V1 is already
 executing under rev2, and V2a/V2b simply shift behind V1b.
 
+## 9. Amendment Rev4 — Meta model as constrained decision engine (ARCH-V2-003)
+
+Stage 1 of the hackathon requires a substantive Meta model role.
+Rev4 promotes Muse Spark from wording/ranking assistant to the
+**decision engine behind the existing server-side ModelPort** —
+without widening any fact boundary. Deterministic behaviour remains
+the fallback and the demo stays recordable with the model off.
+
+- **R1 Decision engine (amends V2a/V2b).** Behind the existing
+  ModelPort (server-side template ids, strict facts schema,
+  fact-checker, loopback proxy, key only in `.env.local`), Muse
+  Spark implements the `CommandInterpreter` seam: it maps utterances
+  to the closed intent set with slots under schema; performs
+  situation attribution (which signal changed and why it matters);
+  resolves preference/constraint conflicts; and selects and ranks
+  candidates **among preparer-produced options only**, with
+  enumerated reason codes. Output is schema-validated and
+  fact-checked; the model never originates times, places, or facts.
+  The deterministic grammar and ranking remain the fallback. The UI
+  carries a visible engine status — **"Meta model · live"** vs
+  **"Offline fallback · deterministic"** — and a **redacted decision
+  log** (template id, input fact ids, output codes, validation
+  result; never secrets, never raw personal content) is inspectable.
+  Tests replay recorded fixtures; live calls happen only behind the
+  S1 owner gate (key + billed-call approval; no credit assumed).
+- **R2 Causality goldens (add-only; D1–D6 unchanged).** G-RAIN:
+  same user/lesson, clear → rain changes departure and ranking, Why
+  cites the weather signal. G-PREF: same city/time, different
+  confirmed preferences change the lunch choice and its explanation.
+  G-QUIET: nothing needed ⇒ no interruption (suppression recorded).
+  Each golden records the full chain: signal → reasoning (model or
+  fallback, labelled) → suggestion → confirm → state.
+- **R3 Before-you-ask (V2a).** A replayable clear → rain scene
+  change transitions the home into the prepared plan with **no
+  typing** — a real state transition, reduced-motion safe. This is
+  the demo's first 10–20 seconds.
+- **R4 Provenance chain (Why, V2a/V2b).** Every cited signal shows
+  timestamp, location (demo city), source (provider or simulated
+  fixture), and authorization status. No invented roads, distances,
+  opening hours, or transit data.
+- **R5 Agentic completion.** Accept/confirm changes state visibly;
+  XMemo write-back is shown honestly (local-only while X1 is
+  unauthorized — cloud success is never claimed); booking, spending,
+  or external actions would require explicit confirmation (none
+  exist in the demo).
+- **R6 Generality evidence (V4).** The AC-EXT-1 grocery-stub
+  zero-core-diff code diff and its tests are surfaced in the V4
+  evidence and docs, not merely asserted.
+- **R7 Rubric mapping (DOC-RESYNC).** A rubric-to-evidence table
+  (Impact 30, Meta AI Tooling 25, Demo 25, Technical 20, Best
+  Agentic bonus) mapping each criterion to demonstrable evidence; a
+  "built during hackathon" statement over commit range
+  `f7dd63d..HEAD` (all commits 2026-10-28 JST onward); and a
+  feature-delta list.
+
+Time impact: V2a +3h, V2b +1h, DOC-RESYNC +1h, V4 +2h (≈ +7h).
+Cut order if the 11/1 noon line tightens: model intent-proposal
+breadth (keep candidate ranking) → R7 polish → R3 staging extras.
+Never cut: causality goldens, the deterministic fallback, or the
+model-vs-fallback honesty status.
+
+## 10. Amendment Rev5 — real-world map/merchant chain (ARCH-V2-004)
+
+Owner requirement (msg_71704251afe4499a): connect Yori to real
+nearby merchants, not only UI. Design only; every real-world step
+sits behind an explicit owner gate, and the simulated-scenario
+switch keeps the recorded demo reproducible without ever passing
+simulated data off as live. This amendment **changes a standing
+boundary** and says so: PH-001 banned device geolocation outright
+(static guard, AC-204-2). Rev5 replaces that blanket ban with a
+consented, single-adapter path (INV-111 below); the guard is
+rescoped, not removed. See `SPEC_IMPACT_REV5.md`.
+
+### 10.1 Geolocation consent (G-a)
+
+One adapter module owns `navigator.geolocation`; nothing else in
+the codebase may reference it (rescoped static guard proves this).
+Flow: explicit in-app consent step (what is sent, to whom, why) →
+one-shot position with accuracy + timestamp → signals labelled
+`source: "real"` with consent scope. Denied, timeout, and stale
+(older than the refresh threshold) each degrade to a clear notice
+plus a **manual location** option (demo-city or user-typed place).
+Discipline: debounce, cached fix, refresh threshold, and a request
+budget per session; **no `watchPosition`, ever**. Secure context:
+localhost on the Mac is fine; a phone over LAN needs HTTPS, so any
+tunnel/deploy is gate **P-HTTPS**.
+
+### 10.2 PlacesProvider seam and provider decision (G-b)
+
+`PlacesProvider` in `src/adapters/providers`, shared by the lunch
+detector (real mode) and the new fuel detector. Results carry
+`placeId, coords, name, source, fetchedAt`, and opening status
+**only when the provider supplies it**. Provider-unavailable is
+shown prominently. Merchants, distances, ETAs, and streets are
+never fabricated; ETAs come only from a real routing provider
+(OSRM, fair-use/terms noted) or are shown as straight-line distance
+labelled as such — "fastest" is never claimed without route data.
+
+| Candidate | Cost/key | Obligations | Verdict |
+|---|---|---|---|
+| OpenStreetMap Overpass | Free, no key | ODbL attribution; fair-use rate limits; coordinates still disclosed to a third party (gate P-LOC) | **Recommended first**: no billing gate, demo can run free |
+| Google Places API (New) | Billed; key + billing account (gate P-BILL) | Key server-side behind the loopback proxy only; field-masked Nearby Search (`restaurant`, `gas_station`) | Owner-gated alternative if data quality demands it |
+
+### 10.3 Fuel plugin and FIND_FUEL (G-c)
+
+A `fuel` plugin (detector + preparer + adapter) demonstrating the
+AC-EXT-1 extension path with real data: zero `src/core` diff, same
+as grocery-stub. The closed grammar gains `FIND_FUEL`
+("gas" / "find gas" / "加油"). Disambiguation is explicit: "加油"
+also means encouragement, so the intent fires only with travel/
+location context or an explicit station reference; when ambiguous,
+the conversation asks ("Did you mean: find a gas station?") in the
+`needs-confirmation` state instead of guessing.
+
+### 10.4 Navigate handoff (G-d)
+
+Only on a user click, never auto-launched. Auditable URL builders,
+unit-tested for exact coordinates and encoding: Google Maps
+`https://www.google.com/maps/dir/?api=1&destination=<lat,lng>` (or
+`destination_place_id`, `travelmode=driving`; no key) and Apple Maps
+`https://maps.apple.com/?daddr=<lat,lng>&dirflg=d`, with
+iOS/Android/desktop fallback selection.
+
+### 10.5 Proactive lunch on real POIs (G-e)
+
+GPS fix + local mealtime + MemoryPort preferences (XMemo only if
+X1 is authorized; otherwise local and labelled) + nearby candidates
+from PlacesProvider. Muse Spark (behind S1, Rev4 rules) ranks and
+explains; the deterministic ranking is the fallback; shared
+suppression prevents duplicate reminders. Open-now, ratings, and
+route times render **only with provider evidence** — this is the
+real-data counterpart of Rev3's fixture honesty, and real results
+are labelled with source + `fetchedAt`, never blended with
+simulated cards.
+
+### 10.6 Owner gates and invariants
+
+Gates, never assumed: **P-LOC** (send device coordinates to the
+chosen provider, and which provider), **P-BILL** (Google Places key
++ billing, if chosen), **P-HTTPS** (tunnel/deploy for phone
+testing), **S1** (model key + billed calls), **X1** (XMemo auth).
+New invariant **INV-111**: device coordinates are obtained only
+through the single consent-gated adapter, one-shot, budgeted, and
+leave the device only to the P-LOC-approved provider; the demo's
+simulated switch disables the whole real chain. Slices (plan):
+GEO consent → PLACES+FUEL+NAVIGATE (no key needed, first) →
+REAL-LUNCH. Time impact ≈ 15h after V2b; against the 11/1 noon cut
+line these slices are **first in the cut order** — the line protects
+V2a/V2b, and Rev5 work never delays the recordable simulated demo.
+
+Dependency correction (Rev5 rev2): acquiring a consented location
+discloses nothing to third parties, so V5-GEO and V5-FUEL build and
+test **without** waiting for P-LOC, against mocked geolocation and
+a recorded/simulated Places fixture (labelled). Only the live
+provider call discloses coordinates; it sits in the separate small
+slice **V5-LIVE-POI** behind GATE-P-LOC, which also collects the
+real-run evidence. V5-LUNCH likewise does not wait for P-HTTPS
+(localhost is a secure context); phone evidence is optional and
+applies only if P-HTTPS is DONE. Release order after the cut-line
+check: **V3 → DOC-RESYNC → V4 first** (recordable demo), with the
+V5 chain interleaved only while time permits before the 11/4
+freeze — the coordinator decides the interleaving at the
+CUTLINE_CHECK_V2 decision point.
+
 ## 7. Blocked visual finalization and image channel
 
 R0–R3 are not on this Mac and the Bridge cannot carry binaries.

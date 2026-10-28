@@ -249,7 +249,7 @@ export function renderRestaurantDetail(vm: RestaurantDetailVM): string {
           <h2 class="v2-section-heading">Walking Directions</h2>
           <span class="v2-in-app-badge">In-app route · simulated</span>
         </div>
-        <p class="v2-directions-intro">Schematic route to ${escapeHtml(vm.name)} (${escapeHtml(vm.distanceText)}):</p>
+        <p class="v2-directions-intro">Schematic route to ${escapeHtml(vm.name)}${vm.distanceText ? ` (${escapeHtml(vm.distanceText)})` : ''}:</p>
         <ol class="v2-directions-list">
           ${vm.directions
             .map(
