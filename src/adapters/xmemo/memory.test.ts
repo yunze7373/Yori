@@ -1,6 +1,6 @@
 /**
  * MemoryPort Unit Tests
- * Governed by Architecture Rev3 Section 9.2, AC-106-3, and HB-3.
+ * Governed by Architecture Rev3 Section 9.2, AC-106-3, HB-3, AC-203-1, and AC-203-2.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -112,5 +112,163 @@ describe('MemoryPort (XMemo & Local Adapters)', () => {
     });
     expect(unauthedAdapter.getStatus().isRemoteConfigured).toBe(false);
     expect(unauthedAdapter.getOAuthConfig()?.issuer).toBe('https://xmemo.dev');
+  });
+
+  describe('XMemoRemoteAdapter: Mocked Network / Fallback Verification (AC-203-2)', () => {
+    const mockConfirmedFact: MemoryFact = createMemoryFact(
+      'transit_pref',
+      'drive',
+      'confirmed',
+      { source: 'user_confirmed', recordedAt: '2026-10-28T10:00:00Z' },
+      '2026-10-28T10:00:00Z'
+    );
+
+    it('loadFacts maps recalled items to confirmed facts with xmemo provenance on 200', async () => {
+      const mockFetch = (async (url: string) => {
+        expect(url).toBe('/api/xmemo/mcp');
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jsonrpc: '2.0',
+            id: 1,
+            result: {
+              memories: [
+                {
+                  key: 'rain_habit',
+                  value: 'drive',
+                  updatedAt: '2026-10-28T10:00:00Z',
+                  note: 'Synced from XMemo vault',
+                },
+              ],
+            },
+          }),
+        };
+      }) as any;
+
+      const adapter = new XMemoRemoteAdapter({
+        proxyEndpoint: '/api/xmemo',
+        fetchFn: mockFetch,
+        appAuthToken: 'mock-token',
+      });
+
+      const facts = await adapter.loadFacts();
+      expect(facts).toHaveLength(1);
+      expect(facts[0]?.key).toBe('rain_habit');
+      expect(facts[0]?.value).toBe('drive');
+      expect(facts[0]?.status).toBe('confirmed');
+      expect(facts[0]?.provenance.source).toBe('xmemo');
+    });
+
+    it('loadFacts silently falls back to empty array on 401 token expiry', async () => {
+      const mock401Fetch = (async () => ({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: 'unauthorized' }),
+      })) as any;
+
+      const adapter = new XMemoRemoteAdapter({
+        proxyEndpoint: '/api/xmemo',
+        fetchFn: mock401Fetch,
+        appAuthToken: 'expired-token',
+      });
+
+      const facts = await adapter.loadFacts();
+      expect(facts).toEqual([]);
+    });
+
+    it('loadFacts silently falls back to empty array on 5xx server error', async () => {
+      const mock500Fetch = (async () => ({
+        ok: false,
+        status: 502,
+        json: async () => ({ error: 'Bad Gateway' }),
+      })) as any;
+
+      const adapter = new XMemoRemoteAdapter({
+        proxyEndpoint: '/api/xmemo',
+        fetchFn: mock500Fetch,
+        appAuthToken: 'valid-token',
+      });
+
+      const facts = await adapter.loadFacts();
+      expect(facts).toEqual([]);
+    });
+
+    it('loadFacts silently falls back to empty array on network failure (offline)', async () => {
+      const networkFailFetch = (async () => {
+        throw new Error('Failed to fetch (offline)');
+      }) as any;
+
+      const adapter = new XMemoRemoteAdapter({
+        proxyEndpoint: '/api/xmemo',
+        fetchFn: networkFailFetch,
+        appAuthToken: 'valid-token',
+      });
+
+      const facts = await adapter.loadFacts();
+      expect(facts).toEqual([]);
+    });
+
+    it('writeBack dispatches confirmed fact to MCP remember tool on 200', async () => {
+      let capturedBody: any;
+      const mockFetch = (async (url: string, init: any) => {
+        expect(url).toBe('/api/xmemo/mcp');
+        capturedBody = JSON.parse(init.body);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ jsonrpc: '2.0', id: 1, result: { success: true } }),
+        };
+      }) as any;
+
+      const adapter = new XMemoRemoteAdapter({
+        proxyEndpoint: '/api/xmemo',
+        fetchFn: mockFetch,
+        appAuthToken: 'valid-token',
+      });
+
+      const res = await adapter.writeBack(mockConfirmedFact);
+      expect(res.success).toBe(true);
+      expect(capturedBody.params.name).toBe('remember');
+      expect(capturedBody.params.arguments.key).toBe('transit_pref');
+      expect(capturedBody.params.arguments.value).toBe('drive');
+      expect(capturedBody.params.arguments.status).toBe('confirmed');
+    });
+
+    it('writeBack returns error object on 401/5xx/network failure without throwing', async () => {
+      const mock500Fetch = (async () => ({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'Internal Error' }),
+      })) as any;
+
+      const adapter = new XMemoRemoteAdapter({
+        proxyEndpoint: '/api/xmemo',
+        fetchFn: mock500Fetch,
+        appAuthToken: 'valid-token',
+      });
+
+      const res = await adapter.writeBack(mockConfirmedFact);
+      expect(res.success).toBe(false);
+      expect(res.error).toBeDefined();
+    });
+
+    it('writeBack throws INV-107 error on pending fact even if remote configured', async () => {
+      const pendingFact: MemoryFact = createMemoryFact(
+        'pending_pref',
+        'walking',
+        'pending',
+        { source: 'user_feedback', recordedAt: '2026-10-28T10:00:00Z' },
+        '2026-10-28T10:00:00Z'
+      );
+
+      const adapter = new XMemoRemoteAdapter({
+        appAuthToken: 'valid-token',
+      });
+
+      await expect(adapter.writeBack(pendingFact)).rejects.toThrow(
+        /MemoryPort invariant violation \(INV-107\)/
+      );
+    });
   });
 });

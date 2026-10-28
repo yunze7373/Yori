@@ -24,6 +24,11 @@ export interface MeViewState {
   readonly timezone?: string;
   readonly actionNotice?: string;
   readonly isPersistent?: boolean;
+  readonly xmemoStatus?: {
+    readonly enabled: boolean;
+    readonly connected: boolean;
+    readonly statusText?: string;
+  };
 }
 
 export function renderMeView(state: MeViewState): string {
@@ -161,7 +166,37 @@ export function renderMeView(state: MeViewState): string {
         </div>
       </section>
 
-      <!-- 5. Data Controls & Storage (INV-110) -->
+      <!-- 5. XMemo Sync (PH-002 C2, AC-203-2) - Only visible when XMEMO_OAUTH_ENABLED is on -->
+      ${
+        state.xmemoStatus?.enabled === true
+          ? `
+      <section class="card me-card" aria-labelledby="me-xmemo-title">
+        <div class="me-card-header">
+          <h2 id="me-xmemo-title" class="section-label">XMemo Sync</h2>
+          <span class="card-badge ${state.xmemoStatus.connected ? 'badge-confirmed' : 'badge-pending'}">
+            ${state.xmemoStatus.connected ? 'Connected' : 'Disconnected'}
+          </span>
+        </div>
+        <p class="me-card-desc">
+          ${
+            state.xmemoStatus.connected
+              ? 'Connected to XMemo private memory vault. Confirmed preferences sync securely via OAuth 2.0 PKCE.'
+              : 'Connect your XMemo account to securely read preferences and sync confirmed facts.'
+          }
+        </p>
+        <div class="data-actions-row">
+          ${
+            state.xmemoStatus.connected
+              ? `<button type="button" class="btn btn-outline" id="btn-xmemo-disconnect">Disconnect XMemo</button>`
+              : `<button type="button" class="btn btn-primary" id="btn-xmemo-connect">Connect XMemo</button>`
+          }
+        </div>
+      </section>
+      `
+          : ''
+      }
+
+      <!-- 6. Data Controls & Storage (INV-110) -->
       <section class="card me-card" aria-labelledby="me-data-title">
         <h2 id="me-data-title" class="section-label">${escapeHtml(STRINGS.me.dataControlsTitle)}</h2>
         <div class="data-actions-row">

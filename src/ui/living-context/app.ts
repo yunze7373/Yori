@@ -472,6 +472,33 @@ export function renderApp(
     rationales: Record<string, string>;
   } | null = null;
 
+  let xmemoStatus: { enabled: boolean; connected: boolean; statusText?: string } = {
+    enabled: false,
+    connected: false,
+  };
+
+  if (typeof window !== 'undefined' && window.location?.search?.includes('xmemo=connected')) {
+    actionFeedbackMessage = 'XMemo account connected successfully';
+    activeTab = 'me';
+  }
+
+  async function checkXMemoStatus() {
+    try {
+      if (typeof fetch !== 'undefined') {
+        const resp = await fetch('/api/xmemo/status', { cache: 'no-store' });
+        if (resp.ok) {
+          const newStatus = (await resp.json()) as { enabled: boolean; connected: boolean; statusText?: string };
+          xmemoStatus = newStatus;
+          update();
+        }
+      }
+    } catch {
+      // Ignore network errors
+    }
+  }
+
+  void checkXMemoStatus();
+
   function update() {
     const {
       pipelineResult,
@@ -536,6 +563,7 @@ export function renderApp(
         timezone: snapshotTimezone,
         actionNotice: actionFeedbackMessage ?? undefined,
         isPersistent: storage.isPersistent(),
+        xmemoStatus,
       });
     } else {
       mainContentHtml = `
@@ -932,9 +960,10 @@ export function renderApp(
 
     const meBtn = root.querySelector('#tab-me');
     if (meBtn) {
-      meBtn.addEventListener('click', () => {
+      meBtn.addEventListener('click', async () => {
         activeTab = 'me';
         update();
+        await checkXMemoStatus();
       });
     }
 
@@ -948,9 +977,10 @@ export function renderApp(
 
     const desktopMeBtn = root.querySelector('#desktop-nav-me');
     if (desktopMeBtn) {
-      desktopMeBtn.addEventListener('click', () => {
+      desktopMeBtn.addEventListener('click', async () => {
         activeTab = 'me';
         update();
+        await checkXMemoStatus();
       });
     }
 
@@ -1321,6 +1351,39 @@ export function renderApp(
 
     const meResetBtn = root.querySelector('#btn-me-reset') as HTMLButtonElement | null;
     if (meResetBtn) meResetBtn.addEventListener('click', () => handleReset(meResetBtn));
+
+    const connectBtn = root.querySelector('#btn-xmemo-connect');
+    if (connectBtn) {
+      connectBtn.addEventListener('click', async () => {
+        try {
+          const res = await fetch('/api/xmemo/auth-url', { method: 'POST' });
+          if (res.ok) {
+            const data = (await res.json()) as { authUrl?: string };
+            if (data.authUrl) {
+              window.location.href = data.authUrl;
+            }
+          }
+        } catch {
+          // ignore error
+        }
+      });
+    }
+
+    const disconnectBtn = root.querySelector('#btn-xmemo-disconnect');
+    if (disconnectBtn) {
+      disconnectBtn.addEventListener('click', async () => {
+        try {
+          const res = await fetch('/api/xmemo/disconnect', { method: 'POST' });
+          if (res.ok) {
+            xmemoStatus = { enabled: true, connected: false };
+            actionFeedbackMessage = 'XMemo disconnected';
+            update();
+          }
+        } catch {
+          // ignore error
+        }
+      });
+    }
 
     // Coordinate reasoning asynchronously after deterministic composition (Requirement 4)
     if (coordinatedScene !== currentScene) {

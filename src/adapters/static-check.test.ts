@@ -49,6 +49,9 @@ describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
       /\beyJ[a-zA-Z0-9_-]{20,}\.eyJ[a-zA-Z0-9_-]{20,}\b/, // JWT tokens
       /MODEL_API_KEY\s*[:=]\s*['"][a-zA-Z0-9_-]{10,}['"]/, // Hardcoded key value
       /META_API_KEY\s*[:=]\s*['"][a-zA-Z0-9_-]{10,}['"]/,
+      /XMEMO_API_KEY\s*[:=]\s*['"][a-zA-Z0-9_-]{10,}['"]/,
+      /XMEMO_CLIENT_SECRET\s*[:=]\s*['"][a-zA-Z0-9_-]{10,}['"]/,
+      /client_secret\s*[:=]\s*['"][a-zA-Z0-9_-]{10,}['"]/,
     ];
 
     for (const filePath of srcFiles) {
@@ -112,5 +115,25 @@ describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
 
     await expect(remoteAdapter.writeBack(pendingFact)).rejects.toThrow();
     await expect(remoteAdapter.writeBack(rejectedFact)).rejects.toThrow();
+  });
+
+  it('ensures zero token or credential storage in browser storage APIs (HB-3, AC-203-2)', () => {
+    const srcFiles = collectFiles(path.resolve('src'));
+    const forbiddenPatterns = [
+      /localStorage\.setItem\([^)]*(?:token|secret|auth|bearer|code_verifier)/i,
+      /sessionStorage\.setItem\([^)]*(?:token|secret|auth|bearer|code_verifier)/i,
+      /document\.cookie\s*=\s*[^;]*(?:token|secret|auth|bearer)/i,
+    ];
+
+    for (const filePath of srcFiles) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      for (const pattern of forbiddenPatterns) {
+        const match = pattern.exec(content);
+        expect(
+          match,
+          `Forbidden client-side token storage detected in ${path.relative(process.cwd(), filePath)}: ${match?.[0]}`
+        ).toBeNull();
+      }
+    }
   });
 });

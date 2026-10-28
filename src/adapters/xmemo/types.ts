@@ -37,6 +37,8 @@ export interface XMemoOAuthConfig {
 export interface RemoteMemoryAdapterConfig {
   readonly appAuthToken?: string;
   readonly oauth?: XMemoOAuthConfig;
+  readonly proxyEndpoint?: string;
+  readonly fetchFn?: typeof fetch;
 }
 
 export interface MemoryPort {

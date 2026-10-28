@@ -1,16 +1,19 @@
 /**
  * MemoryPort Entry Point
- * Governed by Architecture Rev3 Section 9.2.
+ * Governed by Architecture Rev3 Section 9.2, AC-203-1, and AC-203-2.
  */
 
-import type { MemoryPort } from './types.js';
+import type { MemoryPort, RemoteMemoryAdapterConfig } from './types.js';
 import { LocalMemoryAdapter } from './local-adapter.js';
 import { XMemoRemoteAdapter } from './remote-adapter.js';
 import type { YoriStorage } from '../../core/storage/index.js';
 
-export function createMemoryPort(storage?: YoriStorage, remoteAuthToken?: string): MemoryPort {
-  if (remoteAuthToken) {
-    return new XMemoRemoteAdapter(remoteAuthToken);
+export function createMemoryPort(
+  storage?: YoriStorage,
+  remoteConfigOrToken?: string | RemoteMemoryAdapterConfig
+): MemoryPort {
+  if (remoteConfigOrToken) {
+    return new XMemoRemoteAdapter(remoteConfigOrToken);
   }
   return new LocalMemoryAdapter(storage);
 }
