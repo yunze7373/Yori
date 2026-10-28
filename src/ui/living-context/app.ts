@@ -68,6 +68,13 @@ import { renderMeView } from '../me/me-view.js';
 import { createMemoryPort } from '../../adapters/xmemo/index.js';
 import { DEFAULT_DAILY_PROMPT_BUDGET } from '../../core/policy/index.js';
 import { coordinateReasoning } from '../../app/reasoning-coordinator.js';
+import { createActionStateStore, type ActionStateStore } from '../action-state/index.js';
+import {
+  renderAskBar,
+  attachAskBarEvents,
+  renderConversationOverlay,
+  attachConversationEvents,
+} from '../conversation/index.js';
 
 export type DemoSceneId =
   | 'clear'
@@ -546,6 +553,8 @@ export function renderApp(
   let activeTab: 'today' | 'me' = 'today';
   const sharedStorage = customStorage ?? new YoriStorage(new WebStorageDriver());
   const memoryPort = createMemoryPort(sharedStorage);
+  const actionStore: ActionStateStore = createActionStateStore();
+  let conversationCleanup: (() => void) | null = null;
 
   let activeModal:
     | null
@@ -1058,6 +1067,7 @@ export function renderApp(
 
         <main class="main-container" role="main">
           ${mainContentHtml}
+          ${uiVersion === 'v2' && activeTab === 'today' ? renderAskBar() : ''}
         </main>
 
         <!-- Bottom Tab Bar (Mobile) -->
@@ -1110,8 +1120,21 @@ export function renderApp(
             ? renderDismissDialog(activeModal.plan.intentId)
             : ''
         }
+
+        <!-- V2 Full-Page Conversation Shell -->
+        ${
+          uiVersion === 'v2' && actionStore.getInteractionState() === 'CONVERSATION'
+            ? renderConversationOverlay(actionStore)
+            : ''
+        }
       </div>
     `;
+
+    // Clean up any previous conversation event listeners before rebinding
+    if (conversationCleanup) {
+      conversationCleanup();
+      conversationCleanup = null;
+    }
 
     // -------------------------------------------------------------
     // EVENT BINDINGS
@@ -1564,6 +1587,24 @@ export function renderApp(
           // ignore error
         }
       });
+    }
+
+    // -------------------------------------------------------------
+    // V2 ASK BAR & CONVERSATION SHELL (V0 - LIVING_CONTEXT_V2.md §2)
+    // -------------------------------------------------------------
+    if (uiVersion === 'v2') {
+      attachAskBarEvents(root, () => {
+        actionStore.openConversation();
+        update();
+      });
+
+      if (actionStore.getInteractionState() === 'CONVERSATION') {
+        conversationCleanup = attachConversationEvents(root, actionStore, () => {
+          update();
+          const askBarEl = root.querySelector<HTMLButtonElement>('#ask-bar');
+          askBarEl?.focus();
+        });
+      }
     }
 
     // Coordinate reasoning asynchronously after deterministic composition (Requirement 4)

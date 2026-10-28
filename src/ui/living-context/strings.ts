@@ -48,6 +48,19 @@ export const STRINGS = Object.freeze({
     me: 'Me',
     comingSoonBadge: 'Coming soon',
   }),
+  conversation: Object.freeze({
+    askBarPlaceholder: 'Ask Yori about your day...',
+    askBarAriaLabel: 'Open Ask Yori conversation',
+    title: 'Ask Yori',
+    closeAriaLabel: 'Close conversation',
+    pinAriaLabel: 'Pin conversation to stay open',
+    pinnedActive: 'Pinned',
+    inputPlaceholder: 'Ask Yori or type a command...',
+    inputAriaLabel: 'Ask Yori a question or issue a command',
+    sendAriaLabel: 'Send message',
+    v0PlaceholderResponse:
+      'Commands arrive in the next build (V2a). You can explore the full-page conversation shell, pin toggling, and Esc/close navigation.',
+  }),
   quietState: Object.freeze({
     title: 'Nothing needs your attention right now.',
     subtitle: "You're all caught up. We'll let you know when something comes up.",

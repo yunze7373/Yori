@@ -1055,3 +1055,333 @@ button:focus-visible, a:focus-visible, select:focus-visible {
     display: flex;
   }
 }
+
+/* ==========================================================================
+   V0 Ask Bar & Full-Page Conversation Shell (LIVING_CONTEXT_V2.md §2)
+   ========================================================================== */
+
+.ask-bar-dock {
+  position: sticky;
+  bottom: 64px;
+  width: 100%;
+  max-width: 600px;
+  margin: 20px auto 0 auto;
+  padding: 0 16px;
+  z-index: 40;
+}
+
+@media (min-width: 1024px) {
+  .ask-bar-dock {
+    bottom: 24px;
+    max-width: 680px;
+  }
+}
+
+.ask-bar-container {
+  width: 100%;
+}
+
+.ask-bar {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  background: #FFFFFF;
+  color: #16382F;
+  border: 1px solid #CAD6D0;
+  border-radius: 28px;
+  box-shadow: 0 4px 16px rgba(22, 56, 47, 0.08);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: left;
+}
+
+.ask-bar:hover {
+  border-color: #2D6A4F;
+  box-shadow: 0 6px 20px rgba(22, 56, 47, 0.12);
+  transform: translateY(-1px);
+}
+
+.ask-bar:focus-visible {
+  outline: 2px solid #2D6A4F;
+  outline-offset: 2px;
+}
+
+.ask-bar-icon {
+  flex-shrink: 0;
+  color: #2D6A4F;
+}
+
+.ask-bar-text {
+  flex: 1;
+  color: #4B6358;
+}
+
+.ask-bar-hint {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #16382F;
+  background: #E2EAE5;
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid #CAD6D0;
+}
+
+/* Full-page Conversation Shell */
+.conversation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+@media (min-width: 768px) {
+  .conversation-overlay {
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+}
+
+.conversation-shell {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  background: #FAFCFA;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+@media (min-width: 768px) {
+  .conversation-shell {
+    max-width: 680px;
+    height: 90vh;
+    max-height: 840px;
+    border-radius: 20px;
+    border: 1px solid #CAD6D0;
+  }
+}
+
+.conversation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2EAE5;
+  flex-shrink: 0;
+}
+
+.conversation-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.conversation-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #16382F;
+}
+
+.conversation-btn-icon {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid #E2EAE5;
+  background: #FFFFFF;
+  color: #16382F;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.conversation-btn-icon:hover {
+  background: #EAF2EE;
+}
+
+.conversation-btn-icon:focus-visible {
+  outline: 2px solid #2D6A4F;
+  outline-offset: 2px;
+}
+
+.conversation-pin-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 16px;
+  border: 1px solid #CAD6D0;
+  background: #FFFFFF;
+  color: #2D6A4F;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.conversation-pin-btn:hover {
+  background: #EAF2EE;
+}
+
+.conversation-pin-btn.is-pinned {
+  background-color: #16382F !important;
+  color: #FFFFFF !important;
+  border-color: #16382F !important;
+}
+
+.conversation-pin-btn.is-pinned span {
+  color: #FFFFFF !important;
+}
+
+.conversation-pin-btn.is-pinned svg {
+  stroke: #FFFFFF !important;
+}
+
+.conversation-pin-btn:focus-visible {
+  outline: 2px solid #2D6A4F;
+  outline-offset: 2px;
+}
+
+.conversation-transcript {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #F8FAF9;
+}
+
+.chat-bubble-wrapper {
+  display: flex;
+  width: 100%;
+}
+
+.chat-bubble-assistant {
+  justify-content: flex-start;
+}
+
+.chat-bubble-user {
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: 82%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.chat-bubble-assistant .chat-bubble {
+  background: #FFFFFF;
+  color: #16382F;
+  border: 1px solid #E2EAE5;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.chat-bubble-user .chat-bubble {
+  background: #2D6A4F;
+  color: #FFFFFF;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-text {
+  margin: 0;
+}
+
+.chat-placeholder-tag {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  font-style: italic;
+  color: #52796F;
+}
+
+.conversation-footer {
+  padding: 14px 18px;
+  background: #FFFFFF;
+  border-top: 1px solid #E2EAE5;
+  padding-bottom: max(14px, env(safe-area-inset-bottom, 14px));
+  flex-shrink: 0;
+}
+
+.conversation-composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.conversation-input {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 22px;
+  border: 1px solid #CAD6D0;
+  background: #F8FAF9;
+  color: #16382F;
+  font-size: 0.9375rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.conversation-input:focus {
+  outline: none;
+  border-color: #2D6A4F;
+  background: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.12);
+}
+
+.conversation-send-btn {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: #2D6A4F;
+  color: #FFFFFF;
+  cursor: pointer;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.conversation-send-btn:hover {
+  background: #1B4332;
+}
+
+.conversation-send-btn:focus-visible {
+  outline: 2px solid #2D6A4F;
+  outline-offset: 2px;
+}
+
+/* Reduced Motion Override */
+@media (prefers-reduced-motion: reduce) {
+  .ask-bar,
+  .conversation-overlay,
+  .conversation-shell,
+  .conversation-btn-icon,
+  .conversation-pin-btn,
+  .conversation-send-btn {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
