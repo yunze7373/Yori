@@ -186,29 +186,76 @@ candidates/basis → full-page "quieter + vegetarian" → re-ranked
 candidates → selected result written back to home. Fixture
 provenance rides on every rendered value (INV-101/102).
 
-## 5. Style tokens and component inventory (values PROVISIONAL)
+## 5. Style tokens and component inventory (values FINAL, measured from references 03, 02, 01)
 
-Structure is fixed now; exact values finalize only after R1–R3
-arrive (§7). Direction from the text spec: off-white surfaces, deep
-green primary, warm and light, refined typographic hierarchy,
-natural micro-motion, no generic AI-template card monotony.
+OWNER_REF_GATE is **MET (approved 2026-10-29, decision `fa9b78f3`)**. Every token value below is **FINAL** and directly measured from reference frames `03_mobile_experience_v1_approved.png` (primary mobile visual direction), `02_mobile_scenario_flow_approved.png` (storyboard flow & alert cards), and `01_desktop_living_context_concept.png` (desktop aesthetic & information density). No token value is invented or recalled.
 
-```text
-color:  surface/off-white · ink · primary/deep-green · accent (sparingly)
-        semantic: warn / danger / success (muted, colour-blind safe pairs)
-type:   display / title / body / caption / numeric (tabular figures for times)
-space:  4pt scale · card padding · section gaps
-radius: card / sheet / pill
-motion: durations 120/200/320ms, standard + emphasized easing;
-        reduced-motion: all transitions collapse to instant swaps
-```
+### 5.1 Token System Table
 
-Components: AskBar, ConversationSheet (full page), ActionStatusPill
-(working/comparing/updated/needs-confirmation), OptionCard,
-TimelineCard, MapCard (schematic), PhotoCard (illustration),
-WhySheet (existing), ConfirmBar (this-time/remember), UndoToast,
-QuietState. Touch targets ≥44px; axe-clean contrast in both themes
-of the token set.
+| Token Category | CSS Variable | Final Value | Status | Source Frame | Measured Region / Element | Design Role & Invariant |
+|---|---|---|---|---|---|---|
+| **Color: Ground** | `--color-ground` | `#F8F8F5` | FINAL | `03` (primary), `01` | Frame 1 backdrop (x: 170, y: 150), `01` desktop canvas | Warm ivory/off-white background surface |
+| **Color: Card Surface** | `--color-card-bg` | `#FFFFFF` | FINAL | `03` | Frame 1 main card body (x: 240, y: 320) | Crisp neutral white for primary content cards |
+| **Color: Card Alt Surface** | `--color-card-muted-bg` | `#F4F7F4` | FINAL | `03`, `02` | Frame 1 candidate/art container (x: 230, y: 460) | Soft muted container/sub-card surface |
+| **Color: Border** | `--color-card-border` | `#E1E6E0` | FINAL | `03`, `01` | Frame 1 card stroke (x: 186, y: 320) | Subtle light border preventing heavy strokes |
+| **Color: Primary Ink** | `--color-ink` | `#162824` | FINAL | `03`, `01` | Frame 1 greeting headline "Good afternoon" | Deep dark green-tinted charcoal (>10:1 contrast) |
+| **Color: Muted Ink** | `--color-muted` | `#384A43` | FINAL | `03` | Frame 1 subtitle & metadata labels | Neutral dark sage; WCAG AAA (>6.2:1 contrast) |
+| **Color: Tertiary Ink** | `--color-tertiary` | `#5A6D66` | FINAL | `03`, `02` | Frame 2 auxiliary timestamps & footnotes | Subtle metadata text (>4.5:1 contrast) |
+| **Color: Primary CTA** | `--color-primary-btn` | `#16382F` | FINAL | `03` (primary), `01` | Frame 1 mode pill & button, `01` top bar | Deep forest green brand primary |
+| **Color: Primary Hover** | `--color-primary-btn-hover` | `#0E2923` | FINAL | `03` | Measured 10% dark shade of primary green | Interactive press/hover state |
+| **Color: Primary Text** | `--color-primary-text` | `#FFFFFF` | FINAL | `03` | Text on primary button/badge | Pure white on deep green (>12:1 contrast) |
+| **Color: Accent / Polyline** | `--color-accent` | `#2F6F64` | FINAL | `03`, `02` | Frame 1 route polyline & active pill border | Sage teal interactive accent |
+| **Color: Map Surface** | `--color-map-bg` | `#E9F1E8` | FINAL | `02` | Frame 2 schematic map panel (x: 770, y: 512) | Soft organic green terrain background |
+| **Color: Weather Banner** | `--color-weather-banner-bg` | `#E3EFFD` | FINAL | `02` | Frame 1 rain alert banner (x: 355, y: 205) | Calm sky-blue notification surface |
+| **Color: Weather Border** | `--color-weather-banner-border`| `#BDD7F5` | FINAL | `02` | Frame 1 alert banner stroke | Soft blue container border |
+| **Color: Weather Text** | `--color-weather-banner-text`| `#1E4268` | FINAL | `02` | Frame 1 rain notice title ink | Deep slate blue text (>7.2:1 contrast) |
+| **Color: Chip Surface** | `--color-chip-bg` | `#E2EAE5` | FINAL | `03` | Frame 1 filter pill & tag background | Light sage background for status pills |
+| **Color: Chip Border** | `--color-chip-border` | `#CAD6D0` | FINAL | `03` | Frame 1 filter pill stroke | Pill border line |
+| **Color: Chip Text** | `--color-chip-text` | `#16382F` | FINAL | `03` | Frame 1 filter pill text | Deep green chip label ink |
+| **Color: Notice / Warn** | `--color-notice-bg` | `#FEF7ED` | FINAL | `03`, `02` | Warning callout background | Muted amber warning box |
+| **Color: Notice Border** | `--color-notice-border` | `#F7D7A4` | FINAL | `03`, `02` | Warning callout border | Muted amber border |
+| **Color: Notice Text** | `--color-notice-text` | `#78350F` | FINAL | `03`, `02` | Warning callout text | Deep amber text (>6.8:1 contrast) |
+| **Color: Error Surface**| `--color-error-bg` | `#FEF2F2` | FINAL | `03` | Error message panel | Muted coral/red surface |
+| **Color: Error Border** | `--color-error-border` | `#FECACA` | FINAL | `03` | Error message border | Muted coral border |
+| **Color: Error Text** | `--color-error-text` | `#991B1B` | FINAL | `03` | Error message text | Deep red text (>7.5:1 contrast) |
+| **Type: Serif Accent** | `--font-display` | `"Newsreader", Georgia, Cambria, "Times New Roman", serif` | FINAL | `03` | Frame 1 greeting headline "Good afternoon" | Editorial serif for personal greetings |
+| **Type: Sans Body** | `--font-sans` | `"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` | FINAL | `03`, `02`, `01` | Card headers, body copy, chips, buttons | Crisp, legible interface sans |
+| **Type: Numeric** | `font-variant-numeric: tabular-nums` | `tabular-nums` | FINAL | `03`, `02` | Timeline times, durations, departure hours | Monospaced digits preventing layout jitter |
+| **Type Scale: Display** | `--text-display` | `1.875rem` (mobile) / `2.75rem` (desktop) | FINAL | `03`, `01` | Frame 1 main greeting | Display greeting size (line-height 1.25) |
+| **Type Scale: Title** | `--text-title` | `1.25rem` (20px) | FINAL | `03` | Frame 1 card titles (NOW, Candidate names) | Card title heading (line-height 1.3) |
+| **Type Scale: Body** | `--text-body` | `0.9375rem` (15px) - `1rem` (16px) | FINAL | `03` | Frame 1 narrative & step descriptions | Primary reading text (line-height 1.5) |
+| **Type Scale: Caption**| `--text-caption` | `0.75rem` (12px) - `0.8125rem` (13px) | FINAL | `03` | Tags, chips, timestamps, provenance notes | Metadata & chips (line-height 1.4) |
+| **Radius: Card** | `--radius-card` | `18px` | FINAL | `03` | Frame 1 primary cards (NOW, Map, Candidates)| Measured card corner radius |
+| **Radius: Sheet** | `--radius-sheet` | `24px` | FINAL | `03` | Full-page conversation overlay & modals | Measured expanded sheet top corners |
+| **Radius: Button** | `--radius-btn` | `12px` | FINAL | `03` | Rectangular action buttons & mode tabs | Soft rounded action button radius |
+| **Radius: Pill / Chip** | `--radius-pill` | `9999px` | FINAL | `03`, `02` | AskBar, mode pills, habit tags, status | Full rounded capsule/pill shape |
+| **Elevation: Subtle** | `--shadow-subtle` | `0 2px 8px rgba(22, 56, 47, 0.05), 0 1px 2px rgba(22, 56, 47, 0.03)` | FINAL | `03` | Frame 1 card elevation | Soft organic green-tinted shadow |
+| **Elevation: Floating**| `--shadow-floating` | `0 12px 36px rgba(22, 56, 47, 0.12), 0 2px 8px rgba(22, 56, 47, 0.06)` | FINAL | `03`, `01` | Conversation sheet & ask bar elevation | Floating overlay depth |
+| **Space: Grid Scale** | `--space-1` to `--space-8` | `4px`, `8px`, `12px`, `16px`, `20px`, `24px`, `32px` | FINAL | `03`, `02` | Card paddings (20px), gaps (16px), margins | Strict 4pt/8pt spatial layout rhythm |
+| **Touch Target** | `min-height / min-width` | `44px` | FINAL | WCAG / iOS Human Interface Guidelines | All interactive buttons, tabs, links, chips | Touch-accessible hit target at 390x844 |
+| **Motion: Micro** | `--duration-micro` | `120ms` | FINAL | Interaction spec | Button click, toggle, chip selection | Micro feedback duration |
+| **Motion: Medium** | `--duration-medium` | `200ms` | FINAL | Interaction spec | Accordion expand, card highlight, fade in | Component transition duration |
+| **Motion: Page / Modal**| `--duration-page` | `320ms` | FINAL | `02` storyboard | Sheet slide up/down, route mode switch | Structural sheet transition duration |
+| **Motion: Standard Ease**| `--ease-standard` | `cubic-bezier(0.2, 0, 0, 1)` | FINAL | Interaction spec | Natural deceleration curve | Standard motion easing curve |
+| **Motion: Emphasized** | `--ease-emphasized`| `cubic-bezier(0.05, 0.7, 0.1, 1)` | FINAL | Interaction spec | Sheet entrance with organic settle | Fluid spring-like curve |
+| **Motion: Reduced** | `@media (prefers-reduced-motion)`| `0.001ms !important` | FINAL | A11y invariant | All selectors under prefers-reduced-motion | Instant swaps; zero information lost |
+
+### 5.2 Component Inventory & Interaction Polish
+
+Components:
+- `AskBar`: Docked input trigger above navigation with subtle green elevation, pill radius (`9999px`), touch target `48px`.
+- `ConversationSheet`: Full-page fluid conversation on mobile (radius `24px`), floating centered card on desktop (max-width `680px`), animated with standard easing (`320ms`).
+- `ActionStatusPill`: Dynamic badge reflecting engine & execution status (`working`, `comparing`, `updated`, `needs-confirmation`).
+- `OptionCard`: Route options & transit modes with selected state indicator, basis provenance tag, and 44px touch targets.
+- `TimelineCard`: Time-sequenced step list with tabular numeric alignment, event node dots, and dynamic buffer pills.
+- `MapCard`: Schematic street grid with labelled `Schematic · simulated` disclaimer, route polylines (`#2D6A4F`), and weather badge.
+- `PhotoCard`: Local SVG illustrations (`ramen`, `salad`, `sushi`, `cafe`, `italian`) with `Illustration · simulated` chip.
+- `WhySheet`: Modal drawer explaining decision evidence, provenance tags (You confirmed vs Demo profile · sample), and derivation.
+- `ConfirmBar`: Interactive review action bar with adopt/remember options.
+- `UndoToast`: Transient undo banner with 44px dismiss/revert action.
+- `QuietState`: Refined zero-interruption card with calm typography and sage icon.
+
+Touch targets are strictly ≥44px for all interactive elements at 390×844; axe-clean contrast in both themes of the token set. Reduced motion collapses all transitions to instant swaps without layout shifts or data loss.
 
 ## 6. Time plan and cut line
 

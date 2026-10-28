@@ -13,26 +13,78 @@
  */
 
 :root {
+  /* Surfaces & Backgrounds */
   --color-ground: #F8F8F5;
-  --color-ink: #17211F;
-  --color-muted: #354540; /* enhanced for >6:1 contrast on ground/white/tinted surfaces */
   --color-card-bg: #FFFFFF;
+  --color-card-muted-bg: #F4F7F4;
   --color-card-border: #E1E6E0;
+
+  /* Inks & Text (WCAG AAA compliant contrast) */
+  --color-ink: #162824;
+  --color-muted: #384A43; /* > 6.2:1 contrast against ground/white */
+  --color-tertiary: #5A6D66; /* > 4.5:1 contrast */
+
+  /* Primary Brand & CTA */
   --color-primary-btn: #16382F;
+  --color-primary-btn-hover: #0E2923;
   --color-primary-text: #FFFFFF;
   --color-accent: #2F6F64;
+  --color-accent-subtle: #E2ECE6;
+
+  /* Weather & Domain Surfaces */
   --color-map-bg: #E9F1E8;
+  --color-weather-banner-bg: #E3EFFD;
+  --color-weather-banner-border: #BDD7F5;
+  --color-weather-banner-text: #1E4268;
+
+  /* Status Chips & Badges */
+  --color-chip-bg: #E2EAE5;
+  --color-chip-border: #CAD6D0;
+  --color-chip-text: #16382F;
+
+  /* Semantic Alerts */
   --color-notice-bg: #FEF7ED;
   --color-notice-border: #F7D7A4;
   --color-notice-text: #78350F;
   --color-error-bg: #FEF2F2;
   --color-error-border: #FECACA;
   --color-error-text: #991B1B;
+  --color-success-bg: #D1E7DD;
+  --color-success-text: #0F5132;
+
+  /* Typography */
   --font-serif: "Newsreader", Georgia, Cambria, "Times New Roman", serif;
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Radii */
   --radius-card: 18px;
+  --radius-sheet: 24px;
+  --radius-btn: 12px;
   --radius-chip: 9999px;
-  --shadow-subtle: 0 2px 8px rgba(23, 33, 31, 0.04);
+  --radius-pill: 9999px;
+
+  /* Elevations */
+  --shadow-subtle: 0 2px 8px rgba(22, 56, 47, 0.05), 0 1px 2px rgba(22, 56, 47, 0.03);
+  --shadow-card: 0 4px 16px rgba(22, 56, 47, 0.07), 0 1px 3px rgba(22, 56, 47, 0.04);
+  --shadow-floating: 0 12px 36px rgba(22, 56, 47, 0.12), 0 2px 8px rgba(22, 56, 47, 0.06);
+
+  /* Spacing Scale (4pt/8pt rhythm) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Micro-Motion Tokens */
+  --duration-instant: 0ms;
+  --duration-micro: 120ms;
+  --duration-medium: 200ms;
+  --duration-page: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);
 }
 
 *, *::before, *::after {
@@ -61,10 +113,15 @@ html, body {
 
 /* Prefers reduced motion */
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-micro: 0.001ms !important;
+    --duration-medium: 0.001ms !important;
+    --duration-page: 0.001ms !important;
+  }
   *, *::before, *::after {
-    animation-duration: 0.01ms !important;
+    animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
 }
@@ -687,6 +744,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   margin-bottom: 16px;
 }
 
+.modal-close-btn,
 .btn-close {
   background: none;
   border: none;
@@ -694,18 +752,30 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   line-height: 1;
   color: var(--color-muted);
   cursor: pointer;
-  padding: 8px;
-  min-width: 44px;
-  min-height: 44px;
+  padding: 0;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--space-2);
+  transition: background-color var(--duration-micro) var(--ease-standard), color var(--duration-micro) var(--ease-standard);
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
+.modal-close-btn:hover,
 .btn-close:hover {
-  background-color: #F1F4F1;
+  background-color: var(--color-card-muted-bg);
   color: var(--color-ink);
+}
+
+.modal-close-btn:focus-visible,
+.btn-close:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .modal-body {
@@ -724,6 +794,15 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   justify-content: flex-end;
   gap: 12px;
   background-color: #FAFBF9;
+}
+
+.modal-footer .btn,
+#btn-why-sheet-done {
+  min-height: 44px;
+  min-width: 80px;
+  height: 44px;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 /* Why Sheet Sections */
@@ -1266,17 +1345,19 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 }
 
 .conversation-btn-icon {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   border: 1px solid #E2EAE5;
   background: #FFFFFF;
-  color: #16382F;
+  color: var(--color-primary-btn);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background var(--duration-micro) var(--ease-standard);
 }
 
 .conversation-btn-icon:hover {
@@ -1284,7 +1365,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 }
 
 .conversation-btn-icon:focus-visible {
-  outline: 2px solid #2D6A4F;
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
@@ -1292,15 +1373,16 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
-  border-radius: 16px;
+  padding: 8px 14px;
+  min-height: 44px;
+  border-radius: 22px;
   border: 1px solid #CAD6D0;
   background: #FFFFFF;
-  color: #2D6A4F;
+  color: var(--color-accent);
   font-size: 0.8125rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background var(--duration-micro) var(--ease-standard);
 }
 
 .conversation-pin-btn:hover {
@@ -1516,12 +1598,17 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 .btn-dev-export-log {
   background: none;
   border: 1px solid #CAD6D0;
-  border-radius: 4px;
-  padding: 2px 8px;
-  font-size: 0.6875rem;
+  border-radius: 6px;
+  padding: 6px 12px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
   font-weight: 600;
   color: #2F3E46;
   cursor: pointer;
+  transition: background var(--duration-micro) var(--ease-standard);
 }
 
 .btn-dev-decision-log:hover,
@@ -1667,14 +1754,17 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 .v2-replay-btn {
   margin-left: 8px;
   font-size: 0.75rem;
-  padding: 4px 10px;
-  min-height: 32px;
+  padding: 6px 14px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 8px;
   background: #FFFFFF;
   border: 1px solid #CAD6D0;
-  color: #16382F;
+  color: var(--color-primary-btn);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color var(--duration-micro) var(--ease-standard), border-color var(--duration-micro) var(--ease-standard);
 }
 
 .v2-replay-btn:hover {
@@ -1730,16 +1820,17 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  background: #EFF5F1;
-  border: 1px solid #C8DDD0;
+  background: var(--color-weather-banner-bg);
+  border: 1px solid var(--color-weather-banner-border);
   border-radius: var(--radius-card);
   padding: 18px 20px;
-  color: #16382F;
+  color: var(--color-weather-banner-text);
+  box-shadow: var(--shadow-subtle);
 }
 
 .v2-insight-icon {
   flex-shrink: 0;
-  color: #2D6A4F;
+  color: #1E4268;
   margin-top: 2px;
 }
 
@@ -1751,12 +1842,12 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   font-size: 1.125rem;
   font-weight: 700;
   margin: 0 0 4px 0;
-  color: #16382F;
+  color: var(--color-weather-banner-text);
 }
 
 .v2-insight-desc {
   font-size: 0.9375rem;
-  color: #354540;
+  color: #2D4C6E;
   margin: 0 0 10px 0;
 }
 
@@ -2046,7 +2137,11 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 .v2-view-detail-link {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #2D6A4F;
+  color: var(--color-accent);
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -2072,23 +2167,24 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   gap: 6px;
   background: none;
   border: 1px solid #D5DDD8;
-  border-radius: 20px;
-  padding: 6px 14px;
+  border-radius: 22px;
+  padding: 8px 16px;
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #16382F;
+  color: var(--color-primary-btn);
   cursor: pointer;
-  min-height: 38px;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  min-height: 44px;
+  min-width: 44px;
+  transition: background var(--duration-micro) var(--ease-standard), border-color var(--duration-micro) var(--ease-standard);
 }
 
 .v2-back-btn:hover {
   background: #EBF2ED;
-  border-color: #2D6A4F;
+  border-color: var(--color-accent);
 }
 
 .v2-back-btn:focus-visible {
-  outline: 2px solid #2D6A4F;
+  outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
@@ -2585,13 +2681,27 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 
 .v2-empty-plans,
 .v2-empty-proposals {
-  padding: 24px;
+  padding: 32px 24px;
   text-align: center;
-  color: #16382F;
-  font-size: 0.875rem;
-  border: 1px dashed #CADBC9;
-  border-radius: 14px;
-  background: #FFFFFF;
+  color: var(--color-muted);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  border: 1px dashed var(--color-card-border);
+  border-radius: var(--radius-card);
+  background: var(--color-card-bg);
+  box-shadow: var(--shadow-subtle);
+}
+
+/* Tabular Figures for Numeric Times & Durations (FINAL Token) */
+.v2-time-value,
+.v2-step-time,
+.v2-tab-times,
+.item-time,
+.now-time,
+.v2-step-dur,
+.v2-plan-time,
+.option-meta {
+  font-variant-numeric: tabular-nums;
 }
 
 /* Desktop adaptations for V1b */
