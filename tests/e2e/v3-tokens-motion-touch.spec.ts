@@ -459,12 +459,19 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     expect(askBarBox).not.toBeNull();
     expect(askBarBox!.height).toBeLessThanOrEqual(56);
 
-    // 2. Ask bar placeholder box single line (height <= 26px)
+    // 2. Ask bar placeholder box single line (height <= 26px) with shorter mobile copy and no ellipsis
     const askBarText = page.locator('#ask-bar .ask-bar-text');
     await expect(askBarText).toBeVisible();
     const askBarTextBox = await askBarText.boundingBox();
     expect(askBarTextBox).not.toBeNull();
     expect(askBarTextBox!.height).toBeLessThanOrEqual(26);
+
+    // Mobile copy "Ask Yori..." is visible, desktop copy is hidden, scrollWidth <= clientWidth (no truncation)
+    await expect(page.locator('#ask-bar .v2-ask-mobile')).toBeVisible();
+    await expect(page.locator('#ask-bar .v2-ask-desktop')).toBeHidden();
+    expect(await page.locator('#ask-bar .v2-ask-mobile').innerText()).toBe('Ask Yori...');
+    const askBarNoTruncation = await askBarText.evaluate(el => el.scrollWidth <= el.clientWidth);
+    expect(askBarNoTruncation, 'Ask bar text should fit without ellipsis truncation').toBe(true);
 
     // 3. Card-header chip ("Schematic · simulated") single line (height <= 28px)
     const headerChip = page.locator('.map-header .card-badge').first();
@@ -473,12 +480,52 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     expect(chipBox).not.toBeNull();
     expect(chipBox!.height).toBeLessThanOrEqual(28);
 
-    // 4. Section heading ("SPATIAL CONTEXT MAP") single line (height <= 26px)
+    // 4. Section heading ("Route Map" on mobile) single line (height <= 26px)
     const sectionHeading = page.locator('.map-header .section-label').first();
     await expect(sectionHeading).toBeVisible();
     const headingBox = await sectionHeading.boundingBox();
     expect(headingBox).not.toBeNull();
     expect(headingBox!.height).toBeLessThanOrEqual(26);
+
+    // Mobile heading "Route Map" visible, desktop "Spatial Context Map" hidden, no ellipsis truncation
+    await expect(page.locator('.map-header .v2-heading-mobile').first()).toBeVisible();
+    await expect(page.locator('.map-header .v2-heading-desktop').first()).toBeHidden();
+    expect(await page.locator('.map-header .v2-heading-mobile').first().textContent()).toBe('Route Map');
+    expect(await page.locator('.map-header .v2-heading-mobile').first().innerText()).toBe('ROUTE MAP');
+    const headingNoTruncation = await sectionHeading.evaluate(el => el.scrollWidth <= el.clientWidth);
+    expect(headingNoTruncation, 'Section heading should fit without ellipsis truncation').toBe(true);
+
+    // 5. Verify desktop copy when expanded to 1280x800
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.waitForTimeout(200);
+    await expect(page.locator('#ask-bar .v2-ask-desktop')).toBeVisible();
+    await expect(page.locator('#ask-bar .v2-ask-mobile')).toBeHidden();
+    expect(await page.locator('#ask-bar .v2-ask-desktop').innerText()).toBe('Ask Yori about your day...');
+
+    await expect(page.locator('.map-header .v2-heading-desktop').first()).toBeVisible();
+    await expect(page.locator('.map-header .v2-heading-mobile').first()).toBeHidden();
+    expect(await page.locator('.map-header .v2-heading-desktop').first().textContent()).toBe('Spatial Context Map');
+    expect(await page.locator('.map-header .v2-heading-desktop').first().innerText()).toBe('SPATIAL CONTEXT MAP');
+
+    // 6. Verify effective computed font-size >= 10px on all map SVG text elements
+    for (const testScene of ['rain', 'clear', 'away-lunch']) {
+      await page.selectOption('#scene-select', testScene);
+      await page.waitForTimeout(200);
+      const svgTexts = page.locator('.v2-map-canvas svg text');
+      const textCount = await svgTexts.count();
+      expect(textCount).toBeGreaterThan(0);
+      for (let i = 0; i < textCount; i++) {
+        const textEl = svgTexts.nth(i);
+        const textContent = await textEl.textContent();
+        const fontSize = await textEl.evaluate(el => {
+          return parseFloat(window.getComputedStyle(el).fontSize);
+        });
+        expect(
+          fontSize,
+          `Map text "${textContent?.trim()}" effective computed font size should be >= 10px in ${testScene} scene`
+        ).toBeGreaterThanOrEqual(10);
+      }
+    }
   });
 
   test('V3 Map Callout vs Node Label Collision: callout rect and node labels do not intersect at 390x844 and 1280x800 in Rain and Clear scenes', async ({

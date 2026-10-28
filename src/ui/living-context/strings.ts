@@ -50,6 +50,7 @@ export const STRINGS = Object.freeze({
   }),
   conversation: Object.freeze({
     askBarPlaceholder: 'Ask Yori about your day...',
+    askBarPlaceholderMobile: 'Ask Yori...',
     askBarAriaLabel: 'Open Ask Yori conversation',
     title: 'Ask Yori',
     closeAriaLabel: 'Close conversation',
@@ -203,6 +204,7 @@ export const STRINGS = Object.freeze({
   }),
   map: Object.freeze({
     label: 'Spatial Context Map',
+    mobileLabel: 'Route Map',
     abstractStreetDescription: 'Stylized street grid showing destination area',
     simulatedTag: 'Simulated Spatial Evidence',
   }),

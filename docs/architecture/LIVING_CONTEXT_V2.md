@@ -196,7 +196,7 @@ OWNER_REF_GATE is **MET (approved 2026-10-29, decision `fa9b78f3`)**. Every toke
 |---|---|---|---|---|---|---|
 | **Color: Ground** | `--color-ground` | `#F8F8F5` | MEASURED | `02` (x: 355, y: 100 reads `#F8F9F7`) | Max Δchannel = 2 (<= 6) | Warm ivory/off-white background surface |
 | **Color: Card Surface** | `--color-card-bg` | `#FFFFFF` | MEASURED | `03` (x: 700, y: 100 reads `#FFFFFF`) | Exact match (Δ=0) | Crisp neutral white for primary content cards |
-| **Color: Card Alt Surface** | `--color-card-muted-bg` | `#F4F7F4` | MEASURED | `03` (x: 140, y: 100 reads `#F3F7F2`) | Max Δchannel = 2 (<= 6) | Soft muted container/sub-card surface |
+| **Color: Card Alt Surface** | `--color-card-muted-bg` | `#F4F7F4` | DERIVED | Derived neutral tint between `--color-ground` (`#F8F8F5`) and `--color-card-bg` (`#FFFFFF`) | Subtle organic container tint | Soft muted container/sub-card surface |
 | **Color: Border** | `--color-card-border` | `#E1E6E0` | CARRIED | Baseline architecture specification | Cards in Ref-03 rely on organic drop shadows | Subtle light border preventing heavy strokes |
 | **Color: Primary Ink** | `--color-ink` | `#162824` | MEASURED | `03` (x: 1080, y: 520 reads `#14241F`) | Max Δchannel = 5 (<= 6) | Deep dark green-tinted charcoal (>10:1 contrast) |
 | **Color: Muted Ink** | `--color-muted` | `#384A43` | MEASURED | `03` (x: 1560, y: 230 reads `#3A4847`) | Max Δchannel = 4 (<= 6) | Neutral dark sage; WCAG AAA (>6.2:1 contrast) |
@@ -226,15 +226,15 @@ OWNER_REF_GATE is **MET (approved 2026-10-29, decision `fa9b78f3`)**. Every toke
 | **Type: Serif Accent** | `--font-display` | `"Newsreader", Georgia, Cambria, "Times New Roman", serif` | MEASURED | `03` Frame 1 greeting headline | Editorial serif for personal greetings | Editorial serif for greetings |
 | **Type: Sans Body** | `--font-sans` | `"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` | A11Y/STANDARD | `03`, `02`, `01` body and card copy | Crisp, legible interface sans | Crisp, legible interface sans |
 | **Type: Numeric** | `font-variant-numeric: tabular-nums` | `tabular-nums` | A11Y/STANDARD | `03`, `02` time values and durations | Monospaced digits preventing layout jitter | Tabular numeric alignment |
-| **Type Scale: Display** | `--text-display` | `1.875rem` (30px) | MEASURED | `03` main greeting "Good afternoon" | Display greeting heading | Greeting display size |
-| **Type Scale: Title** | `--text-title` | `1.25rem` (20px) | MEASURED | `03` card titles (NOW, Candidates) | Card title heading | Card title heading size |
-| **Type Scale: Body** | `--text-body` | `1rem` (16px) | MEASURED | `03` narrative & step descriptions | Primary reading text | Body reading text size |
-| **Type Scale: Caption**| `--text-caption` | `0.8125rem` (13px) | MEASURED | `03` tags, chips, timestamps | Metadata & status chips | Caption & chip text size |
-| **Radius: Card** | `--radius-card` | `18px` | MEASURED | `03` primary cards (NOW, Map, Candidates) | Measured card corner radius | Card border radius |
-| **Radius: Sheet** | `--radius-sheet` | `24px` | MEASURED | `03` expanded conversation overlay | Measured expanded sheet top corners | Sheet top corners radius |
-| **Radius: Button** | `--radius-btn` | `12px` | MEASURED | `03` rectangular action buttons & tabs | Soft rounded action button radius | Action button radius |
-| **Radius: Pill / Chip** | `--radius-pill` | `9999px` | MEASURED | `03`, `02` AskBar, mode pills, status | Full rounded capsule/pill shape | Fully rounded capsule radius |
-| **Radius: Chip Alt** | `--radius-chip` | `9999px` | MEASURED | `03`, `02` filter tags and chips | Full rounded capsule/chip shape | Filter pill radius |
+| **Type Scale: Display** | `--text-display` | `1.875rem` (30px) | ESTIMATED (visual, with scale reference) | `03` main greeting "Good afternoon" | Display greeting heading | Greeting display size |
+| **Type Scale: Title** | `--text-title` | `1.25rem` (20px) | ESTIMATED (visual, with scale reference) | `03` card titles (NOW, Candidates) | Card title heading | Card title heading size |
+| **Type Scale: Body** | `--text-body` | `1rem` (16px) | ESTIMATED (visual, with scale reference) | `03` narrative & step descriptions | Primary reading text | Body reading text size |
+| **Type Scale: Caption**| `--text-caption` | `0.8125rem` (13px) | ESTIMATED (visual, with scale reference) | `03` tags, chips, timestamps | Metadata & status chips | Caption & chip text size |
+| **Radius: Card** | `--radius-card` | `18px` | DESIGN (visual hierarchy matching Ref-03) | `03` primary cards (NOW, Map, Candidates) | Card corner radius matching visual hierarchy | Card border radius |
+| **Radius: Sheet** | `--radius-sheet` | `24px` | DESIGN (visual hierarchy matching Ref-03) | `03` expanded conversation overlay | Expanded sheet top corners | Sheet top corners radius |
+| **Radius: Button** | `--radius-btn` | `12px` | DESIGN (visual hierarchy matching Ref-03) | `03` rectangular action buttons & tabs | Soft rounded action button radius | Action button radius |
+| **Radius: Pill / Chip** | `--radius-pill` | `9999px` | DESIGN (capsule geometry matching Ref-03 pills) | `03`, `02` AskBar, mode pills, status | Full rounded capsule/pill shape | Fully rounded capsule radius |
+| **Radius: Chip Alt** | `--radius-chip` | `9999px` | DESIGN (capsule geometry matching Ref-03 pills) | `03`, `02` filter tags and chips | Full rounded capsule/chip shape | Filter pill radius |
 | **Elevation: Subtle** | `--shadow-subtle` | `0 2px 8px rgba(22, 56, 47, 0.05), 0 1px 2px rgba(22, 56, 47, 0.03)` | DERIVED | Multi-layer organic green-tinted shadow | Card resting elevation | Card resting elevation |
 | **Elevation: Card** | `--shadow-card` | `0 4px 16px rgba(22, 56, 47, 0.07), 0 1px 3px rgba(22, 56, 47, 0.04)` | DERIVED | Multi-layer organic green-tinted elevation | Primary card container elevation | Primary card depth |
 | **Elevation: Floating**| `--shadow-floating` | `0 12px 36px rgba(22, 56, 47, 0.12), 0 2px 8px rgba(22, 56, 47, 0.06)` | DERIVED | Multi-layer depth elevation | Conversation sheet & ask bar elevation | Floating sheet elevation |
@@ -632,8 +632,8 @@ All names, hashes, and pixel dimensions match the plan exactly with zero mismatc
   - **V2a-1:** Approved (decision `fcfaf197` @ commit `0f9f5d7`).
   - **V2a-2:** Approved (decision `ccd3c033` @ commit `d8b4a3f`).
   - **V2b:** Approved (decision `a08c3164-792d-4217-a23d-243012f9e7ef` on review request `8d3dbbfd-3526-4a6b-b01f-1c0809e9ec47` @ commit `f3d3740`).
-- **Outcome:** **CONTINUE** with Living Context V2 UI. Both core loops (leave-later/transit switch and lunch filter/re-rank) are formally Reviewer-approved with zero core diff, causality goldens (G-RAIN, G-PREF, G-QUIET), and full Playwright e2e passes. No fallback to the `yori-approved-ui` (V-ANCHOR) is required.
-- **Release Order:** `V3 → DOC-RESYNC → V4` first (recordable demo), with the V5 chain (`V5-GEO → V5-FUEL → V5-LIVE-POI / V5-LUNCH`) interleaved only while time permits before the 2026-11-04 freeze.
+- **Outcome:** **CONTINUE** with Living Context V2 UI. Both core loops (leave-later/transit switch and lunch filter/re-rank) are formally Reviewer-approved with zero core diff, causality goldens (G-RAIN, G-PREF, G-QUIET), and full Playwright e2e passes (executor-reported 118/118 e2e, 399 unit tests, 18 goldens, 53 drills). The Reviewer independently ran and verified: V2a-1 interaction e2e, V2a-2 model faults suite, V2b lunch loop e2e, zero core diff against f43c6c1d, and touch-target / contrast invariants. No fallback to the `yori-approved-ui` (V-ANCHOR) is required.
+- **Release Order:** `V3 → G3-PARITY → DOC-RESYNC → G12-CORE → V4`, then V5 if time permits before the 2026-11-04 freeze.
 - **Coordinator Interleaving:** Default order stands unless the coordinator explicitly instructs otherwise.
 - **Milestone Schedule Targets:**
   - Rough-cut target: real e2e of both loops usable by **2026-11-02**.

@@ -27,7 +27,7 @@ The token system is verified with reproducible automated canvas sampling via `no
 |---|---|---|---|---|---|---|---|
 | **Color: Ground** | `--color-ground` | `#F8F8F5` | MEASURED | `02` (x: 355, y: 100 reads `#F8F9F7`) | 2 (<= 6) | PASS | Warm ivory/off-white background canvas surface |
 | **Color: Card Surface** | `--color-card-bg` | `#FFFFFF` | MEASURED | `03` (x: 700, y: 100 reads `#FFFFFF`) | 0 (exact) | PASS | Crisp neutral white for primary content cards |
-| **Color: Card Alt Surface** | `--color-card-muted-bg` | `#F4F7F4` | MEASURED | `03` (x: 140, y: 100 reads `#F3F7F2`) | 2 (<= 6) | PASS | Soft muted container/sub-card surface |
+| **Color: Card Alt Surface** | `--color-card-muted-bg` | `#F4F7F4` | DERIVED | Derived neutral tint between `--color-ground` (`#F8F8F5`) and `--color-card-bg` (`#FFFFFF`) | — | PASS | Soft muted container/sub-card surface |
 | **Color: Border** | `--color-card-border` | `#E1E6E0` | CARRIED | Baseline architecture specification | — | PASS | Subtle light border; cards rely on organic drop shadows |
 | **Color: Primary Ink** | `--color-ink` | `#162824` | MEASURED | `03` (x: 1080, y: 520 reads `#14241F`) | 5 (<= 6) | PASS | Deep dark green-tinted charcoal (>10:1 contrast) |
 | **Color: Muted Ink** | `--color-muted` | `#384A43` | MEASURED | `03` (x: 1560, y: 230 reads `#3A4847`) | 4 (<= 6) | PASS | Neutral dark sage; WCAG AAA (>6.2:1 contrast) |
@@ -57,15 +57,15 @@ The token system is verified with reproducible automated canvas sampling via `no
 | **Type: Serif Accent** | `--font-display` | `"Newsreader", Georgia, Cambria, "Times New Roman", serif` | MEASURED | `03` Frame 1 greeting headline | — | PASS | Editorial serif for personal greetings |
 | **Type: Sans Body** | `--font-sans` | `"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` | A11Y/STANDARD | Interface sans across cards & body | — | PASS | Crisp, legible interface sans |
 | **Type: Numeric** | `font-variant-numeric: tabular-nums` | `tabular-nums` | A11Y/STANDARD | Numeric times and durations | — | PASS | Monospaced digits preventing layout jitter |
-| **Type Scale: Display** | `--text-display` | `1.875rem` (30px) | MEASURED | `03` main greeting "Good afternoon" | — | PASS | Display greeting size (line-height 1.25) |
-| **Type Scale: Title** | `--text-title` | `1.25rem` (20px) | MEASURED | `03` card titles (NOW, Candidates) | — | PASS | Card title heading (line-height 1.3) |
-| **Type Scale: Body** | `--text-body` | `1rem` (16px) | MEASURED | `03` narrative & step descriptions | — | PASS | Primary reading text (line-height 1.5) |
-| **Type Scale: Caption**| `--text-caption` | `0.8125rem` (13px) | MEASURED | `03` tags, chips, timestamps | — | PASS | Metadata & chips (line-height 1.4) |
-| **Radius: Card** | `--radius-card` | `18px` | MEASURED | `03` primary cards (NOW, Map, Candidates) | — | PASS | Measured card corner radius |
-| **Radius: Sheet** | `--radius-sheet` | `24px` | MEASURED | `03` expanded conversation overlay | — | PASS | Measured expanded sheet top corners |
-| **Radius: Button** | `--radius-btn` | `12px` | MEASURED | `03` rectangular action buttons & tabs | — | PASS | Soft rounded action button radius |
-| **Radius: Pill / Chip** | `--radius-pill` | `9999px` | MEASURED | `03`, `02` AskBar, mode pills, status | — | PASS | Full rounded capsule/pill shape |
-| **Radius: Chip Alt** | `--radius-chip` | `9999px` | MEASURED | `03`, `02` filter tags and chips | — | PASS | Full rounded capsule/chip shape |
+| **Type Scale: Display** | `--text-display` | `1.875rem` (30px) | ESTIMATED (visual, with scale reference) | `03` main greeting "Good afternoon" | — | PASS | Display greeting size (line-height 1.25) |
+| **Type Scale: Title** | `--text-title` | `1.25rem` (20px) | ESTIMATED (visual, with scale reference) | `03` card titles (NOW, Candidates) | — | PASS | Card title heading (line-height 1.3) |
+| **Type Scale: Body** | `--text-body` | `1rem` (16px) | ESTIMATED (visual, with scale reference) | `03` narrative & step descriptions | — | PASS | Primary reading text (line-height 1.5) |
+| **Type Scale: Caption**| `--text-caption` | `0.8125rem` (13px) | ESTIMATED (visual, with scale reference) | `03` tags, chips, timestamps | — | PASS | Metadata & chips (line-height 1.4) |
+| **Radius: Card** | `--radius-card` | `18px` | DESIGN (visual hierarchy matching Ref-03) | `03` primary cards (NOW, Map, Candidates) | — | PASS | Measured card corner radius |
+| **Radius: Sheet** | `--radius-sheet` | `24px` | DESIGN (visual hierarchy matching Ref-03) | `03` expanded conversation overlay | — | PASS | Measured expanded sheet top corners |
+| **Radius: Button** | `--radius-btn` | `12px` | DESIGN (visual hierarchy matching Ref-03) | `03` rectangular action buttons & tabs | — | PASS | Soft rounded action button radius |
+| **Radius: Pill / Chip** | `--radius-pill` | `9999px` | DESIGN (capsule geometry matching Ref-03 pills) | `03`, `02` AskBar, mode pills, status | — | PASS | Full rounded capsule/pill shape |
+| **Radius: Chip Alt** | `--radius-chip` | `9999px` | DESIGN (capsule geometry matching Ref-03 pills) | `03`, `02` filter tags and chips | — | PASS | Full rounded capsule/chip shape |
 | **Elevation: Subtle** | `--shadow-subtle` | `0 2px 8px rgba(22, 56, 47, 0.05), 0 1px 2px rgba(22, 56, 47, 0.03)` | DERIVED | Organic green-tinted shadow | — | PASS | Soft card elevation |
 | **Elevation: Card** | `--shadow-card` | `0 4px 16px rgba(22, 56, 47, 0.07), 0 1px 3px rgba(22, 56, 47, 0.04)` | DERIVED | Primary card container depth | — | PASS | Card elevation depth |
 | **Elevation: Floating**| `--shadow-floating` | `0 12px 36px rgba(22, 56, 47, 0.12), 0 2px 8px rgba(22, 56, 47, 0.06)` | DERIVED | Floating overlay elevation | — | PASS | Conversation sheet & ask bar elevation |

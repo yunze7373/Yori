@@ -792,5 +792,5 @@
     "Both owner loops demonstrable end to end on real viewports with recordings, or the 2026-11-01 noon JST cut line honestly falls back to the approved UI",
     "No concept-image data presented as real; token/layout finality claimed only if R1-R3 actually arrived with hash receipt"
   ],
-  "release_order": "After CUTLINE_CHECK_V2: V3 -> DOC-RESYNC -> V4 (recordable demo first). The V5 chain (V5-GEO -> V5-FUEL -> V5-LIVE-POI / V5-LUNCH) interleaves only while time permits before the 2026-11-04 freeze; the coordinator decides interleaving at the CUTLINE_CHECK_V2 decision point. Rev5 slices are first in the cut order."
+  "release_order": "After CUTLINE_CHECK_V2: V3 -> G3-PARITY -> DOC-RESYNC -> G12-CORE -> V4 (recordable demo first), then V5 if time permits before the 2026-11-04 freeze. The coordinator decides interleaving at each slice decision point. Rev5 slices are first in the cut order."
 }

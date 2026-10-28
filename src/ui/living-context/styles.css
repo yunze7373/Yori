@@ -1270,6 +1270,28 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   white-space: nowrap;
 }
 
+/* Responsive Desktop vs Mobile Copy (Carry-over C-3) */
+.v2-ask-mobile,
+.v2-heading-mobile {
+  display: none;
+}
+
+.v2-ask-desktop,
+.v2-heading-desktop {
+  display: inline;
+}
+
+@media (max-width: 640px) {
+  .v2-ask-desktop,
+  .v2-heading-desktop {
+    display: none;
+  }
+  .v2-ask-mobile,
+  .v2-heading-mobile {
+    display: inline;
+  }
+}
+
 /* Full-page Conversation Shell */
 .conversation-overlay {
   position: fixed;

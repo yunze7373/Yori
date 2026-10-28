@@ -56,12 +56,12 @@ function renderMapSvg(map: MapVM): string {
         ${
           map.weatherCallout
             ? `
-          <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 66}, ${map.weatherCallout.y - 17})">
-            <rect width="132" height="34" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
-            <text x="66" y="14" fill="#FFFFFF" font-size="9" font-weight="700" text-anchor="middle" font-family="var(--font-sans)">
+          <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 73}, ${map.weatherCallout.y - 18})">
+            <rect width="146" height="36" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
+            <text x="73" y="15" fill="#FFFFFF" font-size="10" font-weight="700" text-anchor="middle" font-family="var(--font-sans)">
               ${escapeHtml(map.weatherCallout.text)}
             </text>
-            <text x="66" y="26" fill="#E2EAE5" font-size="8" text-anchor="middle" font-family="var(--font-sans)">
+            <text x="73" y="28" fill="#E2EAE5" font-size="10" text-anchor="middle" font-family="var(--font-sans)">
               ${escapeHtml(map.weatherCallout.subtext || '')}
             </text>
           </g>
@@ -99,7 +99,7 @@ function renderMapSvg(map: MapVM): string {
               <g class="v2-map-marker place ${m.isHighlight ? 'highlight' : ''}" transform="translate(${m.x}, ${m.y})">
                 <circle cx="0" cy="0" r="${m.isHighlight ? 7 : 5}" fill="${m.isHighlight ? '#2D6A4F' : '#5B6B65'}"/>
                 ${m.isHighlight ? '<circle cx="0" cy="0" r="11" stroke="#2D6A4F" stroke-width="1.5" opacity="0.5"/>' : ''}
-                <text x="0" y="${m.y < 70 ? -10 : 16}" fill="#16382F" font-size="9" font-weight="${m.isHighlight ? '700' : '500'}" text-anchor="middle" font-family="sans-serif">
+                <text x="0" y="${m.y < 70 ? -10 : 16}" fill="#16382F" font-size="10" font-weight="${m.isHighlight ? '700' : '500'}" text-anchor="middle" font-family="sans-serif">
                   ${escapeHtml(m.label)}
                 </text>
               </g>
@@ -115,7 +115,7 @@ export function renderMapCard(map: MapVM): string {
   return `
     <section class="card v2-map-card ${map.sizeHint}" aria-label="${escapeHtml(map.label)}">
       <div class="map-header">
-        <span class="section-label">${escapeHtml(map.label)}</span>
+        <span class="section-label"><span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(STRINGS.map.mobileLabel || 'Route Map')}</span></span>
         <span class="card-badge">${escapeHtml(map.simulatedBadge)}</span>
       </div>
       ${renderMapSvg(map)}

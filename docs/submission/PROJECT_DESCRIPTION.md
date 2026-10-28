@@ -128,18 +128,59 @@ To ensure honesty and transparent demonstration:
 
 ---
 
-## 7. Model & Integration Details
+## 7. Model & Integration Status (Honest Readiness Disclosure)
 
-- **Event**: Meta Global AI Developer Hackathon
-- **Theme**: Build for Your World
-- **Track**: Startup Track [OWNER TO CONFIRM]
-- **AI Model**: Meta Muse Spark 1.3 (`muse-spark-1.3`) via `https://api.meta.ai/v1` [OWNER TO CONFIRM]
-- **Memory Infrastructure**: XMemo Cloud Memory via OAuth 2.0 PKCE (`https://xmemo.dev`) and MCP (`https://xmemo.dev/mcp`)
-- **Default State**: Both integrations are **OFF by default**; Yori runs 100% deterministically and offline without requiring external API keys.
+Every integration's live/off status is stated truthfully exactly as classified in [`docs/architecture/SUBMISSION_READINESS.md`](../architecture/SUBMISSION_READINESS.md):
+
+| Integration | Classification | Status & Enforcement |
+|---|---|---|
+| **Meta Muse Spark Reasoning (S1)** | `IMPLEMENTED-BUT-OFF` | `MODEL_API_KEY` unset, diagnostics `disabled`, keySource `none`. Zero live calls run. Model interpreter executes strictly against verified offline fixtures with engine status `'Scripted model fixture · not a live model call'`. Strict parity between server validator and client interpreter (G3-PARITY). |
+| **XMemo Cloud Memory (X1)** | `IMPLEMENTED-BUT-OFF` | Flag `XMEMO_OAUTH_ENABLED=false`. Code marks proxy mapping `UNVERIFIED_XMEMO_MCP_MAPPING`. Local browser storage is the active and sovereign source of truth. Confirm-only memory (INV-107) enforced client-side and server-side. |
+| **Live Weather (Open-Meteo)** | `IMPLEMENTED-BUT-OFF` | Flag `WEATHER_LIVE_ENABLED=false`. All scenes run on recorded, labelled fixtures with fixed city coordinates. Zero device geolocation or GPS calls anywhere. |
+| **Core Living Context Pipeline** | `DONE + LOCAL-TESTED` | Fully operable locally on loopback (`127.0.0.1:5173`). 418 unit tests, 18 golden acceptance fixtures, 53 degradation drills, 20 Playwright E2E tests, zero core diff vs baseline anchor. |
 
 ---
 
-## 8. North Star Roadmap & Next Steps
+## 8. Hackathon Evaluation Rubric Mapping
+
+Every criterion is mapped strictly to demonstrable, recorded, and verifiable code evidence—with zero aspirational claims:
+
+| Evaluation Criterion | Weight | Demonstrable & Recorded Evidence |
+|---|---|---|
+| **Impact & Value** | **30 pts** | • Solves real-world cognitive overload: replaces passive chat prompting and noisy notification feeds with a proactive, calm Living Context.<br>• At most one actionable NOW card with clear travel and preparation windows.<br>• Calm Quiet State (*"Nothing needs your attention right now."*) respects user peace of mind.<br>• Proactive prompt budget (max 3/day) prevents notification fatigue.<br>• Accessibility-first: 0 Axe violations across WCAG contrast, touch targets (≥44px), and reduced-motion instant duration collapse. |
+| **Meta Tooling Integration** | **25 pts** | • Architecture designed around Meta Muse Spark 1.3 (`muse-spark-1.3`) for contextual ranking and conversational natural language command interpretation.<br>• Server-side dev proxy implements factual hallucination filtering, input schema validation, and closed decision intents.<br>• Strict fact-key parity (G3-PARITY): validates citations against confirmed memory keys, preventing synthetic fact invention.<br>• Transparent UI engine badge: displays truthful `'Offline fallback · deterministic'` and `'Scripted model fixture · not a live model call'` rather than faking live model connectivity. |
+| **Quality of Demo & Presentation** | **25 pts** | • Fully synchronized 3-minute video demonstration script ([`docs/submission/VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md)) with every on-screen string and flow sequence asserted verbatim by automated Playwright E2E tests.<br>• Two comprehensive interactive user loops: Rain Re-Plan (transit adaptation + umbrella) and Away Lunch (candidate cards + local illustrations + dietary filters).<br>• Fully explainable review loop: Why Sheet displays plain-language evidence derivations without raw timestamps or technical jargon.<br>• Sovereign Me tab demonstrates explicit Confirm-Only memory (INV-107) and live timing recomputation. |
+| **Technical Execution & Architecture** | **20 pts** | • Layered architecture with pure domain core (`src/core/`) frozen with zero diffs (`git diff --stat f43c6c1d HEAD -- src/core` 100% empty).<br>• Test-driven rigor: 418 unit & integration tests, 18 golden acceptance fixtures, 53 degradation drills, 20 Playwright E2E tests.<br>• Deterministic replay: core domain has zero ambient clock calls (`Date.now()`) and zero network imports.<br>• Storage envelope with corruption detection, recovery reset, and raw JSON export.<br>• Strict design token system verified by Playwright pixel sampler (10/10 PASS). |
+| **Best Agentic Workflow (Bonus)** | **Bonus** | • Autonomous agentic loop: proactive context synthesis -> habit-informed candidate ranking -> conversational command adjustment -> user proposal generation -> confirm-only promotion -> deterministic re-planning.<br>• Full-page conversational shell (Ask Yori) seamlessly integrates natural language commands with structured Living Context cards.<br>• Complete user sovereignty: AI suggests, user controls, memory only learns on explicit confirmation. |
+
+---
+
+## 9. Built During the Hackathon Statement & Feature Delta
+
+### Hackathon Commit Statement
+> **Verified Commit Range:** `f7dd63d..HEAD`  
+> **Total Commits:** 70 commits  
+> **Initial Scaffolding Commit:** `f7dd63de5f74d285f6eef6ae44258d79650004d4` on Wed Oct 28 03:56:28 2026 +0900  
+> **Current HEAD Commit:** `ccfc0b79499aed67f0038f3757f0abc6b439e916` on Thu Oct 29 03:15:01 2026 +0900  
+> 
+> *All 70 commits in the Yori codebase were authored and committed entirely within the Meta Global AI Developer Hackathon period, beginning from initial repository scaffolding through feature implementation, testing, and documentation.*
+
+### Feature Delta List (Shipped & Approved Slices)
+
+| Slice ID | Title | Scope & Shipped Deliverables |
+|---|---|---|
+| **Slice 0** | **Foundation & Contracts** | Pure domain core contracts (`PreparedPlan`, `ContextSignal`, `MemoryFact`), deterministic living composer, shared policy engine (budget caps, cooldowns), and static checks. |
+| **Slice 1** | **Phase 1 Living Context Core** | Six deterministic demo scenes (D1 Clear, D2 Rain, D3 Away Lunch, D4 Busy Lunch, D5 Missing Weather, D6 Corrupt Storage), Why Sheet evidence citations, Adjust Dialog, and Me tab. |
+| **Slice 1b** | **Degradation Hardening** | Fault-injection degradation drills (NFR-102/103), storage envelope verification with recovery reset workflow, and Zero-Core-Diff enforcement (AC-EXT-1). |
+| **Slice 2a-1** | **V2 Shell Preview & Action Store** | Action-State store managing HOME, DETAIL, and CONVERSATION interaction states; docked Ask Bar; full-page conversation overlay with focus trap, pin toggle, and Esc navigation. |
+| **Slice 2a-2** | **V2a Model Interpreter & Proxy** | Conversational model interpreter supporting natural language departure time shifts (`leave-later`), pre-model command schema validation, and transparent engine status disclosure. |
+| **Slice 2b** | **Lunch Loop & Candidates Hero** | Candidates Hero view for dining recommendations, local labelled SVG illustrations for food categories, dietary filter chips (quieter, vegetarian), and restaurant detail views. |
+| **Slice 3 (V3)** | **Tokens & Micro-Motion Polish** | Finalized design token system: warm ivory ground (`#F8F8F5`), crisp card surface (`#FFFFFF`), pine brand (`#162824` / `#16382F`), serif display typography, 44px touch targets, and micro-motion easing. |
+| **Slice 5 (G3-PARITY)** | **Validator & Interpreter Parity** | Server proxy pre-model validator and client interpreter fact-key parity (`knownFactKeys`, subset checking against confirmed facts, closed intents set, prototype pollution protection). |
+
+---
+
+## 10. North Star Roadmap & Next Steps
 
 1. **Phase 3 (Physical Integration)**:
    - Real system calendar provider integration via native Web Calendar APIs.

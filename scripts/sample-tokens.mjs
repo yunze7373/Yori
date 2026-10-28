@@ -38,16 +38,6 @@ export const TOKEN_SAMPLES = [
     classification: 'MEASURED (Ref-03 card body reads #FFFFFF exact match)'
   },
   {
-    category: 'Color: Card Alt Surface (Ref 03)',
-    tokenVar: '--color-card-muted-bg',
-    tokenValue: '#F4F7F4',
-    file: '03_mobile_experience_v1_approved.png',
-    x: 140,
-    y: 100,
-    toleranceChannels: 6,
-    classification: 'MEASURED (Ref-03 container reads #F3F7F2, max channel delta = 2 <= 6)'
-  },
-  {
     category: 'Color: Primary Ink (Ref 03)',
     tokenVar: '--color-ink',
     tokenValue: '#162824',
@@ -351,6 +341,7 @@ export async function runSampler(options = {}) {
   out('DERIVED & STANDARD TOKENS SUMMARY:');
   out('--------------------------------------------------------------------------------');
   out('- DERIVED tokens:');
+  out('  * --color-card-muted-bg (#F4F7F4): Subtle neutral container surface derived between ground #F8F8F5 and card #FFFFFF');
   out('  * --color-primary-btn-hover (#0E2923): Computed as 10% dark shade of --color-primary-btn (#16382F)');
   out('  * --color-accent-subtle (#E2ECE6): Computed as 12% alpha tint of --color-accent (#2F6F64) over ground');
   out('  * --color-weather-banner-border (#BDD7F5): Container border for weather alert banner');

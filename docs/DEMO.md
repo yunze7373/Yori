@@ -25,18 +25,30 @@ Open **[http://127.0.0.1:5173](http://127.0.0.1:5173)** in your browser (mobile-
 # Run type checks
 npm run typecheck
 
-# Run unit & integration test suites (231 tests)
+# Run unit & integration test suites (418 tests across 23 test files)
 npm test
 
-# Run golden acceptance harness (D1–D6 + AC-EXT-1)
+# Run golden acceptance harness (18 tests across 4 test files)
 npm run test:golden
 
-# Run degradation drills (NFR-102/103 fault-injection invariance)
+# Run degradation drills (53 fault-injection invariance tests)
 npm run test:drills
 
-# Run Playwright E2E verification (38 tests)
+# Run Playwright E2E verification (20 tests, mobile 390x844 & desktop 1280x800)
 npm run test:e2e
+
+# Run reproducible token pixel sampler (10/10 PASS)
+node scripts/sample-tokens.mjs
 ```
+
+### Recording Candidate Build (`V2 Living Context`)
+The V2 Living Context UI is the official recording candidate for video submission:
+```bash
+# 1. Build and preview V2 UI directly (or run npm run dev and append ?ui=v2)
+VITE_YORI_UI=v2 npm run build
+npm run preview
+```
+Visit **`http://127.0.0.1:5173/?ui=v2`** to inspect the full V2 recording experience (docked bottom Ask Bar, Route Map with organic weather callouts, candidate dining cards with local SVG artwork, and conversational shell).
 
 ### Running the Approved Fallback UI from Tag (`yori-approved-ui`)
 The submission-approved fallback UI (commit `908abee`) is permanently anchored by the local annotated git tag `yori-approved-ui`. You can build and preview it independently at any time without disturbing ongoing work on `main`:
@@ -57,13 +69,13 @@ git worktree remove ../yori-approved-ui
 ```
 
 ### UI Version Build Flag (`VITE_YORI_UI`)
-By default, the application builds and serves the approved baseline UI (`v1`). You can toggle or evaluate the V2 shell via the build-time environment variable:
+By default, the application builds and serves the approved baseline UI (`v1`), with `v2` selectable via build environment or URL parameter:
 
 ```bash
-# Build approved baseline UI (default; fails closed to v1 on unknown values)
+# Build approved baseline UI (fails closed to v1 on unknown values)
 VITE_YORI_UI=v1 npm run build
 
-# Build V2 shell preview
+# Build V2 shell preview (recording candidate)
 VITE_YORI_UI=v2 npm run build
 ```
 For local preview and testing convenience, `?ui=v1` or `?ui=v2` query parameters may also be supplied in the URL.
@@ -152,14 +164,14 @@ Governed by Plan `YORI_SUBMIT` (Task `FALLBACK-VERIFY`, AC-205-2). When running 
 
 ---
 
-## ⚠️ Status & Known Limitations (PH-002)
+## ⚠️ Status & Known Limitations (Submission Readiness Alignment)
 
-As part of the project evolution, Yori operates as a deterministic, local-first foundation with the following known architectural boundaries:
-- **ModelPort Live Status (OWNER_GATE_1)**: `disabled` (status: `disabled`, keySource: `none`). OWNER_GATE_1 unmet, B proceeds fixture-only.
-- **Muse Spark is wording & ranking only**: The model port refines natural language phrasing over supplied facts and reorders candidates within constrained schemas; it does not perform unconstrained autonomous execution. Any time, place, or citation token not present in the supplied signal set causes the output to be discarded for the deterministic baseline.
-- **XMemo live sync: implemented, disabled pending owner authorization; local memory is the source of truth**: The server-side OAuth 2.0 PKCE and MCP proxy plumbing is implemented behind the `XMEMO_OAUTH_ENABLED` feature flag (disabled by default). Local storage serves as the source of truth; confirmed facts are persisted locally in versioned envelopes. Remote synchronization remains disabled until explicit owner authorization.
-- **Simulated providers**: Calendar, weather, location coordinates, routes, places, and grocery items are simulated mock fixtures with no real third-party service provider integrations.
-- **Proactive prompts not delivered as notifications**: Proactive prompt evaluation and budget enforcement occur during Living Context composition; OS-level system push notifications are deferred to native platform wrappers.
+Every integration's status matches [`docs/architecture/SUBMISSION_READINESS.md`](architecture/SUBMISSION_READINESS.md) exactly:
+- **Meta Muse Spark Reasoning (`IMPLEMENTED-BUT-OFF`)**: `MODEL_API_KEY` unset (diagnostics `disabled`, keySource `none`). G3-PARITY approved as precondition; zero live calls run. Model interpreter runs strictly against verified offline fixtures with engine status `'Scripted model fixture · not a live model call'`.
+- **XMemo Memory Integration (`IMPLEMENTED-BUT-OFF`)**: `XMEMO_OAUTH_ENABLED=false`. Code marks MCP proxy mapping `UNVERIFIED_XMEMO_MCP_MAPPING`. Sovereign local browser storage is the active and sole truth; confirm-only memory (INV-107) strictly enforced.
+- **Live Weather Integration (`IMPLEMENTED-BUT-OFF`)**: `WEATHER_LIVE_ENABLED=false`. All scenes run on recorded, labelled fixtures with fixed city coordinates. Zero device geolocation or GPS calls anywhere.
+- **Simulated Providers**: Calendar, weather, location coordinates, routes, places, and grocery items are simulated mock fixtures with no real third-party service provider integrations.
+- **Proactive Prompts**: Proactive prompt evaluation and budget enforcement occur during Living Context composition; OS-level system push notifications are deferred to native platform wrappers.
 
 ---
 
