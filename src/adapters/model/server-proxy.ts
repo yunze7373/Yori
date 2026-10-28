@@ -31,6 +31,7 @@ import {
   type ReasoningValidationFailureReason,
   deterministicReasoningFallback,
   validateReasoningOutput,
+  validateReasoningInputSchema,
 } from './reasoning.js';
 
 export interface ModelReasoningResponse {
@@ -457,8 +458,20 @@ export class ModelDevProxy {
         req.on('end', async () => {
           if (isOversize) return;
           try {
-            const parsed = JSON.parse(body) as ReasoningInput;
-            const result = await this.handleReasoning(parsed);
+            const parsed = JSON.parse(body);
+            const inputValidation = validateReasoningInputSchema(parsed);
+            if (!inputValidation.valid) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(
+                JSON.stringify({
+                  error: `Invalid reasoning input: ${inputValidation.error}`,
+                })
+              );
+              resolve(true);
+              return;
+            }
+            const result = await this.handleReasoning(inputValidation.data!);
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify(result));
@@ -640,8 +653,24 @@ export class ModelDevProxy {
    * Any violation or failure safely discards the whole output for the deterministic ranking.
    */
   public async handleReasoning(
-    input: ReasoningInput
+    rawInput: unknown
   ): Promise<ModelReasoningResponse> {
+    const inputValidation = validateReasoningInputSchema(rawInput);
+    if (!inputValidation.valid) {
+      const fallback = deterministicReasoningFallback(
+        rawInput &&
+          typeof rawInput === 'object' &&
+          Array.isArray((rawInput as any).candidates)
+          ? (rawInput as ReasoningInput)
+          : { candidates: [], availableSignalIds: [], confirmedFactKeys: [] }
+      );
+      return {
+        result: fallback,
+        usedFallback: true,
+        fallbackReason: 'schema_invalid',
+      };
+    }
+    const input = inputValidation.data!;
     const fallback = deterministicReasoningFallback(input);
     const diag = this.getDiagnostics();
 

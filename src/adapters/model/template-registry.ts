@@ -306,10 +306,9 @@ export const SERVER_TEMPLATES: Readonly<Record<string, ServerTemplate>> = Object
     promptInstruction:
       'Rank the candidate plans based on confirmed preferences and real-time signals. All claims must cite provided signal IDs or fact keys.',
     allowedFactRules: Object.freeze<Record<string, FactFieldRule>>({
-      candidatePlanIds: { type: 'string_array', maxItems: 10, itemMaxLength: 100 },
-      availableSignalIds: { type: 'string_array', maxItems: 20, itemMaxLength: 100 },
-      confirmedFactKeys: { type: 'string_array', maxItems: 20, itemMaxLength: 100 },
-      contextSummary: { type: 'string', maxLength: 300 },
+      candidatePlanIds: { type: 'string_array', maxItems: 6, itemMaxLength: 64 },
+      availableSignalIds: { type: 'string_array', maxItems: 20, itemMaxLength: 64 },
+      confirmedFactKeys: { type: 'string_array', maxItems: 20, itemMaxLength: 64 },
     }),
     renderDeterministic(facts: Record<string, unknown>): string {
       if (Array.isArray(facts.candidatePlanIds) && facts.candidatePlanIds.length > 0) {

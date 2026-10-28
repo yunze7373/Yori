@@ -4,12 +4,14 @@
  *
  * Requirements:
  * 1. Inputs are derived server-side or from pipeline output, NOT free client text.
+ *    No free-text headline or contextSummary fields in reasoning inputs; strict schema validation.
  * 2. Model output schema (strict JSON): {orderedPlanIds[], rationale[{planId, citedSignalIds[], citedFactKeys[], text}], proposedIntent?{intent, confidence, citedSignalIds[]}}.
  * 3. Any unknown planId/signal/fact id, missing citation, an extra key, or an unlisted time/place/price token
  *    discards the WHOLE output and uses the deterministic ranking.
  * 4. Effect is bounded: the model may only reorder candidates the engine produced (or propose an intent that
  *    passes through the EXISTING shared policy: suppression, budget, decline).
- * 5. Deterministic fallback is always available.
+ * 5. Candidate instants are converted to local display forms (12h and 24h) in candidate/snapshot timezone for fact checking.
+ * 6. Deterministic fallback is always available.
  */
 
 import type {
@@ -19,15 +21,27 @@ import type {
   MemoryFact,
   IntentCandidate,
 } from '../../core/contracts/index.js';
-import { validateFactsInWording } from './fact-checker.js';
+import { validateFactsInWording, parseTimeToMinutes } from './fact-checker.js';
+
+export const REGISTERED_INTENTS: ReadonlySet<string> = new Set([
+  'depart',
+  'lunch',
+  'grocery',
+  'grocery-stub',
+]);
+
+const ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+const SIGNAL_ID_PATTERN = /^[a-zA-Z0-9_.-]{1,32}:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+const FACT_KEY_PATTERN = /^[a-zA-Z0-9_.-]{1,64}$/;
+const TIMEZONE_PATTERN = /^[a-zA-Z0-9_/+-]{1,50}$/;
 
 export interface CandidatePlanSummary {
   readonly id: string;
   readonly intentId: string;
   readonly confidence: number;
-  readonly headline: string;
   readonly times: readonly string[];
   readonly places: readonly string[];
+  readonly timezone?: string;
   readonly prices?: readonly string[];
   readonly optionModes?: readonly string[];
   readonly citedSignalIds: readonly string[];
@@ -38,7 +52,8 @@ export interface ReasoningInput {
   readonly candidates: readonly CandidatePlanSummary[];
   readonly availableSignalIds: readonly string[];
   readonly confirmedFactKeys: readonly string[];
-  readonly contextSummary?: string;
+  readonly timeZone?: string;
+  readonly timezone?: string;
 }
 
 export interface PlanRationale {
@@ -77,8 +92,244 @@ export type ReasoningValidationResult =
       readonly error: string;
     };
 
+export type ReasoningInputValidationResult =
+  | { readonly valid: true; readonly data: ReasoningInput }
+  | { readonly valid: false; readonly error: string };
+
+/**
+ * Validates ReasoningInput against a strict schema before sending upstream or processing.
+ * Rejects free-text instruction fields, extra keys, unregistered intents, or malformed IDs.
+ */
+export function validateReasoningInputSchema(raw: unknown): ReasoningInputValidationResult {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { valid: false, error: 'Reasoning input must be a non-null JSON object' };
+  }
+
+  const record = raw as Record<string, unknown>;
+
+  // Allowed top-level keys only
+  const allowedTopKeys = new Set([
+    'candidates',
+    'availableSignalIds',
+    'confirmedFactKeys',
+    'timeZone',
+    'timezone',
+  ]);
+  for (const k of Object.keys(record)) {
+    if (!allowedTopKeys.has(k)) {
+      return { valid: false, error: `Unauthorized top-level key '${k}'` };
+    }
+  }
+
+  // candidates: array 1..6
+  if (!Array.isArray(record.candidates)) {
+    return { valid: false, error: "'candidates' must be an array" };
+  }
+  if (record.candidates.length === 0 || record.candidates.length > 6) {
+    return {
+      valid: false,
+      error: `'candidates' array length must be between 1 and 6 (got ${record.candidates.length})`,
+    };
+  }
+
+  const allowedCandidateKeys = new Set([
+    'id',
+    'intentId',
+    'confidence',
+    'times',
+    'places',
+    'timezone',
+    'prices',
+    'optionModes',
+    'citedSignalIds',
+    'citedFactKeys',
+  ]);
+
+  const validatedCandidates: CandidatePlanSummary[] = [];
+
+  for (let i = 0; i < record.candidates.length; i++) {
+    const c = record.candidates[i];
+    if (!c || typeof c !== 'object' || Array.isArray(c)) {
+      return { valid: false, error: `candidates[${i}] must be a non-null object` };
+    }
+    const cRec = c as Record<string, unknown>;
+
+    for (const ck of Object.keys(cRec)) {
+      if (!allowedCandidateKeys.has(ck)) {
+        return { valid: false, error: `Unauthorized candidate key '${ck}' in candidates[${i}]` };
+      }
+    }
+
+    if (typeof cRec.id !== 'string' || !ID_PATTERN.test(cRec.id)) {
+      return { valid: false, error: `Invalid candidate id in candidates[${i}]` };
+    }
+
+    if (typeof cRec.intentId !== 'string' || !REGISTERED_INTENTS.has(cRec.intentId)) {
+      return {
+        valid: false,
+        error: `Invalid or unregistered intentId '${cRec.intentId}' in candidates[${i}]`,
+      };
+    }
+
+    if (
+      typeof cRec.confidence !== 'number' ||
+      !Number.isFinite(cRec.confidence) ||
+      cRec.confidence < 0 ||
+      cRec.confidence > 1
+    ) {
+      return {
+        valid: false,
+        error: `confidence in candidates[${i}] must be a number between 0 and 1`,
+      };
+    }
+
+    if (!Array.isArray(cRec.times) || cRec.times.length > 10) {
+      return { valid: false, error: `times in candidates[${i}] must be an array of at most 10 items` };
+    }
+    for (const t of cRec.times) {
+      if (typeof t !== 'string' || t.length > 40 || (!parseTimeToMinutes(t) && !Date.parse(t))) {
+        return { valid: false, error: `Invalid time instant '${t}' in candidates[${i}]` };
+      }
+    }
+
+    if (!Array.isArray(cRec.places) || cRec.places.length > 6) {
+      return { valid: false, error: `places in candidates[${i}] must be an array of at most 6 items` };
+    }
+    for (const p of cRec.places) {
+      if (typeof p !== 'string' || p.length === 0 || p.length > 60 || /[\r\n]/.test(p)) {
+        return { valid: false, error: `Invalid place token in candidates[${i}]` };
+      }
+    }
+
+    if (cRec.timezone !== undefined) {
+      if (typeof cRec.timezone !== 'string' || !TIMEZONE_PATTERN.test(cRec.timezone)) {
+        return { valid: false, error: `Invalid timezone in candidates[${i}]` };
+      }
+    }
+
+    if (cRec.prices !== undefined) {
+      if (!Array.isArray(cRec.prices) || cRec.prices.length > 6) {
+        return { valid: false, error: `prices in candidates[${i}] must be an array of at most 6 items` };
+      }
+      for (const pr of cRec.prices) {
+        if (typeof pr !== 'string' || pr.length > 20 || /[\r\n]/.test(pr)) {
+          return { valid: false, error: `Invalid price in candidates[${i}]` };
+        }
+      }
+    }
+
+    if (cRec.optionModes !== undefined) {
+      if (!Array.isArray(cRec.optionModes) || cRec.optionModes.length > 6) {
+        return { valid: false, error: `optionModes in candidates[${i}] must be an array of at most 6 items` };
+      }
+      for (const m of cRec.optionModes) {
+        if (typeof m !== 'string' || m.length > 30 || /[\r\n]/.test(m)) {
+          return { valid: false, error: `Invalid optionMode in candidates[${i}]` };
+        }
+      }
+    }
+
+    if (!Array.isArray(cRec.citedSignalIds) || cRec.citedSignalIds.length > 10) {
+      return { valid: false, error: `citedSignalIds in candidates[${i}] must be an array of at most 10 items` };
+    }
+    for (const sid of cRec.citedSignalIds) {
+      if (typeof sid !== 'string' || sid.length > 64 || !SIGNAL_ID_PATTERN.test(sid)) {
+        return { valid: false, error: `Invalid citedSignalId '${sid}' in candidates[${i}]` };
+      }
+    }
+
+    if (!Array.isArray(cRec.citedFactKeys) || cRec.citedFactKeys.length > 10) {
+      return { valid: false, error: `citedFactKeys in candidates[${i}] must be an array of at most 10 items` };
+    }
+    for (const fk of cRec.citedFactKeys) {
+      if (typeof fk !== 'string' || fk.length > 64 || !FACT_KEY_PATTERN.test(fk)) {
+        return { valid: false, error: `Invalid citedFactKey '${fk}' in candidates[${i}]` };
+      }
+    }
+
+    validatedCandidates.push({
+      id: cRec.id,
+      intentId: cRec.intentId,
+      confidence: cRec.confidence,
+      times: Object.freeze([...cRec.times]),
+      places: Object.freeze([...cRec.places]),
+      timezone: cRec.timezone as string | undefined,
+      prices: cRec.prices ? Object.freeze([...(cRec.prices as string[])]) : undefined,
+      optionModes: cRec.optionModes ? Object.freeze([...(cRec.optionModes as string[])]) : undefined,
+      citedSignalIds: Object.freeze([...cRec.citedSignalIds]),
+      citedFactKeys: Object.freeze([...cRec.citedFactKeys]),
+    });
+  }
+
+  // availableSignalIds: array 0..20
+  if (!Array.isArray(record.availableSignalIds) || record.availableSignalIds.length > 20) {
+    return { valid: false, error: "'availableSignalIds' must be an array of at most 20 items" };
+  }
+  for (const sid of record.availableSignalIds) {
+    if (typeof sid !== 'string' || sid.length > 64 || !SIGNAL_ID_PATTERN.test(sid)) {
+      return { valid: false, error: `Invalid signal ID '${sid}' in availableSignalIds` };
+    }
+  }
+
+  // confirmedFactKeys: array 0..20
+  if (!Array.isArray(record.confirmedFactKeys) || record.confirmedFactKeys.length > 20) {
+    return { valid: false, error: "'confirmedFactKeys' must be an array of at most 20 items" };
+  }
+  for (const fk of record.confirmedFactKeys) {
+    if (typeof fk !== 'string' || fk.length > 64 || !FACT_KEY_PATTERN.test(fk)) {
+      return { valid: false, error: `Invalid fact key '${fk}' in confirmedFactKeys` };
+    }
+  }
+
+  const tz = (record.timeZone || record.timezone) as string | undefined;
+  if (tz !== undefined && (typeof tz !== 'string' || !TIMEZONE_PATTERN.test(tz))) {
+    return { valid: false, error: `Invalid timeZone '${tz}'` };
+  }
+
+  return {
+    valid: true,
+    data: Object.freeze({
+      candidates: Object.freeze(validatedCandidates),
+      availableSignalIds: Object.freeze([...(record.availableSignalIds as string[])]),
+      confirmedFactKeys: Object.freeze([...(record.confirmedFactKeys as string[])]),
+      timeZone: tz,
+    }),
+  };
+}
+
+/**
+ * Converts an ISO-8601 instant string into 12-hour and 24-hour localized display times
+ * for fact-checking rationale tokens against candidate times.
+ */
+export function convertInstantToLocalDisplayTimes(
+  isoInstant: string,
+  timeZone?: string
+): readonly string[] {
+  if (!timeZone) return [];
+  const d = new Date(isoInstant);
+  if (!Number.isFinite(d.getTime())) return [];
+  try {
+    const f12 = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(d);
+    const f24 = new Intl.DateTimeFormat('en-GB', {
+      timeZone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(d);
+    return Object.freeze([f12, f24]);
+  } catch {
+    return Object.freeze([]);
+  }
+}
+
 /**
  * Summarizes a PreparedPlan into structured candidate fields for reasoning input.
+ * Eliminates free-text headline fields to keep reasoning inputs strictly bounded.
  */
 export function summarizePlanForReasoning(plan: PreparedPlan): CandidatePlanSummary {
   const times: string[] = [];
@@ -108,8 +359,8 @@ export function summarizePlanForReasoning(plan: PreparedPlan): CandidatePlanSumm
     id: plan.id,
     intentId: plan.intentId,
     confidence: 1.0,
-    headline: plan.headline,
     times: Object.freeze([...new Set(times)]),
+    timezone: plan.timezone,
     places: Object.freeze([...new Set(places)]),
     prices: Object.freeze([...new Set(prices)]),
     optionModes: Object.freeze([...new Set(optionModes)]),
@@ -124,8 +375,7 @@ export function summarizePlanForReasoning(plan: PreparedPlan): CandidatePlanSumm
 export function buildReasoningInput(
   plans: readonly PreparedPlan[],
   snapshot: ContextSnapshot,
-  memory: readonly MemoryFact[],
-  contextSummary?: string
+  memory: readonly MemoryFact[]
 ): ReasoningInput {
   const candidates = plans.map(summarizePlanForReasoning);
   const availableSignalIds = snapshot.signals.map(s => `${s.kind}:${s.issuedAt}`);
@@ -135,7 +385,7 @@ export function buildReasoningInput(
     candidates: Object.freeze(candidates),
     availableSignalIds: Object.freeze([...new Set(availableSignalIds)]),
     confirmedFactKeys: Object.freeze([...new Set(confirmedFactKeys)]),
-    contextSummary,
+    timeZone: snapshot.timezone,
   });
 }
 
@@ -220,10 +470,18 @@ export function validateReasoningOutput(
   const confirmedFacts = new Set(input.confirmedFactKeys);
 
   // Aggregate supplied facts for fact-checking rationale text
+  // Convert candidate instant times to their local display forms in the candidate/snapshot timezone (P2 fix)
   const allSuppliedTimes: string[] = [];
   const allSuppliedPlaces: string[] = [];
   for (const cand of input.candidates) {
-    allSuppliedTimes.push(...cand.times);
+    const tz = cand.timezone || input.timeZone || input.timezone;
+    for (const t of cand.times) {
+      allSuppliedTimes.push(t);
+      if (tz) {
+        const localTimes = convertInstantToLocalDisplayTimes(t, tz);
+        allSuppliedTimes.push(...localTimes);
+      }
+    }
     allSuppliedPlaces.push(...cand.places);
   }
 
@@ -340,60 +598,60 @@ export function validateReasoningOutput(
     );
   }
 
-  // 3. Validate proposedIntent (optional)
-  let proposedIntent: ProposedIntent | undefined;
-  if (record.proposedIntent !== undefined) {
-    if (!record.proposedIntent || typeof record.proposedIntent !== 'object' || Array.isArray(record.proposedIntent)) {
+  // 3. Validate optional proposedIntent
+  let validatedProposedIntent: ProposedIntent | undefined;
+  if (record.proposedIntent !== undefined && record.proposedIntent !== null) {
+    if (typeof record.proposedIntent !== 'object' || Array.isArray(record.proposedIntent)) {
       return {
         valid: false,
         reason: 'schema_invalid',
-        error: "'proposedIntent' must be an object if present",
+        error: 'proposedIntent must be an object',
       };
     }
 
-    const piObj = record.proposedIntent as Record<string, unknown>;
-    const allowedPiKeys = new Set(['intent', 'confidence', 'citedSignalIds']);
-    for (const pik of Object.keys(piObj)) {
-      if (!allowedPiKeys.has(pik)) {
+    const propObj = record.proposedIntent as Record<string, unknown>;
+    const allowedPropKeys = new Set(['intent', 'confidence', 'citedSignalIds']);
+    for (const pk of Object.keys(propObj)) {
+      if (!allowedPropKeys.has(pk)) {
         return {
           valid: false,
           reason: 'extra_keys',
-          error: `Unauthorized key '${pik}' in proposedIntent`,
+          error: `Unauthorized key '${pk}' in proposedIntent`,
         };
       }
     }
 
-    if (typeof piObj.intent !== 'string' || piObj.intent.trim().length === 0) {
+    if (typeof propObj.intent !== 'string' || propObj.intent.trim().length === 0) {
       return {
         valid: false,
         reason: 'schema_invalid',
-        error: "proposedIntent requires non-empty 'intent' string",
+        error: 'proposedIntent.intent must be a non-empty string',
       };
     }
 
     if (
-      typeof piObj.confidence !== 'number' ||
-      isNaN(piObj.confidence) ||
-      piObj.confidence < 0 ||
-      piObj.confidence > 1
+      typeof propObj.confidence !== 'number' ||
+      !Number.isFinite(propObj.confidence) ||
+      propObj.confidence < 0 ||
+      propObj.confidence > 1
     ) {
       return {
         valid: false,
         reason: 'schema_invalid',
-        error: 'proposedIntent confidence must be a number between 0.0 and 1.0',
+        error: 'proposedIntent.confidence must be a number between 0 and 1',
       };
     }
 
-    if (!Array.isArray(piObj.citedSignalIds) || piObj.citedSignalIds.length === 0) {
+    if (!Array.isArray(propObj.citedSignalIds) || propObj.citedSignalIds.length === 0) {
       return {
         valid: false,
         reason: 'missing_citation',
-        error: 'proposedIntent must cite at least one signal ID',
+        error: 'proposedIntent.citedSignalIds must be a non-empty array of signal IDs',
       };
     }
 
-    const piSignals: string[] = [];
-    for (const sid of piObj.citedSignalIds) {
+    const citedSignals: string[] = [];
+    for (const sid of propObj.citedSignalIds) {
       if (typeof sid !== 'string' || !availableSignals.has(sid)) {
         return {
           valid: false,
@@ -401,89 +659,90 @@ export function validateReasoningOutput(
           error: `proposedIntent cites unknown signal ID '${sid}'`,
         };
       }
-      piSignals.push(sid);
+      citedSignals.push(sid);
     }
 
-    proposedIntent = Object.freeze({
-      intent: piObj.intent,
-      confidence: piObj.confidence,
-      citedSignalIds: Object.freeze(piSignals),
+    validatedProposedIntent = Object.freeze({
+      intent: propObj.intent.trim(),
+      confidence: propObj.confidence,
+      citedSignalIds: Object.freeze(citedSignals),
     });
   }
 
   return {
     valid: true,
     data: Object.freeze({
-      orderedPlanIds: Object.freeze([...record.orderedPlanIds as string[]]),
+      orderedPlanIds: Object.freeze(record.orderedPlanIds as string[]),
       rationale: Object.freeze(validatedRationales),
-      proposedIntent,
+      proposedIntent: validatedProposedIntent,
     }),
   };
 }
 
 /**
- * Returns deterministic fallback reasoning output (preserving input candidate order).
+ * Returns deterministic fallback ordering identical to engine output.
+ * Preserves the original engine order with zero rationale statements.
  */
 export function deterministicReasoningFallback(input: ReasoningInput): ReasoningOutput {
+  const orderedPlanIds = input.candidates.map(c => c.id);
   return Object.freeze({
-    orderedPlanIds: Object.freeze(input.candidates.map(c => c.id)),
+    orderedPlanIds: Object.freeze(orderedPlanIds),
     rationale: Object.freeze([]),
   });
 }
 
 /**
- * Bounded effect: reorders engine-produced PreparedPlans matching reasoning output.
- * Preserves plan integrity (headline, times, actions unchanged).
+ * Reorders candidate plans based on reasoning output.
+ * Keeps candidate plans byte-for-byte intact (Requirement 3: model may only reorder candidates).
+ * Plans omitted by the model are appended at the end in their original deterministic order.
  */
 export function reorderPlansWithReasoning(
   plans: readonly PreparedPlan[],
-  reasoning: ReasoningOutput | null
+  reasoning: ReasoningOutput
 ): readonly PreparedPlan[] {
-  if (!reasoning || !Array.isArray(reasoning.orderedPlanIds) || reasoning.orderedPlanIds.length === 0) {
-    return plans;
+  const planMap = new Map<string, PreparedPlan>();
+  for (const p of plans) {
+    planMap.set(p.id, p);
   }
 
-  const planMap = new Map(plans.map(p => [p.id, p]));
-  const reordered: PreparedPlan[] = [];
+  const result: PreparedPlan[] = [];
+  const addedIds = new Set<string>();
 
   for (const id of reasoning.orderedPlanIds) {
-    const found = planMap.get(id);
-    if (found) {
-      reordered.push(found);
-      planMap.delete(id);
+    const plan = planMap.get(id);
+    if (plan && !addedIds.has(id)) {
+      result.push(plan);
+      addedIds.add(id);
     }
   }
 
-  // Append any plans that were not in the reordering list
-  for (const remaining of planMap.values()) {
-    reordered.push(remaining);
+  // Append any plans not explicitly mentioned in their original order
+  for (const p of plans) {
+    if (!addedIds.has(p.id)) {
+      result.push(p);
+      addedIds.add(p.id);
+    }
   }
 
-  return Object.freeze(reordered);
+  return Object.freeze(result);
 }
 
 /**
- * Creates an IntentCandidate from a model-proposed intent.
- * Enters the EXISTING shared policy pipeline (AC-202-3).
+ * Creates an IntentCandidate from a validated ProposedIntent.
+ * Passes through the standard pipeline (SharedPolicy) just like any engine candidate (Requirement 3, AC-202-3).
  */
 export function createModelIntentCandidate(
   proposed: ProposedIntent,
   availableSignals: readonly ContextSignal[]
 ): IntentCandidate {
-  const signalMap = new Map(availableSignals.map(s => [`${s.kind}:${s.issuedAt}`, s]));
-  const evidence: ContextSignal[] = [];
-
-  for (const sid of proposed.citedSignalIds) {
-    const s = signalMap.get(sid);
-    if (s) {
-      evidence.push(s);
-    }
-  }
+  const matchedSignals = availableSignals.filter(s =>
+    proposed.citedSignalIds.includes(`${s.kind}:${s.issuedAt}`)
+  );
 
   return Object.freeze({
     intent: proposed.intent,
     confidence: proposed.confidence,
-    evidence: Object.freeze(evidence),
+    evidence: Object.freeze(matchedSignals),
     metadata: Object.freeze({
       source: 'model_reasoning',
       citedSignalIds: proposed.citedSignalIds,
