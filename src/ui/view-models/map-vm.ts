@@ -5,11 +5,14 @@
  * - Rendered only when spatial evidence exists.
  * - Invariant: Labelled "Schematic · simulated" (never represented as road-accurate, no forged streets).
  * - Geometry is a labelled schematic fixture polyline and option markers.
+ * - Routes drawn ONLY for options actually present in the plan.
+ * - Weather callouts derived strictly from weather signals (no invented times or intensities).
  * - Size hint: prominent (large, for transit/rain) or compact (for lunch/places).
  */
 
 import type { PreparedPlan, PlanOption, SpatialMapEvidence } from '../../core/contracts/index.js';
-import type { MapVM, MapMarkerVM, MapPolylineVM } from './types.js';
+import { formatTime } from '../living-context/presentation.js';
+import type { MapVM, MapMarkerVM, MapPolylineVM, MapWeatherCalloutVM } from './types.js';
 
 export function deriveMapVM(
   plan: PreparedPlan | null,
@@ -26,11 +29,19 @@ export function deriveMapVM(
       plan.subjectTitle ||
       (typeof (spatialEvidence?.placeOrRoute as any)?.name === 'string'
         ? (spatialEvidence?.placeOrRoute as any).name
-        : 'Piano Studio (Downtown)');
+        : 'Destination');
+
+    const destinationArea =
+      typeof (spatialEvidence?.placeOrRoute as any)?.area === 'string'
+        ? (spatialEvidence?.placeOrRoute as any).area
+        : undefined;
 
     const hasRain =
       plan.checklist?.includes('umbrella') ||
       plan.why.evidenceSignals.some(s => s.description?.toLowerCase().includes('rain'));
+
+    const apptTime = plan.apptAt ? formatTime(plan.apptAt, plan.timezone) : '';
+    const destSublabel = apptTime ? `Destination · ${apptTime}` : 'Destination';
 
     // Markers
     const markers: MapMarkerVM[] = [
@@ -47,34 +58,105 @@ export function deriveMapVM(
         x: 275,
         y: 45,
         label: destinationName,
-        sublabel: 'Destination · 3:00 PM',
+        sublabel: destSublabel,
         type: 'destination',
         isHighlight: true,
       },
     ];
 
-    // Polylines: Primary route (Drive 25m) + Alternative (Bus 40m)
-    const polylines: MapPolylineVM[] = [
-      {
+    // Polylines: draw routes ONLY for options present in the plan
+    const polylines: MapPolylineVM[] = [];
+
+    const driveOpt = plan.optionsOrSteps?.find(
+      opt => typeof opt !== 'string' && (opt as PlanOption).mode === 'drive'
+    ) as PlanOption | undefined;
+
+    const busOpt = plan.optionsOrSteps?.find(
+      opt => typeof opt !== 'string' && (opt as PlanOption).mode === 'bus'
+    ) as PlanOption | undefined;
+
+    if (driveOpt || busOpt) {
+      // Multi-modal plan (e.g. D2 with drive and bus options)
+      if (driveOpt) {
+        const driveLabel =
+          typeof driveOpt.travelMinutes === 'number'
+            ? `Drive · ${driveOpt.travelMinutes} min`
+            : 'Drive route';
+
+        polylines.push({
+          id: 'route-drive',
+          points: '45,115 115,115 175,55 275,45',
+          mode: 'drive',
+          label: driveLabel,
+          strokeColor: '#2D6A4F',
+          strokeWidth: 4,
+          travelMinutes: driveOpt.travelMinutes,
+        });
+      }
+
+      if (busOpt) {
+        const busLabel =
+          typeof busOpt.travelMinutes === 'number'
+            ? `Bus · ${busOpt.travelMinutes} min`
+            : 'Bus route';
+
+        polylines.push({
+          id: 'route-bus',
+          points: '45,115 85,150 205,150 275,45',
+          mode: 'bus',
+          label: busLabel,
+          strokeColor: '#718096',
+          strokeWidth: 3,
+          strokeDasharray: '6 4',
+          travelMinutes: busOpt.travelMinutes,
+        });
+      }
+    } else {
+      // Single-mode plan (e.g. D1): derive travel duration mathematically from timing
+      let travelMinutes: number | undefined;
+      const bufferFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_buffer_minutes');
+      const bufferMinutes = typeof bufferFact?.value === 'number' ? bufferFact.value : 0;
+      if (plan.apptAt && plan.leaveAt) {
+        const apptMs = Date.parse(plan.apptAt);
+        const leaveMs = Date.parse(plan.leaveAt);
+        if (Number.isFinite(apptMs) && Number.isFinite(leaveMs) && apptMs > leaveMs) {
+          const diff = Math.round((apptMs - leaveMs) / 60000);
+          if (diff > bufferMinutes) {
+            travelMinutes = diff - bufferMinutes;
+          }
+        }
+      }
+
+      const singleRouteLabel =
+        travelMinutes !== undefined ? `Drive · ${travelMinutes} min` : 'Drive route';
+
+      polylines.push({
         id: 'route-drive',
         points: '45,115 115,115 175,55 275,45',
         mode: 'drive',
-        label: 'Drive · 25 min',
+        label: singleRouteLabel,
         strokeColor: '#2D6A4F',
         strokeWidth: 4,
-        travelMinutes: 25,
-      },
-      {
-        id: 'route-bus',
-        points: '45,115 85,150 205,150 275,45',
-        mode: 'bus',
-        label: 'Bus · 40 min',
-        strokeColor: '#718096',
-        strokeWidth: 3,
-        strokeDasharray: '6 4',
-        travelMinutes: 40,
-      },
-    ];
+        travelMinutes,
+      });
+      // Strictly NO bus route added for single-mode departure!
+    }
+
+    // Weather Callout: derived strictly from weather signal (no hardcoded hours or intensity)
+    let weatherCallout: MapWeatherCalloutVM | undefined;
+    if (hasRain) {
+      const weatherSignal = plan.why?.evidenceSignals?.find(s => s.kind === 'weather');
+      const issuedTime = weatherSignal?.issuedAt ? formatTime(weatherSignal.issuedAt, plan.timezone) : undefined;
+      weatherCallout = {
+        x: 160,
+        y: 40,
+        text: 'Rain forecast · simulated',
+        subtext: issuedTime ? `Issued ${issuedTime}` : 'Travel window',
+      };
+    }
+
+    const polyModes = polylines.map(p => p.mode).join(' and ');
+    const ariaDescription = `Schematic simulated map showing route from Home to ${destinationName} with ${polyModes || 'transit'} line`;
 
     return {
       id: `map-depart-${plan.id}`,
@@ -82,30 +164,28 @@ export function deriveMapVM(
       simulatedBadge: 'Schematic · simulated',
       sizeHint,
       destinationName,
-      destinationArea: 'Downtown',
+      destinationArea,
       markers: Object.freeze(markers),
       polylines: Object.freeze(polylines),
-      weatherCallout: hasRain
-        ? {
-            x: 160,
-            y: 40,
-            text: 'Rain expected',
-            subtext: 'Heavier 2:00–4:00 PM',
-          }
-        : undefined,
-      ariaDescription: `Schematic simulated map showing route from Home to ${destinationName} with primary drive and alternative bus transit lines`,
+      weatherCallout,
+      ariaDescription,
     };
   }
 
   // Lunch / candidate places map
   if (plan?.intentId === 'lunch') {
+    const area =
+      typeof (spatialEvidence?.placeOrRoute as any)?.area === 'string'
+        ? (spatialEvidence?.placeOrRoute as any).area
+        : undefined;
+
     const markers: MapMarkerVM[] = [
       {
         id: 'marker-user-location',
         x: 50,
         y: 85,
         label: 'You',
-        sublabel: 'Downtown',
+        sublabel: area,
         type: 'origin',
       },
     ];
@@ -131,7 +211,7 @@ export function deriveMapVM(
           x: coords.x,
           y: coords.y,
           label: name,
-          sublabel: distText,
+          sublabel: distText || undefined,
           type: 'place',
           isHighlight: idx === 0,
         });
@@ -155,10 +235,10 @@ export function deriveMapVM(
       simulatedBadge: 'Schematic · simulated',
       sizeHint: 'compact',
       destinationName: 'Lunch locations near you',
-      destinationArea: 'Downtown',
+      destinationArea: area,
       markers: Object.freeze(markers),
       polylines: Object.freeze(polylines),
-      ariaDescription: 'Schematic simulated map displaying lunch candidate locations relative to your current location in Downtown',
+      ariaDescription: 'Schematic simulated map displaying lunch candidate locations relative to your current location',
     };
   }
 

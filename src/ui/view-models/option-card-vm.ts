@@ -4,31 +4,48 @@
  * Rules:
  * - Derived purely from PreparedPlan.optionsOrSteps and Why citations.
  * - Invariant: Zero star ratings, zero invented reviews.
- * - Ranking basis explains the preference or habit cited.
+ * - Ranking basis explains the preference or habit cited with honest provenance (sample vs confirmed).
+ * - Show option details only from plan fields (mode, travelMinutes, bufferMinutes); zero invented rationales.
+ * - Do not render plain step strings as option cards when timeline already shows them.
  */
 
 import type { PreparedPlan, PlanOption } from '../../core/contracts/index.js';
 import { formatTime } from '../living-context/presentation.js';
+import { humanizeMemoryKey } from '../review/why-sheet.js';
 import type { OptionCardVM } from './types.js';
 
-export function deriveOptionCardVMs(plan: PreparedPlan): OptionCardVM[] {
+export function deriveOptionCardVMs(
+  plan: PreparedPlan,
+  userConfirmedKeys?: ReadonlySet<string>
+): OptionCardVM[] {
   if (!plan.optionsOrSteps || plan.optionsOrSteps.length === 0) {
     return [];
+  }
+
+  // If this is a depart plan and optionsOrSteps only contains plain step strings
+  // or non-mode step objects, do NOT render them as option cards because the timeline already displays them
+  if (plan.intentId === 'depart') {
+    const hasTransitModes = plan.optionsOrSteps.some(
+      opt => typeof opt !== 'string' && typeof (opt as PlanOption).mode === 'string'
+    );
+    if (!hasTransitModes) {
+      return [];
+    }
   }
 
   const tz = plan.timezone;
   const cards: OptionCardVM[] = [];
 
+  // Extract buffer minutes from memory facts
+  const bufferFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_buffer_minutes');
+  const bufferMinutes =
+    typeof bufferFact?.value === 'number' && Number.isFinite(bufferFact.value)
+      ? bufferFact.value
+      : undefined;
+
   for (let i = 0; i < plan.optionsOrSteps.length; i++) {
     const raw = plan.optionsOrSteps[i];
     if (typeof raw === 'string') {
-      cards.push({
-        id: `opt-${i}`,
-        label: raw,
-        title: raw,
-        isSelected: i === 0,
-        isRecommended: i === 0,
-      });
       continue;
     }
 
@@ -40,17 +57,33 @@ export function deriveOptionCardVMs(plan: PreparedPlan): OptionCardVM[] {
       const modeCap = mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : 'Option';
       const leaveTime = formatTime(opt.leaveAt, tz);
       const title = leaveTime ? `${modeCap} · leave ${leaveTime}` : modeCap;
-      const travelMins = opt.travelMinutes ?? (mode === 'drive' ? 25 : 40);
+      const travelMins = opt.travelMinutes;
       const isFirst = i === 0;
 
-      // Ranking explanation from why or rankedByFactKey
+      // Ranking explanation with provenance (demo profile vs user confirmed)
       let rankingBasis: string | undefined;
       if (opt.rankedByFactKey) {
-        rankingBasis = `Ranked by habit: ${opt.rankedByFactKey.replace(/_/g, ' ')}`;
+        const humanKey = humanizeMemoryKey(opt.rankedByFactKey);
+        const isConfirmed = userConfirmedKeys?.has(opt.rankedByFactKey) ?? false;
+        const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+        rankingBasis = `Ranked by habit: ${humanKey} (${provenance})`;
       } else if (isFirst) {
-        rankingBasis = 'Faster route · confirmed preference';
+        rankingBasis = 'Recommended route';
       } else {
-        rankingBasis = 'Alternative route option';
+        rankingBasis = 'Alternative route';
+      }
+
+      // Detail derived purely from plan fields (mode, travelMinutes, bufferMinutes)
+      let detail = opt.details;
+      if (!detail) {
+        const parts: string[] = [];
+        if (travelMins !== undefined) {
+          parts.push(`${travelMins}m ${mode || 'travel'}`);
+        }
+        if (bufferMinutes !== undefined) {
+          parts.push(`${bufferMinutes}m buffer`);
+        }
+        detail = parts.join(' · ');
       }
 
       cards.push({
@@ -60,9 +93,9 @@ export function deriveOptionCardVMs(plan: PreparedPlan): OptionCardVM[] {
         mode,
         travelMinutes: travelMins,
         leaveTime,
-        bufferMinutes: 5,
+        bufferMinutes,
         badge: isFirst ? 'Recommended' : 'Alternative',
-        detail: `${travelMins}m ${mode || 'travel'} · ${isFirst ? 'avoids walking in rain' : 'transit schedule'}`,
+        detail: detail || undefined,
         rankingBasis,
         isSelected: isFirst,
         isRecommended: isFirst,
@@ -76,10 +109,13 @@ export function deriveOptionCardVMs(plan: PreparedPlan): OptionCardVM[] {
     const distanceMins = opt.distanceMinutes;
     const distanceText = typeof distanceMins === 'number' ? `${distanceMins}m away` : '';
 
-    let rankingBasis = 'Prepared based on your nearby location';
-    const tasteFact = plan.why.memoryFactsUsed.find(f => f.key.includes('taste') || f.key.includes('cuisine'));
+    let rankingBasis: string | undefined;
+    const tasteFact = plan.why?.memoryFactsUsed?.find(f => f.key.includes('taste') || f.key.includes('cuisine'));
     if (tasteFact) {
-      rankingBasis = `Cites confirmed ${tasteFact.key.replace(/_/g, ' ')}: ${String(tasteFact.value)}`;
+      const humanKey = humanizeMemoryKey(tasteFact.key);
+      const isConfirmed = userConfirmedKeys?.has(tasteFact.key) ?? false;
+      const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+      rankingBasis = `Based on habit: ${humanKey} (${provenance})`;
     }
 
     cards.push({
@@ -88,7 +124,7 @@ export function deriveOptionCardVMs(plan: PreparedPlan): OptionCardVM[] {
       title: name,
       travelMinutes: distanceMins,
       badge: cuisine || undefined,
-      detail: distanceText,
+      detail: distanceText || undefined,
       rankingBasis,
       isSelected: i === 0,
       isRecommended: i === 0,

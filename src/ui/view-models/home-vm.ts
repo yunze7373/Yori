@@ -9,9 +9,16 @@
  *   - Lunch: candidate cards with local illustrations + compact map + per-option basis.
  *   - Quiet: honest quiet state.
  *   - Empty groups (empty AHEAD or FOR YOU) are collapsed completely.
+ * - Honest provenance: sample demo profile facts must NEVER be labelled "Confirmed".
  */
 
-import type { PreparedPlan, PlanOption, SpatialMapEvidence, PlanAction } from '../../core/contracts/index.js';
+import type {
+  PreparedPlan,
+  PlanOption,
+  SpatialMapEvidence,
+  PlanAction,
+  ContextSnapshot,
+} from '../../core/contracts/index.js';
 import { formatTime, formatAheadPlan, humanizeProposalTitle } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
 import { deriveTimelineVM } from './timeline-vm.js';
@@ -31,10 +38,20 @@ export interface BuildHomeCompositionOptions {
   aheadPlans?: readonly PreparedPlan[];
   proposals?: readonly { key: string; value?: unknown }[];
   acceptedPlanIds?: readonly string[];
+  userConfirmedKeys?: ReadonlySet<string>;
+  snapshot?: ContextSnapshot | null;
 }
 
 export function buildHomeComposition(options: BuildHomeCompositionOptions): HomeCompositionVM {
-  const { plan, spatialEvidence, aheadPlans = [], proposals = [], acceptedPlanIds = [] } = options;
+  const {
+    plan,
+    spatialEvidence,
+    aheadPlans = [],
+    proposals = [],
+    acceptedPlanIds = [],
+    userConfirmedKeys,
+    snapshot,
+  } = options;
 
   // 1. Quiet State (D4: 0 prompts is valid; honest quiet state)
   if (!plan) {
@@ -75,6 +92,18 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       hasRainChecklist ||
       plan.why.evidenceSignals.some(s => s.description?.toLowerCase().includes('rain'));
 
+    let rainInsightDesc: string | undefined;
+    if (isRain) {
+      const weatherSignal =
+        snapshot?.signals.find(s => s.kind === 'weather') ??
+        plan.why.evidenceSignals.find(s => s.kind === 'weather');
+
+      const issuedTime = weatherSignal?.issuedAt ? formatTime(weatherSignal.issuedAt, tz) : undefined;
+      rainInsightDesc = issuedTime
+        ? `Rain in the forecast for your travel window · simulated (issued ${issuedTime}). I've prepared an updated departure schedule.`
+        : `Rain in the forecast for your travel window · simulated. I've prepared an updated departure schedule.`;
+    }
+
     let habitNote: string | undefined;
     const rainFact = plan.why.memoryFactsUsed.find(
       f => f.key === 'rain_transport_preference' && f.status === 'confirmed'
@@ -85,7 +114,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
 
     const map = deriveMapVM(plan, spatialEvidence, 'prominent');
     const timeline = deriveTimelineVM(plan);
-    const optionCards = deriveOptionCardVMs(plan);
+    const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys);
 
     return {
       layoutKind: 'journey',
@@ -95,6 +124,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       basis: STRINGS.depart.basisLine,
       isRain,
       rainBanner: isRain ? STRINGS.rain.whatChanged : undefined,
+      rainInsightDesc,
       umbrellaChip: hasRainChecklist ? STRINGS.rain.umbrellaChip : undefined,
       habitNote,
       map,
@@ -114,7 +144,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       for (let i = 0; i < plan.optionsOrSteps.length; i++) {
         const raw = plan.optionsOrSteps[i];
         if (typeof raw === 'string') {
-          const photo = getLocalIllustration('dining', raw);
+          const photo = getLocalIllustration('dining');
           candidateCards.push({
             id: `candidate-${i}`,
             name: raw,
@@ -129,15 +159,25 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           const opt = raw as PlanOption;
           const name = opt.name || opt.label;
           const cuisine = opt.cuisine ? opt.cuisine.charAt(0).toUpperCase() + opt.cuisine.slice(1) : 'Dining';
-          const distMins = opt.distanceMinutes ?? 5;
+          const distMins = opt.distanceMinutes;
+          const distText = typeof distMins === 'number' ? `${distMins}m away` : '';
           const photo = getLocalIllustration(opt.cuisine || 'dining', name);
+
+          // Check if taste preference or cuisine fact is confirmed by the user
+          const tasteFact = plan.why?.memoryFactsUsed?.find(
+            f => f.key.includes('taste') || f.key.includes('cuisine')
+          );
+          const isConfirmed = tasteFact ? (userConfirmedKeys?.has(tasteFact.key) ?? false) : false;
+          const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+          const basis = `Based on taste: ${cuisine} (${provenance})`;
+
           candidateCards.push({
             id: opt.id || `candidate-${i}`,
             name,
             cuisine,
-            distanceMinutes: distMins,
-            distanceText: `${distMins}m away`,
-            basis: `Confirmed taste preference: ${cuisine}`,
+            distanceMinutes: distMins ?? 0,
+            distanceText: distText,
+            basis,
             photo,
             isSelected: i === 0,
           });
@@ -146,7 +186,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     }
 
     const map = deriveMapVM(plan, spatialEvidence, 'compact');
-    const optionCards = deriveOptionCardVMs(plan);
+    const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys);
 
     return {
       layoutKind: 'candidates',
@@ -165,15 +205,15 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     };
   }
 
-  // 4. Generic Fallback Plan
+  // 4. Generic Fallback
   return {
     layoutKind: 'generic',
     planId: plan.id,
     title: plan.headline,
     headline: plan.headline,
-    basis: 'Based on your scheduled plans.',
+    basis: 'Current recommended plan',
     isRain: false,
-    options: deriveOptionCardVMs(plan),
+    options: deriveOptionCardVMs(plan, userConfirmedKeys),
     isAccepted,
     actions,
     aheadItems: compileAheadItems(aheadPlans),
@@ -182,9 +222,6 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
 }
 
 function compileAheadItems(aheadPlans: readonly PreparedPlan[]): readonly AheadItemVM[] {
-  if (!aheadPlans || aheadPlans.length === 0) {
-    return Object.freeze([]);
-  }
   return Object.freeze(
     aheadPlans.map(p => {
       const formatted = formatAheadPlan(p);
@@ -200,14 +237,10 @@ function compileAheadItems(aheadPlans: readonly PreparedPlan[]): readonly AheadI
 function compileProposals(
   proposals: readonly { key: string; value?: unknown }[]
 ): readonly ProposalItemVM[] {
-  if (!proposals || proposals.length === 0) {
-    return Object.freeze([]);
-  }
   return Object.freeze(
-    proposals.map(p => ({
-      key: p.key,
-      title: humanizeProposalTitle(p.key),
-      basis: typeof p.value === 'string' ? `Proposed value: ${p.value}` : undefined,
+    proposals.map(prop => ({
+      key: prop.key,
+      title: humanizeProposalTitle(prop.key),
     }))
   );
 }

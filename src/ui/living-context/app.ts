@@ -736,6 +736,8 @@ export function renderApp(
         aheadPlans,
         proposals: living.forYou.map(f => ({ key: f.key, value: f.value })),
         acceptedPlanIds,
+        userConfirmedKeys,
+        snapshot,
       });
 
       mainContentHtml = `

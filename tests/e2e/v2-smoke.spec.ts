@@ -209,12 +209,36 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
 
     // Clear D1
     await expect(page.locator('.now-card')).toContainText('Piano lesson at 3:00 PM');
+    // Verify D1 timeline derives exact 30 min travel and 2:55 PM arrival (no 25m/2:50 constants)
+    const d1Timeline = page.locator('.v2-timeline');
+    await expect(d1Timeline).toBeVisible();
+    await expect(d1Timeline).toContainText('Drive · 30 min');
+    await expect(d1Timeline).toContainText('2:55 PM');
+    await expect(d1Timeline).toContainText('5m buffer');
+    // Single-mode D1 has only drive route on map and NO bus route
+    await expect(page.locator('.v2-map-card polyline#route-drive, .v2-map-card [id="route-drive"]')).toBeVisible();
+    await expect(page.locator('.v2-map-card polyline#route-bus, .v2-map-card [id="route-bus"]')).toHaveCount(0);
+    // Plain string steps are not rendered as option cards
+    await expect(page.locator('.v2-options-grid')).toHaveCount(0);
 
     // Switch to Rain D2
     await page.selectOption('#scene-select', 'rain');
     await expect(page.locator('.now-card')).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
     await expect(page.locator('.now-card')).toContainText('Umbrella');
     await expect(page.locator('.now-card')).toContainText('Drive · leave 2:30 PM');
+
+    // Weather copy is derived strictly from weather signal (no reference image constants)
+    const insightDesc = page.locator('.v2-insight-desc');
+    await expect(insightDesc).toBeVisible();
+    await expect(insightDesc).toContainText('simulated');
+    await expect(insightDesc).not.toContainText('around 2:00 PM');
+    await expect(insightDesc).not.toContainText('Heavier 2:00–4:00 PM');
+
+    // Sample habit ranking basis displays honest Demo profile · sample and NEVER Confirmed
+    const rainOptions = page.locator('.v2-options-grid');
+    await expect(rainOptions).toBeVisible();
+    await expect(rainOptions).toContainText('Demo profile · sample');
+    await expect(rainOptions).not.toContainText('Confirmed');
 
     // Verify V2 Journey components (prominent map and timeline)
     await expect(page.locator('.v2-map-card.prominent')).toBeVisible();
@@ -234,6 +258,11 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(page.locator('.v2-candidate-card')).toHaveCount(3);
     await expect(page.locator('.v2-illustration-badge')).toHaveCount(3);
     await expect(page.locator('.v2-map-card.compact')).toBeVisible();
+
+    // Candidate basis displays honest Demo profile · sample and NEVER Confirmed
+    const candidateList = page.locator('.v2-candidate-list');
+    await expect(candidateList).toContainText('Demo profile · sample');
+    await expect(candidateList).not.toContainText('Confirmed');
 
     // Lunch axe check & screenshot
     await checkAxe(page);

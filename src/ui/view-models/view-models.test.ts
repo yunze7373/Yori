@@ -30,6 +30,7 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
         leaveAt: '2026-10-28T21:30:00.000Z',
         requiresConfirmation: false,
         rankedByFactKey: 'rain_transport_preference',
+        details: '25 min drive + 5 min buffer',
       },
       {
         id: 'opt-bus',
@@ -38,6 +39,7 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
         travelMinutes: 40,
         leaveAt: '2026-10-28T21:15:00.000Z',
         requiresConfirmation: false,
+        details: '40 min bus + 5 min buffer',
       },
     ],
     requiresConfirmation: false,
@@ -46,11 +48,21 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
         {
           kind: 'weather',
           source: 'simulated',
-          issuedAt: '2026-10-28T20:35:00.000Z',
+          issuedAt: '2026-10-28T20:35:00.000Z', // 1:35 PM local
           description: 'Rain forecast moderate at 1:35 PM',
         },
       ],
       memoryFactsUsed: [
+        {
+          key: 'prep_buffer_minutes',
+          value: 5,
+          status: 'confirmed',
+        },
+        {
+          key: 'prep_duration_minutes',
+          value: 20,
+          status: 'confirmed',
+        },
         {
           key: 'rain_transport_preference',
           value: 'drive_first',
@@ -60,6 +72,85 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
       derivation: 'Re-plan: rain at 1:35 PM -> drive option ranked first',
     },
     createdAt: '2026-10-28T20:35:00.000Z',
+  };
+
+  const d1ClearPlan: PreparedPlan = {
+    id: 'plan-d1-clear',
+    intentId: 'depart',
+    headline: 'Piano lesson at 3:00 PM',
+    subjectTitle: 'Piano lesson',
+    apptAt: '2026-10-28T22:00:00.000Z', // 3:00 PM PDT
+    prepareAt: '2026-10-28T21:05:00.000Z', // 2:05 PM PDT
+    leaveAt: '2026-10-28T21:25:00.000Z', // 2:25 PM PDT
+    timezone: 'America/Los_Angeles',
+    checklist: [],
+    optionsOrSteps: [
+      'prepare 2:05 PM',
+      'leave 2:25 PM',
+    ],
+    requiresConfirmation: false,
+    why: {
+      evidenceSignals: [
+        {
+          kind: 'travel_estimate',
+          source: 'simulated',
+          issuedAt: '2026-10-28T17:00:00.000Z',
+          description: 'Travel time estimate',
+        },
+      ],
+      memoryFactsUsed: [
+        {
+          key: 'prep_buffer_minutes',
+          value: 5,
+          status: 'confirmed',
+        },
+        {
+          key: 'prep_duration_minutes',
+          value: 20,
+          status: 'confirmed',
+        },
+      ],
+      derivation: 'Clear departure: 20m prep, 30m travel, 5m buffer',
+    },
+    createdAt: '2026-10-28T17:00:00.000Z',
+  };
+
+  const postConfirmPlan: PreparedPlan = {
+    id: 'plan-post-confirm',
+    intentId: 'depart',
+    headline: 'Piano lesson at 3:00 PM',
+    subjectTitle: 'Piano lesson',
+    apptAt: '2026-10-28T22:00:00.000Z', // 3:00 PM PDT
+    prepareAt: '2026-10-28T20:55:00.000Z', // 1:55 PM PDT (25m prep)
+    leaveAt: '2026-10-28T21:20:00.000Z', // 2:20 PM PDT (30m travel + 10m buffer = 40m before 3:00)
+    timezone: 'America/Los_Angeles',
+    checklist: ['umbrella'],
+    optionsOrSteps: [],
+    requiresConfirmation: false,
+    why: {
+      evidenceSignals: [
+        {
+          kind: 'travel_estimate',
+          source: 'simulated',
+          issuedAt: '2026-10-28T17:00:00.000Z',
+          description: 'Travel time estimate',
+        },
+      ],
+      memoryFactsUsed: [
+        {
+          key: 'prep_buffer_minutes',
+          value: 10,
+          status: 'confirmed',
+        },
+        {
+          key: 'prep_duration_minutes',
+          value: 25,
+          status: 'confirmed',
+        },
+      ],
+      derivation: 'Re-plan with confirmed user preferences: 25m prep, 10m buffer',
+    },
+    createdAt: '2026-10-28T20:00:00.000Z',
   };
 
   const d3LunchPlan: PreparedPlan = {
@@ -115,7 +206,7 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
   };
 
   const mockSpatialEvidence: SpatialMapEvidence = {
-    placeOrRoute: { name: 'Piano Studio (Downtown)' },
+    placeOrRoute: { name: 'Piano Studio (Downtown)', area: 'Downtown' },
     spatialEvidence: {
       kind: 'calendar',
       source: 'simulated',
@@ -138,6 +229,7 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
       expect(timeline!.steps[0]!.time).toBe('2:10 PM');
       expect(timeline!.steps[0]!.label).toBe('Get ready');
       expect(timeline!.steps[0]!.detail).toContain('umbrella');
+      expect(timeline!.steps[0]!.detail).toContain('20m prep + 5m buffer');
 
       // Step 2: Leave
       expect(timeline!.steps[1]!.time).toBe('2:30 PM');
@@ -156,15 +248,18 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
       expect(timeline!.steps[3]!.isEvent).toBe(true);
     });
 
-    it('derives OptionCardVMs for transit modes with ranking basis and no star ratings', () => {
-      const options = deriveOptionCardVMs(d2RainPlan);
+    it('derives OptionCardVMs for transit modes with honest ranking basis and no star ratings', () => {
+      // Sample profile fact (userConfirmedKeys empty)
+      const options = deriveOptionCardVMs(d2RainPlan, new Set());
       expect(options).toHaveLength(2);
 
       // Drive option
       expect(options[0]!.mode).toBe('drive');
       expect(options[0]!.travelMinutes).toBe(25);
       expect(options[0]!.badge).toBe('Recommended');
-      expect(options[0]!.rankingBasis).toContain('rain transport preference');
+      expect(options[0]!.rankingBasis).toContain('Rain travel habit');
+      expect(options[0]!.rankingBasis).toContain('Demo profile · sample');
+      expect(options[0]!.rankingBasis).not.toContain('Confirmed');
       expect(options[0]!.isSelected).toBe(true);
 
       // Bus option
@@ -187,11 +282,118 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
       expect(map!.polylines).toHaveLength(2); // Drive and Bus
       expect(map!.markers).toHaveLength(2); // Origin and Destination
       expect(map!.weatherCallout).toBeDefined();
-      expect(map!.weatherCallout!.text).toBe('Rain expected');
+      expect(map!.weatherCallout!.text).toBe('Rain forecast · simulated');
+      expect(map!.weatherCallout!.subtext).toBe('Issued 1:35 PM');
     });
   });
 
-  describe('4.2 Candidate Cards & Compact Map (Lunch Away)', () => {
+  describe('4.2 Non-D2 Value Verification (Finding 1 & 4 Fixes)', () => {
+    it('derives D1 travel mathematically as 30 min and arrival as 2:55 PM (not 25m/2:50)', () => {
+      const timeline = deriveTimelineVM(d1ClearPlan);
+      expect(timeline).toBeDefined();
+      expect(timeline!.steps).toHaveLength(4);
+
+      // Step 1: Prep (2:05 PM)
+      expect(timeline!.steps[0]!.time).toBe('2:05 PM');
+      expect(timeline!.steps[0]!.detail).toBe('20m prep + 5m buffer');
+
+      // Step 2: Leave (2:25 PM) with 30 min travel (3:00 - 2:25 - 5m buffer = 30m)
+      expect(timeline!.steps[1]!.time).toBe('2:25 PM');
+      expect(timeline!.steps[1]!.detail).toBe('Drive · 30 min');
+
+      // Step 3: Arrive at 2:55 PM (2:25 PM + 30m = 2:55 PM) with 5m buffer
+      expect(timeline!.steps[2]!.time).toBe('2:55 PM');
+      expect(timeline!.steps[2]!.detail).toBe('On time · 5m buffer');
+
+      // Step 4: Event at 3:00 PM
+      expect(timeline!.steps[3]!.time).toBe('3:00 PM');
+    });
+
+    it('omits option cards for single-mode depart plans where timeline already shows the steps', () => {
+      const options = deriveOptionCardVMs(d1ClearPlan);
+      // Plain string steps are not rendered as duplicate option cards
+      expect(options).toHaveLength(0);
+    });
+
+    it('draws only the Drive polyline for single-mode depart plan and NO bus polyline', () => {
+      const map = deriveMapVM(d1ClearPlan, mockSpatialEvidence, 'prominent');
+      expect(map).toBeDefined();
+      expect(map!.polylines).toHaveLength(1);
+      expect(map!.polylines[0]!.mode).toBe('drive');
+      expect(map!.polylines[0]!.travelMinutes).toBe(30);
+      expect(map!.polylines.some(p => p.mode === 'bus')).toBe(false);
+      expect(map!.weatherCallout).toBeUndefined();
+    });
+
+    it('correctly adapts timeline to post-confirm 25m prep + 10m buffer facts', () => {
+      const timeline = deriveTimelineVM(postConfirmPlan);
+      expect(timeline).toBeDefined();
+
+      // Step 1: Prep at 1:55 PM with 25m prep + 10m buffer
+      expect(timeline!.steps[0]!.time).toBe('1:55 PM');
+      expect(timeline!.steps[0]!.detail).toBe('Take umbrella · 25m prep + 10m buffer');
+
+      // Step 2: Leave at 2:20 PM
+      expect(timeline!.steps[1]!.time).toBe('2:20 PM');
+      expect(timeline!.steps[1]!.detail).toBe('Drive · 30 min');
+
+      // Step 3: Arrive at 2:50 PM (2:20 PM + 30m = 2:50 PM) with 10m buffer
+      expect(timeline!.steps[2]!.time).toBe('2:50 PM');
+      expect(timeline!.steps[2]!.detail).toBe('On time · 10m buffer');
+    });
+  });
+
+  describe('4.3 Weather Copy Derivation & Static Check (Finding 2 Fix)', () => {
+    it('derives weather copy strictly from signal issuedAt and excludes reference-art literals', () => {
+      const comp = buildHomeComposition({
+        plan: d2RainPlan,
+        spatialEvidence: mockSpatialEvidence,
+      });
+
+      expect(comp.isRain).toBe(true);
+      expect(comp.rainInsightDesc).toBeDefined();
+      expect(comp.rainInsightDesc).toContain('issued 1:35 PM');
+      expect(comp.rainInsightDesc).toContain('simulated');
+
+      // Verify absence of reference-image literals
+      expect(comp.rainInsightDesc).not.toContain('around 2:00 PM');
+      expect(comp.rainInsightDesc).not.toContain('Heavier 2:00–4:00 PM');
+      expect(comp.map?.weatherCallout?.subtext).not.toContain('2:00–4:00 PM');
+    });
+  });
+
+  describe('4.4 Provenance Honesty for Sample vs Confirmed Facts (Finding 3 Fix)', () => {
+    it('labels sample demo profile facts as Demo profile · sample and NEVER as Confirmed', () => {
+      const comp = buildHomeComposition({
+        plan: d3LunchPlan,
+        spatialEvidence: mockSpatialEvidence,
+        userConfirmedKeys: new Set(), // user has not confirmed taste
+      });
+
+      expect(comp.candidateCards).toBeDefined();
+      expect(comp.candidateCards![0]!.basis).toContain('Demo profile · sample');
+      expect(comp.candidateCards![0]!.basis).not.toContain('Confirmed');
+
+      const options = deriveOptionCardVMs(d2RainPlan, new Set());
+      expect(options[0]!.rankingBasis).toContain('Demo profile · sample');
+      expect(options[0]!.rankingBasis).not.toContain('Confirmed');
+    });
+
+    it('labels facts as You confirmed when present in userConfirmedKeys', () => {
+      const comp = buildHomeComposition({
+        plan: d3LunchPlan,
+        spatialEvidence: mockSpatialEvidence,
+        userConfirmedKeys: new Set(['taste_preference']),
+      });
+
+      expect(comp.candidateCards![0]!.basis).toContain('You confirmed');
+
+      const options = deriveOptionCardVMs(d2RainPlan, new Set(['rain_transport_preference']));
+      expect(options[0]!.rankingBasis).toContain('You confirmed');
+    });
+  });
+
+  describe('4.5 Candidate Cards & Compact Map (Lunch Away)', () => {
     it('derives CandidateCardVMs paired with local SVG illustrations', () => {
       const comp = buildHomeComposition({
         plan: d3LunchPlan,
@@ -215,6 +417,11 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
       expect(placeB.name).toBe('Demo Place B · Salad');
       expect(placeB.cuisine).toBe('Salad');
       expect(placeB.photo.category).toBe('salad');
+
+      const placeC = comp.candidateCards![2]!;
+      expect(placeC.name).toBe('Demo Place C · Sushi');
+      expect(placeC.cuisine).toBe('Japanese');
+      expect(placeC.photo.category).toBe('sushi');
     });
 
     it('derives compact MapVM for lunch candidates', () => {
@@ -228,16 +435,15 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
     });
   });
 
-  describe('4.3 Empty Group Collapse (§4 Non-monotonous Layout)', () => {
+  describe('4.6 Empty Group Collapse (§4 Non-monotonous Layout)', () => {
     it('collapses AHEAD and FOR YOU when empty (zero empty placeholder cards)', () => {
       const comp = buildHomeComposition({
         plan: d2RainPlan,
         spatialEvidence: mockSpatialEvidence,
-        aheadPlans: [], // empty
-        proposals: [], // empty
+        aheadPlans: [],
+        proposals: [],
       });
 
-      // Proof: empty lists mean the UI template never renders empty block wrappers
       expect(comp.aheadItems).toHaveLength(0);
       expect(comp.proposals).toHaveLength(0);
     });
@@ -272,7 +478,7 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
     });
   });
 
-  describe('4.4 Static Check: Zero External Image URLs (Data Honesty)', () => {
+  describe('4.7 Static Check: Zero External Image URLs (Data Honesty)', () => {
     it('verifies all files in src/ui/view-models/ contain ZERO external image URLs', () => {
       const vmDir = path.resolve(process.cwd(), 'src/ui/view-models');
       const files = fs.readdirSync(vmDir).filter(f => f.endsWith('.ts'));
@@ -297,7 +503,6 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
       for (const ill of illustrations) {
         expect(ill.simulatedBadge).toBe('Illustration · simulated');
         expect(ill.svgMarkup).toContain('<svg');
-        // Proof of zero external image URLs / zero remote asset fetching
         expect(ill.svgMarkup).not.toMatch(/https?:\/\/[^\s"']+\.(png|jpg|jpeg|webp|gif)/i);
         expect(ill.svgMarkup).not.toMatch(/src=["']https?:\/\//i);
         expect(ill.svgMarkup).not.toMatch(/xlink:href=["']https?:\/\//i);

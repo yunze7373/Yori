@@ -6,6 +6,7 @@
  * - ZERO external image URLs or remote assets (enforced by static check).
  * - Visibly labelled "Illustration · simulated".
  * - No person photo as Yori avatar.
+ * - Match on fixture cuisine and dish attributes only (zero concept image venue names).
  */
 
 import type { PhotoVM } from './types.js';
@@ -64,21 +65,23 @@ function createSaladSvg(): string {
 function createSushiSvg(): string {
   return `
     <svg width="100%" height="100%" viewBox="0 0 200 130" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
-      <rect width="100%" height="100%" fill="#F5F3EF" rx="8"/>
-      <line x1="20" y1="105" x2="180" y2="105" stroke="#E3DFD5" stroke-width="3" stroke-linecap="round"/>
-      <!-- Wooden geta plate -->
-      <rect x="45" y="60" width="110" height="32" rx="4" fill="#C99B6D"/>
-      <rect x="52" y="92" width="12" height="8" rx="2" fill="#9C6B3E"/>
-      <rect x="136" y="92" width="12" height="8" rx="2" fill="#9C6B3E"/>
-      <!-- Nigiri pieces -->
-      <ellipse cx="70" cy="66" rx="14" ry="7" fill="#FFFFFF"/>
-      <path d="M57 65 C57 58 83 58 83 65 Z" fill="#E76F51"/>
-      <ellipse cx="100" cy="66" rx="14" ry="7" fill="#FFFFFF"/>
-      <path d="M87 65 C87 58 113 58 113 65 Z" fill="#F4A261"/>
-      <!-- Maki roll -->
-      <ellipse cx="132" cy="66" rx="11" ry="8" fill="#1C2E26"/>
-      <ellipse cx="132" cy="65" rx="8" ry="5.5" fill="#FFFFFF"/>
-      <circle cx="132" cy="65" r="2.5" fill="#40916C"/>
+      <rect width="100%" height="100%" fill="#F7F5F0" rx="8"/>
+      <!-- Dark slate serving board -->
+      <rect x="35" y="42" width="130" height="60" rx="4" fill="#212F2B"/>
+      <!-- Nigiri 1: Salmon -->
+      <rect x="52" y="58" width="26" height="15" rx="5" fill="#F8F9FA"/>
+      <rect x="50" y="54" width="30" height="12" rx="4" fill="#FA8072"/>
+      <line x1="56" y1="56" x2="74" y2="56" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+      <!-- Nigiri 2: Tuna -->
+      <rect x="87" y="58" width="26" height="15" rx="5" fill="#F8F9FA"/>
+      <rect x="85" y="54" width="30" height="12" rx="4" fill="#C93B3B"/>
+      <!-- Nigiri 3: Tamago with Nori band -->
+      <rect x="122" y="58" width="26" height="15" rx="5" fill="#F8F9FA"/>
+      <rect x="120" y="53" width="30" height="13" rx="4" fill="#F6BD60"/>
+      <rect x="131" y="53" width="8" height="20" fill="#1C2E26"/>
+      <!-- Wasabi dab & Ginger -->
+      <ellipse cx="48" cy="88" rx="6" ry="4" fill="#74C69D"/>
+      <ellipse cx="152" cy="88" rx="8" ry="4" fill="#FFDDD2"/>
     </svg>
   `.trim();
 }
@@ -86,23 +89,19 @@ function createSushiSvg(): string {
 function createCafeSvg(): string {
   return `
     <svg width="100%" height="100%" viewBox="0 0 200 130" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
-      <rect width="100%" height="100%" fill="#F7F3EE" rx="8"/>
-      <line x1="20" y1="105" x2="180" y2="105" stroke="#E5DED4" stroke-width="3" stroke-linecap="round"/>
+      <rect width="100%" height="100%" fill="#F9F6F0" rx="8"/>
+      <ellipse cx="100" cy="100" rx="45" ry="10" fill="#E8DFD3"/>
       <!-- Saucer -->
-      <ellipse cx="100" cy="92" rx="46" ry="10" fill="#E6DFD5"/>
-      <ellipse cx="100" cy="90" rx="40" ry="8" fill="#FFFFFF"/>
-      <!-- Ceramic Cup -->
-      <path d="M72 58 C72 82 82 86 100 86 C118 86 128 82 128 58 Z" fill="#FFFFFF"/>
-      <ellipse cx="100" cy="58" rx="28" ry="7" fill="#EAE5DC"/>
-      <!-- Coffee surface -->
-      <ellipse cx="100" cy="59" rx="24" ry="5.5" fill="#5E3821"/>
-      <!-- Latte art leaf -->
-      <path d="M96 59 Q100 56 104 59 Q100 61 96 59 Z" fill="#FAF5EF"/>
+      <ellipse cx="100" cy="85" rx="46" ry="12" fill="#E6DFD5"/>
+      <ellipse cx="100" cy="83" rx="40" ry="10" fill="#FFFFFF"/>
+      <!-- Cup -->
+      <path d="M72 55 C72 82 82 85 100 85 C118 85 128 82 128 55 Z" fill="#FFFFFF"/>
+      <ellipse cx="100" cy="55" rx="28" ry="8" fill="#F0ECE4"/>
+      <!-- Coffee & Latte Art -->
+      <ellipse cx="100" cy="55" rx="25" ry="7" fill="#6F4E37"/>
+      <path d="M92 55 Q100 51 108 55 Q100 58 92 55" fill="#FFFFFF" opacity="0.85"/>
       <!-- Handle -->
-      <path d="M127 63 C138 63 138 77 125 79" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" fill="none"/>
-      <!-- Steam -->
-      <path d="M96 46 Q100 38 96 32" stroke="#C9BEB0" stroke-width="2" stroke-linecap="round" fill="none"/>
-      <path d="M106 44 Q110 36 106 28" stroke="#C9BEB0" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <path d="M126 60 C138 60 138 74 124 76" stroke="#FFFFFF" stroke-width="4.5" fill="none"/>
     </svg>
   `.trim();
 }
@@ -111,17 +110,14 @@ function createItalianSvg(): string {
   return `
     <svg width="100%" height="100%" viewBox="0 0 200 130" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
       <rect width="100%" height="100%" fill="#FBF8F3" rx="8"/>
-      <line x1="20" y1="105" x2="180" y2="105" stroke="#EAE2D5" stroke-width="3" stroke-linecap="round"/>
-      <!-- Plate -->
-      <ellipse cx="100" cy="85" rx="60" ry="18" fill="#ECE5DA"/>
-      <ellipse cx="100" cy="82" rx="52" ry="14" fill="#FFFFFF"/>
-      <!-- Pasta swirl -->
-      <ellipse cx="100" cy="78" rx="34" ry="10" fill="#F7DC6F"/>
-      <path d="M80 76 Q95 68 112 75 Q120 80 102 82" stroke="#E59866" stroke-width="4" stroke-linecap="round" fill="none"/>
-      <!-- Tomato sauce & basil garnish -->
-      <circle cx="98" cy="76" r="8" fill="#C0392B"/>
-      <ellipse cx="94" cy="72" rx="5" ry="3" fill="#27AE60" transform="rotate(-20 94 72)"/>
-      <ellipse cx="105" cy="74" rx="4" ry="2.5" fill="#2ECC71" transform="rotate(25 105 74)"/>
+      <!-- Plate rim and center -->
+      <ellipse cx="100" cy="75" rx="60" ry="22" fill="#FFFFFF" stroke="#E5DFD7" stroke-width="2"/>
+      <ellipse cx="100" cy="75" rx="42" ry="15" fill="#FAF6F0"/>
+      <!-- Pasta mound with tomato sauce -->
+      <ellipse cx="100" cy="73" rx="32" ry="11" fill="#F3D58C"/>
+      <path d="M85 70 Q100 64 115 70 Q105 76 90 73" fill="#D34B38"/>
+      <!-- Basil leaf -->
+      <path d="M96 66 C93 61 100 58 104 64 C100 66 98 67 96 66 Z" fill="#3A8657"/>
     </svg>
   `.trim();
 }
@@ -129,13 +125,13 @@ function createItalianSvg(): string {
 function createDefaultDiningSvg(): string {
   return `
     <svg width="100%" height="100%" viewBox="0 0 200 130" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
-      <rect width="100%" height="100%" fill="#F5F6F5" rx="8"/>
-      <line x1="20" y1="105" x2="180" y2="105" stroke="#E1E4E1" stroke-width="3" stroke-linecap="round"/>
-      <ellipse cx="100" cy="84" rx="48" ry="14" fill="#E2EAE5"/>
-      <ellipse cx="100" cy="81" rx="40" ry="11" fill="#FFFFFF"/>
-      <!-- Fork and knife icon -->
-      <path d="M78 50 L78 72 M74 50 L74 60 C74 64 82 64 82 60 L82 50" stroke="#2D6A4F" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-      <path d="M122 50 L122 72 M122 50 C125 50 128 54 128 62 L122 64" stroke="#2D6A4F" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <rect width="100%" height="100%" fill="#F6F7F5" rx="8"/>
+      <ellipse cx="100" cy="80" rx="50" ry="16" fill="#FFFFFF" stroke="#DEE2DF" stroke-width="2"/>
+      <circle cx="100" cy="78" r="18" fill="#4B6B5C" opacity="0.8"/>
+      <circle cx="100" cy="78" r="12" fill="#E8EDEA"/>
+      <!-- Cloche / Cover hint -->
+      <path d="M82 72 C82 58 118 58 118 72 Z" fill="#8FA499" opacity="0.4"/>
+      <circle cx="100" cy="56" r="3.5" fill="#4B6B5C"/>
     </svg>
   `.trim();
 }
@@ -152,7 +148,7 @@ export function getLocalIllustration(cuisineOrCategory: string, name?: string): 
     category = 'ramen';
     label = 'Ramen dish illustration';
     svgMarkup = createRamenSvg();
-  } else if (norm.includes('salad') || norm.includes('vegetarian') || nameNorm.includes('green') || nameNorm.includes('salad')) {
+  } else if (norm.includes('salad') || norm.includes('vegetarian') || nameNorm.includes('salad')) {
     category = 'salad';
     label = 'Fresh salad illustration';
     svgMarkup = createSaladSvg();
@@ -160,11 +156,11 @@ export function getLocalIllustration(cuisineOrCategory: string, name?: string): 
     category = 'sushi';
     label = 'Sushi platter illustration';
     svgMarkup = createSushiSvg();
-  } else if (norm.includes('cafe') || norm.includes('coffee') || nameNorm.includes('cafe') || nameNorm.includes('lumi')) {
+  } else if (norm.includes('cafe') || norm.includes('coffee') || nameNorm.includes('cafe')) {
     category = 'cafe';
     label = 'Café coffee illustration';
     svgMarkup = createCafeSvg();
-  } else if (norm.includes('italian') || norm.includes('pasta') || nameNorm.includes('italian') || nameNorm.includes('sakura')) {
+  } else if (norm.includes('italian') || norm.includes('pasta') || nameNorm.includes('italian')) {
     category = 'italian';
     label = 'Italian pasta illustration';
     svgMarkup = createItalianSvg();

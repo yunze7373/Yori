@@ -40,6 +40,7 @@ function renderMapSvg(map: MapVM): string {
           .map(
             poly => `
           <polyline
+            id="${poly.id}"
             points="${poly.points}"
             stroke="${poly.strokeColor}"
             stroke-width="${poly.strokeWidth}"
@@ -201,7 +202,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             </div>
             <div class="v2-insight-body">
               <h2 class="v2-insight-title">${escapeHtml(vm.rainBanner)}</h2>
-              <p class="v2-insight-desc">Rain expected around 2:00 PM. I've prepared an updated departure schedule.</p>
+              <p class="v2-insight-desc">${escapeHtml(vm.rainInsightDesc || "I've prepared an updated departure schedule.")}</p>
               ${
                 vm.umbrellaChip
                   ? `

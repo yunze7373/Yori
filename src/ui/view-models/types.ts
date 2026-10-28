@@ -129,6 +129,7 @@ export interface HomeCompositionVM {
   readonly basis: string;
   readonly isRain: boolean;
   readonly rainBanner?: string;
+  readonly rainInsightDesc?: string;
   readonly umbrellaChip?: string;
   readonly habitNote?: string;
 
