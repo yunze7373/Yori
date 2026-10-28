@@ -15,7 +15,7 @@
 :root {
   --color-ground: #F8F8F5;
   --color-ink: #17211F;
-  --color-muted: #42524D; /* enhanced for >5.5:1 contrast on ground/white */
+  --color-muted: #354540; /* enhanced for >6:1 contrast on ground/white/tinted surfaces */
   --color-card-bg: #FFFFFF;
   --color-card-border: #E1E6E0;
   --color-primary-btn: #16382F;
@@ -49,6 +49,17 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 button, select, input, a {
@@ -103,6 +114,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+  border: 1px solid #CAD6D0;
 }
 
 .live-weather-chip {
@@ -329,8 +341,14 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   padding: 10px 18px;
   border-radius: 12px;
   font-weight: 600;
+  cursor: pointer;
+  opacity: 1;
+  transition: all 0.15s ease;
+}
+
+.btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
-  opacity: 0.7;
 }
 
 .btn-primary {
@@ -340,7 +358,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 }
 
 .btn-outline {
-  background-color: transparent;
+  background-color: #FFFFFF;
   color: var(--color-ink);
   border: 1px solid var(--color-card-border);
 }
@@ -654,7 +672,12 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   line-height: 1;
   color: var(--color-muted);
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 6px;
 }
 
@@ -693,7 +716,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--color-accent);
+  color: #21584F;
 }
 
 .why-item-list {
@@ -732,7 +755,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 
 .why-item-time {
   font-size: 0.78rem;
-  color: #6B7C75;
+  color: var(--color-muted);
 }
 
 .why-empty-text {
@@ -755,31 +778,37 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 .badge-simulated {
   background-color: #E2EAE5;
   color: #16382F;
+  border: 1px solid #CAD6D0;
 }
 
 .badge-real {
   background-color: #DCFCE7;
-  color: #166534;
+  color: #14532D;
+  border: 1px solid #BBF7D0;
 }
 
 .badge-confirmed {
   background-color: #DCFCE7;
-  color: #166534;
+  color: #14532D;
+  border: 1px solid #BBF7D0;
 }
 
 .badge-pending {
   background-color: #FEF3C7;
-  color: #92400E;
+  color: #78350F;
+  border: 1px solid #FDE68A;
 }
 
 .badge-rejected {
   background-color: #FEE2E2;
-  color: #991B1B;
+  color: #7F1D1D;
+  border: 1px solid #FECACA;
 }
 
 .badge-budget {
   background-color: #E0E7FF;
   color: #3730A3;
+  border: 1px solid #C7D2FE;
   font-weight: 600;
 }
 
@@ -839,7 +868,8 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   font-size: 0.95rem;
   color: var(--color-ink);
   cursor: pointer;
-  padding: 8px 12px;
+  padding: 10px 12px;
+  min-height: 44px;
   border-radius: 8px;
   transition: background-color 0.15s ease;
 }
@@ -943,7 +973,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 
 .memory-meta {
   font-size: 0.78rem;
-  color: #6B7C75;
+  color: var(--color-muted);
   margin-top: 2px;
 }
 
@@ -961,9 +991,9 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 }
 
 .btn-sm {
-  padding: 6px 12px;
-  font-size: 0.82rem;
-  min-height: 36px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  min-height: 44px;
 }
 
 .data-actions-row {
@@ -981,6 +1011,10 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 
 .nav-pill {
   padding: 8px 16px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 20px;
   font-size: 0.88rem;
   font-weight: 500;

@@ -172,23 +172,23 @@ export function renderMeView(state: MeViewState): string {
           ? `
       <section class="card me-card" aria-labelledby="me-xmemo-title">
         <div class="me-card-header">
-          <h2 id="me-xmemo-title" class="section-label">XMemo Sync</h2>
+          <h2 id="me-xmemo-title" class="section-label">${escapeHtml(STRINGS.xmemo.title)}</h2>
           <span class="card-badge ${state.xmemoStatus.connected ? 'badge-confirmed' : 'badge-pending'}">
-            ${state.xmemoStatus.connected ? 'Connected' : 'Disconnected'}
+            ${escapeHtml(state.xmemoStatus.connected ? STRINGS.xmemo.connectedBadge : STRINGS.xmemo.disconnectedBadge)}
           </span>
         </div>
         <p class="me-card-desc">
-          ${
+          ${escapeHtml(
             state.xmemoStatus.connected
-              ? 'Connected to XMemo private memory vault. Confirmed preferences sync securely via OAuth 2.0 PKCE.'
-              : 'Connect your XMemo account to securely read preferences and sync confirmed facts.'
-          }
+              ? STRINGS.xmemo.connectedDesc
+              : STRINGS.xmemo.disconnectedDesc
+          )}
         </p>
         <div class="data-actions-row">
           ${
             state.xmemoStatus.connected
-              ? `<button type="button" class="btn btn-outline" id="btn-xmemo-disconnect">Disconnect XMemo</button>`
-              : `<button type="button" class="btn btn-primary" id="btn-xmemo-connect">Connect XMemo</button>`
+              ? `<button type="button" class="btn btn-outline" id="btn-xmemo-disconnect">${escapeHtml(STRINGS.xmemo.disconnectBtn)}</button>`
+              : `<button type="button" class="btn btn-primary" id="btn-xmemo-connect">${escapeHtml(STRINGS.xmemo.connectBtn)}</button>`
           }
         </div>
       </section>

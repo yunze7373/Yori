@@ -17,6 +17,15 @@ export const STRINGS = Object.freeze({
     liveWeatherBadge: 'Live weather',
     weatherAttribution: 'Weather data by Open-Meteo.com',
   }),
+  xmemo: Object.freeze({
+    title: 'XMemo Sync',
+    connectedBadge: 'Connected',
+    disconnectedBadge: 'Disconnected',
+    connectedDesc: 'Connected to your private memory vault. Confirmed preferences sync securely in the background.',
+    disconnectedDesc: 'Connect your private memory vault to securely sync confirmed preferences.',
+    connectBtn: 'Connect XMemo',
+    disconnectBtn: 'Disconnect XMemo',
+  }),
   sections: Object.freeze({
     now: 'NOW · YOUR NEXT MOMENT',
     ahead: "AHEAD · WHAT'S COMING",
