@@ -41,7 +41,7 @@ Yori synthesizes structured context into an intuitive, glanceable card layout:
 
 ### 2. Explainable Review Loop
 Every recommendation is fully transparent:
-- **Why Sheet**: Tap **Why** to inspect plain-language rationale (e.g. *"Drive ranked first based on your confirmed habit for rainy days"*), citing real snapshot timestamps and evidence signals.
+- **Why Sheet**: Tap **Why** to inspect plain-language rationale (e.g. *"You usually prefer driving when it rains."*), citing scenario evidence signals alongside clearly labelled demo-profile and user-confirmed habits.
 - **Adjust Dialog**: Adjust buffer times for *"This time only"* or choose *"Remember as preference"* to create a proposal.
 - **Dismissals**: Dismissing a card silences it for the day and creates an explainable preference proposal.
 

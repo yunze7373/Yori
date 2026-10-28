@@ -51,12 +51,12 @@ Use the **Demo Scenes** selector at the top-right of the navigation bar to test 
 
 2. **Rain Re-Plan (D2)**
    - **Context**: Sudden rain forecast issued at 1:35 PM valid for the departure window.
-   - **NOW Card**: Dynamically includes an **Umbrella** checklist chip and two ranked transit tiles: Drive (2:30 PM, ranked first by confirmed habit) and Bus (2:15 PM).
-   - **Memory**: Personal habit fact explains why driving is prioritized over transit.
+   - **NOW Card**: Dynamically includes an **Umbrella** checklist chip and two ranked transit tiles: Drive (2:30 PM, ranked first by rain habit) and Bus (2:15 PM).
+   - **Memory**: Demo-profile habit fact explains why driving is prioritized over transit.
 
 3. **Away Lunch (D3)**
    - **Context**: User is away from home at 12:10 PM with an adequate free schedule window and has not eaten lunch.
-   - **NOW Card**: Recommends up to 3 dining options within walking distance matching confirmed taste memories (`Japanese`, `Salad`).
+   - **NOW Card**: Recommends up to 3 dining options within walking distance matching taste preferences (`Japanese`, `Salad`).
 
 4. **Busy Lunch (D4)**
    - **Context**: User has back-to-back meetings or already logged lunch.

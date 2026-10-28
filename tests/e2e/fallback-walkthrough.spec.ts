@@ -357,6 +357,9 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     // Acceptance (1): Verify that returning to Why Sheet now shows user-confirmed facts
     // with 'Confirmed' badge while unchanged sample facts still show 'Demo profile · sample preference'
     await navigateToToday(page, isMobile);
+    // Verifies the recomputed timing line reflects 25m prep & 10m buffer: 3:00 PM - 25m drive - 10m buffer = leave 2:25 PM; ready 2:00 PM
+    await expect(page.locator('#now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
+
     await page.locator('#btn-why').click();
     const postWhyModal = page.locator('.modal-card');
     await expect(postWhyModal).toBeVisible();
