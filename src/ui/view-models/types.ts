@@ -147,3 +147,66 @@ export interface HomeCompositionVM {
   readonly aheadItems: readonly AheadItemVM[];
   readonly proposals: readonly ProposalItemVM[];
 }
+
+// -------------------------------------------------------------
+// V1b DETAIL VIEW MODELS (LIVING_CONTEXT_V2.md §8 D1)
+// -------------------------------------------------------------
+
+export interface TripModeTabVM {
+  readonly id: string;
+  readonly mode: 'drive' | 'bus' | 'walk' | string;
+  readonly label: string;
+  readonly leaveTime: string;
+  readonly arriveTime: string;
+  readonly durationMinutes: number;
+  readonly isSelected: boolean;
+}
+
+export interface TripWhyProvenanceVM {
+  readonly label: string;
+  readonly value: string;
+  readonly provenanceText: string;
+  readonly isConfirmed: boolean;
+}
+
+export interface TripDetailVM {
+  readonly planId: string;
+  readonly title: string;
+  readonly headline: string;
+  readonly destinationName: string;
+  readonly apptTime: string;
+  readonly leaveTime: string;
+  readonly arriveTime: string;
+  readonly bufferText: string;
+  readonly prepText: string;
+  readonly modeTabs: readonly TripModeTabVM[];
+  readonly selectedMode: string;
+  readonly map: MapVM;
+  readonly steps: readonly TimelineStepVM[];
+  readonly whyHabits: readonly TripWhyProvenanceVM[];
+  readonly whyDerivation: string;
+  readonly isAccepted: boolean;
+  readonly actions: readonly PlanAction[];
+}
+
+export interface RestaurantDirectionStepVM {
+  readonly id: string;
+  readonly instruction: string;
+  readonly durationText?: string;
+  readonly isFinal?: boolean;
+}
+
+export interface RestaurantDetailVM {
+  readonly id: string;
+  readonly name: string;
+  readonly cuisine: string;
+  readonly distanceMinutes: number;
+  readonly distanceText: string;
+  readonly photo: PhotoVM;
+  readonly attributeChips: readonly string[];
+  readonly basis: string;
+  readonly map: MapVM;
+  readonly isSaved: boolean;
+  readonly directions: readonly RestaurantDirectionStepVM[];
+  readonly simulatedNotice: string;
+}

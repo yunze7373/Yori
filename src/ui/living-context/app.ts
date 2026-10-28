@@ -75,8 +75,18 @@ import {
   renderConversationOverlay,
   attachConversationEvents,
 } from '../conversation/index.js';
-import { buildHomeComposition } from '../view-models/index.js';
+import {
+  buildHomeComposition,
+  deriveTripDetailVM,
+  deriveRestaurantDetailVM,
+} from '../view-models/index.js';
 import { renderV2Home } from './v2-home-view.js';
+import {
+  renderTripDetail,
+  renderRestaurantDetail,
+  renderPlansView,
+  renderForYouView,
+} from './v2-detail-views.js';
 
 export type DemoSceneId =
   | 'clear'
@@ -552,7 +562,31 @@ export function renderApp(
   const uiVersion: UiVersion = resolveUiVersion(uiVersionOverride ?? getEffectiveUiVersion());
   root.setAttribute('data-ui-version', uiVersion);
   let currentScene = initialScene;
-  let activeTab: 'today' | 'me' = 'today';
+  let activeTab: 'today' | 'home' | 'plans' | 'for-you' | 'me' = 'today';
+  let activeDetail: {
+    type: 'trip' | 'restaurant';
+    planId?: string;
+    candidateId?: string;
+    selectedMode?: string;
+    isSaved?: boolean;
+    originatingElementId?: string;
+  } | null = null;
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('popstate', () => {
+      if (activeDetail) {
+        const origId = activeDetail.originatingElementId;
+        activeDetail = null;
+        update();
+        if (origId) {
+          requestAnimationFrame(() => {
+            const el = document.getElementById(origId) ?? root.querySelector('.now-card, .v2-candidate-card');
+            (el as HTMLElement)?.focus();
+          });
+        }
+      }
+    });
+  }
   const sharedStorage = customStorage ?? new YoriStorage(new WebStorageDriver());
   const memoryPort = createMemoryPort(sharedStorage);
   const actionStore: ActionStateStore = createActionStateStore();
@@ -730,15 +764,54 @@ export function renderApp(
         xmemoStatus,
       });
     } else if (uiVersion === 'v2') {
-      const v2Composition = buildHomeComposition({
-        plan: nowPlan,
-        spatialEvidence: spatialMapEvidence,
-        aheadPlans,
-        proposals: living.forYou.map(f => ({ key: f.key, value: f.value })),
-        acceptedPlanIds,
-        userConfirmedKeys,
-        snapshot,
-      });
+      let v2BodyHtml = '';
+      if (activeDetail?.type === 'trip' && nowPlan) {
+        const tripVM = deriveTripDetailVM({
+          plan: nowPlan,
+          spatialEvidence: spatialMapEvidence,
+          selectedMode: activeDetail.selectedMode,
+          userConfirmedKeys,
+          snapshot,
+          acceptedPlanIds,
+        });
+        v2BodyHtml = renderTripDetail(tripVM);
+      } else if (activeDetail?.type === 'restaurant' && nowPlan) {
+        const firstOpt = nowPlan.optionsOrSteps?.[0];
+        const defaultCandId =
+          typeof firstOpt !== 'string' && firstOpt ? firstOpt.id : 'cand-1';
+        const candidateId = activeDetail.candidateId || defaultCandId;
+        const restaurantVM = deriveRestaurantDetailVM({
+          candidateId,
+          plan: nowPlan,
+          spatialEvidence: spatialMapEvidence,
+          isSaved: activeDetail.isSaved ?? false,
+          userConfirmedKeys,
+        });
+        v2BodyHtml = renderRestaurantDetail(restaurantVM);
+      } else if (activeTab === 'plans') {
+        v2BodyHtml = renderPlansView(aheadPlans);
+      } else if (activeTab === 'for-you') {
+        const proposalsVM = living.forYou.map(f => {
+          const isConfirmed = userConfirmedKeys.has(f.key);
+          const title = humanizeProposalTitle(f.key);
+          const basis = isConfirmed
+            ? 'Confirmed preference'
+            : 'Derived from sample demo profile';
+          return { key: f.key, title, basis, value: f.value };
+        });
+        v2BodyHtml = renderForYouView(proposalsVM);
+      } else {
+        const v2Composition = buildHomeComposition({
+          plan: nowPlan,
+          spatialEvidence: spatialMapEvidence,
+          aheadPlans,
+          proposals: living.forYou.map(f => ({ key: f.key, value: f.value })),
+          acceptedPlanIds,
+          userConfirmedKeys,
+          snapshot,
+        });
+        v2BodyHtml = renderV2Home(v2Composition);
+      }
 
       mainContentHtml = `
         ${
@@ -773,7 +846,7 @@ export function renderApp(
             : ''
         }
 
-        ${renderV2Home(v2Composition)}
+        ${v2BodyHtml}
       `;
     } else {
       mainContentHtml = `
@@ -1075,12 +1148,31 @@ export function renderApp(
 
               <!-- Desktop Navigation Links -->
               <nav class="desktop-nav" aria-label="Desktop Navigation">
+                ${
+                  uiVersion === 'v2'
+                    ? `
+                <button type="button" class="nav-pill ${activeTab === 'today' || activeTab === 'home' ? 'active' : ''}" data-tab="home" id="desktop-nav-home">
+                  Home
+                </button>
+                <button type="button" class="nav-pill ${activeTab === 'plans' ? 'active' : ''}" data-tab="plans" id="desktop-nav-plans">
+                  Plans
+                </button>
+                <button type="button" class="nav-pill ${activeTab === 'for-you' ? 'active' : ''}" data-tab="for-you" id="desktop-nav-for-you">
+                  For You
+                </button>
+                <button type="button" class="nav-pill ${activeTab === 'me' ? 'active' : ''}" data-tab="me" id="desktop-nav-me">
+                  Me
+                </button>
+                `
+                    : `
                 <button type="button" class="nav-pill ${activeTab === 'today' ? 'active' : ''}" data-tab="today" id="desktop-nav-today">
                   ${escapeHtml(STRINGS.tabs.today)}
                 </button>
                 <button type="button" class="nav-pill ${activeTab === 'me' ? 'active' : ''}" data-tab="me" id="desktop-nav-me">
                   ${escapeHtml(STRINGS.tabs.me)}
                 </button>
+                `
+                }
               </nav>
 
               <div class="scene-switcher">
@@ -1115,11 +1207,45 @@ export function renderApp(
 
         <main class="main-container" role="main">
           ${mainContentHtml}
-          ${uiVersion === 'v2' && activeTab === 'today' ? renderAskBar() : ''}
+          ${uiVersion === 'v2' && (activeTab === 'today' || activeTab === 'home') && !activeDetail ? renderAskBar() : ''}
         </main>
 
         <!-- Bottom Tab Bar (Mobile) -->
         <nav class="bottom-tab-bar" aria-label="Main Navigation">
+          ${
+            uiVersion === 'v2'
+              ? `
+          <button type="button" class="tab-item ${activeTab === 'today' || activeTab === 'home' ? 'active' : ''}" id="tab-home" aria-current="${activeTab === 'today' || activeTab === 'home' ? 'page' : 'false'}">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+            <span>Home</span>
+          </button>
+          <button type="button" class="tab-item ${activeTab === 'plans' ? 'active' : ''}" id="tab-plans" aria-current="${activeTab === 'plans' ? 'page' : 'false'}">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <span>Plans</span>
+          </button>
+          <button type="button" class="tab-item ${activeTab === 'for-you' ? 'active' : ''}" id="tab-for-you" aria-current="${activeTab === 'for-you' ? 'page' : 'false'}">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+            </svg>
+            <span>For You</span>
+          </button>
+          <button type="button" class="tab-item ${activeTab === 'me' ? 'active' : ''}" id="tab-me" aria-current="${activeTab === 'me' ? 'page' : 'false'}">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>Me</span>
+          </button>
+          `
+              : `
           <button type="button" class="tab-item ${activeTab === 'today' ? 'active' : ''}" id="tab-today" aria-current="${activeTab === 'today' ? 'page' : 'false'}">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
               <circle cx="12" cy="12" r="5"></circle>
@@ -1132,9 +1258,6 @@ export function renderApp(
             </svg>
             <span>${escapeHtml(STRINGS.tabs.today)}</span>
           </button>
-          ${
-            uiVersion === 'v1'
-              ? `
           <button type="button" class="tab-item disabled" disabled aria-disabled="true" title="Coming soon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
               <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
@@ -1147,9 +1270,6 @@ export function renderApp(
             </svg>
             <span>${escapeHtml(STRINGS.tabs.ask)}</span>
           </button>
-          `
-              : ''
-          }
           <button type="button" class="tab-item ${activeTab === 'me' ? 'active' : ''}" id="tab-me" aria-current="${activeTab === 'me' ? 'page' : 'false'}">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
@@ -1157,6 +1277,8 @@ export function renderApp(
             </svg>
             <span>${escapeHtml(STRINGS.tabs.me)}</span>
           </button>
+          `
+          }
         </nav>
 
         <!-- Active Modals (Why sheet, Adjust, Dismiss) -->
@@ -1208,10 +1330,38 @@ export function renderApp(
     }
 
     // 2. Navigation Tab Switching (Mobile & Desktop)
+    const homeBtn = root.querySelector('#tab-home');
+    if (homeBtn) {
+      homeBtn.addEventListener('click', () => {
+        activeTab = 'today';
+        activeDetail = null;
+        update();
+      });
+    }
+
     const todayBtn = root.querySelector('#tab-today');
     if (todayBtn) {
       todayBtn.addEventListener('click', () => {
         activeTab = 'today';
+        activeDetail = null;
+        update();
+      });
+    }
+
+    const plansBtn = root.querySelector('#tab-plans');
+    if (plansBtn) {
+      plansBtn.addEventListener('click', () => {
+        activeTab = 'plans';
+        activeDetail = null;
+        update();
+      });
+    }
+
+    const forYouBtn = root.querySelector('#tab-for-you');
+    if (forYouBtn) {
+      forYouBtn.addEventListener('click', () => {
+        activeTab = 'for-you';
+        activeDetail = null;
         update();
       });
     }
@@ -1220,8 +1370,36 @@ export function renderApp(
     if (meBtn) {
       meBtn.addEventListener('click', async () => {
         activeTab = 'me';
+        activeDetail = null;
         update();
         await checkXMemoStatus();
+      });
+    }
+
+    const desktopHomeBtn = root.querySelector('#desktop-nav-home');
+    if (desktopHomeBtn) {
+      desktopHomeBtn.addEventListener('click', () => {
+        activeTab = 'today';
+        activeDetail = null;
+        update();
+      });
+    }
+
+    const desktopPlansBtn = root.querySelector('#desktop-nav-plans');
+    if (desktopPlansBtn) {
+      desktopPlansBtn.addEventListener('click', () => {
+        activeTab = 'plans';
+        activeDetail = null;
+        update();
+      });
+    }
+
+    const desktopForYouBtn = root.querySelector('#desktop-nav-for-you');
+    if (desktopForYouBtn) {
+      desktopForYouBtn.addEventListener('click', () => {
+        activeTab = 'for-you';
+        activeDetail = null;
+        update();
       });
     }
 
@@ -1229,6 +1407,7 @@ export function renderApp(
     if (desktopTodayBtn) {
       desktopTodayBtn.addEventListener('click', () => {
         activeTab = 'today';
+        activeDetail = null;
         update();
       });
     }
@@ -1237,9 +1416,139 @@ export function renderApp(
     if (desktopMeBtn) {
       desktopMeBtn.addEventListener('click', async () => {
         activeTab = 'me';
+        activeDetail = null;
         update();
         await checkXMemoStatus();
       });
+    }
+
+    // 2b. V2 Detail View Interactions (TripDetail & RestaurantDetail)
+    if (uiVersion === 'v2') {
+      // Open TripDetail from 'Details →' button or NOW card
+      const tripDetailsBtn = root.querySelector('#btn-view-trip-details');
+      if (tripDetailsBtn && nowPlan) {
+        tripDetailsBtn.addEventListener('click', e => {
+          e.stopPropagation();
+          activeDetail = {
+            type: 'trip',
+            planId: nowPlan.id,
+            originatingElementId: 'btn-view-trip-details',
+          };
+          if (typeof window !== 'undefined' && window.history?.pushState) {
+            window.history.pushState({ detail: activeDetail }, '', window.location.href);
+          }
+          update();
+        });
+      }
+
+      const nowCardJourney = root.querySelector('.now-card.v2-journey-card');
+      if (nowCardJourney && nowPlan) {
+        nowCardJourney.addEventListener('click', e => {
+          const target = e.target as HTMLElement;
+          if (target.closest('button, a, input, select')) return;
+          activeDetail = {
+            type: 'trip',
+            planId: nowPlan.id,
+            originatingElementId: 'now-title',
+          };
+          if (typeof window !== 'undefined' && window.history?.pushState) {
+            window.history.pushState({ detail: activeDetail }, '', window.location.href);
+          }
+          update();
+        });
+      }
+
+      // Open RestaurantDetail from candidate cards
+      root.querySelectorAll<HTMLElement>('.v2-candidate-card').forEach(card => {
+        const candId = card.getAttribute('data-candidate-id');
+        const openCandidate = () => {
+          activeDetail = {
+            type: 'restaurant',
+            candidateId: candId ?? undefined,
+            originatingElementId: card.id || (candId ? `candidate-${candId}` : undefined),
+          };
+          if (typeof window !== 'undefined' && window.history?.pushState) {
+            window.history.pushState({ detail: activeDetail }, '', window.location.href);
+          }
+          update();
+        };
+
+        card.addEventListener('click', e => {
+          const target = e.target as HTMLElement;
+          if (target.closest('button:not(.v2-candidate-card)')) return;
+          openCandidate();
+        });
+
+        card.addEventListener('keydown', e => {
+          const ke = e as KeyboardEvent;
+          if (ke.key === 'Enter' || ke.key === ' ') {
+            ke.preventDefault();
+            openCandidate();
+          }
+        });
+      });
+
+      // TripDetail: Back button & mode tabs
+      const tripBackBtn = root.querySelector('#trip-detail-back-btn');
+      if (tripBackBtn) {
+        tripBackBtn.addEventListener('click', () => {
+          const origId = activeDetail?.originatingElementId;
+          activeDetail = null;
+          update();
+          if (origId) {
+            requestAnimationFrame(() => {
+              const el = document.getElementById(origId) ?? root.querySelector('.now-card');
+              (el as HTMLElement)?.focus();
+            });
+          }
+        });
+      }
+
+      root.querySelectorAll<HTMLElement>('.v2-mode-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          const mode = tab.getAttribute('data-mode');
+          if (mode && activeDetail?.type === 'trip') {
+            activeDetail.selectedMode = mode;
+            update();
+          }
+        });
+      });
+
+      // RestaurantDetail: Back button, Save, Directions
+      const restBackBtn = root.querySelector('#restaurant-detail-back-btn');
+      if (restBackBtn) {
+        restBackBtn.addEventListener('click', () => {
+          const origId = activeDetail?.originatingElementId;
+          activeDetail = null;
+          update();
+          if (origId) {
+            requestAnimationFrame(() => {
+              const el = document.getElementById(origId) ?? root.querySelector('.v2-candidate-card');
+              (el as HTMLElement)?.focus();
+            });
+          }
+        });
+      }
+
+      const restSaveBtn = root.querySelector('#btn-restaurant-save');
+      if (restSaveBtn) {
+        restSaveBtn.addEventListener('click', () => {
+          if (activeDetail && activeDetail.type === 'restaurant') {
+            activeDetail.isSaved = !activeDetail.isSaved;
+            update();
+          }
+        });
+      }
+
+      const directionsBtn = root.querySelector('#btn-restaurant-directions');
+      const directionsPanel = root.querySelector<HTMLElement>('#restaurant-directions-panel');
+      if (directionsBtn && directionsPanel) {
+        directionsBtn.addEventListener('click', () => {
+          const isHidden = directionsPanel.style.display === 'none' || !directionsPanel.style.display;
+          directionsPanel.style.display = isHidden ? 'block' : 'none';
+          directionsBtn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+        });
+      }
     }
 
     // 3. Plan Review Actions: Accept

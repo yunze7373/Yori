@@ -111,7 +111,7 @@ function renderMapSvg(map: MapVM): string {
   `;
 }
 
-function renderMapCard(map: MapVM): string {
+export function renderMapCard(map: MapVM): string {
   return `
     <section class="card v2-map-card ${map.sizeHint}" aria-label="${escapeHtml(map.label)}">
       <div class="map-header">
@@ -139,6 +139,9 @@ function renderActionRow(vm: HomeCompositionVM): string {
         <button type="button" class="btn btn-outline" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}">
           ${escapeHtml(STRINGS.actions.undo)}
         </button>
+        <button type="button" class="btn btn-outline v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}">
+          Details →
+        </button>
         <button type="button" class="btn btn-outline" id="btn-why" data-plan-id="${escapeHtml(planId)}">
           ${escapeHtml(STRINGS.actions.why)}
         </button>
@@ -152,6 +155,9 @@ function renderActionRow(vm: HomeCompositionVM): string {
       </button>
       <button type="button" class="btn btn-outline" id="btn-adjust" data-plan-id="${escapeHtml(planId)}">
         ${escapeHtml(STRINGS.actions.adjust)}
+      </button>
+      <button type="button" class="btn btn-outline v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}">
+        Details →
       </button>
       <button type="button" class="btn btn-outline" id="btn-dismiss" data-plan-id="${escapeHtml(planId)}">
         ${escapeHtml(STRINGS.actions.dismiss)}
@@ -333,7 +339,14 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             ${vm.candidateCards
               .map(
                 c => `
-              <div class="v2-candidate-card ${c.isSelected ? 'selected' : ''}">
+              <div
+                class="v2-candidate-card ${c.isSelected ? 'selected' : ''}"
+                id="candidate-${c.id}"
+                data-candidate-id="${c.id}"
+                role="button"
+                tabindex="0"
+                aria-label="View details for ${escapeHtml(c.name)}"
+              >
                 <div class="v2-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
                   ${c.photo.svgMarkup}
                   <span class="v2-illustration-badge">${escapeHtml(c.photo.simulatedBadge)}</span>
@@ -345,6 +358,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     <span class="v2-distance-chip">${escapeHtml(c.distanceText)}</span>
                   </div>
                   <div class="v2-candidate-basis">${escapeHtml(c.basis)}</div>
+                  <div class="v2-candidate-footer">
+                    <span class="v2-view-detail-link">Details →</span>
+                  </div>
                 </div>
               </div>
             `

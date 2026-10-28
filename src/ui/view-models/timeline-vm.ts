@@ -12,7 +12,10 @@ import type { PreparedPlan, PlanOption } from '../../core/contracts/index.js';
 import { formatTime } from '../living-context/presentation.js';
 import type { TimelineVM, TimelineStepVM } from './types.js';
 
-export function deriveTimelineVM(plan: PreparedPlan): TimelineVM | undefined {
+export function deriveTimelineVM(
+  plan: PreparedPlan,
+  snapshot?: { signals: readonly { kind: string; value?: unknown }[] } | null
+): TimelineVM | undefined {
   if (plan.intentId !== 'depart') {
     return undefined;
   }
@@ -90,11 +93,12 @@ export function deriveTimelineVM(plan: PreparedPlan): TimelineVM | undefined {
     }
   }
 
-  // If primaryMode still not determined, check travel evidence signals
-  if (!primaryMode && plan.why?.evidenceSignals) {
-    const travelSignal = plan.why.evidenceSignals.find(s => s.kind === 'travel_estimate');
-    if (travelSignal?.description) {
-      primaryMode = 'Drive';
+  // If primaryMode still not determined, check travel signal value if available
+  if (!primaryMode && snapshot?.signals) {
+    const travelSig = snapshot.signals.find(s => s.kind === 'travel_estimate');
+    const valMode = (travelSig?.value as Record<string, unknown>)?.mode;
+    if (typeof valMode === 'string' && valMode) {
+      primaryMode = valMode.charAt(0).toUpperCase() + valMode.slice(1);
     }
   }
   if (!primaryMode) {

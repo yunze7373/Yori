@@ -289,7 +289,12 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
 
   describe('4.2 Non-D2 Value Verification (Finding 1 & 4 Fixes)', () => {
     it('derives D1 travel mathematically as 30 min and arrival as 2:55 PM (not 25m/2:50)', () => {
-      const timeline = deriveTimelineVM(d1ClearPlan);
+      const mockSnapshot = {
+        signals: [
+          { kind: 'travel_estimate', value: { mode: 'drive', travelMinutes: 30 } },
+        ],
+      };
+      const timeline = deriveTimelineVM(d1ClearPlan, mockSnapshot);
       expect(timeline).toBeDefined();
       expect(timeline!.steps).toHaveLength(4);
 
@@ -309,6 +314,21 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
       expect(timeline!.steps[3]!.time).toBe('3:00 PM');
     });
 
+    it('derives travel mode from signal value without assuming Drive', () => {
+      // Test mode derived as Bus from signal value
+      const busSnapshot = {
+        signals: [
+          { kind: 'travel_estimate', value: { mode: 'bus', travelMinutes: 30 } },
+        ],
+      };
+      const busTimeline = deriveTimelineVM(d1ClearPlan, busSnapshot);
+      expect(busTimeline!.steps[1]!.detail).toBe('Bus · 30 min');
+
+      // Test mode fallback to neutral Travel when no signal value exists
+      const neutralTimeline = deriveTimelineVM(d1ClearPlan, { signals: [] });
+      expect(neutralTimeline!.steps[1]!.detail).toBe('Travel · 30 min');
+    });
+
     it('omits option cards for single-mode depart plans where timeline already shows the steps', () => {
       const options = deriveOptionCardVMs(d1ClearPlan);
       // Plain string steps are not rendered as duplicate option cards
@@ -326,7 +346,12 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
     });
 
     it('correctly adapts timeline to post-confirm 25m prep + 10m buffer facts', () => {
-      const timeline = deriveTimelineVM(postConfirmPlan);
+      const mockSnapshot = {
+        signals: [
+          { kind: 'travel_estimate', value: { mode: 'drive', travelMinutes: 30 } },
+        ],
+      };
+      const timeline = deriveTimelineVM(postConfirmPlan, mockSnapshot);
       expect(timeline).toBeDefined();
 
       // Step 1: Prep at 1:55 PM with 25m prep + 10m buffer

@@ -113,7 +113,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     }
 
     const map = deriveMapVM(plan, spatialEvidence, 'prominent');
-    const timeline = deriveTimelineVM(plan);
+    const timeline = deriveTimelineVM(plan, snapshot);
     const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys);
 
     return {

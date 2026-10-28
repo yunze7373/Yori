@@ -279,4 +279,282 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(page.locator('#badge-ui-version')).toHaveCount(0);
     await expect(page.locator('#ask-bar')).toHaveCount(0);
   });
+
+  test('V1b: TripDetail expanded view with mode tabs, schematic map, timing, why provenance, and back navigation', async ({ page }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+    await page.selectOption('#scene-select', 'rain');
+
+    const viewport = page.viewportSize();
+    const isMobile = (viewport?.width ?? 0) < 600;
+
+    // Verify rain scene home is loaded
+    await expect(page.locator('.now-card')).toBeVisible();
+
+    // Click "Details →" button to open TripDetail
+    const detailsBtn = page.locator('#btn-view-trip-details');
+    await expect(detailsBtn).toBeVisible();
+    await detailsBtn.click();
+
+    // Verify TripDetail view is mounted
+    const tripDetail = page.locator('.v2-trip-detail');
+    await expect(tripDetail).toBeVisible();
+    await expect(tripDetail).toContainText('Piano lesson at 3:00 PM');
+    await expect(tripDetail).toContainText('SIMULATED');
+
+    // Verify Mode Tabs: Drive and Bus only; Walk absent
+    const driveTab = page.locator('#mode-tab-drive');
+    const busTab = page.locator('#mode-tab-bus');
+    const walkTab = page.locator('#mode-tab-walk');
+
+    await expect(driveTab).toBeVisible();
+    await expect(driveTab).toContainText('Drive · 25 min');
+    await expect(driveTab).toHaveAttribute('aria-selected', 'true');
+
+    await expect(busTab).toBeVisible();
+    await expect(busTab).toContainText('Bus · 40 min');
+    await expect(busTab).toHaveAttribute('aria-selected', 'false');
+
+    await expect(walkTab).toHaveCount(0);
+
+    // Initial Drive Timing Summary: leave 2:30 PM, arrive 2:55 PM (5m buffer)
+    const leaveTimeEl = page.locator('#trip-leave-time');
+    const arriveTimeEl = page.locator('#trip-arrive-time');
+    await expect(leaveTimeEl).toHaveText('2:30 PM');
+    await expect(arriveTimeEl).toHaveText('2:55 PM');
+    await expect(tripDetail.locator('.v2-buffer-pill')).toContainText('5m buffer');
+    await expect(tripDetail.locator('.v2-prep-pill')).toContainText('Take umbrella · 20m prep + 5m buffer');
+
+    // Switch to Bus Mode Tab
+    await busTab.click();
+    await expect(busTab).toHaveAttribute('aria-selected', 'true');
+    await expect(driveTab).toHaveAttribute('aria-selected', 'false');
+    // Bus: leave 2:15 PM, arrive 2:55 PM
+    await expect(leaveTimeEl).toHaveText('2:15 PM');
+    await expect(arriveTimeEl).toHaveText('2:55 PM');
+
+    // Prominent Schematic Map with weather overlay
+    const mapCard = tripDetail.locator('.v2-map-card.prominent');
+    await expect(mapCard).toBeVisible();
+    await expect(mapCard).toContainText('Rain forecast · simulated');
+
+    // "Why this plan?" section with honest provenance chips
+    const whySection = tripDetail.locator('.v2-why-plan-card');
+    await expect(whySection).toBeVisible();
+    await expect(whySection).toContainText('Why this plan?');
+    await expect(whySection).toContainText('Demo profile · sample');
+    // Data honesty check: zero star ratings or review counts
+    const tripDetailText = await tripDetail.innerText();
+    expect(tripDetailText).not.toContain('★');
+    expect(tripDetailText).not.toContain('reviews');
+
+    // Axe audit
+    await checkAxe(page);
+
+    // Screenshot evidence capture
+    const tripFilename = isMobile
+      ? 'v2-trip-detail-mobile-390x844.png'
+      : 'v2-trip-detail-desktop-1280x800.png';
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, tripFilename), fullPage: false });
+
+    // Back button returns to Home and restores focus to originating button
+    const backBtn = page.locator('#trip-detail-back-btn');
+    await expect(backBtn).toBeVisible();
+    await backBtn.click();
+
+    // Verify return to Home
+    await expect(page.locator('.v2-trip-detail')).toHaveCount(0);
+    await expect(page.locator('.now-card')).toBeVisible();
+
+    // Open detail again and test browser popstate (Back)
+    await page.locator('#btn-view-trip-details').click();
+    await expect(page.locator('.v2-trip-detail')).toBeVisible();
+    await page.goBack();
+    await expect(page.locator('.v2-trip-detail')).toHaveCount(0);
+    await expect(page.locator('.now-card')).toBeVisible();
+  });
+
+  test('V1b: RestaurantDetail expanded view with local artwork, attribute chips, Save UI state, in-app Directions, and back navigation', async ({ page }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+    await page.selectOption('#scene-select', 'away-lunch');
+
+    const viewport = page.viewportSize();
+    const isMobile = (viewport?.width ?? 0) < 600;
+
+    // Verify candidate cards are present
+    const firstCandidate = page.locator('.v2-candidate-card').first();
+    await expect(firstCandidate).toBeVisible();
+    const candidateName = await firstCandidate.locator('.v2-candidate-name').innerText();
+
+    // Click candidate card to open RestaurantDetail
+    await firstCandidate.click();
+
+    // Verify RestaurantDetail view is mounted
+    const restDetail = page.locator('.v2-restaurant-detail');
+    await expect(restDetail).toBeVisible();
+    await expect(restDetail.locator('#restaurant-detail-name')).toHaveText(candidateName);
+
+    // Local labelled SVG illustration with zero remote URLs
+    const heroArt = restDetail.locator('.v2-restaurant-hero-art');
+    await expect(heroArt).toBeVisible();
+    await expect(heroArt).toContainText('Illustration · simulated');
+    const heroSvg = heroArt.locator('svg');
+    await expect(heroSvg).toBeVisible();
+    // Static check: verify zero remote images
+    const remoteImgs = await restDetail.locator('img, image').all();
+    for (const img of remoteImgs) {
+      const src = (await img.getAttribute('src')) || (await img.getAttribute('href')) || '';
+      expect(src).not.toContain('http://');
+      expect(src).not.toContain('https://');
+    }
+
+    // Fixture attribute chips only; zero star ratings or review counts
+    const attrChips = restDetail.locator('.v2-attribute-chips');
+    await expect(attrChips).toBeVisible();
+    await expect(attrChips).toContainText('5m away');
+    const detailText = await restDetail.innerText();
+    expect(detailText).not.toContain('★');
+    expect(detailText).not.toContain('reviews');
+    expect(detailText).not.toContain('rating');
+
+    // Save button: UI state only, zero memory writes
+    const saveBtn = restDetail.locator('#btn-restaurant-save');
+    await expect(saveBtn).toBeVisible();
+    await expect(saveBtn).toHaveAttribute('aria-pressed', 'false');
+    await expect(saveBtn).toContainText('Save');
+
+    // Click Save: toggles to Saved
+    await saveBtn.click();
+    await expect(saveBtn).toHaveAttribute('aria-pressed', 'true');
+    await expect(saveBtn).toContainText('Saved');
+
+    // In-App Directions button: strictly in-app route, zero external maps/URLs
+    const dirBtn = restDetail.locator('#btn-restaurant-directions');
+    const dirPanel = restDetail.locator('#restaurant-directions-panel');
+    await expect(dirBtn).toBeVisible();
+    await expect(dirPanel).not.toBeVisible();
+
+    // Click Directions to reveal in-app schematic directions
+    await dirBtn.click();
+    await expect(dirPanel).toBeVisible();
+    await expect(dirPanel).toContainText('Walking Directions');
+    await expect(dirPanel).toContainText('In-app route · simulated');
+    await expect(dirPanel.locator('.v2-direction-item')).toHaveCount(3);
+
+    // Verify zero external map links in directions panel
+    const externalLinks = await dirPanel.locator('a[href*="google"], a[href*="maps"], a[target="_blank"]').all();
+    expect(externalLinks).toHaveLength(0);
+
+    // Axe audit
+    await checkAxe(page);
+
+    // Screenshot evidence capture
+    const restFilename = isMobile
+      ? 'v2-restaurant-detail-mobile-390x844.png'
+      : 'v2-restaurant-detail-desktop-1280x800.png';
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, restFilename), fullPage: false });
+
+    // Back button returns to Home and restores focus to originating candidate card
+    const backBtn = restDetail.locator('#restaurant-detail-back-btn');
+    await expect(backBtn).toBeVisible();
+    await backBtn.click();
+
+    // Verify return to Home
+    await expect(page.locator('.v2-restaurant-detail')).toHaveCount(0);
+    await expect(page.locator('.v2-candidate-list')).toBeVisible();
+  });
+
+  test('V1b: Decided 4-tab bottom navigation (Home / Plans / For You / Me), zero disabled tabs, and no mic icon', async ({ page }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+
+    const viewport = page.viewportSize();
+    const isMobile = (viewport?.width ?? 0) < 600;
+
+    // Verify zero disabled navigation tabs on V2
+    const disabledTabs = page.locator('.bottom-tab-bar .disabled, .desktop-nav .disabled');
+    await expect(disabledTabs).toHaveCount(0);
+
+    // Verify NO mic icon exists in ask bar or anywhere in navigation
+    const micElements = page.locator('[aria-label*="mic" i], .mic-icon, svg.mic');
+    await expect(micElements).toHaveCount(0);
+
+    if (isMobile) {
+      // Mobile 4-tab bottom bar: #tab-home, #tab-plans, #tab-for-you, #tab-me
+      const tabHome = page.locator('#tab-home');
+      const tabPlans = page.locator('#tab-plans');
+      const tabForYou = page.locator('#tab-for-you');
+      const tabMe = page.locator('#tab-me');
+
+      await expect(tabHome).toBeVisible();
+      await expect(tabPlans).toBeVisible();
+      await expect(tabForYou).toBeVisible();
+      await expect(tabMe).toBeVisible();
+
+      // Home tab is initially active
+      await expect(tabHome).toHaveAttribute('aria-current', 'page');
+      await expect(page.locator('#ask-bar')).toBeVisible();
+
+      // Switch to Plans tab (functional AHEAD list)
+      await tabPlans.click();
+      await expect(tabPlans).toHaveAttribute('aria-current', 'page');
+      await expect(tabHome).toHaveAttribute('aria-current', 'false');
+      await expect(page.locator('.v2-plans-view')).toBeVisible();
+      await expect(page.locator('.v2-plans-view')).toContainText('Upcoming Plans');
+      // Ask bar is hidden on secondary tabs
+      await expect(page.locator('#ask-bar')).toHaveCount(0);
+
+      // Switch to For You tab (functional proposals & insights)
+      await tabForYou.click();
+      await expect(tabForYou).toHaveAttribute('aria-current', 'page');
+      await expect(page.locator('.v2-for-you-view')).toBeVisible();
+      await expect(page.locator('.v2-for-you-view')).toContainText('For You');
+
+      // Switch to Me tab (functional memory & budget view)
+      await tabMe.click();
+      await expect(tabMe).toHaveAttribute('aria-current', 'page');
+      await expect(page.locator('.me-view-container')).toBeVisible();
+
+      // Switch back to Home
+      await tabHome.click();
+      await expect(tabHome).toHaveAttribute('aria-current', 'page');
+      await expect(page.locator('.now-card')).toBeVisible();
+      await expect(page.locator('#ask-bar')).toBeVisible();
+    } else {
+      // Desktop 4 navigation pills: #desktop-nav-home, #desktop-nav-plans, #desktop-nav-for-you, #desktop-nav-me
+      const navHome = page.locator('#desktop-nav-home');
+      const navPlans = page.locator('#desktop-nav-plans');
+      const navForYou = page.locator('#desktop-nav-for-you');
+      const navMe = page.locator('#desktop-nav-me');
+
+      await expect(navHome).toBeVisible();
+      await expect(navPlans).toBeVisible();
+      await expect(navForYou).toBeVisible();
+      await expect(navMe).toBeVisible();
+
+      // Switch to Plans
+      await navPlans.click();
+      await expect(navPlans).toHaveClass(/active/);
+      await expect(page.locator('.v2-plans-view')).toBeVisible();
+
+      // Switch to For You
+      await navForYou.click();
+      await expect(navForYou).toHaveClass(/active/);
+      await expect(page.locator('.v2-for-you-view')).toBeVisible();
+
+      // Switch to Me
+      await navMe.click();
+      await expect(navMe).toHaveClass(/active/);
+      await expect(page.locator('.me-view-container')).toBeVisible();
+
+      // Return to Home
+      await navHome.click();
+      await expect(navHome).toHaveClass(/active/);
+      await expect(page.locator('.now-card')).toBeVisible();
+    }
+
+    // Axe audit
+    await checkAxe(page);
+  });
 });

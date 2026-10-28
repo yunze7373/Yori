@@ -8,3 +8,5 @@ export * from './timeline-vm.js';
 export * from './option-card-vm.js';
 export * from './map-vm.js';
 export * from './home-vm.js';
+export * from './trip-detail-vm.js';
+export * from './restaurant-detail-vm.js';

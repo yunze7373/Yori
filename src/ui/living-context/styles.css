@@ -1712,3 +1712,591 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   line-height: 1.35;
 }
 
+.v2-candidate-card {
+  cursor: pointer;
+}
+
+.v2-candidate-card:focus-visible {
+  outline: 2px solid #2D6A4F;
+  outline-offset: 2px;
+}
+
+.v2-candidate-footer {
+  margin-top: 4px;
+}
+
+.v2-view-detail-link {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #2D6A4F;
+}
+
+/* -------------------------------------------------------------------------- */
+/* V1b: Expanded Detail Views & Functional Bottom Navigation (D1/D2/D4)        */
+/* -------------------------------------------------------------------------- */
+
+.v2-detail-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.v2-detail-top-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.v2-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid #D5DDD8;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #16382F;
+  cursor: pointer;
+  min-height: 38px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.v2-back-btn:hover {
+  background: #EBF2ED;
+  border-color: #2D6A4F;
+}
+
+.v2-back-btn:focus-visible {
+  outline: 2px solid #2D6A4F;
+  outline-offset: 2px;
+}
+
+.v2-detail-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #16382F;
+  color: #FFFFFF;
+  letter-spacing: 0.03em;
+}
+
+.v2-detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.v2-detail-title {
+  font-family: Georgia, Cambria, 'Times New Roman', Times, serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #16382F;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.v2-detail-headline {
+  font-size: 0.875rem;
+  color: #16382F;
+}
+
+/* Mode Tabs */
+.v2-mode-tabs {
+  display: flex;
+  gap: 8px;
+  background: #EBF2ED;
+  padding: 4px;
+  border-radius: 12px;
+}
+
+.v2-mode-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  min-height: 48px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.v2-mode-tab.selected {
+  background: #FFFFFF;
+  border-color: #CADBC9;
+  box-shadow: 0 2px 6px rgba(22, 56, 47, 0.08);
+}
+
+.v2-mode-tab:focus-visible {
+  outline: 2px solid #2D6A4F;
+  outline-offset: 1px;
+}
+
+.v2-tab-label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #16382F;
+}
+
+.v2-tab-times {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #16382F;
+  margin-top: 2px;
+}
+
+/* Trip Summary Card */
+.v2-trip-summary-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border: 1px solid #CADBC9;
+  border-radius: 16px;
+  background: #FFFFFF;
+}
+
+.v2-trip-summary-times {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px 0;
+}
+
+.v2-time-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.v2-time-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #16382F;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.v2-time-value {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: #16382F;
+  font-variant-numeric: tabular-nums;
+}
+
+.v2-time-divider {
+  font-size: 1.25rem;
+  color: #16382F;
+}
+
+.v2-trip-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.v2-buffer-pill,
+.v2-prep-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: #E2EAE5;
+  color: #16382F;
+}
+
+.v2-trip-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+  border-top: 1px dashed #D5DDD8;
+  padding-top: 12px;
+}
+
+.v2-trip-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 0.8125rem;
+}
+
+.v2-step-time {
+  min-width: 62px;
+  font-weight: 700;
+  color: #16382F;
+  font-variant-numeric: tabular-nums;
+}
+
+.v2-step-node {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2D6A4F;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.v2-trip-step.event .v2-step-node {
+  background: #B45309;
+}
+
+.v2-step-content {
+  flex: 1;
+}
+
+.v2-step-label {
+  font-weight: 600;
+  color: #16382F;
+}
+
+.v2-step-detail {
+  font-size: 0.75rem;
+  color: #16382F;
+  margin-top: 1px;
+}
+
+/* Why This Plan Card */
+.v2-why-plan-card {
+  padding: 16px;
+  border: 1px solid #CADBC9;
+  border-radius: 16px;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.v2-section-heading {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: #16382F;
+  margin: 0;
+}
+
+.v2-why-derivation {
+  font-size: 0.8125rem;
+  color: #16382F;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.v2-habits-provenance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.v2-habit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #F4F7F4;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+}
+
+.v2-habit-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.v2-habit-name {
+  font-weight: 600;
+  color: #16382F;
+}
+
+.v2-habit-val {
+  font-size: 0.75rem;
+  color: #16382F;
+}
+
+.v2-provenance-chip {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.v2-provenance-chip.confirmed {
+  background: #D1E7DD;
+  color: #0F5132;
+}
+
+.v2-provenance-chip.sample {
+  background: #EAE6DF;
+  color: #544A3E;
+}
+
+.v2-detail-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Restaurant Detail */
+.v2-restaurant-hero-art {
+  position: relative;
+  width: 100%;
+  height: 160px;
+  background: #F4F7F4;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #D5DDD8;
+}
+
+.v2-attribute-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.v2-attr-chip {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: #E2EAE5;
+  color: #16382F;
+}
+
+.v2-basis-card {
+  padding: 12px 14px;
+  background: #F8FAF8;
+  border: 1px solid #D5DDD8;
+  border-radius: 12px;
+}
+
+.v2-basis-text {
+  font-size: 0.8125rem;
+  color: #2D6A4F;
+  font-weight: 500;
+}
+
+.v2-restaurant-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.v2-save-btn {
+  flex: 1;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-saved {
+  background: #2D6A4F !important;
+  color: #FFFFFF !important;
+  border-color: #2D6A4F !important;
+}
+
+.v2-directions-btn {
+  flex: 1;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.v2-directions-panel {
+  padding: 16px;
+  border: 1px solid #CADBC9;
+  border-radius: 16px;
+  background: #FFFFFF;
+}
+
+.v2-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.v2-in-app-badge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #16382F;
+  color: #FFFFFF;
+}
+
+.v2-directions-intro {
+  font-size: 0.8125rem;
+  color: #16382F;
+  margin: 0 0 12px 0;
+}
+
+.v2-directions-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.v2-direction-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.8125rem;
+  color: #16382F;
+}
+
+.v2-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #E2EAE5;
+  font-weight: 700;
+  font-size: 0.75rem;
+  color: #16382F;
+  flex-shrink: 0;
+}
+
+.v2-direction-item.final .v2-step-number {
+  background: #2D6A4F;
+  color: #FFFFFF;
+}
+
+.v2-step-instruction {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.v2-step-dur {
+  font-size: 0.75rem;
+  color: #16382F;
+  font-weight: 600;
+}
+
+/* Plans & For You Views */
+.v2-view-header {
+  margin-bottom: 16px;
+}
+
+.v2-view-title {
+  font-family: Georgia, Cambria, 'Times New Roman', Times, serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #16382F;
+  margin: 0 0 4px 0;
+}
+
+.v2-view-subtitle {
+  font-size: 0.875rem;
+  color: #16382F;
+  margin: 0;
+}
+
+.v2-plans-list,
+.v2-for-you-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.v2-plan-item-card,
+.v2-proposal-item-card {
+  padding: 16px;
+  border: 1px solid #CADBC9;
+  border-radius: 14px;
+  background: #FFFFFF;
+}
+
+.v2-plan-item-header,
+.v2-proposal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.v2-plan-headline,
+.v2-proposal-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #16382F;
+  margin: 0;
+}
+
+.v2-plan-subject {
+  font-size: 0.875rem;
+  color: #16382F;
+  margin-bottom: 4px;
+}
+
+.v2-plan-time,
+.v2-plan-checklist {
+  font-size: 0.8125rem;
+  color: #16382F;
+  margin-top: 4px;
+}
+
+.v2-proposal-basis {
+  font-size: 0.8125rem;
+  color: #2D6A4F;
+  margin: 6px 0 12px 0;
+}
+
+.v2-proposal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.v2-empty-plans,
+.v2-empty-proposals {
+  padding: 24px;
+  text-align: center;
+  color: #16382F;
+  font-size: 0.875rem;
+  border: 1px dashed #CADBC9;
+  border-radius: 14px;
+  background: #FFFFFF;
+}
+
+/* Desktop adaptations for V1b */
+@media (min-width: 1280px) {
+  .v2-trip-detail {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .v2-restaurant-detail {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  .v2-restaurant-hero-art {
+    height: 220px;
+  }
+
+  .v2-plans-view,
+  .v2-for-you-view {
+    max-width: 800px;
+    margin: 0 auto;
+  }
+}
+
+
