@@ -141,7 +141,12 @@ export function buildHumanDerivation(plan: PreparedPlan): string {
     const leaveTime = formatTime(plan.leaveAt, tz);
 
     if (apptTime && prepareTime && leaveTime) {
-      return `${subject} is scheduled at ${apptTime}. Based on live route estimates and your preparation routine, we scheduled preparation to start at ${prepareTime} and departure by ${leaveTime}.`;
+      const travelSig = plan.why?.evidenceSignals?.find(
+        s => s.kind.includes('travel') || s.kind.includes('traffic')
+      );
+      const isReal = travelSig?.source === 'real';
+      const routeDesc = isReal ? 'live route estimates' : 'the route estimate (simulated)';
+      return `${subject} is scheduled at ${apptTime}. Based on ${routeDesc} and your preparation routine, we scheduled preparation to start at ${prepareTime} and departure by ${leaveTime}.`;
     }
   }
 

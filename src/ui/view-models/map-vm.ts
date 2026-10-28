@@ -14,10 +14,16 @@ import type { PreparedPlan, PlanOption, SpatialMapEvidence } from '../../core/co
 import { formatTime } from '../living-context/presentation.js';
 import type { MapVM, MapMarkerVM, MapPolylineVM, MapWeatherCalloutVM } from './types.js';
 
+export interface DeriveMapVMOptions {
+  snapshot?: { signals: readonly { kind: string; value?: unknown }[] } | null;
+  mode?: string;
+}
+
 export function deriveMapVM(
   plan: PreparedPlan | null,
   spatialEvidence: SpatialMapEvidence | null,
-  sizeHint: 'prominent' | 'compact' = 'prominent'
+  sizeHint: 'prominent' | 'compact' = 'prominent',
+  options?: DeriveMapVMOptions
 ): MapVM | undefined {
   if (!spatialEvidence && !plan) {
     return undefined;
@@ -127,15 +133,28 @@ export function deriveMapVM(
         }
       }
 
+      // Determine single mode from option override, signal, or fallback
+      let singleMode: 'drive' | 'bus' | 'walk' | string = 'drive';
+      if (options?.mode && options.mode.trim()) {
+        singleMode = options.mode.toLowerCase();
+      } else if (options?.snapshot?.signals) {
+        const travelSig = options.snapshot.signals.find(s => s.kind === 'travel_estimate');
+        const valMode = (travelSig?.value as Record<string, unknown>)?.mode;
+        if (typeof valMode === 'string' && valMode.trim()) {
+          singleMode = valMode.toLowerCase();
+        }
+      }
+      const singleModeCap = singleMode.charAt(0).toUpperCase() + singleMode.slice(1);
+
       const singleRouteLabel =
-        travelMinutes !== undefined ? `Drive · ${travelMinutes} min` : 'Drive route';
+        travelMinutes !== undefined ? `${singleModeCap} · ${travelMinutes} min` : `${singleModeCap} route`;
 
       polylines.push({
-        id: 'route-drive',
+        id: `route-${singleMode}`,
         points: '45,115 115,115 175,55 275,45',
-        mode: 'drive',
+        mode: singleMode,
         label: singleRouteLabel,
-        strokeColor: '#2D6A4F',
+        strokeColor: singleMode === 'bus' ? '#718096' : '#2D6A4F',
         strokeWidth: 4,
         travelMinutes,
       });

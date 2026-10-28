@@ -246,6 +246,11 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     // Wait for modal fade-in animation (0.2s) to settle for Axe color contrast check
     await page.waitForTimeout(300);
 
+    // Verify Why explanation does not falsely claim "live route estimates" on simulated data
+    const whyModalText = await whyModal.innerText();
+    expect(whyModalText).not.toContain('live route');
+    expect(whyModalText).toContain('route estimate (simulated)');
+
     // Verify weather evidence in Why Sheet has explicit simulated labelling
     const evidenceSection = page.locator('.why-section', { hasText: 'Evidence & Signals' });
     await expect(evidenceSection).toContainText('Weather forecast');

@@ -178,6 +178,7 @@ export class LunchPreparer implements Preparer {
       headline: `Lunch options near you (${selected.length} places matching your tastes)`,
       optionsOrSteps: Object.freeze(optionsOrSteps),
       requiresConfirmation: false, // Informational recommendation card; not a booking or payment (INV-104)
+      timezone: snapshot.timezone,
       createdAt: snapshot.asOf,
       why: Object.freeze({
         evidenceSignals: Object.freeze(evidenceSignals),

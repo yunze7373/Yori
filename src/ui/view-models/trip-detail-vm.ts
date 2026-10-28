@@ -35,7 +35,10 @@ export interface DeriveTripDetailOptions {
   spatialEvidence: SpatialMapEvidence | null;
   selectedMode?: string;
   userConfirmedKeys?: ReadonlySet<string>;
-  snapshot?: { signals: readonly { kind: string; value?: unknown }[] } | null;
+  snapshot?: {
+    signals: readonly { kind: string; value?: unknown }[];
+    timezone?: string;
+  } | null;
   acceptedPlanIds?: readonly string[];
 }
 
@@ -49,7 +52,7 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     acceptedPlanIds = [],
   } = options;
 
-  const tz = plan.timezone;
+  const tz = plan.timezone ?? snapshot?.timezone;
   const apptTime = plan.apptAt ? formatTime(plan.apptAt, tz) : '';
   const title = plan.subjectTitle
     ? (apptTime ? `${plan.subjectTitle} at ${apptTime}` : plan.subjectTitle)
@@ -212,7 +215,10 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
   const prepText = prepParts.join(' · ');
 
   // Map and Timeline dynamically synced with selected mode
-  const map = deriveMapVM(plan, spatialEvidence, 'prominent')!;
+  const map = deriveMapVM(plan, spatialEvidence, 'prominent', {
+    snapshot,
+    mode: selectedTab.mode,
+  })!;
   const timeline = deriveTimelineVM(plan, snapshot, selectedTab.mode);
   const steps = timeline?.steps ?? [];
 

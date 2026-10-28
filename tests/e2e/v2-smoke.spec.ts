@@ -354,10 +354,12 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(whySection).toBeVisible();
     await expect(whySection).toContainText('Why this plan?');
     await expect(whySection).toContainText('Demo profile · sample');
-    // Data honesty check: zero star ratings or review counts
+    // Data honesty check: zero star ratings, review counts, or false "live" claims on simulated data
     const tripDetailText = await tripDetail.innerText();
     expect(tripDetailText).not.toContain('★');
     expect(tripDetailText).not.toContain('reviews');
+    expect(tripDetailText).not.toContain('live route');
+    expect(tripDetailText).toContain('route estimate (simulated)');
 
     // Axe audit
     await checkAxe(page);
@@ -424,6 +426,9 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     const attrChips = restDetail.locator('.v2-attribute-chips');
     await expect(attrChips).toBeVisible();
     await expect(attrChips).toContainText('5m away');
+    await expect(attrChips).toContainText('Lunch window 12:10 PM–1:30 PM');
+    await expect(attrChips).not.toContainText('4:10 AM');
+    await expect(attrChips).not.toContainText('5:30 AM');
     const detailText = await restDetail.innerText();
     expect(detailText).not.toContain('★');
     expect(detailText).not.toContain('reviews');

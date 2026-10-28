@@ -59,7 +59,7 @@ export interface MapMarkerVM {
 export interface MapPolylineVM {
   readonly id: string;
   readonly points: string; // SVG polyline points string "x1,y1 x2,y2 ..."
-  readonly mode: 'drive' | 'bus' | 'walk';
+  readonly mode: 'drive' | 'bus' | 'walk' | string;
   readonly label: string;
   readonly strokeColor: string;
   readonly strokeDasharray?: string;

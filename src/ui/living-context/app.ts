@@ -787,6 +787,7 @@ export function renderApp(
           isSaved: activeDetail.isSaved ?? false,
           userConfirmedKeys,
           snapshot,
+          timezone: snapshotTimezone,
         });
         v2BodyHtml = renderRestaurantDetail(restaurantVM);
       } else if (activeTab === 'plans') {

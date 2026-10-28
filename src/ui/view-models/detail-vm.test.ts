@@ -260,7 +260,7 @@ describe('V1b: TripDetailVM and RestaurantDetailVM Derivation (§8 D1/D4)', () =
       expect(vmNoMode.modeTabs[0]!.label).not.toContain('Drive');
     });
 
-    it('produces human conversational derivation copy instead of raw formulas', () => {
+    it('produces human conversational derivation copy instead of raw formulas and never claims "live" on simulated data', () => {
       const vm = deriveTripDetailVM({
         plan: d2RainPlan,
         spatialEvidence,
@@ -268,6 +268,32 @@ describe('V1b: TripDetailVM and RestaurantDetailVM Derivation (§8 D1/D4)', () =
       expect(vm.whyDerivation).toContain('Piano lesson is scheduled at 3:00 PM');
       expect(vm.whyDerivation).not.toContain('appt - travel');
       expect(vm.whyDerivation).not.toContain('14:25');
+      // P2 finding: must not falsely claim "live route estimates" on simulated data
+      expect(vm.whyDerivation).not.toContain('live route');
+      expect(vm.whyDerivation).toContain('the route estimate (simulated)');
+    });
+
+    it('derives single-mode map polyline mode and label from travel signal rather than hardcoding Drive', () => {
+      const planBus: PreparedPlan = {
+        ...d2RainPlan,
+        optionsOrSteps: [], // single mode
+      };
+      const mapVM = deriveTripDetailVM({
+        plan: planBus,
+        spatialEvidence,
+        snapshot: {
+          signals: [
+            {
+              kind: 'travel_estimate',
+              value: { mode: 'bus', travelMinutes: 40 },
+            },
+          ],
+        },
+      }).map;
+      expect(mapVM).toBeDefined();
+      expect(mapVM.polylines[0]!.mode).toBe('bus');
+      expect(mapVM.polylines[0]!.label).toContain('Bus');
+      expect(mapVM.polylines[0]!.label).not.toContain('Drive');
     });
 
     it('updates active mode and times when selectedMode is specified', () => {
@@ -469,32 +495,83 @@ describe('V1b: TripDetailVM and RestaurantDetailVM Derivation (§8 D1/D4)', () =
       expect(vm.directions[0]!.durationText).toBe('Simulated route');
     });
 
-    it('derives lunch window chip from schedule_window signal and omits it when absent', () => {
-      // 1. When schedule_window is present
-      const vmWithWindow = deriveRestaurantDetailVM({
-        candidateId: 'cand-1',
-        plan: d1LunchPlan,
-        spatialEvidence: null,
-        snapshot: {
-          signals: [
-            {
-              kind: 'schedule_window',
-              issuedAt: '2026-10-28T19:10:00.000Z', // 12:10 PM PDT
-              value: { freeUntil: '2026-10-28T20:30:00.000Z' }, // 1:30 PM PDT
-            },
-          ],
-        },
-      });
-      expect(vmWithWindow.attributeChips).toContain('Lunch window 12:10 PM–1:30 PM');
+    it('renders exact lunch window and trip times under non-scene host timezones (TZ=Asia/Tokyo and TZ=America/New_York)', () => {
+      const origTz = process.env.TZ;
+      try {
+        for (const hostTz of ['Asia/Tokyo', 'America/New_York']) {
+          process.env.TZ = hostTz;
 
-      // 2. When schedule_window is absent
-      const vmNoWindow = deriveRestaurantDetailVM({
+          // 1. Restaurant Detail lunch window: d3 local is 12:10 PM - 1:30 PM in America/Los_Angeles
+          const lunchPlanNoTz: PreparedPlan = {
+            ...d1LunchPlan,
+            timezone: undefined, // Plan lacks timezone
+          };
+          const restVM = deriveRestaurantDetailVM({
+            candidateId: 'cand-1',
+            plan: lunchPlanNoTz,
+            spatialEvidence: null,
+            snapshot: {
+              timezone: 'America/Los_Angeles',
+              signals: [
+                {
+                  kind: 'schedule_window',
+                  issuedAt: '2026-10-28T19:10:00.000Z',
+                  value: { freeUntil: '2026-10-28T20:30:00.000Z' },
+                },
+              ],
+            },
+          });
+          expect(restVM.attributeChips).toContain('Lunch window 12:10 PM–1:30 PM');
+          expect(restVM.attributeChips.some(c => c.includes('4:10 AM'))).toBe(false);
+          expect(restVM.attributeChips.some(c => c.includes('3:10 PM'))).toBe(false);
+
+          // 2. Trip Detail times: d2 local is 2:30 PM leave, 2:55 PM arrive in America/Los_Angeles
+          const tripVM = deriveTripDetailVM({
+            plan: d2RainPlan,
+            spatialEvidence,
+            snapshot: {
+              timezone: 'America/Los_Angeles',
+              signals: [],
+            },
+          });
+          expect(tripVM.leaveTime).toBe('2:30 PM');
+          expect(tripVM.arriveTime).toBe('2:55 PM');
+          expect(tripVM.steps[0]!.time).toBe('2:10 PM');
+          expect(tripVM.steps[1]!.time).toBe('2:30 PM');
+          expect(tripVM.steps[2]!.time).toBe('2:55 PM');
+          expect(tripVM.steps[3]!.time).toBe('3:00 PM');
+        }
+      } finally {
+        process.env.TZ = origTz;
+      }
+    });
+
+    it('condition C8 regression: displayed facts carry honest provenance and indicate simulated/sample status', () => {
+      // 1. Restaurant Detail
+      const restVM = deriveRestaurantDetailVM({
         candidateId: 'cand-1',
         plan: d1LunchPlan,
         spatialEvidence: null,
-        snapshot: { signals: [] },
       });
-      expect(vmNoWindow.attributeChips.some(c => c.toLowerCase().includes('lunch window'))).toBe(false);
+      expect(restVM.simulatedNotice).toContain('simulated');
+      expect(restVM.photo.simulatedBadge).toContain('simulated');
+      expect(restVM.directions[0]!.durationText).toContain('simulated route');
+      expect(restVM.basis).toContain('Demo profile · sample');
+
+      // 2. Trip Detail
+      const tripVM = deriveTripDetailVM({
+        plan: d2RainPlan,
+        spatialEvidence,
+      });
+      expect(tripVM.whyDerivation).toContain('(simulated)');
+      expect(tripVM.whyDerivation).not.toContain('live route');
+      for (const habit of tripVM.whyHabits) {
+        if (!habit.isConfirmed) {
+          expect(habit.provenanceText).toBe('Demo profile · sample');
+        } else {
+          expect(habit.provenanceText).toBe('You confirmed');
+        }
+      }
     });
 
     it('renders honest taste provenance with userConfirmedKeys', () => {

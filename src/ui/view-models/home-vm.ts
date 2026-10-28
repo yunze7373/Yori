@@ -112,7 +112,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       habitNote = rainFact.value === 'bus_first' ? STRINGS.habit.rainTransit : STRINGS.habit.rainDrive;
     }
 
-    const map = deriveMapVM(plan, spatialEvidence, 'prominent');
+    const map = deriveMapVM(plan, spatialEvidence, 'prominent', { snapshot });
     const timeline = deriveTimelineVM(plan, snapshot);
     const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys);
 
@@ -185,7 +185,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       }
     }
 
-    const map = deriveMapVM(plan, spatialEvidence, 'compact');
+    const map = deriveMapVM(plan, spatialEvidence, 'compact', { snapshot });
     const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys);
 
     return {

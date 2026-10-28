@@ -22,7 +22,11 @@ export interface DeriveRestaurantDetailOptions {
   spatialEvidence: SpatialMapEvidence | null;
   isSaved?: boolean;
   userConfirmedKeys?: ReadonlySet<string>;
-  snapshot?: { signals: readonly { kind: string; value?: unknown; issuedAt?: string }[] } | null;
+  snapshot?: {
+    signals: readonly { kind: string; value?: unknown; issuedAt?: string }[];
+    timezone?: string;
+  } | null;
+  timezone?: string;
 }
 
 export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions): RestaurantDetailVM {
@@ -33,6 +37,7 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     isSaved = false,
     userConfirmedKeys,
     snapshot,
+    timezone,
   } = options;
 
   // Locate the target candidate option in plan.optionsOrSteps
@@ -73,7 +78,10 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     snapshot?.signals?.find(s => s.kind === 'schedule_window') ??
     plan.why?.evidenceSignals?.find(s => s.kind === 'schedule_window');
 
-  if (scheduleSig) {
+  // Format with snapshot or scene timezone, falling back to plan's (omit if neither exists)
+  const tz = timezone ?? snapshot?.timezone ?? plan.timezone;
+
+  if (tz && scheduleSig) {
     const val = (scheduleSig as { value?: unknown }).value as Record<string, unknown> | undefined;
     const freeUntil = (val?.freeUntil as string | undefined) ?? (val?.until as string | undefined);
     const start =
@@ -81,7 +89,6 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
       (val?.freeFrom as string | undefined) ??
       (scheduleSig as { issuedAt?: string }).issuedAt;
 
-    const tz = plan.timezone;
     if (freeUntil) {
       const freeUntilFormatted = formatTime(freeUntil, tz);
       if (start) {
