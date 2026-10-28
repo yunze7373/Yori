@@ -129,6 +129,34 @@ export function computeSceneState(
   const storedProposals = loadedEnvelope?.payload.proposals ?? [];
   const storedConfirmedFacts = loadedEnvelope?.payload.memoryFacts ?? [];
 
+  const activeConfirmedFacts: MemoryFact[] = [...storedConfirmedFacts.filter(f => f.status === 'confirmed')];
+  const userPrep = activeConfirmedFacts.find(f => f.key === 'prep_buffer_preference');
+  if (userPrep && typeof userPrep.value === 'object' && userPrep.value !== null) {
+    const val = userPrep.value as { prepMinutes?: number; bufferMinutes?: number };
+    if (typeof val.bufferMinutes === 'number' && !activeConfirmedFacts.some(f => f.key === 'prep_buffer_minutes')) {
+      activeConfirmedFacts.push(
+        createMemoryFact(
+          'prep_buffer_minutes',
+          val.bufferMinutes,
+          'confirmed',
+          userPrep.provenance,
+          userPrep.updatedAt
+        )
+      );
+    }
+    if (typeof val.prepMinutes === 'number' && !activeConfirmedFacts.some(f => f.key === 'prep_duration_minutes')) {
+      activeConfirmedFacts.push(
+        createMemoryFact(
+          'prep_duration_minutes',
+          val.prepMinutes,
+          'confirmed',
+          userPrep.provenance,
+          userPrep.updatedAt
+        )
+      );
+    }
+  }
+
   switch (scene) {
     case 'clear': {
       const clock = createFixedClock(D1_INITIAL_CLOCK);
@@ -139,8 +167,8 @@ export function computeSceneState(
 
       // Merge seed facts with stored facts & proposals
       const combinedMemory = [
-        ...d1MemoryFacts.filter(f => !storedConfirmedFacts.some(sc => sc.key === f.key)),
-        ...storedConfirmedFacts,
+        ...d1MemoryFacts.filter(f => !activeConfirmedFacts.some(sc => sc.key === f.key)),
+        ...activeConfirmedFacts,
         ...storedProposals,
       ];
 
@@ -180,8 +208,8 @@ export function computeSceneState(
       const snapshot = injectWeather(rawSnapshot);
 
       const combinedMemory = [
-        ...d2MemoryFacts.filter(f => !storedConfirmedFacts.some(sc => sc.key === f.key)),
-        ...storedConfirmedFacts,
+        ...d2MemoryFacts.filter(f => !activeConfirmedFacts.some(sc => sc.key === f.key)),
+        ...activeConfirmedFacts,
         ...storedProposals,
       ];
 
@@ -220,8 +248,8 @@ export function computeSceneState(
       const snapshot = player.getSnapshotAt('2026-10-28T19:10:00.000Z');
 
       const combinedMemory = [
-        ...d3MemoryFacts.filter(f => !storedConfirmedFacts.some(sc => sc.key === f.key)),
-        ...storedConfirmedFacts,
+        ...d3MemoryFacts.filter(f => !activeConfirmedFacts.some(sc => sc.key === f.key)),
+        ...activeConfirmedFacts,
         ...storedProposals,
       ];
 
@@ -260,8 +288,8 @@ export function computeSceneState(
       const snapshot = player.getSnapshotAt('2026-10-28T19:10:00.000Z');
 
       const combinedMemory = [
-        ...d4MemoryFacts.filter(f => !storedConfirmedFacts.some(sc => sc.key === f.key)),
-        ...storedConfirmedFacts,
+        ...d4MemoryFacts.filter(f => !activeConfirmedFacts.some(sc => sc.key === f.key)),
+        ...activeConfirmedFacts,
         ...storedProposals,
       ];
 
@@ -432,9 +460,9 @@ export function computeSceneState(
       const snapshot = injectWeather(rawSnapshot);
 
       const combinedMemory = [
-        ...d1MemoryFacts.filter(f => !storedConfirmedFacts.some(sc => sc.key === f.key)),
-        ...d3MemoryFacts.filter(f => !storedConfirmedFacts.some(sc => sc.key === f.key)),
-        ...storedConfirmedFacts,
+        ...d1MemoryFacts.filter(f => !activeConfirmedFacts.some(sc => sc.key === f.key)),
+        ...d3MemoryFacts.filter(f => !activeConfirmedFacts.some(sc => sc.key === f.key)),
+        ...activeConfirmedFacts,
         ...storedProposals,
       ];
 
@@ -604,6 +632,23 @@ export function renderApp(
     const aheadPlans = reasoningState && reasoningState.scene === currentScene ? reasoningState.ahead : living.ahead;
     const notices = pipelineResult.notices;
     const acceptedPlanIds: readonly string[] = storedEnvelope?.payload.acceptedPlanIds ?? [];
+    const rawStoredConfirmed = storedEnvelope?.payload.memoryFacts ?? [];
+    const activeStoredConfirmed: MemoryFact[] = [...rawStoredConfirmed.filter(f => f.status === 'confirmed')];
+    const uPrep = activeStoredConfirmed.find(f => f.key === 'prep_buffer_preference');
+    if (uPrep && typeof uPrep.value === 'object' && uPrep.value !== null) {
+      const val = uPrep.value as { prepMinutes?: number; bufferMinutes?: number };
+      if (typeof val.bufferMinutes === 'number' && !activeStoredConfirmed.some(f => f.key === 'prep_buffer_minutes')) {
+        activeStoredConfirmed.push(
+          createMemoryFact('prep_buffer_minutes', val.bufferMinutes, 'confirmed', uPrep.provenance, uPrep.updatedAt)
+        );
+      }
+      if (typeof val.prepMinutes === 'number' && !activeStoredConfirmed.some(f => f.key === 'prep_duration_minutes')) {
+        activeStoredConfirmed.push(
+          createMemoryFact('prep_duration_minutes', val.prepMinutes, 'confirmed', uPrep.provenance, uPrep.updatedAt)
+        );
+      }
+    }
+    const userConfirmedKeys = new Set(activeStoredConfirmed.map(f => f.key));
 
     const greeting = getGreeting(snapshotAsOf, snapshotTimezone);
     const nowPresentation = nowPlan ? formatNowPlan(nowPlan) : null;
@@ -1004,7 +1049,8 @@ export function renderApp(
             ? renderWhySheet(
                 activeModal.plan,
                 reasoningState?.rationales[activeModal.plan.id],
-                snapshotTimezone
+                snapshotTimezone,
+                userConfirmedKeys
               )
             : activeModal?.type === 'adjust'
             ? renderAdjustDialog(activeModal.values)

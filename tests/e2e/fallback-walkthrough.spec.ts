@@ -106,7 +106,6 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `01-clear-d1-${viewName}.png`),
-      fullPage: true,
     });
 
     // -------------------------------------------------------------------------
@@ -135,11 +134,29 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     // Habit note: driving preference when it rains
     await expect(nowCardD2.locator('.habit-note')).toHaveText('You usually prefer driving when it rains.');
 
+    // P3: Scroll first option tile into view and ensure no overlap with bottom tab bar on mobile
+    const firstTransitTile = transitOptions.first();
+    await firstTransitTile.scrollIntoViewIfNeeded();
+    if (isMobile) {
+      const tabBar = page.locator('.bottom-tab-bar');
+      const tileBox = await firstTransitTile.boundingBox();
+      const tabBox = await tabBar.boundingBox();
+      if (tileBox && tabBox && tileBox.y + tileBox.height > tabBox.y) {
+        const scrollDelta = tileBox.y + tileBox.height - tabBox.y + 24;
+        await page.evaluate(delta => window.scrollBy(0, delta), scrollDelta);
+      }
+      const finalTileBox = await firstTransitTile.boundingBox();
+      const finalTabBox = await tabBar.boundingBox();
+      expect(finalTileBox).not.toBeNull();
+      expect(finalTabBox).not.toBeNull();
+      expect(finalTileBox!.y).toBeGreaterThanOrEqual(0);
+      expect(finalTileBox!.y + finalTileBox!.height).toBeLessThanOrEqual(finalTabBox!.y);
+    }
+
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `02-rain-replan-d2-${viewName}.png`),
-      fullPage: true,
     });
 
     // -------------------------------------------------------------------------
@@ -155,11 +172,44 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
       'Mock places for this demo; real listings come from a place provider.'
     );
 
+    // Verify D3 Why Sheet memory section shows sample-profile labelling
+    const d3WhyBtn = page.locator('#btn-why');
+    await d3WhyBtn.click();
+    const d3WhyModal = page.locator('.modal-card');
+    await expect(d3WhyModal).toBeVisible();
+    await page.waitForTimeout(300);
+    const d3MemorySection = page.locator('.why-section', { hasText: 'Memory & Habits' });
+    await expect(d3MemorySection).toBeVisible();
+    await expect(d3MemorySection).toContainText('Dining taste preferences');
+    await expect(d3MemorySection).toContainText('Demo profile · sample preference');
+    await expect(d3MemorySection.locator('.badge-confirmed')).toHaveCount(0);
+    await page.locator('#btn-close-why').click();
+    await expect(d3WhyModal).not.toBeVisible();
+    await page.waitForTimeout(200);
+
+    // P3: Ensure first lunch option tile is scrolled above bottom tab bar on mobile
+    const firstLunchTile = nowCardD3.locator('.options-grid .option-tile').first();
+    await firstLunchTile.scrollIntoViewIfNeeded();
+    if (isMobile) {
+      const tabBar = page.locator('.bottom-tab-bar');
+      const lunchBox = await firstLunchTile.boundingBox();
+      const tabBox = await tabBar.boundingBox();
+      if (lunchBox && tabBox && lunchBox.y + lunchBox.height > tabBox.y) {
+        const scrollDelta = lunchBox.y + lunchBox.height - tabBox.y + 24;
+        await page.evaluate(delta => window.scrollBy(0, delta), scrollDelta);
+      }
+      const finalLunchBox = await firstLunchTile.boundingBox();
+      const finalTabBox = await tabBar.boundingBox();
+      expect(finalLunchBox).not.toBeNull();
+      expect(finalTabBox).not.toBeNull();
+      expect(finalLunchBox!.y).toBeGreaterThanOrEqual(0);
+      expect(finalLunchBox!.y + finalLunchBox!.height).toBeLessThanOrEqual(finalTabBox!.y);
+    }
+
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `03-away-lunch-d3-${viewName}.png`),
-      fullPage: true,
     });
 
     // Switch to D4 Busy Lunch: honest quiet state
@@ -172,7 +222,6 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `04-busy-lunch-d4-${viewName}.png`),
-      fullPage: true,
     });
 
     // Verify Scene D6 (Missing Weather): fail-closed notice and 0 SIMULATED badges in scene
@@ -204,11 +253,21 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await expect(evidenceSection).toContainText('Recorded at 1:35 PM');
     await expect(evidenceSection).toContainText('SIMULATED');
 
+    // Verify Memory & Habits section in D2 shows sample-profile labelling
+    const d2MemorySection = page.locator('.why-section', { hasText: 'Memory & Habits' });
+    await expect(d2MemorySection).toBeVisible();
+    await expect(d2MemorySection).toContainText('Rain travel habit');
+    await expect(d2MemorySection).toContainText('Buffer before leaving');
+    await expect(d2MemorySection).toContainText('Time to get ready');
+    await expect(
+      d2MemorySection.locator('.card-badge:has-text("Demo profile · sample preference")')
+    ).toHaveCount(3);
+    await expect(d2MemorySection.locator('.badge-confirmed')).toHaveCount(0);
+
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `05-why-sheet-${viewName}.png`),
-      fullPage: true,
     });
 
     // Close Why Sheet
@@ -235,7 +294,6 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `06-adjust-dialog-${viewName}.png`),
-      fullPage: true,
     });
 
     // Click Remember as preference (creates a pending proposal under INV-107)
@@ -261,6 +319,13 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await expect(budgetBadge).toBeVisible();
     await expect(budgetBadge).toContainText('0 of 3 used today');
 
+    // Verify empty confirmed memory wording explicitly notes demo sample profile
+    const confirmedEmpty = page.locator('#confirmed-facts-list .memory-empty');
+    await expect(confirmedEmpty).toBeVisible();
+    await expect(confirmedEmpty).toHaveText(
+      'No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.'
+    );
+
     // Pending proposal present in Me tab
     const pendingInMe = page.locator('#proposal-prep_buffer_preference');
     await expect(pendingInMe).toBeVisible();
@@ -270,7 +335,6 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `07-me-pending-proposal-${viewName}.png`),
-      fullPage: true,
     });
 
     // Confirm proposal: moves from pending to confirmed preferences
@@ -282,13 +346,34 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     const confirmedFact = page.locator('#fact-prep_buffer_preference');
     await expect(confirmedFact).toBeVisible();
     await expect(confirmedFact).toContainText('Confirmed');
+    await expect(page.locator('#confirmed-facts-list .memory-empty')).toHaveCount(0);
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `08-me-confirmed-preference-${viewName}.png`),
-      fullPage: true,
     });
+
+    // Acceptance (1): Verify that returning to Why Sheet now shows user-confirmed facts
+    // with 'Confirmed' badge while unchanged sample facts still show 'Demo profile · sample preference'
+    await navigateToToday(page, isMobile);
+    await page.locator('#btn-why').click();
+    const postWhyModal = page.locator('.modal-card');
+    await expect(postWhyModal).toBeVisible();
+    await page.waitForTimeout(300);
+    const postWhyMemory = page.locator('.why-section', { hasText: 'Memory & Habits' });
+    // User-confirmed facts show 'Confirmed'
+    await expect(postWhyMemory.locator('.badge-confirmed')).toHaveCount(2);
+    await expect(postWhyMemory).toContainText('Buffer before leaving');
+    await expect(postWhyMemory).toContainText('Time to get ready');
+    // Unchanged sample fact (rain habit) still shows 'Demo profile · sample preference'
+    await expect(
+      postWhyMemory.locator('.card-badge:has-text("Demo profile · sample preference")')
+    ).toHaveCount(1);
+    await expect(postWhyMemory).toContainText('Rain travel habit');
+    await page.locator('#btn-close-why').click();
+    await expect(postWhyModal).not.toBeVisible();
+    await page.waitForTimeout(200);
 
     // -------------------------------------------------------------------------
     // Step 6: Reasoning Demo (Model Off) & Deterministic Fallback Invariance
@@ -311,7 +396,6 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `09-reasoning-demo-model-off-${viewName}.png`),
-      fullPage: true,
     });
 
     // -------------------------------------------------------------------------
@@ -324,7 +408,6 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `10-closing-home-${viewName}.png`),
-      fullPage: true,
     });
   });
 });

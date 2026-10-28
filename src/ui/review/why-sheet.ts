@@ -160,7 +160,8 @@ export function buildHumanDerivation(plan: PreparedPlan): string {
 export function renderWhySheet(
   plan: PreparedPlan,
   orderingRationale?: string,
-  timezone?: string
+  timezone?: string,
+  userConfirmedKeys?: ReadonlySet<string>
 ): string {
   const tz = timezone || plan.timezone || 'America/Los_Angeles';
   const signals = plan.why.evidenceSignals;
@@ -233,15 +234,22 @@ export function renderWhySheet(
               ${
                 memoryFacts.length > 0
                   ? memoryFacts
-                      .map(fact => `
+                      .map(fact => {
+                        const isUserConfirmed = userConfirmedKeys?.has(fact.key) ?? false;
+                        const badgeText = isUserConfirmed
+                          ? STRINGS.whySheet.confirmedBadge
+                          : STRINGS.whySheet.sampleProfileBadge;
+                        const badgeClass = isUserConfirmed ? 'badge-confirmed' : 'badge-simulated';
+                        return `
                       <div class="why-item-row">
                         <div class="why-item-main">
                           <span class="why-item-label">${escapeHtml(humanizeMemoryKey(fact.key))}</span>
                           <span class="why-item-desc">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</span>
                         </div>
-                        <span class="card-badge badge-confirmed">Confirmed</span>
+                        <span class="card-badge ${badgeClass}">${escapeHtml(badgeText)}</span>
                       </div>
-                    `)
+                    `;
+                      })
                       .join('')
                   : `<p class="why-empty-text">${escapeHtml(STRINGS.whySheet.noMemory)}</p>`
               }

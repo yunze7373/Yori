@@ -188,10 +188,10 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     await expect(evidenceSection).toContainText('SIMULATED');
     await expect(evidenceSection).toContainText('1:35 PM');
 
-    // 4. Verify memory habit with Confirmed badge
-    const memorySection = page.locator('.why-section', { hasText: 'Confirmed Memory & Habits' });
+    // 4. Verify memory habit with sample profile badge
+    const memorySection = page.locator('.why-section', { hasText: 'Memory & Habits' });
     await expect(memorySection).toContainText('Rain travel habit');
-    await expect(memorySection).toContainText('Confirmed');
+    await expect(memorySection).toContainText('Demo profile · sample preference');
 
     // 5. Verify derivation has no internal tokens
     const derivation = page.locator('.why-derivation-text');
