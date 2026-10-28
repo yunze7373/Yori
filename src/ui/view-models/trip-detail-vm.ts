@@ -206,22 +206,30 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     if (plan.apptAt && activeLeaveAt && activeDuration !== undefined) {
       const apptMs = Date.parse(plan.apptAt);
       const arriveMs = Date.parse(activeLeaveAt) + activeDuration * 60000;
-      if (Number.isFinite(apptMs) && Number.isFinite(arriveMs) && apptMs >= arriveMs) {
+      if (Number.isFinite(apptMs) && Number.isFinite(arriveMs)) {
         optionBufferMinutes = Math.round((apptMs - arriveMs) / 60000);
       }
     }
   }
 
-  // If buffer fact/data is missing, omit buffer text or say 'On time'
-  const bufferText =
-    optionBufferMinutes !== undefined ? `On time · ${optionBufferMinutes}m buffer` : 'On time';
+  // Derive honest arrive status (On time vs Late by Xm)
+  let bufferText = 'On time';
+  if (optionBufferMinutes !== undefined) {
+    if (optionBufferMinutes < 0) {
+      bufferText = `Late by ${Math.abs(optionBufferMinutes)}m`;
+    } else if (optionBufferMinutes > 0) {
+      bufferText = `On time · ${optionBufferMinutes}m buffer`;
+    } else {
+      bufferText = 'On time';
+    }
+  }
 
   const hasUmbrella = plan.checklist?.includes('umbrella') ?? false;
   const prepParts: string[] = [];
   if (hasUmbrella) {
     prepParts.push('Take umbrella');
   }
-  if (prepMinutes !== undefined && optionBufferMinutes !== undefined) {
+  if (prepMinutes !== undefined && optionBufferMinutes !== undefined && optionBufferMinutes >= 0) {
     prepParts.push(`${prepMinutes}m prep + ${optionBufferMinutes}m buffer`);
   } else if (prepMinutes !== undefined) {
     prepParts.push(`${prepMinutes}m prep`);

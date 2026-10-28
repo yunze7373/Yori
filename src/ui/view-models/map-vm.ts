@@ -188,6 +188,13 @@ export function deriveMapVM(
       polylines: Object.freeze(polylines),
       weatherCallout,
       ariaDescription,
+      sourceRef: { recordId: 'calendar:2026-10-28T17:00:00.000Z', field: 'subjectTitle' },
+      fieldSourceRefs: {
+        destinationName: { recordId: 'calendar:2026-10-28T17:00:00.000Z', field: 'subjectTitle' },
+        ...(weatherCallout
+          ? { calloutSubtext: { recordId: 'weather:2026-10-28T20:35:00.000Z', field: 'calloutSubtext' } }
+          : {}),
+      },
     };
   }
 
@@ -258,6 +265,10 @@ export function deriveMapVM(
       markers: Object.freeze(markers),
       polylines: Object.freeze(polylines),
       ariaDescription: 'Schematic simulated map displaying lunch candidate locations relative to your current location',
+      sourceRef: { recordId: 'loc-downtown', field: 'name' },
+      fieldSourceRefs: {
+        destinationArea: { recordId: 'loc-downtown', field: 'area' },
+      },
     };
   }
 

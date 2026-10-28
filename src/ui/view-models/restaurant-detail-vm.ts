@@ -17,7 +17,6 @@ import { classifyFactSource } from './provenance.js';
 import { deriveMapVM } from './map-vm.js';
 import {
   GroundedRecommendationVerifier,
-  createLunchEvidenceBundle,
   buildNavigateUrl,
   type EvidenceBundle,
   type SourceRef,
@@ -50,13 +49,7 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     evidenceBundle,
   } = options;
 
-  const bundle =
-    evidenceBundle ??
-    createLunchEvidenceBundle({
-      plan,
-      timezone: timezone ?? plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
-      isConfirmedTaste: userConfirmedKeys?.has('taste_preference_lunch_cuisine'),
-    });
+  const bundle = evidenceBundle;
 
   // Locate the target candidate option in plan.optionsOrSteps
   let targetOpt: PlanOption | undefined;

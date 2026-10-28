@@ -79,6 +79,7 @@ import {
   buildHomeComposition,
   deriveTripDetailVM,
   deriveRestaurantDetailVM,
+  createLunchEvidenceBundle,
 } from '../view-models/index.js';
 import { renderV2Home } from './v2-home-view.js';
 import {
@@ -813,6 +814,11 @@ export function renderApp(
         const defaultCandId =
           typeof firstOpt !== 'string' && firstOpt ? firstOpt.id : 'cand-1';
         const candidateId = activeDetail.candidateId || defaultCandId;
+        const restaurantBundle = createLunchEvidenceBundle({
+          sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
+          timezone: snapshotTimezone,
+          isConfirmedTaste: userConfirmedKeys.has('taste_preference_lunch_cuisine'),
+        });
         const restaurantVM = deriveRestaurantDetailVM({
           candidateId,
           plan: nowPlan,
@@ -821,6 +827,7 @@ export function renderApp(
           userConfirmedKeys,
           snapshot,
           timezone: snapshotTimezone,
+          evidenceBundle: restaurantBundle,
         });
         v2BodyHtml = renderRestaurantDetail(restaurantVM);
       } else if (activeTab === 'plans') {

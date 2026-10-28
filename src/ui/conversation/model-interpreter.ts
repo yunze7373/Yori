@@ -180,40 +180,57 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       }
     }
 
-    // 3. Validate citedSignalIds
-    if (!Array.isArray(obj.citedSignalIds)) {
-      return { valid: false, reason: 'schema_invalid', error: "'citedSignalIds' must be an array" };
+    // 3. Validate reasonCodes array early
+    if (!Array.isArray(obj.reasonCodes)) {
+      return { valid: false, reason: 'schema_invalid', error: "'reasonCodes' must be an array" };
     }
-    for (const sigId of obj.citedSignalIds) {
-      if (typeof sigId !== 'string') {
+    for (const code of obj.reasonCodes) {
+      if (typeof code !== 'string' || !VALID_REASON_CODES.has(code)) {
         return {
           valid: false,
-          reason: 'schema_invalid',
-          error: "Items in 'citedSignalIds' must be strings",
+          reason: 'invalid_reason_code',
+          error: `Reason code '${String(code)}' is not in VALID_REASON_CODES`,
         };
-      }
-      if (sigId === '__proto__' || sigId === 'constructor' || sigId === 'prototype') {
-        return {
-          valid: false,
-          reason: 'unknown_signal_id',
-          error: `Invalid signal citation '${sigId}'`,
-        };
-      }
-    }
-    if (context?.availableSignalIds !== undefined) {
-      const allowedSignalSet = new Set(context.availableSignalIds);
-      for (const sigId of obj.citedSignalIds) {
-        if (!allowedSignalSet.has(sigId)) {
-          return {
-            valid: false,
-            reason: 'unknown_signal_id',
-            error: `Signal citation '${sigId}' not found in availableSignalIds`,
-          };
-        }
       }
     }
 
-    // 4. Validate citedFactKeys (existence against knownFactKeys, always enforced)
+    // 4. Validate situationAttribution reasonCode early if present
+    if (obj.situationAttribution !== undefined) {
+      if (
+        !obj.situationAttribution ||
+        typeof obj.situationAttribution !== 'object' ||
+        Array.isArray(obj.situationAttribution)
+      ) {
+        return { valid: false, reason: 'schema_invalid', error: "'situationAttribution' must be an object" };
+      }
+      const saObj = obj.situationAttribution as Record<string, unknown>;
+      if (typeof saObj.reasonCode !== 'string' || !VALID_REASON_CODES.has(saObj.reasonCode)) {
+        return {
+          valid: false,
+          reason: 'invalid_reason_code',
+          error: `situationAttribution reasonCode '${String(saObj.reasonCode)}' is not valid`,
+        };
+      }
+    }
+
+    // 5. Fact check on explanation text (defense in depth)
+    if (typeof obj.explanation === 'string' && obj.explanation.length > 0) {
+      const validTimes = context?.validTimes ?? [];
+      const validPlaces = context?.validPlaces ?? [];
+      const check = validateFactsInWording(obj.explanation, {
+        times: validTimes,
+        places: validPlaces,
+      });
+      if (!check.valid) {
+        return {
+          valid: false,
+          reason: 'unlisted_fact_token',
+          error: `Explanation contains unlisted token: ${check.unlistedTokens.join(', ')}`,
+        };
+      }
+    }
+
+    // 6. Validate citedFactKeys (existence against knownFactKeys, always enforced)
     if (!Array.isArray(obj.citedFactKeys)) {
       return { valid: false, reason: 'schema_invalid', error: "'citedFactKeys' must be an array" };
     }
@@ -244,67 +261,9 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       }
     }
 
-    // 5. Validate reasonCodes
-    if (!Array.isArray(obj.reasonCodes)) {
-      return { valid: false, reason: 'schema_invalid', error: "'reasonCodes' must be an array" };
-    }
-    for (const code of obj.reasonCodes) {
-      if (typeof code !== 'string' || !VALID_REASON_CODES.has(code)) {
-        return {
-          valid: false,
-          reason: 'invalid_reason_code',
-          error: `Reason code '${String(code)}' is not in VALID_REASON_CODES`,
-        };
-      }
-    }
-
-    // 6. Validate situationAttribution if present
+    // 7. Validate situationAttribution fact citations & preference discipline
     if (obj.situationAttribution !== undefined) {
-      if (
-        !obj.situationAttribution ||
-        typeof obj.situationAttribution !== 'object' ||
-        Array.isArray(obj.situationAttribution)
-      ) {
-        return { valid: false, reason: 'schema_invalid', error: "'situationAttribution' must be an object" };
-      }
       const sa = obj.situationAttribution as Record<string, unknown>;
-      if (typeof sa.signalId !== 'string') {
-        return { valid: false, reason: 'schema_invalid', error: 'situationAttribution.signalId must be a string' };
-      }
-      if (sa.signalId === '__proto__' || sa.signalId === 'constructor' || sa.signalId === 'prototype') {
-        return {
-          valid: false,
-          reason: 'unknown_signal_id',
-          error: `situationAttribution signalId '${sa.signalId}' is invalid`,
-        };
-      }
-      if (context?.availableSignalIds !== undefined) {
-        const allowedSignalSet = new Set(context.availableSignalIds);
-        if (!allowedSignalSet.has(sa.signalId)) {
-          return {
-            valid: false,
-            reason: 'unknown_signal_id',
-            error: `situationAttribution signalId '${sa.signalId}' not in availableSignalIds`,
-          };
-        }
-      }
-      if (context?.evidenceBundle && typeof context.evidenceBundle.getRecord === 'function') {
-        const rec = context.evidenceBundle.getRecord(sa.signalId);
-        if (!rec) {
-          return {
-            valid: false,
-            reason: 'unknown_signal_id',
-            error: `situationAttribution signalId '${sa.signalId}' not found in evidenceBundle`,
-          };
-        }
-      }
-      if (typeof sa.reasonCode !== 'string' || !VALID_REASON_CODES.has(sa.reasonCode)) {
-        return {
-          valid: false,
-          reason: 'invalid_reason_code',
-          error: `situationAttribution reasonCode '${String(sa.reasonCode)}' is not valid`,
-        };
-      }
       if (sa.citedFactKeys !== undefined) {
         if (!Array.isArray(sa.citedFactKeys)) {
           return {
@@ -337,7 +296,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       }
     }
 
-    // 6b. Validate confirmed preference discipline:
+    // 8. Validate confirmed preference discipline:
     // matches_confirmed_preference (reason code or attribution) must require citedFactKeys
     // to be non-empty and a subset of confirmedFactKeys.
     // When SA carries its own citedFactKeys, those are subset-checked as well.
@@ -389,20 +348,83 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       }
     }
 
-    // 7. Fact check on explanation text (defense in depth)
-    if (typeof obj.explanation === 'string' && obj.explanation.length > 0) {
-      const validTimes = context?.validTimes ?? [];
-      const validPlaces = context?.validPlaces ?? [];
-      const check = validateFactsInWording(obj.explanation, {
-        times: validTimes,
-        places: validPlaces,
-      });
-      if (!check.valid) {
+    // 9. Validate citedSignalIds (fails closed when availableSignalIds is undefined or empty)
+    if (!Array.isArray(obj.citedSignalIds)) {
+      return { valid: false, reason: 'schema_invalid', error: "'citedSignalIds' must be an array" };
+    }
+    for (const sigId of obj.citedSignalIds) {
+      if (typeof sigId !== 'string') {
         return {
           valid: false,
-          reason: 'unlisted_fact_token',
-          error: `Explanation contains unlisted token: ${check.unlistedTokens.join(', ')}`,
+          reason: 'schema_invalid',
+          error: "Items in 'citedSignalIds' must be strings",
         };
+      }
+      if (sigId === '__proto__' || sigId === 'constructor' || sigId === 'prototype') {
+        return {
+          valid: false,
+          reason: 'unknown_signal_id',
+          error: `Invalid signal citation '${sigId}'`,
+        };
+      }
+    }
+    if (obj.citedSignalIds.length > 0) {
+      if (context?.availableSignalIds === undefined || context.availableSignalIds.length === 0) {
+        return {
+          valid: false,
+          reason: 'unknown_signal_id',
+          error: `Signal citation requires availableSignalIds to be provided and non-empty`,
+        };
+      }
+      const allowedSignalSet = new Set(context.availableSignalIds);
+      for (const sigId of obj.citedSignalIds) {
+        if (!allowedSignalSet.has(sigId)) {
+          return {
+            valid: false,
+            reason: 'unknown_signal_id',
+            error: `Signal citation '${sigId}' not found in availableSignalIds`,
+          };
+        }
+      }
+    }
+
+    // 10. Validate situationAttribution signal citation & evidence bundle resolution
+    if (obj.situationAttribution !== undefined) {
+      const saRec = obj.situationAttribution as Record<string, unknown>;
+      if (typeof saRec.signalId !== 'string') {
+        return { valid: false, reason: 'schema_invalid', error: 'situationAttribution.signalId must be a string' };
+      }
+      if (saRec.signalId === '__proto__' || saRec.signalId === 'constructor' || saRec.signalId === 'prototype') {
+        return {
+          valid: false,
+          reason: 'unknown_signal_id',
+          error: `situationAttribution signalId '${saRec.signalId}' is invalid`,
+        };
+      }
+      if (context?.availableSignalIds === undefined || context.availableSignalIds.length === 0) {
+        return {
+          valid: false,
+          reason: 'unknown_signal_id',
+          error: `situationAttribution signalId '${saRec.signalId}' requires availableSignalIds to be provided and non-empty`,
+        };
+      }
+      const allowedSignalSet = new Set(context.availableSignalIds);
+      if (!allowedSignalSet.has(saRec.signalId)) {
+        return {
+          valid: false,
+          reason: 'unknown_signal_id',
+          error: `situationAttribution signalId '${saRec.signalId}' not in availableSignalIds`,
+        };
+      }
+      if (context?.evidenceBundle && typeof context.evidenceBundle.getRecord === 'function') {
+        const rec = context.evidenceBundle.getRecord(saRec.signalId);
+        if (!rec) {
+          return {
+            valid: false,
+            reason: 'unknown_signal_id',
+            error: `situationAttribution signalId '${saRec.signalId}' not found in evidenceBundle`,
+          };
+        }
       }
     }
 

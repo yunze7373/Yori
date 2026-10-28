@@ -36,6 +36,7 @@ import { formatTime } from '../living-context/presentation.js';
 import { derivePlanTimingFacts } from '../view-models/timing.js';
 import { buildHumanDerivation, humanizeMemoryKey } from '../review/why-sheet.js';
 import { classifyFactSource, provenanceLabel } from '../view-models/provenance.js';
+import { createRainEvidenceBundle, createLunchEvidenceBundle } from '../view-models/grounding.js';
 
 function checkSystemReducedMotion(): boolean {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -439,6 +440,23 @@ export class DefaultActionStateStore implements ActionStateStore {
       }
     }
 
+    // Resolve evidence bundle for scene
+    const evidenceBundle =
+      ctx?.evidenceBundle ??
+      (ctx?.plan?.intentId === 'depart' || ctx?.sceneId === 'rain'
+        ? createRainEvidenceBundle({
+            sceneClockIso: ctx?.snapshot?.asOf,
+            timezone: ctx?.plan?.timezone ?? ctx?.snapshot?.timezone,
+            isConfirmedHabit: ctx?.userConfirmedKeys?.has('rain_transport_preference'),
+          })
+        : ctx?.plan?.intentId === 'lunch' || ctx?.sceneId === 'away-lunch'
+          ? createLunchEvidenceBundle({
+              sceneClockIso: ctx?.snapshot?.asOf,
+              timezone: ctx?.plan?.timezone ?? ctx?.snapshot?.timezone,
+              isConfirmedTaste: ctx?.userConfirmedKeys?.has('taste_preference_lunch_cuisine'),
+            })
+          : undefined);
+
     // Gather available signals from context
     const availableSignalIds: string[] = [];
     if (ctx?.snapshot?.signals) {
@@ -451,6 +469,14 @@ export class DefaultActionStateStore implements ActionStateStore {
       for (const s of ctx.plan.why.evidenceSignals) {
         if (s.issuedAt) availableSignalIds.push(`${s.kind}:${s.issuedAt}`);
         availableSignalIds.push(s.kind);
+      }
+    }
+    const bundleWithRecords = evidenceBundle as { getAllRecords?(): readonly { id: string }[] } | undefined;
+    if (bundleWithRecords && typeof bundleWithRecords.getAllRecords === 'function') {
+      for (const rec of bundleWithRecords.getAllRecords()) {
+        if (!availableSignalIds.includes(rec.id)) {
+          availableSignalIds.push(rec.id);
+        }
       }
     }
 
@@ -508,6 +534,7 @@ export class DefaultActionStateStore implements ActionStateStore {
       validTimes,
       validPlaces,
       sceneId: ctx?.sceneId,
+      evidenceBundle,
     });
 
     if (cmd.situationAttribution) {

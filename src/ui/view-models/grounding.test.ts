@@ -14,6 +14,7 @@ import { buildHomeComposition } from './home-vm.js';
 import { deriveOptionCardVMs } from './option-card-vm.js';
 import { deriveRestaurantDetailVM } from './restaurant-detail-vm.js';
 import { deriveTripDetailVM } from './trip-detail-vm.js';
+import { deriveTimelineVM } from './timeline-vm.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
 
@@ -88,16 +89,16 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
     optionsOrSteps: [
       {
         id: 'mock-place-1',
-        label: 'Ramen Ichiko · Ramen',
-        name: 'Ramen Ichiko',
+        label: 'Demo Place A · Ramen',
+        name: 'Demo Place A · Ramen',
         cuisine: 'japanese',
         distanceMinutes: 5,
         requiresConfirmation: false,
       },
       {
         id: 'mock-place-2',
-        label: 'Green Garden Salad · Salad',
-        name: 'Green Garden Salad',
+        label: 'Demo Place B · Salad',
+        name: 'Demo Place B · Salad',
         cuisine: 'salad',
         distanceMinutes: 7,
         requiresConfirmation: false,
@@ -188,7 +189,7 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(home.candidateCards).toHaveLength(2);
 
       const ramenCand = home.candidateCards![0]!;
-      expect(ramenCand.name).toBe('Ramen Ichiko');
+      expect(ramenCand.name).toBe('Demo Place A · Ramen');
       expect(ramenCand.sourceRef).toEqual({ recordId: 'mock-place-1', field: 'name' });
       expect(ramenCand.fieldSourceRefs!.cuisine).toEqual({ recordId: 'mock-place-1', field: 'cuisine' });
       expect(ramenCand.fieldSourceRefs!.distanceMinutes).toEqual({ recordId: 'mock-place-1', field: 'distanceMinutes' });
@@ -205,8 +206,8 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
         evidenceBundle: bundle,
         userConfirmedKeys: new Set(['taste_preference_lunch_cuisine']),
       });
-      expect(detail.name).toBe('Ramen Ichiko');
-      expect(detail.navigateUrl).toBe('yori://navigate?id=mock-place-1&name=Ramen%20Ichiko');
+      expect(detail.name).toBe('Demo Place A · Ramen');
+      expect(detail.navigateUrl).toBe('yori://navigate?id=mock-place-1&name=Demo%20Place%20A%20%C2%B7%20Ramen');
     });
 
     it('Normalizes time (12h/24h), duration, distance, and place names correctly', () => {
@@ -400,12 +401,12 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       // Valid candidate generates valid URL
       const validCand = {
         id: 'mock-place-1',
-        name: 'Ramen Ichiko',
+        name: 'Demo Place A · Ramen',
         cuisine: 'japanese',
         distanceMinutes: 5,
         sourceRef: { recordId: 'mock-place-1', field: 'name' },
       };
-      expect(buildNavigateUrl(validCand, bundle)).toBe('yori://navigate?id=mock-place-1&name=Ramen%20Ichiko');
+      expect(buildNavigateUrl(validCand, bundle)).toBe('yori://navigate?id=mock-place-1&name=Demo%20Place%20A%20%C2%B7%20Ramen');
 
       // Tampered candidate returns undefined
       const tamperedCand = {
@@ -424,6 +425,57 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
         sourceRef: { recordId: 'unknown-place-999', field: 'name' },
       };
       expect(buildNavigateUrl(outCand, bundle)).toBeUndefined();
+    });
+
+    it('(7) Tampered plan apptAt time -> fails closed, trip detail apptTime becomes "unknown", redacted log', () => {
+      const bundle = createRainEvidenceBundle();
+      const tamperedRainPlan: PreparedPlan = {
+        ...rainPlan,
+        apptAt: '2026-10-28T23:00:00.000Z', // 4:00 PM (tampered vs 3:00 PM in calendar record)
+      };
+
+      const tripDetail = deriveTripDetailVM({
+        plan: tamperedRainPlan,
+        spatialEvidence: null,
+        evidenceBundle: bundle,
+      });
+
+      expect(tripDetail.apptTime).toBe('unknown');
+
+      const latest = globalDecisionLogger.getLatest()!;
+      expect(latest.validationResult.valid).toBe(false);
+      expect(latest.validationResult.reason).toBe('tampered_value');
+      expect(latest.inputFactKeys).toEqual(['apptTime']);
+    });
+
+    it('(8) Plan candidate absent from adapter -> candidate withheld from cards + redacted Decision Log entry', () => {
+      const bundle = createLunchEvidenceBundle();
+      const planWithMissingPlace: PreparedPlan = {
+        ...lunchPlan,
+        optionsOrSteps: [
+          {
+            id: 'unregistered-candidate-alpha',
+            label: 'Mystery Food Truck',
+            name: 'Mystery Food Truck',
+            cuisine: 'street_food',
+            distanceMinutes: 3,
+            requiresConfirmation: false,
+          },
+        ],
+      };
+
+      const home = buildHomeComposition({
+        plan: planWithMissingPlace,
+        spatialEvidence: null,
+        evidenceBundle: bundle,
+      });
+
+      expect(home.candidateCards).toHaveLength(0); // Withheld!
+
+      const latest = globalDecisionLogger.getLatest()!;
+      expect(latest.validationResult.valid).toBe(false);
+      expect(latest.validationResult.reason).toBe('candidate_outside_bundle');
+      expect(latest.inputSignalIds).toEqual(['unregistered-candidate-alpha']);
     });
   });
 
@@ -446,6 +498,178 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(json).not.toContain('secret');
       expect(json).not.toContain('api_key');
       expect(json).not.toContain('token');
+    });
+  });
+
+  describe('Part 4: Check-1 Coverage (Rain & Lunch VMs)', () => {
+    it('Rain scene: verifies every rendered place, number, time inside VMs (NOW, timeline, map callout, banner, Why rows)', () => {
+      const bundle = createRainEvidenceBundle({ isConfirmedHabit: true });
+      const home = buildHomeComposition({
+        plan: rainPlan,
+        spatialEvidence: {
+          placeOrRoute: { name: 'Piano Studio (Rain Route)', destination: '123 Harmony Way' },
+          spatialEvidence: { kind: 'calendar', value: {} } as any,
+        },
+        evidenceBundle: bundle,
+        userConfirmedKeys: new Set(['rain_transport_preference']),
+      });
+
+      // 1. NOW title & headline
+      expect(home.title).toBe('Piano Studio (Rain Route) at 3:00 PM');
+      expect(home.headline).toBe('Get ready at 2:10 PM, leave by 2:30 PM');
+      expect(home.umbrellaChip).toBe('Umbrella');
+
+      // 2. Banner & insight
+      expect(home.rainBanner).toBe('What changed: rain forecast');
+      expect(home.rainInsightDesc).toContain('Rain in the forecast for your travel window');
+      expect(home.rainInsightDesc).toContain('issued 1:35 PM');
+
+      // 3. Option Cards (numeric fields grounded, no composed copy)
+      expect(home.options).toHaveLength(2);
+      const driveCard = home.options[0]!;
+      expect(driveCard.mode).toBe('drive');
+      expect(driveCard.travelMinutes).toBe(25);
+      expect(driveCard.leaveTime).toBe('2:30 PM');
+      expect(driveCard.bufferMinutes).toBe(5);
+      expect(driveCard.badge).toBe('Recommended');
+      expect(driveCard.detail).toBe('25 min drive + 5 min buffer');
+
+      const busCard = home.options[1]!;
+      expect(busCard.mode).toBe('bus');
+      expect(busCard.travelMinutes).toBe(40);
+      expect(busCard.leaveTime).toBe('2:15 PM');
+      expect(busCard.bufferMinutes).toBe(5);
+      expect(busCard.badge).toBe('Alternative');
+
+      // 4. Timeline
+      expect(home.timeline).toBeDefined();
+      const steps = home.timeline!.steps;
+      expect(steps).toHaveLength(4);
+      expect(steps[0]!.time).toBe('2:10 PM');
+      expect(steps[0]!.detail).toContain('Take umbrella');
+      expect(steps[1]!.time).toBe('2:30 PM');
+      expect(steps[1]!.detail).toContain('Drive · 25 min');
+      expect(steps[2]!.time).toBe('2:55 PM');
+      expect(steps[2]!.detail).toBe('On time · 5m buffer');
+      expect(steps[3]!.time).toBe('3:00 PM');
+
+      // 5. Map Callout & destination
+      expect(home.map).toBeDefined();
+      expect(home.map!.destinationName).toBe('Piano Studio (Rain Route)');
+      expect(home.map!.weatherCallout).toBeDefined();
+      expect(home.map!.weatherCallout!.text).toBe('Rain forecast · simulated');
+      expect(home.map!.weatherCallout!.subtext).toBe('Issued 1:35 PM');
+    });
+
+    it('Post-leave-later-confirm state: derives arrive status truthfully as "Late by 10m" for 3:10 PM arrival vs 3:00 PM lesson', () => {
+      const bundle = createRainEvidenceBundle();
+      // Leave 15 min later: leave 2:45 PM, prep 2:25 PM, arrival 3:10 PM
+      const latePlan: PreparedPlan = {
+        ...rainPlan,
+        leaveAt: '2026-10-28T21:45:00.000Z', // 2:45 PM
+        prepareAt: '2026-10-28T21:25:00.000Z', // 2:25 PM
+        headline: 'Get ready at 2:25 PM, leave by 2:45 PM',
+        optionsOrSteps: [
+          {
+            id: 'opt-drive',
+            label: 'Drive · 25 min',
+            mode: 'drive',
+            travelMinutes: 25,
+            leaveAt: '2026-10-28T21:45:00.000Z',
+            details: '25 min drive · late by 10m',
+            requiresConfirmation: true,
+          },
+        ],
+        requiresConfirmation: true,
+      };
+
+      const timeline = deriveTimelineVM(latePlan);
+      expect(timeline).toBeDefined();
+      const arriveStep = timeline!.steps.find(s => s.id === 'step-arrive')!;
+      expect(arriveStep.time).toBe('3:10 PM');
+      expect(arriveStep.detail).toBe('Late by 10m'); // Truth in arrival status! Never 'On time'
+
+      const tripDetail = deriveTripDetailVM({
+        plan: latePlan,
+        spatialEvidence: null,
+        evidenceBundle: bundle,
+      });
+      expect(tripDetail.arriveTime).toBe('3:10 PM');
+      expect(tripDetail.bufferText).toBe('Late by 10m'); // Truth in arrival status!
+    });
+
+    it('Post-prep-confirm state: verifies updated prep and buffer timing in timeline and detail VMs', () => {
+      const bundle = createRainEvidenceBundle();
+      // User confirmed 25m prep + 10m buffer: leave 2:25 PM, prep 2:00 PM, arrive 2:50 PM
+      const prepConfirmedPlan: PreparedPlan = {
+        ...rainPlan,
+        leaveAt: '2026-10-28T21:25:00.000Z', // 2:25 PM
+        prepareAt: '2026-10-28T21:00:00.000Z', // 2:00 PM
+        headline: 'Get ready at 2:00 PM, leave by 2:25 PM',
+        optionsOrSteps: [
+          {
+            id: 'opt-drive',
+            label: 'Drive · 25 min',
+            mode: 'drive',
+            travelMinutes: 25,
+            leaveAt: '2026-10-28T21:25:00.000Z',
+            requiresConfirmation: false,
+          },
+        ],
+        why: {
+          ...rainPlan.why,
+          memoryFactsUsed: [
+            { key: 'prep_buffer_minutes', value: 10, status: 'confirmed' },
+            { key: 'prep_duration_minutes', value: 25, status: 'confirmed' },
+          ],
+        },
+      };
+
+      const timeline = deriveTimelineVM(prepConfirmedPlan);
+      expect(timeline).toBeDefined();
+      const prepStep = timeline!.steps.find(s => s.id === 'step-prep')!;
+      expect(prepStep.time).toBe('2:00 PM');
+      expect(prepStep.detail).toContain('25m prep + 10m buffer');
+
+      const arriveStep = timeline!.steps.find(s => s.id === 'step-arrive')!;
+      expect(arriveStep.time).toBe('2:50 PM');
+      expect(arriveStep.detail).toBe('On time · 10m buffer');
+
+      const tripDetail = deriveTripDetailVM({
+        plan: prepConfirmedPlan,
+        spatialEvidence: null,
+        evidenceBundle: bundle,
+      });
+      expect(tripDetail.arriveTime).toBe('2:50 PM');
+      expect(tripDetail.bufferText).toBe('On time · 10m buffer');
+    });
+
+    it('Lunch scene: verifies every rendered place, number, time inside VMs (NOW, candidate cards, map, Why)', () => {
+      const bundle = createLunchEvidenceBundle({ isConfirmedTaste: true });
+      const home = buildHomeComposition({
+        plan: lunchPlan,
+        spatialEvidence: {
+          placeOrRoute: { name: 'Downtown Dining District', area: 'Downtown' },
+          spatialEvidence: { kind: 'location_status', value: {} } as any,
+        },
+        evidenceBundle: bundle,
+        userConfirmedKeys: new Set(['taste_preference_lunch_cuisine']),
+      });
+
+      expect(home.layoutKind).toBe('candidates');
+      expect(home.title).toBe('Lunch options near you');
+      expect(home.headline).toBe('Places matching what you like, within walking distance');
+
+      expect(home.candidateCards).toHaveLength(2);
+      const cardA = home.candidateCards![0]!;
+      expect(cardA.name).toBe('Demo Place A · Ramen');
+      expect(cardA.cuisine).toBe('Japanese');
+      expect(cardA.distanceMinutes).toBe(5);
+      expect(cardA.distanceText).toBe('5m away');
+      expect(cardA.basis).toContain('Based on taste: Japanese (You confirmed)');
+
+      expect(home.map).toBeDefined();
+      expect(home.map!.destinationArea).toBe('Downtown');
     });
   });
 });

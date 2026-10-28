@@ -27,7 +27,7 @@ export interface MockPlaceItem {
 export const DEFAULT_MOCK_PLACES: readonly MockPlaceItem[] = Object.freeze([
   Object.freeze({
     id: 'mock-place-1',
-    name: 'Placeholder Place Alpha (Ramen)',
+    name: 'Demo Place A · Ramen',
     cuisine: 'japanese',
     distanceMinutes: 5,
     noiseLevel: 'lively',
@@ -35,7 +35,7 @@ export const DEFAULT_MOCK_PLACES: readonly MockPlaceItem[] = Object.freeze([
   }),
   Object.freeze({
     id: 'mock-place-2',
-    name: 'Placeholder Place Beta (Salad)',
+    name: 'Demo Place B · Salad',
     cuisine: 'salad',
     distanceMinutes: 7,
     noiseLevel: 'quiet',
@@ -43,7 +43,7 @@ export const DEFAULT_MOCK_PLACES: readonly MockPlaceItem[] = Object.freeze([
   }),
   Object.freeze({
     id: 'mock-place-3',
-    name: 'Placeholder Place Gamma (Japanese Cuisine)',
+    name: 'Demo Place C · Sushi',
     cuisine: 'japanese',
     distanceMinutes: 10,
     noiseLevel: 'quiet',
@@ -51,7 +51,7 @@ export const DEFAULT_MOCK_PLACES: readonly MockPlaceItem[] = Object.freeze([
   }),
   Object.freeze({
     id: 'mock-place-4',
-    name: 'Placeholder Place Delta (General Dining)',
+    name: 'Demo Place D · Fast Food',
     cuisine: 'fast_food',
     distanceMinutes: 8,
     noiseLevel: 'moderate',

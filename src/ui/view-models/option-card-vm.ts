@@ -104,9 +104,6 @@ export function deriveOptionCardVMs(
       if (bufferMinutes !== undefined) {
         fieldSourceRefs.bufferMinutes = { recordId: recId, field: 'bufferMinutes' };
       }
-      if (detail) {
-        fieldSourceRefs.detail = { recordId: recId, field: 'detail' };
-      }
       if (opt.rankedByFactKey) {
         fieldSourceRefs.rankingBasis = { recordId: 'habit-rain-transport', field: 'rankingBasis' };
       }

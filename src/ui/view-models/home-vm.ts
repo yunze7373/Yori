@@ -211,7 +211,13 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
           const basis = `Based on taste: ${cuisine} (${provenance})`;
 
-          const recId = opt.id || `mock-place-${i + 1}`;
+          const matchedRec = bundle
+            ? bundle.getRecord(opt.id) ||
+              bundle.getRecord(name) ||
+              bundle.getRecord(name.toLowerCase()) ||
+              bundle.getRecord(`mock-place-${i + 1}`)
+            : undefined;
+          const recId = matchedRec?.id || opt.id || `mock-place-${i + 1}`;
           const sourceRef: SourceRef = { recordId: recId, field: 'name' };
           const fieldSourceRefs: Record<string, SourceRef> = {
             name: { recordId: recId, field: 'name' },
@@ -251,7 +257,6 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     }
 
     const map = deriveMapVM(plan, spatialEvidence, 'compact', { snapshot });
-    const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys, bundle);
 
     return {
       layoutKind: 'candidates',
@@ -261,7 +266,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       basis: STRINGS.lunch.basisLine,
       isRain: false,
       map,
-      options: optionCards,
+      options: [],
       candidateCards: Object.freeze(candidateCards),
       isAccepted,
       canUndo,

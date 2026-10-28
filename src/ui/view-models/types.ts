@@ -31,6 +31,7 @@ export interface TimelineVM {
   readonly steps: readonly TimelineStepVM[];
   readonly departureNotice?: string;
   readonly sourceRef?: SourceRef;
+  readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
 }
 
 export interface OptionCardVM {
@@ -94,6 +95,7 @@ export interface MapVM {
   readonly weatherCallout?: MapWeatherCalloutVM;
   readonly ariaDescription: string;
   readonly sourceRef?: SourceRef;
+  readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
 }
 
 export interface PhotoVM {

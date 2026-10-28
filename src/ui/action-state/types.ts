@@ -20,6 +20,7 @@ export interface ActionCommandContext {
   readonly candidate?: IntentCandidate;
   readonly sceneId?: string;
   readonly userConfirmedKeys?: ReadonlySet<string>;
+  readonly evidenceBundle?: { getRecord(id: string): unknown; hasRecord?(id: string): boolean; getAllRecords?(): readonly { id: string }[] };
 }
 
 export type ActionStatus =

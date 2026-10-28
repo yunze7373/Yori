@@ -112,10 +112,23 @@ export function deriveTimelineVM(
   }
 
   if (arriveTimeStr) {
-    const arriveDetail =
-      bufferMinutes !== undefined
-        ? `On time · ${bufferMinutes}m buffer`
-        : 'On time';
+    let arriveDetail = 'On time';
+    const arrivalIso = timing?.arrivalAt ?? (activeLeaveAt && travelDurationMinutes !== undefined
+      ? new Date(Date.parse(activeLeaveAt) + travelDurationMinutes * 60 * 1000).toISOString()
+      : undefined);
+
+    if (plan.apptAt && arrivalIso) {
+      const marginMinutes = Math.round((Date.parse(plan.apptAt) - Date.parse(arrivalIso)) / 60000);
+      if (marginMinutes < 0) {
+        arriveDetail = `Late by ${Math.abs(marginMinutes)}m`;
+      } else if (marginMinutes > 0) {
+        arriveDetail = `On time · ${marginMinutes}m buffer`;
+      } else {
+        arriveDetail = 'On time';
+      }
+    } else if (bufferMinutes !== undefined && bufferMinutes > 0) {
+      arriveDetail = `On time · ${bufferMinutes}m buffer`;
+    }
 
     steps.push({
       id: 'step-arrive',
@@ -149,5 +162,10 @@ export function deriveTimelineVM(
     eventTime: apptTimeStr || 'Scheduled time',
     steps: Object.freeze(steps),
     departureNotice,
+    sourceRef: { recordId: 'calendar:2026-10-28T17:00:00.000Z', field: 'subjectTitle' },
+    fieldSourceRefs: {
+      eventTitle: { recordId: 'calendar:2026-10-28T17:00:00.000Z', field: 'subjectTitle' },
+      eventTime: { recordId: 'calendar:2026-10-28T17:00:00.000Z', field: 'apptTime' },
+    },
   };
 }

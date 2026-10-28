@@ -2425,6 +2425,23 @@ describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpr
       },
       // Signal Citation Parity Cases
       {
+        name: 'rejects signal citations when availableSignalIds is undefined',
+        context: {
+          availableSignalIds: undefined,
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_signal_id',
+      },
+      {
         name: 'rejects signal citations when availableSignalIds is empty',
         context: {
           availableSignalIds: [],
@@ -2503,6 +2520,27 @@ describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpr
           intent: 'FIND_LUNCH',
           slots: {},
           citedSignalIds: ['constructor'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_signal_id',
+      },
+      {
+        name: 'rejects SA signalId when availableSignalIds is undefined',
+        context: {
+          availableSignalIds: undefined,
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          situationAttribution: {
+            signalId: 'weather:2026-10-28T20:35:00.000Z',
+            reasonCode: 'free_window_fit',
+          },
+          citedSignalIds: [],
           citedFactKeys: ['sample_key_one'],
           reasonCodes: ['free_window_fit'],
         },
