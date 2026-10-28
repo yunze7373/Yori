@@ -16,6 +16,25 @@ import { escapeHtml, formatTime } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
 import { humanizeMemoryKey, humanizeMemoryValue } from '../review/why-sheet.js';
 
+/**
+ * Maps provenance source tokens to human-readable user copy.
+ * Eliminates engineering tokens (e.g. 'user_confirmed') on the Me tab.
+ */
+export function formatProvenanceSource(source: string): string {
+  switch (source) {
+    case 'user_confirmed':
+      return 'Source: you confirmed';
+    case 'user_feedback':
+      return 'Source: your adjustment';
+    case 'seed':
+      return 'Source: sample profile';
+    case 'inferred':
+      return 'Source: suggested habit';
+    default:
+      return 'Source: you confirmed';
+  }
+}
+
 export interface MeViewState {
   readonly memoryFacts: readonly MemoryFact[];
   readonly proposals: readonly MemoryFact[];
@@ -85,7 +104,7 @@ export function renderMeView(state: MeViewState): string {
                       <div class="memory-main">
                         <div class="memory-key">${escapeHtml(humanizeMemoryKey(fact.key))}</div>
                         <div class="memory-val">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</div>
-                        <div class="memory-meta">Source: ${escapeHtml(fact.provenance.source)} · Updated ${escapeHtml(time)}</div>
+                        <div class="memory-meta">${escapeHtml(formatProvenanceSource(fact.provenance.source))} · Updated ${escapeHtml(time)}</div>
                       </div>
                       <span class="card-badge badge-confirmed">Confirmed</span>
                     </div>

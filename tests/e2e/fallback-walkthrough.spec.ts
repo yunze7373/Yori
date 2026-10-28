@@ -331,6 +331,45 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await expect(pendingInMe).toBeVisible();
     await expect(pendingInMe).toContainText('Preparation buffer habit');
 
+    // P3: Ensure pending proposal card (title, Confirm and Not true buttons) is scrolled into viewport before capture
+    await pendingInMe.scrollIntoViewIfNeeded();
+
+    const confirmBtn = pendingInMe.locator('.btn-confirm-proposal');
+    const rejectBtn = pendingInMe.locator('.btn-reject-proposal');
+    await expect(confirmBtn).toBeVisible();
+    await expect(rejectBtn).toBeVisible();
+
+    if (isMobile) {
+      const tabBar = page.locator('.bottom-tab-bar');
+      const pendingBox = await pendingInMe.boundingBox();
+      const tabBox = await tabBar.boundingBox();
+      if (pendingBox && tabBox && pendingBox.y + pendingBox.height > tabBox.y) {
+        const scrollDelta = pendingBox.y + pendingBox.height - tabBox.y + 24;
+        await page.evaluate(delta => window.scrollBy(0, delta), scrollDelta);
+      }
+    }
+
+    // Assert the pending proposal card and buttons are inside the viewport at capture time
+    const pendingBoxFinal = await pendingInMe.boundingBox();
+    const confirmBox = await confirmBtn.boundingBox();
+    const rejectBox = await rejectBtn.boundingBox();
+    const vp = page.viewportSize();
+    expect(pendingBoxFinal).not.toBeNull();
+    expect(confirmBox).not.toBeNull();
+    expect(rejectBox).not.toBeNull();
+    expect(vp).not.toBeNull();
+    expect(pendingBoxFinal!.y).toBeGreaterThanOrEqual(0);
+    if (!isMobile) {
+      expect(pendingBoxFinal!.y + pendingBoxFinal!.height).toBeLessThanOrEqual(vp!.height);
+      expect(confirmBox!.y + confirmBox!.height).toBeLessThanOrEqual(vp!.height);
+      expect(rejectBox!.y + rejectBox!.height).toBeLessThanOrEqual(vp!.height);
+    } else {
+      const tabBar = page.locator('.bottom-tab-bar');
+      const tabBox = await tabBar.boundingBox();
+      expect(tabBox).not.toBeNull();
+      expect(pendingBoxFinal!.y + pendingBoxFinal!.height).toBeLessThanOrEqual(tabBox!.y);
+    }
+
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
     await page.screenshot({
@@ -338,7 +377,6 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     });
 
     // Confirm proposal: moves from pending to confirmed preferences
-    const confirmBtn = pendingInMe.locator('.btn-confirm-proposal');
     await confirmBtn.click();
 
     // Proposal disappears from pending and is confirmed
@@ -346,6 +384,7 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     const confirmedFact = page.locator('#fact-prep_buffer_preference');
     await expect(confirmedFact).toBeVisible();
     await expect(confirmedFact).toContainText('Confirmed');
+    await expect(confirmedFact).toContainText('Source: you confirmed');
     await expect(page.locator('#confirmed-facts-list .memory-empty')).toHaveCount(0);
 
     await checkNoHorizontalScroll(page);

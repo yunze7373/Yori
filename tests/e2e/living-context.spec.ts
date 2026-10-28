@@ -576,6 +576,8 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
       /grocery-stub/i,
       /depart-plugin/i,
       /lunch-plugin/i,
+      /user_confirmed/i,
+      /user_feedback/i,
     ];
 
     for (const scene of allScenes) {
@@ -584,6 +586,36 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
       for (const pattern of forbiddenPatterns) {
         expect(text).not.toMatch(pattern);
       }
+    }
+
+    // 3. Extend zero-jargon scan to Me tab with a confirmed fact present (UI-POLISH-P3)
+    await page.evaluate(() => localStorage.clear());
+    await page.goto('/');
+    const freshSelect = page.locator('#scene-select');
+    await freshSelect.selectOption('rain');
+    await page.locator('#btn-adjust').click();
+    await page.locator('#input-prep-minutes').fill('25');
+    await page.locator('#input-buffer-minutes').fill('10');
+    await page.locator('#btn-adjust-remember').click();
+
+    const isMobile = (page.viewportSize()?.width ?? 1280) < 600;
+    if (isMobile) {
+      await page.locator('#tab-me').click();
+    } else {
+      await page.locator('#desktop-nav-me').click();
+    }
+
+    const proposal = page.locator('#proposal-prep_buffer_preference');
+    await expect(proposal).toBeVisible();
+    await proposal.locator('.btn-confirm-proposal').click();
+
+    const confirmedFact = page.locator('#fact-prep_buffer_preference');
+    await expect(confirmedFact).toBeVisible();
+    await expect(confirmedFact).toContainText('Source: you confirmed');
+
+    const meText = await page.innerText('body');
+    for (const pattern of forbiddenPatterns) {
+      expect(meText).not.toMatch(pattern);
     }
   });
 });
