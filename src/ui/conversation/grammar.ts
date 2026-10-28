@@ -104,7 +104,7 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
 
     // 1. ACCEPT ('Looks good', 'Accept', 'Confirm', 'Ok', etc.)
     if (
-      /^(?:looks\s+good(?:\s+to\s+me)?|accept|confirm|sounds\s+good|lgtm|ok|okay|yes|keep\s+it)$/i.test(
+      /^(?:looks\s+good(?:\s+to\s+me)?|accept|confirm|sounds\s+good|lgtm|ok|okay|yes|keep\s+it|keep\s+current(?:\s+departure|\s+plan)?|keep\s+departure)$/i.test(
         normalized
       )
     ) {

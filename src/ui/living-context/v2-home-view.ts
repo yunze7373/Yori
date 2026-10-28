@@ -132,10 +132,29 @@ export function renderMapCard(map: MapVM): string {
 
 function renderActionRow(vm: HomeCompositionVM): string {
   const planId = vm.planId || '';
-  if (vm.isAccepted || vm.canUndo) {
+  if (vm.isAccepted) {
     return `
       <div class="action-row" aria-label="Plan Actions">
-        <span class="badge-accepted">${escapeHtml(vm.isAccepted ? STRINGS.actions.accepted : 'Updated')}</span>
+        <span class="badge-accepted">${escapeHtml(STRINGS.actions.accepted)}</span>
+        <button type="button" class="btn btn-outline" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}">
+          ${escapeHtml(STRINGS.actions.undo)}
+        </button>
+        <button type="button" class="btn btn-outline v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}">
+          Details →
+        </button>
+        <button type="button" class="btn btn-outline" id="btn-why" data-plan-id="${escapeHtml(planId)}">
+          ${escapeHtml(STRINGS.actions.why)}
+        </button>
+      </div>
+    `;
+  }
+  if (vm.canUndo) {
+    return `
+      <div class="action-row" aria-label="Plan Actions">
+        <span class="badge-accepted">Updated</span>
+        <button type="button" class="btn btn-primary" id="btn-accept" data-plan-id="${escapeHtml(planId)}">
+          ${escapeHtml(STRINGS.actions.accept)}
+        </button>
         <button type="button" class="btn btn-outline" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}">
           ${escapeHtml(STRINGS.actions.undo)}
         </button>

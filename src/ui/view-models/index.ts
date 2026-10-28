@@ -10,3 +10,4 @@ export * from './map-vm.js';
 export * from './home-vm.js';
 export * from './trip-detail-vm.js';
 export * from './restaurant-detail-vm.js';
+export * from './timing.js';

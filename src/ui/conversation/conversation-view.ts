@@ -116,7 +116,7 @@ function renderTranscriptItems(transcript: readonly MessageItem[]): string {
                         Leave <strong>${escapeHtml(opt.leaveTime)}</strong> · Arrive by <strong>${escapeHtml(opt.arrivalTime)}</strong>
                       </div>
                       <button type="button" class="btn btn-outline btn-sm btn-select-comparison" data-delta="${opt.deltaMinutes}">
-                        Choose: Leave ${opt.deltaMinutes}m later
+                        ${opt.deltaMinutes === 0 ? 'Keep current departure' : `Choose: Leave ${opt.deltaMinutes}m later`}
                       </button>
                     </div>
                   `
@@ -228,8 +228,10 @@ export function attachConversationEvents(
       btn.addEventListener('click', (e) => {
         e.preventDefault();
         const delta = btn.dataset.delta;
-        if (!delta) return;
-        const res = store.submitMessage(`Leave ${delta} minutes later`);
+        if (delta === undefined) return;
+        const numDelta = parseInt(delta, 10);
+        const msg = numDelta === 0 ? 'Keep current departure' : `Leave ${delta} minutes later`;
+        const res = store.submitMessage(msg);
         transcriptEl.innerHTML = renderTranscriptItems(store.getTranscript());
         transcriptEl.scrollTop = transcriptEl.scrollHeight;
         wireTranscriptButtons();

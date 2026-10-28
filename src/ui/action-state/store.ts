@@ -24,6 +24,7 @@ import {
   type UserRequestOverride,
 } from '../../plugins/depart/request-override.js';
 import { formatTime } from '../living-context/presentation.js';
+import { derivePlanTimingFacts } from '../view-models/timing.js';
 
 function checkSystemReducedMotion(): boolean {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -493,16 +494,14 @@ export class DefaultActionStateStore implements ActionStateStore {
           'comparing'
         );
 
-        const apptMs = new Date(ctx.plan.apptAt || 0).getTime();
-        const leaveMs = new Date(ctx.plan.leaveAt || 0).getTime();
-        const recOpt = (ctx.plan.optionsOrSteps as any[])?.find(o => o.mode === 'drive') ?? ctx.plan.optionsOrSteps[0];
-        const travelMins = recOpt?.travelMinutes ?? recOpt?.estimatedMinutes ?? 25;
-        const arrivalMs = leaveMs + travelMins * 60000;
-        const currentMarginMinutes = Math.max(0, Math.round((apptMs - arrivalMs) / 60000));
+        const tz = ctx.plan.timezone;
+        // Derive timing facts from base plan using single shared timing helper
+        const baseTiming = derivePlanTimingFacts(ctx.plan);
+        const currentMarginMinutes = Math.max(0, baseTiming?.marginMinutes ?? 0);
 
-        // Latest on-time option: delta equals current margin (e.g. 5m in rain, 10m in clear)
-        const safeDelta = currentMarginMinutes > 0 ? currentMarginMinutes : 0;
-        // Later option with late risk: safeDelta + 10m (e.g. 15m in rain)
+        // Latest on-time option: delta equals current margin (e.g. 5m in rain or clear)
+        const safeDelta = currentMarginMinutes;
+        // Later option with late risk: safeDelta + 10m (e.g. 15m in rain/clear), or 15m if safeDelta = 0
         const lateDelta = safeDelta > 0 ? safeDelta + 10 : 15;
 
         const safeOverride = createUserRequestOverride({
@@ -519,34 +518,58 @@ export class DefaultActionStateStore implements ActionStateStore {
         const safePlan = departPreparer.prepareWithRequest(ctx.candidate, ctx.snapshot, ctx.memory, safeOverride);
         const latePlan = departPreparer.prepareWithRequest(ctx.candidate, ctx.snapshot, ctx.memory, lateOverride);
 
-        const safeLeaveStr = safePlan?.leaveAt ? formatTime(safePlan.leaveAt, ctx.plan.timezone) : `${safeDelta}m later`;
-        const lateLeaveStr = latePlan?.leaveAt ? formatTime(latePlan.leaveAt, ctx.plan.timezone) : `${lateDelta}m later`;
+        // Derive timing facts directly from each override's preparer output
+        const safeTiming = safePlan ? derivePlanTimingFacts(safePlan) : undefined;
+        const lateTiming = latePlan ? derivePlanTimingFacts(latePlan) : undefined;
+
+        const safeLeaveStr = safeTiming?.leaveAt
+          ? formatTime(safeTiming.leaveAt, tz)
+          : `${safeDelta}m later`;
+        const safeArriveStr = safeTiming?.arrivalAt
+          ? formatTime(safeTiming.arrivalAt, tz)
+          : (safePlan?.apptAt ? formatTime(safePlan.apptAt, tz) : '');
+
+        const lateLeaveStr = lateTiming?.leaveAt
+          ? formatTime(lateTiming.leaveAt, tz)
+          : `${lateDelta}m later`;
+        const lateArriveStr = lateTiming?.arrivalAt
+          ? formatTime(lateTiming.arrivalAt, tz)
+          : '';
+
+        const safeMargin = safeTiming?.marginMinutes ?? 0;
+        const lateMargin = lateTiming?.marginMinutes ?? -10;
+        const latenessMin = Math.abs(lateMargin);
 
         const comparisonOptions: DepartureComparisonItem[] = [];
-        if (safePlan) {
+        if (safePlan && safeTiming) {
           comparisonOptions.push({
             deltaMinutes: safeDelta,
             headline: safePlan.headline,
             leaveTime: safeLeaveStr,
-            arrivalTime: formatTime(safePlan.apptAt, ctx.plan.timezone),
-            marginMinutes: 0,
-            isLateRisk: false,
+            arrivalTime: safeArriveStr,
+            marginMinutes: safeMargin,
+            isLateRisk: safeTiming.isLate,
             plan: safePlan,
           });
         }
-        if (latePlan) {
+        if (latePlan && lateTiming) {
           comparisonOptions.push({
             deltaMinutes: lateDelta,
             headline: latePlan.headline,
             leaveTime: lateLeaveStr,
-            arrivalTime: formatTime(safePlan?.apptAt ?? ctx.plan.apptAt, ctx.plan.timezone),
-            marginMinutes: -10,
-            isLateRisk: true,
+            arrivalTime: lateArriveStr,
+            marginMinutes: lateMargin,
+            isLateRisk: lateTiming.isLate,
             plan: latePlan,
           });
         }
 
-        const comparisonText = `Comparing departure options: You can leave up to ${safeDelta} minutes later (${safeLeaveStr}) and still arrive on time (0m buffer). Leaving ${lateDelta} minutes later (${lateLeaveStr}) arrives 10m late for ${ctx.plan.subjectTitle}. Which option would you prefer?`;
+        let comparisonText: string;
+        if (safeDelta > 0) {
+          comparisonText = `Comparing departure options: You can leave up to ${safeDelta} minutes later (${safeLeaveStr}) and still arrive on time (0m buffer). Leaving ${lateDelta} minutes later (${lateLeaveStr}) arrives at ${lateArriveStr} (${latenessMin}m late) for ${ctx.plan.subjectTitle}. Which option would you prefer?`;
+        } else {
+          comparisonText = `Comparing departure options: You are on the latest departure to arrive on time (${safeLeaveStr}, 0m buffer). Leaving ${lateDelta} minutes later (${lateLeaveStr}) arrives at ${lateArriveStr} (${latenessMin}m late) for ${ctx.plan.subjectTitle}. Which option would you prefer?`;
+        }
 
         this.resolveNeedsConfirmation(comparisonText, safePlan ?? undefined);
 

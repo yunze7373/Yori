@@ -8,8 +8,9 @@
  * - Omit missing fields rather than defaulting with hardcoded literals.
  */
 
-import type { PreparedPlan, PlanOption } from '../../core/contracts/index.js';
+import type { PreparedPlan } from '../../core/contracts/index.js';
 import { formatTime } from '../living-context/presentation.js';
+import { derivePlanTimingFacts } from './timing.js';
 import type { TimelineVM, TimelineStepVM } from './types.js';
 
 export function deriveTimelineVM(
@@ -27,91 +28,21 @@ export function deriveTimelineVM(
     ? (apptTimeStr ? `${plan.subjectTitle} at ${apptTimeStr}` : plan.subjectTitle)
     : plan.headline;
 
-  // Extract memory facts used (buffer and prep duration)
-  const bufferFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_buffer_minutes');
-  const prepFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_duration_minutes');
-  let bufferMinutes =
-    typeof bufferFact?.value === 'number' && Number.isFinite(bufferFact.value)
-      ? bufferFact.value
-      : undefined;
-  let prepMinutes =
-    typeof prepFact?.value === 'number' && Number.isFinite(prepFact.value)
-      ? prepFact.value
-      : undefined;
+  // Derive timing facts from single shared timing helper
+  const timing = derivePlanTimingFacts(plan, selectedMode);
 
-  // Locate the selected or first option if multi-mode
-  let selectedOpt: PlanOption | undefined;
-  if (plan.optionsOrSteps && plan.optionsOrSteps.length > 0) {
-    const typedOpts = plan.optionsOrSteps.filter(
-      (o): o is PlanOption => typeof o !== 'string' && typeof (o as PlanOption).mode === 'string'
-    );
-    if (selectedMode) {
-      selectedOpt = typedOpts.find(o => o.mode?.toLowerCase() === selectedMode.toLowerCase());
-    }
-    if (!selectedOpt && typedOpts.length > 0) {
-      selectedOpt = typedOpts[0];
-    }
+  let bufferMinutes = timing?.bufferMinutes;
+  let prepMinutes = timing?.prepMinutes;
+  let primaryMode = timing?.mode ? timing.mode.charAt(0).toUpperCase() + timing.mode.slice(1) : undefined;
+  let travelDurationMinutes = timing?.travelMinutes;
+
+  if (timing && timing.marginMinutes >= 0) {
+    bufferMinutes = timing.marginMinutes;
   }
 
-  // Determine primary route mode and travel duration
-  let primaryMode: string | undefined;
-  let travelDurationMinutes: number | undefined;
-
-  if (selectedOpt) {
-    if (selectedOpt.mode) {
-      primaryMode = selectedOpt.mode.charAt(0).toUpperCase() + selectedOpt.mode.slice(1);
-    }
-    if (typeof selectedOpt.travelMinutes === 'number' && Number.isFinite(selectedOpt.travelMinutes)) {
-      travelDurationMinutes = selectedOpt.travelMinutes;
-    }
-  }
-
-  // If not found in typed options (e.g. D1 single-mode plan with step strings),
-  // derive travel minutes mathematically: apptAt - leaveAt - buffer
-  if (travelDurationMinutes === undefined && plan.apptAt && plan.leaveAt) {
-    const apptMs = Date.parse(plan.apptAt);
-    const leaveMs = Date.parse(plan.leaveAt);
-    if (Number.isFinite(apptMs) && Number.isFinite(leaveMs) && apptMs > leaveMs) {
-      const totalDiffMin = Math.round((apptMs - leaveMs) / 60000);
-      const buf = bufferMinutes ?? 0;
-      if (totalDiffMin > buf) {
-        travelDurationMinutes = totalDiffMin - buf;
-      }
-    }
-  }
-
-  // Active leaveAt and arriveAt
-  const activeLeaveAt = selectedOpt?.leaveAt || plan.leaveAt;
-
-  // If buffer fact was present, derive option-specific buffer from apptAt - (activeLeaveAt + travel)
-  if (bufferMinutes !== undefined && plan.apptAt && activeLeaveAt && travelDurationMinutes !== undefined) {
-    const apptMs = Date.parse(plan.apptAt);
-    const leaveMs = Date.parse(activeLeaveAt);
-    if (Number.isFinite(apptMs) && Number.isFinite(leaveMs)) {
-      const arriveMs = leaveMs + travelDurationMinutes * 60000;
-      if (apptMs >= arriveMs) {
-        bufferMinutes = Math.round((apptMs - arriveMs) / 60000);
-      }
-    }
-  }
-
-  // If prepMinutes was not in memory facts, derive it from leaveAt - prepareAt
-  if (prepMinutes === undefined && plan.leaveAt && plan.prepareAt) {
-    const leaveMs = Date.parse(plan.leaveAt);
-    const prepMs = Date.parse(plan.prepareAt);
-    if (Number.isFinite(leaveMs) && Number.isFinite(prepMs) && leaveMs > prepMs) {
-      prepMinutes = Math.round((leaveMs - prepMs) / 60000);
-    }
-  }
-
-  // Active prepareAt
-  let activePrepAt = plan.prepareAt;
-  if (activeLeaveAt && prepMinutes !== undefined) {
-    const leaveMs = Date.parse(activeLeaveAt);
-    if (Number.isFinite(leaveMs)) {
-      activePrepAt = new Date(leaveMs - prepMinutes * 60000).toISOString();
-    }
-  }
+  // Active leaveAt and prepareAt
+  const activeLeaveAt = timing?.leaveAt || plan.leaveAt;
+  const activePrepAt = timing?.prepareAt || plan.prepareAt;
 
   const prepareTimeStr = activePrepAt ? formatTime(activePrepAt, tz) : '';
   const leaveTimeStr = activeLeaveAt ? formatTime(activeLeaveAt, tz) : '';

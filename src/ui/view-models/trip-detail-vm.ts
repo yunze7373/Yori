@@ -24,6 +24,7 @@ import {
 } from '../review/why-sheet.js';
 import { deriveMapVM } from './map-vm.js';
 import { deriveTimelineVM } from './timeline-vm.js';
+import { derivePlanTimingFacts } from './timing.js';
 import type {
   TripDetailVM,
   TripModeTabVM,
@@ -86,19 +87,17 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     for (const opt of typedOptions) {
       const mode = opt.mode!;
       const modeCap = mode.charAt(0).toUpperCase() + mode.slice(1);
+      const optTiming = derivePlanTimingFacts(plan, opt);
       const duration =
         typeof opt.travelMinutes === 'number' && Number.isFinite(opt.travelMinutes)
           ? opt.travelMinutes
           : undefined;
-      const leaveTime = opt.leaveAt ? formatTime(opt.leaveAt, tz) : '';
-      let arriveTime = '';
-      if (opt.leaveAt && duration !== undefined && duration > 0) {
-        const leaveDate = new Date(opt.leaveAt);
-        if (Number.isFinite(leaveDate.getTime())) {
-          const arriveDate = new Date(leaveDate.getTime() + duration * 60000);
-          arriveTime = formatTime(arriveDate.toISOString(), tz);
-        }
-      }
+      const leaveTime = optTiming?.leaveAt
+        ? formatTime(optTiming.leaveAt, tz)
+        : (opt.leaveAt ? formatTime(opt.leaveAt, tz) : '');
+      const arriveTime = duration !== undefined && optTiming?.arrivalAt
+        ? formatTime(optTiming.arrivalAt, tz)
+        : '';
 
       // If travelMinutes is missing, omit rather than displaying "0 min"
       const label = duration !== undefined ? `${modeCap} · ${duration} min` : modeCap;

@@ -258,18 +258,20 @@ describe('V2a-1 Negative Tests & Integration Suite', () => {
     expect(safeOpt!.isLateRisk).toBe(false);
     expect(safeOpt!.marginMinutes).toBe(0);
     expect(safeOpt!.leaveTime).toContain('2:35 PM');
+    expect(safeOpt!.arrivalTime).toContain('3:00 PM');
 
     // Late option: delta = 15 min (leave 2:45 PM, arrive 3:10 PM, late by 10m)
     expect(lateOpt!.deltaMinutes).toBe(15);
     expect(lateOpt!.isLateRisk).toBe(true);
     expect(lateOpt!.marginMinutes).toBe(-10);
     expect(lateOpt!.leaveTime).toContain('2:45 PM');
+    expect(lateOpt!.arrivalTime).toContain('3:10 PM');
 
     // Assistant response presents the honest comparison
     expect(lastMsg!.text).toContain('You can leave up to 5 minutes later');
     expect(lastMsg!.text).toContain('arrive on time (0m buffer)');
     expect(lastMsg!.text).toContain('Leaving 15 minutes later');
-    expect(lastMsg!.text).toContain('arrives 10m late');
+    expect(lastMsg!.text).toContain('(10m late)');
 
     // Selecting the safe option resolves executable and auto-collapses
     const chooseResult = store.submitMessage('Leave 5 minutes later');
