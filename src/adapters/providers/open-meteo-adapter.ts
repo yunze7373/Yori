@@ -42,21 +42,47 @@ export function mapWmoCodeToCondition(code: number): WeatherCondition {
   return 'cloudy';
 }
 
-function resolveIsoTimestamp(timeStr: string | undefined): string {
-  if (!timeStr) {
-    return new Date().toISOString();
+export function resolveOpenMeteoIsoTimestamp(
+  timeStr: unknown,
+  utcOffsetSeconds: unknown
+): string | null {
+  if (typeof timeStr !== 'string' || !timeStr.trim()) {
+    return null;
   }
-  // Open-Meteo formats time like '2026-10-28T12:00'
-  const parsed = Date.parse(timeStr);
-  if (Number.isFinite(parsed)) {
-    return new Date(parsed).toISOString();
+
+  // If timeStr already ends with Z or has an explicit offset (e.g. +00:00 or -07:00)
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/.test(timeStr)) {
+    const ms = Date.parse(timeStr);
+    return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
   }
-  // Try adding 'Z' if timezone offset omitted
-  const parsedUtc = Date.parse(`${timeStr}Z`);
-  if (Number.isFinite(parsedUtc)) {
-    return new Date(parsedUtc).toISOString();
+
+  // Parse wall clock components e.g. "2026-10-28T12:00" or "2026-10-28T12:00:00"
+  const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(timeStr);
+  if (!match) {
+    return null;
   }
-  return new Date().toISOString();
+
+  const offsetSec =
+    typeof utcOffsetSeconds === 'number' && Number.isFinite(utcOffsetSeconds)
+      ? utcOffsetSeconds
+      : 0;
+
+  const year = parseInt(match[1]!, 10);
+  const month = parseInt(match[2]!, 10) - 1;
+  const day = parseInt(match[3]!, 10);
+  const hour = parseInt(match[4]!, 10);
+  const minute = parseInt(match[5]!, 10);
+  const second = match[6] ? parseInt(match[6], 10) : 0;
+
+  // Compute UTC timestamp strictly without host-local timezone contamination
+  const wallUtcMs = Date.UTC(year, month, day, hour, minute, second);
+  const realUtcMs = wallUtcMs - offsetSec * 1000;
+
+  if (!Number.isFinite(realUtcMs)) {
+    return null;
+  }
+
+  return new Date(realUtcMs).toISOString();
 }
 
 export class OpenMeteoWeatherAdapter implements RealProviderAdapter<WeatherData> {
@@ -153,7 +179,11 @@ export class OpenMeteoWeatherAdapter implements RealProviderAdapter<WeatherData>
         else rainfall = 'light';
       }
 
-      const issuedAt = resolveIsoTimestamp(current.time);
+      const issuedAt = resolveOpenMeteoIsoTimestamp(current.time, data?.utc_offset_seconds);
+      if (!issuedAt) {
+        // Fail closed on invalid timestamp; never invent ambient time (INV-103)
+        return Object.freeze([]);
+      }
 
       const value: WeatherData = {
         condition,

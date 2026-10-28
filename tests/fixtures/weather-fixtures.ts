@@ -23,7 +23,8 @@ export const RECORDED_OPEN_METEO_CLEAR_RESPONSE = Object.freeze({
     weather_code: 'wmo code',
   },
   current: {
-    time: '2026-10-28T17:00',
+    // 10:00 AM local time PDT in San Francisco -> 17:00:00.000Z UTC
+    time: '2026-10-28T10:00',
     interval: 900,
     temperature_2m: 19.5,
     relative_humidity_2m: 55,
@@ -57,7 +58,8 @@ export const RECORDED_OPEN_METEO_RAIN_RESPONSE = Object.freeze({
     weather_code: 'wmo code',
   },
   current: {
-    time: '2026-10-28T20:35',
+    // 1:35 PM local time PDT in San Francisco -> 20:35:00.000Z UTC
+    time: '2026-10-28T13:35',
     interval: 900,
     temperature_2m: 14.8,
     relative_humidity_2m: 88,
@@ -83,8 +85,8 @@ export const RECORDED_OPEN_METEO_STALE_RESPONSE = Object.freeze({
   timezone_abbreviation: 'PDT',
   elevation: 18.0,
   current: {
-    // Issued 5 hours before evaluation
-    time: '2026-10-28T15:00',
+    // 8:00 AM local time PDT in San Francisco -> 15:00:00.000Z UTC (stale when evaluated at 17:00Z)
+    time: '2026-10-28T08:00',
     interval: 900,
     temperature_2m: 18.0,
     precipitation: 0.0,

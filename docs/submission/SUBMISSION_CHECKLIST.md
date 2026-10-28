@@ -70,6 +70,11 @@
   - Description: *(Copy approved copy from `PROJECT_DESCRIPTION.md`)*
 - [ ] **Submit Form**: Submit before the official deadline: **2026-11-05 11:00 JST**.
 
+### 7. Provider Commercial Terms & Non-Commercial Qualification (AC-204-2)
+- [ ] **Review Open-Meteo API Terms**: Inspect [`PROVIDERS.md`](../architecture/PROVIDERS.md).
+- [ ] **Owner Action**: Confirm that the hackathon demo and submission qualify under Open-Meteo's non-commercial use terms (<10,000 calls/day, <5,000/hour, <600/minute). If deploying commercially or exceeding rate limits, acquire a commercial API plan or switch to a commercial provider (e.g. Apple WeatherKit).
+- [ ] **Verify Default Off**: Ensure `WEATHER_LIVE_ENABLED` remains `false` by default.
+
 ---
 
 ## 🛡️ Architectural Acceptance Verification (AI Certified)
@@ -77,8 +82,8 @@
 The underlying codebase has passed all required automated verification suites for Phase Closeout:
 - ✅ **AC-EXT-1 Core Diff Invariant**: `src/core/` diff vs baseline `f43c6c1d74c4bc1159300fed9d62aec9447b886e` is **100% EMPTY** (0 files, 0 lines changed).
 - ✅ **TypeScript Strict Mode**: `tsc --noEmit` exits 0 with zero errors.
-- ✅ **Unit & Mock Integration**: 231/231 tests passing (`npm test`).
+- ✅ **Unit & Mock Integration**: 255/255 tests passing (`npm test`).
 - ✅ **Golden Scenario Harness**: 10/10 scenarios passing byte-identically (`npm run test:golden`).
 - ✅ **Degradation Drills**: 21/21 fault injection invariance tests passing (`npm run test:drills`).
-- ✅ **Playwright E2E**: 38/38 end-to-end tests passing (`npm run test:e2e`).
+- ✅ **Playwright E2E**: 42/42 end-to-end tests passing (`npm run test:e2e`).
 - ✅ **Static Secret Scan**: Zero tokens or keys in `src/`, `dist/`, or browser storage APIs.

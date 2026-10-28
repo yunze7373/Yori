@@ -13,6 +13,7 @@ import {
   createRealSignal,
   OPEN_METEO_ATTRIBUTION,
   mapWmoCodeToCondition,
+  resolveOpenMeteoIsoTimestamp,
 } from './index.js';
 import {
   createWeatherProxyMiddleware,
@@ -150,6 +151,27 @@ describe('PH-002 D1: Open-Meteo Real Weather Adapter (AC-204-1, AC-204-2)', () =
     expect(mapWmoCodeToCondition(71)).toBe('snow');
   });
 
+  it('resolveOpenMeteoIsoTimestamp computes strict instant using utc_offset_seconds independent of host timezone', () => {
+    // San Francisco (PDT = UTC-7 = -25200s): 10:00 AM wall time -> 17:00:00.000Z UTC
+    expect(resolveOpenMeteoIsoTimestamp('2026-10-28T10:00', -25200)).toBe('2026-10-28T17:00:00.000Z');
+    // San Francisco 1:35 PM wall time -> 20:35:00.000Z UTC
+    expect(resolveOpenMeteoIsoTimestamp('2026-10-28T13:35', -25200)).toBe('2026-10-28T20:35:00.000Z');
+    // Tokyo (JST = UTC+9 = +32400s): 12:00 PM wall time -> 03:00:00.000Z UTC
+    expect(resolveOpenMeteoIsoTimestamp('2026-10-28T12:00', 32400)).toBe('2026-10-28T03:00:00.000Z');
+    // London (UTC = 0s): 12:00 PM wall time -> 12:00:00.000Z UTC
+    expect(resolveOpenMeteoIsoTimestamp('2026-10-28T12:00', 0)).toBe('2026-10-28T12:00:00.000Z');
+    // Explicit Z timestamp preserves instant
+    expect(resolveOpenMeteoIsoTimestamp('2026-10-28T17:00:00Z', 0)).toBe('2026-10-28T17:00:00.000Z');
+  });
+
+  it('resolveOpenMeteoIsoTimestamp returns null and never invents time on missing or malformed input (INV-103)', () => {
+    expect(resolveOpenMeteoIsoTimestamp(undefined, -25200)).toBeNull();
+    expect(resolveOpenMeteoIsoTimestamp(null, -25200)).toBeNull();
+    expect(resolveOpenMeteoIsoTimestamp('', -25200)).toBeNull();
+    expect(resolveOpenMeteoIsoTimestamp('   ', -25200)).toBeNull();
+    expect(resolveOpenMeteoIsoTimestamp('invalid-date-format', -25200)).toBeNull();
+  });
+
   it('flag-off default makes ZERO network calls and returns empty array', async () => {
     const mockFetch = vi.fn();
     const adapter = new OpenMeteoWeatherAdapter({
@@ -197,6 +219,7 @@ describe('PH-002 D1: Open-Meteo Real Weather Adapter (AC-204-1, AC-204-2)', () =
     expect(sig.kind).toBe('weather');
     expect(sig.source).toBe('real');
     expect(sig.label).toBe('real');
+    expect(sig.issuedAt).toBe('2026-10-28T17:00:00.000Z');
     expect(sig.validFor).toBe(3600000); // 1h bounded validity
     expect(sig.confidence).toBe(1.0);
     expect(sig.consentScope).toBe('device_only');
@@ -225,10 +248,38 @@ describe('PH-002 D1: Open-Meteo Real Weather Adapter (AC-204-1, AC-204-2)', () =
     expect(signals).toHaveLength(1);
     const sig = signals[0]!;
     expect(sig.source).toBe('real');
+    expect(sig.issuedAt).toBe('2026-10-28T20:35:00.000Z');
     expect(sig.value.condition).toBe('rain');
     expect(sig.value.weatherCode).toBe(63);
     expect(sig.value.rainfall).toBe('moderate');
     expect(sig.value.precipProbability).toBe(0.85);
+  });
+
+  it('fails closed when current.time is missing without fabricating now() (INV-103)', async () => {
+    const mockFetch = vi.fn(async () => {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          latitude: 37.7749,
+          longitude: -122.4194,
+          utc_offset_seconds: -25200,
+          current: {
+            temperature_2m: 20,
+            weather_code: 0,
+            // current.time omitted
+          },
+        }),
+      } as Response;
+    });
+
+    const adapter = new OpenMeteoWeatherAdapter({
+      enabled: true,
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    const signals = await adapter.signals();
+    expect(signals).toHaveLength(0);
   });
 
   it('fails closed gracefully on HTTP 500 error without throwing or inventing weather (INV-103)', async () => {

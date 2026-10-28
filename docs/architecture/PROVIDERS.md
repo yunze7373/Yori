@@ -63,7 +63,7 @@ Yori separates environmental perception from proactive decision-making. The dete
 | **Label** | `simulated` | `real` |
 | **Endpoint** | None (in-memory fixtures) | `https://api.open-meteo.com/v1/forecast` |
 | **Cost** | Free (in-memory) | Free / Keyless (0 USD, no API keys or paid tiers required) |
-| **License & ToS** | Repository License | [Open-Meteo Terms](https://open-meteo.com/en/terms) under **CC BY 4.0** |
+| **License & ToS** | Repository License | [Open-Meteo Terms](https://open-meteo.com/en/terms) (accessed 2026-10-28) under **CC BY 4.0** (Non-commercial scope) |
 | **Attribution** | None | Visible attribution: *"Weather data by Open-Meteo.com"* linking to `https://open-meteo.com/` |
 | **Coordinates** | Static fixture coordinates | Strictly configured fixed demo-city coordinate (`DEMO_CITY_LAT`/`DEMO_CITY_LON`) |
 | **Device Geolocation** | Forbidden (`navigator.geolocation` = 0 refs) | Forbidden (`navigator.geolocation` = 0 refs) |
@@ -83,6 +83,19 @@ Yori separates environmental perception from proactive decision-making. The dete
   Host: api.open-meteo.com
   Accept: application/json
   ```
+
+### 3.2 Terms of Service, Rate Limits, and Owner Decision Record (P2)
+- **Source:** [Open-Meteo Terms of Service](https://open-meteo.com/en/terms) (Accessed: 2026-10-28).
+- **Verbatim Free API Terms:**
+  > *"Non-Commercial Use - By using the Free API for non-commercial use you agree to following terms:*
+  > *Less than 10'000 API calls per day, 5'000 per hour and 600 per minute...*
+  > *Attribution: Open-Meteo weather data is available under the Attribution 4.0 International (CC BY 4.0) license. Attribution is required. Please display 'Weather data by Open-Meteo.com' with a link to https://open-meteo.com/."*
+
+> [!IMPORTANT] Owner Action Required: Commercial Scope Qualification
+> 1. **Non-Commercial Scope:** The keyless public tier is legally restricted to non-commercial evaluation, personal use, and educational demonstrations.
+> 2. **Owner Decision:** The project owner (Han) must confirm that the hackathon demo and submission qualify under Open-Meteo's non-commercial policy.
+> 3. **Commercial Deployment:** Any subsequent commercialization, SaaS deployment, or volume exceeding 10,000 calls/day requires upgrading to an Open-Meteo Commercial subscription or integrating a commercial provider (e.g. Apple WeatherKit, Tomorrow.io).
+> 4. **Default Setting:** `WEATHER_LIVE_ENABLED` defaults strictly to `false`. Out of the box, Yori runs 100% offline with zero external network calls.
 
 ### 3.2 Privacy & Data Minimization (AC-204-2)
 1. **Configured Coordinate Only:** The adapter requests weather *only* for the configured demo-city coordinate. The default is San Francisco, CA (`37.7749`, `-122.4194`) with timezone `America/Los_Angeles`.
