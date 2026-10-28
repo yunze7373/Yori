@@ -309,6 +309,7 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     // Step 5: User Sovereignty & The Me Tab (Confirm-only Memory & Budget)
     // -------------------------------------------------------------------------
     await navigateToMe(page, isMobile);
+    await page.waitForTimeout(300);
 
     const meTitle = page.locator('.me-title');
     await expect(meTitle).toBeVisible();

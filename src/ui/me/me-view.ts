@@ -19,6 +19,7 @@ import { humanizeMemoryKey, humanizeMemoryValue } from '../review/why-sheet.js';
 /**
  * Maps provenance source tokens to human-readable user copy.
  * Eliminates engineering tokens (e.g. 'user_confirmed') on the Me tab.
+ * Unknown or non-local sources map to neutral, non-claiming descriptions.
  */
 export function formatProvenanceSource(source: string): string {
   switch (source) {
@@ -30,8 +31,12 @@ export function formatProvenanceSource(source: string): string {
       return 'Source: sample profile';
     case 'inferred':
       return 'Source: suggested habit';
+    case 'xmemo':
+      return 'Source: synced from XMemo';
+    case 'model_reasoning':
+      return 'Source: suggested by assistant';
     default:
-      return 'Source: you confirmed';
+      return 'Source: other';
   }
 }
 
