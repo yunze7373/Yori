@@ -16,6 +16,7 @@ export const STRINGS = Object.freeze({
     simulatedBadge: 'SIMULATED',
     liveWeatherBadge: 'Live weather',
     weatherAttribution: 'Weather data by Open-Meteo.com',
+    v2Badge: 'V2 Preview',
   }),
   xmemo: Object.freeze({
     title: 'XMemo Sync',

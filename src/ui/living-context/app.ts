@@ -78,6 +78,46 @@ export type DemoSceneId =
   | 'corrupt-storage'
   | 'multi-candidate';
 
+export type UiVersion = 'v1' | 'v2';
+
+/**
+ * Resolve UI version from raw input or build-time environment.
+ * Defaults strictly to 'v1' until CUTLINE_CHECK_V2 passes (Reviewer condition C3).
+ * Invalid, empty, or unknown tokens safely fall back to 'v1' without error.
+ */
+export function resolveUiVersion(raw?: string | null): UiVersion {
+  if (typeof raw === 'string' && raw.trim().toLowerCase() === 'v2') {
+    return 'v2';
+  }
+  return 'v1';
+}
+
+/**
+ * Resolve the effective UI version for the current runtime.
+ * Query string parameter `?ui=v1|v2` takes precedence (for testing and side-by-side inspection),
+ * falling back to build-time `import.meta.env.VITE_YORI_UI` or `process.env.VITE_YORI_UI`.
+ */
+export function getEffectiveUiVersion(): UiVersion {
+  if (typeof window !== 'undefined' && window.location?.search) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlUi = params.get('ui');
+      if (urlUi !== null) {
+        return resolveUiVersion(urlUi);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const envRaw =
+    (typeof process !== 'undefined' && process.env ? process.env.VITE_YORI_UI : undefined) ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env
+      ? ((import.meta as any).env.VITE_YORI_UI as string | undefined)
+      : undefined);
+  return resolveUiVersion(envRaw);
+}
+
 export interface AppState {
   currentScene: DemoSceneId;
   pipelineResult: PipelineResult;
@@ -497,8 +537,11 @@ export function computeSceneState(
 export function renderApp(
   root: HTMLElement,
   initialScene: DemoSceneId = 'clear',
-  customStorage?: YoriStorage
+  customStorage?: YoriStorage,
+  uiVersionOverride?: UiVersion | string
 ): void {
+  const uiVersion: UiVersion = resolveUiVersion(uiVersionOverride ?? getEffectiveUiVersion());
+  root.setAttribute('data-ui-version', uiVersion);
   let currentScene = initialScene;
   let activeTab: 'today' | 'me' = 'today';
   const sharedStorage = customStorage ?? new YoriStorage(new WebStorageDriver());
@@ -943,7 +986,7 @@ export function renderApp(
     }
 
     root.innerHTML = `
-      <div class="app-layout">
+      <div class="app-layout" data-ui-version="${uiVersion}">
         <header class="header-bar" role="banner">
           <div class="main-container" style="padding-bottom: 0;">
             <div class="top-meta">
@@ -954,6 +997,15 @@ export function renderApp(
                 </svg>
                 ${escapeHtml(STRINGS.header.demoChip)}
               </span>
+              ${
+                uiVersion === 'v2'
+                  ? `
+              <span class="v2-preview-badge" id="badge-ui-version" aria-label="V2 Shell Active">
+                ${escapeHtml(STRINGS.header.v2Badge)}
+              </span>
+              `
+                  : ''
+              }
               ${
                 weatherStatus.enabled && liveWeatherSignal
                   ? `

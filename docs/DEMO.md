@@ -38,6 +38,36 @@ npm run test:drills
 npm run test:e2e
 ```
 
+### Running the Approved Fallback UI from Tag (`yori-approved-ui`)
+The submission-approved fallback UI (commit `908abee`) is permanently anchored by the local annotated git tag `yori-approved-ui`. You can build and preview it independently at any time without disturbing ongoing work on `main`:
+
+```bash
+# 1. Create a worktree pointing to the approved baseline tag
+git worktree add ../yori-approved-ui yori-approved-ui
+ln -s "$(pwd)/node_modules" ../yori-approved-ui/node_modules
+
+# 2. Build and preview on loopback (e.g. port 5181)
+cd ../yori-approved-ui
+npm run build
+npx vite preview --host 127.0.0.1 --port 5181 --strictPort
+
+# 3. Clean up worktree when done
+cd -
+git worktree remove ../yori-approved-ui
+```
+
+### UI Version Build Flag (`VITE_YORI_UI`)
+By default, the application builds and serves the approved baseline UI (`v1`). You can toggle or evaluate the V2 shell via the build-time environment variable:
+
+```bash
+# Build approved baseline UI (default; fails closed to v1 on unknown values)
+VITE_YORI_UI=v1 npm run build
+
+# Build V2 shell preview
+VITE_YORI_UI=v2 npm run build
+```
+For local preview and testing convenience, `?ui=v1` or `?ui=v2` query parameters may also be supplied in the URL.
+
 ---
 
 ## 🎬 Demo Scene Script

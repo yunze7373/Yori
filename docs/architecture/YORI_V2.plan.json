@@ -1,0 +1,455 @@
+{
+  "schema_version": "1.0.0",
+  "plan": {
+    "id": "yori_v2_001",
+    "phase": "PH-002-ui",
+    "title": "Yori Living Context V2 / Fluid Conversation UI (design-gated slices; core zero diff; cut line 2026-11-01 noon JST)",
+    "source": "ARCH-V2-001 (docs/architecture/LIVING_CONTEXT_V2.md); owner-approved local UI upgrade, no external gates opened",
+    "created_at": "2026-10-28",
+    "status": "pending",
+    "description": "Shared action-state and interaction state machine, scene-driven mobile-first home, full-page fluid conversation with a closed offline command grammar, style tokens and polish, and an operable-preview closeout with two end-to-end recordings. Everything lands in src/ui, src/plugins, src/adapters/mock; src/core stays zero diff vs f43c6c1d.",
+    "course_correction_summary": "previous_phase: PH-002 closeout approved (2c9e058d) | core_delivery: V2 fluid conversation design package | deviation: token values provisional until R1-R3 land in docs/design/v2-reference | INBOX_backlog: 0 P0, 0 P1 | next_phase_focus: V0 action-state machine"
+  },
+  "tasks": [
+    {
+      "id": "V-ANCHOR",
+      "slice": 0,
+      "title": "Fallback anchor: approved-UI tag and VITE_YORI_UI build flag",
+      "priority": "P0",
+      "goal": "Before any V2 change lands, anchor the fallback: annotated git tag yori-approved-ui on the last approved commit 908abee with a documented preview command, plus a VITE_YORI_UI=v1|v2 build flag that keeps the approved home selectable while V2 home is built beside it. Every later slice must leave the app recordable end to end.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 2,
+      "dependencies": [],
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/app.ts",
+        "src/ui/living-context/strings.ts"
+      ],
+      "checks": [
+        "Tag yori-approved-ui exists on 908abee and the documented preview command runs the approved UI from it",
+        "VITE_YORI_UI=v1 renders the approved home and =v2 renders the (initially identical) V2 shell; e2e covers both flag values; core zero diff",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V-ANCHOR --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "V0",
+      "slice": 0,
+      "title": "Shared action-state store and interaction state machine (UI layer)",
+      "priority": "P0",
+      "goal": "Implement the section 2 state machines in new src/ui/action-state: idle/working(comparing)/updated/needs-confirmation/degraded/settled with Undo, plus HOME<->CONVERSATION transitions with smart auto-collapse rules, pin, Esc/back, focus return, and reduced-motion swaps. State lives in the UI layer; core untouched.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 6,
+      "dependencies": [
+        "V-ANCHOR"
+      ],
+      "goal_ids": [
+        "G-105"
+      ],
+      "acceptance_ids": [
+        "AC-105-1",
+        "AC-105-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/action-state",
+        "src/ui/living-context/app.ts",
+        "src/ui/living-context/presentation.ts"
+      ],
+      "checks": [
+        "Gate: git diff f43c6c1d -- src/core empty; npm run test:golden 10/10; state-machine unit tests cover every transition row in design section 2.2 including pin, Esc, and reduced-motion",
+        "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
+        "Affected e2e + axe green; real 390x844 and 1280x800 screenshots of home and conversation states committed as evidence",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V0 --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "V1",
+      "slice": 1,
+      "title": "Scene-driven home composition and view models (mobile-first)",
+      "priority": "P0",
+      "goal": "Recompose home by information value (no empty fixed NOW/AHEAD/FOR YOU blocks; mobile its own dynamic home) with TimelineVM/OptionCardVM/MapVM/PhotoVM derived purely from plan and signal data. Map geometry is a labelled schematic fixture polyline; photos are local labelled illustrations; no external images, no concept-image data.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 8,
+      "dependencies": [
+        "V0"
+      ],
+      "goal_ids": [
+        "G-105",
+        "G-102",
+        "G-103"
+      ],
+      "acceptance_ids": [
+        "AC-105-1",
+        "AC-102-1",
+        "AC-103-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/view-models",
+        "src/ui/living-context/app.ts",
+        "src/ui/living-context/presentation.ts",
+        "src/ui/living-context/styles.css",
+        "src/adapters/mock/index.ts"
+      ],
+      "checks": [
+        "Gate: core zero diff; golden 10/10; both scenes compose from plan data alone (no scene-id branching in presentation code)",
+        "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
+        "E2E + axe green at 390x844 and 1280x800; screenshots show SIMULATED and Illustration labels; static check proves zero external image URLs",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V1 --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_V2_A",
+      "title": "📬 INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": [
+        "V1"
+      ],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "V2a",
+      "slice": 2,
+      "title": "Closed grammar + rain loop (LEAVE_LATER/CHANGE_ROUTE via request override)",
+      "priority": "P0",
+      "goal": "Grammar and CommandInterpreter (model off) with the rain loop: LEAVE_LATER and CHANGE_ROUTE travel as a session-scoped UserRequestOverride into the depart preparer's extended prepareWithRequest entry (design section 2.3) - no synthetic memory facts, no fake signals, never persisted, Undo clears it, Why renders 'Because you asked ... this time only' with user_request provenance. WHY/ACCEPT/UNDO and honest UNSUPPORTED included.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 5,
+      "dependencies": [
+        "V1",
+        "INBOX_CHECK_V2_A"
+      ],
+      "goal_ids": [
+        "G-102",
+        "G-105"
+      ],
+      "acceptance_ids": [
+        "AC-102-2",
+        "AC-105-2",
+        "AC-105-3"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/conversation",
+        "src/plugins/depart/preparer.ts"
+      ],
+      "checks": [
+        "Gate: core zero diff; golden 10/10; grammar unit tests for LEAVE_LATER/CHANGE_ROUTE/WHY/ACCEPT/UNDO plus unknown mode mapping to UNSUPPORTED",
+        "Negative test: after 'leave 15 minutes later' (this time only), storage contains no new or changed confirmed fact, and Why shows user_request provenance distinct from confirmed facts; Undo restores the prior plan and clears the override",
+        "Interaction e2e at 390x844 and 1280x800: home->chat->send->processing->comparison->confirm->updated home->Undo; axe green; screenshots per state",
+        "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V2a --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "V2b",
+      "slice": 2,
+      "title": "Lunch loop: fixture attributes + FIND_LUNCH re-rank via request override",
+      "priority": "P0",
+      "goal": "Lunch fixtures gain noiseLevel/vegetarian attributes (existing fixture values unchanged) and FIND_LUNCH re-ranks candidates through the same UserRequestOverride channel (lunch_filter kind). Quieter+vegetarian loop runs home->chat->send->processing->updated home with the selected result written back; Remember still creates pending proposals only (INV-107).",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 4,
+      "dependencies": [
+        "V2a"
+      ],
+      "goal_ids": [
+        "G-103",
+        "G-105"
+      ],
+      "acceptance_ids": [
+        "AC-103-1",
+        "AC-103-3",
+        "AC-105-2",
+        "AC-105-3"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/conversation",
+        "src/plugins/lunch/preparer.ts",
+        "src/adapters/mock/index.ts"
+      ],
+      "checks": [
+        "Gate: core zero diff; golden 10/10 (attributes added only); FIND_LUNCH filter tests incl. unknown filter -> UNSUPPORTED",
+        "Interaction e2e at both viewports: proactive card->chat quieter+vegetarian->re-rank->selected on home; negative storage test as in V2a; axe green; screenshots per state",
+        "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V2b --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "OWNER_REF_GATE",
+      "slice": 3,
+      "title": "OWNER GATE: place reference images R1-R3 at docs/design/v2-reference/",
+      "priority": "P1",
+      "goal": "Owner/coordinator action: drop the approved reference PNGs into docs/design/v2-reference/ (the Bridge cannot carry binaries). The executor verifies arrival by reporting SHA-256 and byte size per file in the review thread. Until then token values and layout specifics remain PROVISIONAL and V3 must not claim visual finality.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "V2b"
+      ],
+      "owner_gate": "Owner places R1-R3 files; unmet gate means V3 ships structurally with provisional tokens and the limitation stated in evidence",
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/styles.css",
+        "docs/design/v2-reference"
+      ],
+      "checks": [
+        "Expected assets (coordinator manifest): 00 sha256 9b11cb66...bd396 1537x834; 01 7c7f6fc6...0a7a 1448x1086; 02 efa2d9b6...c317 1536x1024; 03 257a988c...403b 1672x941; plus YORI_LIVING_CONTEXT_V2_UI_HANDOFF.md - compare full sha256 and dimensions on arrival and report any mismatch by name",
+        "Arrival receipt: sha256 and byte size of each received file recorded; missing files listed by name, never described as seen",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id OWNER_REF_GATE --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "CUTLINE_CHECK_V2",
+      "slice": 4,
+      "title": "Cut-line decision point (2026-11-01 noon JST)",
+      "priority": "P0",
+      "goal": "Hard decision checkpoint, evaluated at 2026-11-01 noon JST against V2a+V2b approval state (runs immediately after V2b, BEFORE V3): if the two core loops are not Reviewer-approved, stop V2 UI work, keep V3 unstarted, and the owner records the already-approved UI via the V-ANCHOR tag/flag (SUBMIT plan). Record the decision and its basis either way. Rough-cut target: both loops' real e2e usable by 11/2; 11/3-11/4 reserved for re-record and final polish.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "V2a",
+        "V2b"
+      ],
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/strings.ts",
+        "docs/architecture/LIVING_CONTEXT_V2.md"
+      ],
+      "checks": [
+        "Decision recorded with date and gate results: continue to V4 closeout, or fall back to the approved UI for recording on 11/3-11/4",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id CUTLINE_CHECK_V2 --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "V3",
+      "slice": 3,
+      "title": "Style tokens, component polish, micro-motion (values finalized only if refs arrived)",
+      "priority": "P1",
+      "goal": "Apply the section 5 token system (off-white/deep green, typographic hierarchy, motion durations/easing with reduced-motion fallbacks) across the component inventory. If OWNER_REF_GATE is unmet, ship the provisional token values and mark visual finalization blocked in the evidence; do not invent values from memory of the concept images.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 6,
+      "dependencies": [
+        "OWNER_REF_GATE",
+        "CUTLINE_CHECK_V2"
+      ],
+      "goal_ids": [
+        "G-205",
+        "G-105"
+      ],
+      "acceptance_ids": [
+        "AC-205-1",
+        "AC-105-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/styles.css",
+        "src/ui/living-context/app.ts",
+        "src/ui/review/why-sheet.ts"
+      ],
+      "checks": [
+        "Gate: core zero diff; golden 10/10; axe 0 violations; touch targets >=44px; reduced-motion run shows instant swaps with no motion-only information",
+        "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
+        "Real 390x844 and 1280x800 screenshot set for both scenes; evidence states PROVISIONAL or FINAL token status truthfully, matching OWNER_REF_GATE outcome",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V3 --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "DOC-RESYNC",
+      "slice": 4,
+      "title": "Submission doc re-sync for the V2 UI (verbatim quotes with e2e assertions)",
+      "priority": "P1",
+      "goal": "Re-sync DEMO.md, docs/submission/VIDEO_SCRIPT.md and PROJECT_DESCRIPTION.md to the UI that will actually be recorded (V2 if it survived the cut line, otherwise the approved UI): every quoted label, button and flow step in the script is asserted verbatim by e2e (VIDEO-SCRIPT-SYNC pattern), so the owner never records from a stale script.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": [
+        "CUTLINE_CHECK_V2"
+      ],
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/strings.ts",
+        "docs/DEMO.md",
+        "docs/submission/VIDEO_SCRIPT.md"
+      ],
+      "checks": [
+        "Script-to-UI verbatim assertions pass for every quoted string and step order in VIDEO_SCRIPT.md against the recording candidate build",
+        "Docs state the live/off status of every integration exactly as SUBMISSION_READINESS.md classifies it",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id DOC-RESYNC --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "V4",
+      "slice": 4,
+      "title": "Closeout: operable local preview and two end-to-end recordings",
+      "priority": "P0",
+      "goal": "Produce the final evidence: an operable local preview build, plus two end-to-end screen recordings exactly as the owner loops specify (rain: change->route->map/Why->chat leave-later->compare->confirm->collapse->updated home/map/times->Undo; lunch: proactive card->photos/candidates/basis->chat quieter+vegetarian->re-rank->selected on home), with simulated-data labelling, confirm-only memory, and accessibility called out.",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 5,
+      "dependencies": [
+        "DOC-RESYNC",
+        "V3"
+      ],
+      "goal_ids": [
+        "G-105",
+        "G-101",
+        "G-102",
+        "G-103",
+        "G-104",
+        "G-106",
+        "G-107",
+        "G-201",
+        "G-202",
+        "G-203",
+        "G-204"
+      ],
+      "acceptance_ids": [
+        "AC-105-1",
+        "AC-101-2",
+        "AC-102-1",
+        "AC-103-1",
+        "AC-104-2",
+        "AC-106-2",
+        "AC-EXT-1",
+        "AC-201-3",
+        "AC-202-2",
+        "AC-203-2",
+        "AC-204-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/app.ts",
+        "src/ui/conversation",
+        "tests/golden"
+      ],
+      "checks": [
+        "Final gate: git diff f43c6c1d -- src/core empty; golden 10/10; full e2e + axe green; preview runs locally with zero credentials (AC-EXT-1, AC-106-2)",
+        "tests/golden changes in V2 are add-only: existing D1-D6 expectations byte-unchanged (diff over golden expectations shows additions only)",
+        "Both recordings exist and match the owner loop scripts step for step; a static-looking build is explicitly not acceptance",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id V4 --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
+      "id": "PHASE_R_V2_001",
+      "title": "🔥 Phase R planning + generate next phase plan",
+      "type": "meta",
+      "priority": "critical",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": [
+        "V4"
+      ],
+      "goal": "V2 closeout done -> Phase R -> assess against goals.yaml and the submission timeline (owner video 11/3-11/4 if the new UI is recorded; external 2026-11-05 11:00 JST) -> draft any next plan and submit for Reviewer plan review AND owner confirmation. Nothing executes before that gate.",
+      "phase_r_trigger": {
+        "auto_execute": true,
+        "tasks": [
+          "⚠️ Re-read .progress/AI_INSTRUCTIONS.md (ensure rules are not lost after model switch)",
+          "📬 R1: Read INBOX.md (scan mode command section first, then task section)",
+          "💤 R1.5: Convergence gate (no real pending → standby)",
+          "🎯 R2: Read docs/architecture/goals.yaml and PHASE_PLAN.md, execute target alignment assessment; 运行 phase_r_alignment_check.py 验证架构对齐锚点 (alignment anchor check)",
+          "📊 R3: Phase review: git diff confirm delivery + archive completed tasks + Git Commit",
+          "🗺️ R5: Intelligent planning: draft the next phase plan and submit it for Reviewer plan review AND owner confirmation (guarded autonomy); PH-003 requires the privacy-review gate and must not auto-start",
+          "Update PROGRESS_STATUS.json + TODOS.md",
+          "⏸️ R6: Execute NOTHING from the next plan before the Reviewer + owner gate passes; enter standby and wait for the gate result"
+        ]
+      }
+    }
+  ],
+  "success_criteria": [
+    "git diff f43c6c1d -- src/core empty across the whole V2 diff; golden D1-D6 10/10 and INV-107 unregressed",
+    "Both owner loops demonstrable end to end on real viewports with recordings, or the 2026-11-01 noon JST cut line honestly falls back to the approved UI",
+    "No concept-image data presented as real; token/layout finality claimed only if R1-R3 actually arrived with hash receipt"
+  ]
+}
