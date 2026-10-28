@@ -104,3 +104,4 @@ export * from './fact-checker.js';
 export * from './server-proxy.js';
 export * from './template-registry.js';
 export * from './reasoning.js';
+export * from './decision-log.js';

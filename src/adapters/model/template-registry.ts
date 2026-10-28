@@ -323,6 +323,38 @@ export const SERVER_TEMPLATES: Readonly<Record<string, ServerTemplate>> = Object
       return { times: [], places: [] };
     },
   }),
+
+  decision_command: Object.freeze({
+    id: 'decision_command',
+    description: 'Muse Spark constrained command interpreter and situation attribution',
+    systemPrompt:
+      'You are Muse Spark, a constrained decision engine for Yori. Map the user utterance strictly to closed intent set (LEAVE_LATER, CHANGE_ROUTE, WHY, ACCEPT, UNDO, UNSUPPORTED). Attribute situation with enumerated reason codes citing valid signals. Output schema-validated JSON only. Never originate unlisted facts, times, or places.',
+    promptInstruction:
+      'Evaluate utterance under available signals, modes, and confirmed facts. Output JSON: {"intent": "...", "slots": {...}, "situationAttribution": {...}, "recommendedOptionDelta": ..., "citedSignalIds": [...], "citedFactKeys": [...], "reasonCodes": [...]}',
+    allowedFactRules: Object.freeze<Record<string, FactFieldRule>>({
+      utterance: { type: 'string', required: true, maxLength: 200 },
+      availableModes: { type: 'string_array', maxItems: 10, itemMaxLength: 20 },
+      availableSignalIds: { type: 'string_array', maxItems: 20, itemMaxLength: 80 },
+      confirmedFactKeys: { type: 'string_array', maxItems: 20, itemMaxLength: 80 },
+      validTimes: { type: 'string_array', maxItems: 20, itemMaxLength: 50 },
+      validPlaces: { type: 'string_array', maxItems: 20, itemMaxLength: 100 },
+      currentPlanIntent: { type: 'string', maxLength: 50 },
+    }),
+    renderDeterministic(_facts: Record<string, unknown>): string {
+      return JSON.stringify({
+        intent: 'UNSUPPORTED',
+        slots: {},
+        citedSignalIds: [],
+        citedFactKeys: [],
+        reasonCodes: [],
+      });
+    },
+    extractFactTokens(facts: Record<string, unknown>): { times: string[]; places: string[] } {
+      const times = Array.isArray(facts.validTimes) ? (facts.validTimes as string[]) : [];
+      const places = Array.isArray(facts.validPlaces) ? (facts.validPlaces as string[]) : [];
+      return { times, places };
+    },
+  }),
 });
 
 /**

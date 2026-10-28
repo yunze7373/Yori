@@ -142,7 +142,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await page.screenshot({ path: path.join(EVIDENCE_DIR, filename), fullPage: false });
   });
 
-  test('V2a-1 comparison: "Can I leave later?" shows on-time vs late options comparison', async ({
+  test('V2a-2 model decision engine: "Can I leave later?" shows engine status chip, ranked recommendation, Why reason codes, and Undo', async ({
     page,
   }) => {
     await page.goto('/?ui=v2');
@@ -154,25 +154,95 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     const askBar = page.locator('#ask-bar');
     await askBar.click();
 
+    // Verify initial engine status chip is offline fallback before model runs
+    const overlay = page.locator('#conversation-overlay');
+    await expect(overlay).toBeVisible();
+    await expect(page.locator('#conversation-status-badge')).toContainText('Offline demo · simulated');
+    const statusChip = page.locator('#engine-status-chip');
+    await expect(statusChip).toBeVisible();
+    await expect(statusChip).toContainText('Offline fallback · deterministic');
+
+    // Submit "Can I leave later?"
     const input = page.locator('#conversation-input');
     await input.fill('Can I leave later?');
     await page.locator('#conversation-send-btn').click();
 
-    // Verify comparison box appears with both options
+    // After model decision engine runs under recorded fixtures, status updates to Recorded model output · replay (C6)
+    await expect(statusChip).toContainText('Recorded model output · replay');
+
+    // Verify comparison box appears with both options and model recommendation badge
     const compBox = page.locator('.chat-comparison-box');
     await expect(compBox).toBeVisible({ timeout: 5000 });
     await expect(page.locator('#conversation-transcript')).toContainText('You can leave up to 5 minutes later');
     await expect(page.locator('#conversation-transcript')).toContainText('arrive on time');
 
-    // Click safe option button
+    // Recommendation badge with reason code is visible
+    const recBadge = page.locator('.chat-comparison-recommendation');
+    await expect(recBadge).toBeVisible();
+    await expect(recBadge).toContainText('Recommended');
+
+    // Status chip remains honestly labelled
+    await expect(statusChip).toContainText('Recorded model output · replay');
+
+    // Inspect Redacted Decision Log panel (C7)
+    const toggleLogBtn = page.locator('#btn-toggle-decision-log');
+    await expect(toggleLogBtn).toBeVisible();
+    await toggleLogBtn.click();
+
+    const drawer = page.locator('#decision-log-drawer');
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toContainText('Redacted Decision Log (C7)');
+    await expect(drawer).toContainText('weather:2026-10-28T20:35:00.000Z');
+    await expect(drawer).toContainText('weather_adjusted');
+
+    const exportBtn = page.locator('#btn-export-decision-log');
+    await expect(exportBtn).toBeVisible();
+
+    // Close log drawer
+    await toggleLogBtn.click();
+    await expect(drawer).toBeHidden();
+
+    // Click model-recommended safe option button (+5m)
     const safeBtn = page.locator('.btn-select-comparison[data-delta="5"]');
     await expect(safeBtn).toBeVisible();
     await safeBtn.click();
 
     // Auto-collapses to updated home on-time (2:35 PM leave)
-    await expect(page.locator('#conversation-overlay')).toHaveCount(0, { timeout: 5000 });
+    await expect(overlay).toHaveCount(0, { timeout: 5000 });
     const nowCard = page.locator('.now-card');
     await expect(nowCard).toContainText('2:35 PM');
+
+    // Open Why sheet to verify model reason codes
+    const whyBtn = page.locator('#btn-why');
+    await expect(whyBtn).toBeVisible();
+    await whyBtn.click();
+
+    const whySheet = page.locator('#why-sheet-backdrop');
+    await expect(whySheet).toBeVisible();
+    await expect(page.locator('#why-situation-section')).toContainText('Situation Attribution');
+    await expect(page.locator('#why-situation-section')).toContainText('weather adjusted');
+    await expect(page.locator('#why-situation-section')).toContainText('weather:2026-10-28T20:35:00.000Z');
+
+    // Close Why sheet
+    await page.locator('#btn-close-why').click();
+    await expect(whySheet).toHaveCount(0);
+
+    // Verify Undo restores prior plan (2:30 PM)
+    const undoBtn = page.locator('#btn-undo-accept');
+    await expect(undoBtn).toBeVisible();
+    await undoBtn.click();
+    await expect(nowCard).toContainText('2:30 PM');
+
+    // Axe audit
+    await checkAxe(page);
+
+    // Capture screenshot evidence
+    const viewport = page.viewportSize();
+    const isMobile = (viewport?.width ?? 0) < 600;
+    const filename = isMobile
+      ? 'v2-model-comparison-mobile.png'
+      : 'v2-model-comparison-desktop.png';
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, filename), fullPage: false });
   });
 
   test('V2a-1 C1 non-resurrection: dismissed plan cannot be resurrected by chat', async ({

@@ -1,15 +1,19 @@
 /**
- * Full-page Conversation Shell Component (V2a - LIVING_CONTEXT_V2.md §2 & §8 D3/D4/D5)
- * Manages full-page conversation overlay, transcript, composer, focus trap, Esc, Back, and focus return.
+ * Full-page Conversation Shell Component (V2a - LIVING_CONTEXT_V2.md §2 & §8 D3/D4/D5, Rev4 C6/C7)
+ * Manages full-page conversation overlay, transcript, composer, focus trap, Esc, Back, engine status, and decision log.
  */
 
 import { escapeHtml } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
 import type { ActionStateStore, MessageItem } from '../action-state/types.js';
+import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 
 export function renderConversationOverlay(store: ActionStateStore): string {
   const isPinned = store.isPinned();
   const transcript = store.getTranscript();
+  const isInteractive = store.getActionState().status === 'needs-confirmation';
+  const engineStatusLabel = store.getEngineStatusLabel();
+  const logEntries = globalDecisionLogger.getEntries();
 
   return `
     <div class="conversation-overlay" id="conversation-overlay" role="dialog" aria-modal="true" aria-label="${escapeHtml(STRINGS.conversation.title)}">
@@ -30,7 +34,10 @@ export function renderConversationOverlay(store: ActionStateStore): string {
             </div>
             <div class="conversation-title-block">
               <h2 class="conversation-title">${escapeHtml(STRINGS.conversation.title)}</h2>
-              <span class="v2-offline-badge" id="conversation-status-badge">Offline demo · simulated</span>
+              <div class="conversation-subtitle-row">
+                <span class="v2-offline-badge" id="conversation-status-badge">Offline demo · simulated</span>
+                <span class="engine-status-chip" id="engine-status-chip">${escapeHtml(engineStatusLabel)}</span>
+              </div>
             </div>
           </div>
           <div class="conversation-header-right">
@@ -45,8 +52,24 @@ export function renderConversationOverlay(store: ActionStateStore): string {
         </header>
 
         <main class="conversation-transcript" id="conversation-transcript" role="log" aria-live="polite" aria-label="Conversation Transcript">
-          ${renderTranscriptItems(transcript)}
+          ${renderTranscriptItems(transcript, isInteractive)}
         </main>
+
+        <div class="decision-log-bar">
+          <button type="button" class="btn-dev-decision-log" id="btn-toggle-decision-log" aria-expanded="false" title="Inspect Redacted Decision Log">
+            Decision Log
+          </button>
+          <button type="button" class="btn-dev-export-log" id="btn-export-decision-log" data-testid="decision-log-export" title="Export Redacted Decision Log JSON">
+            Export Log
+          </button>
+        </div>
+        <div class="decision-log-drawer" id="decision-log-drawer" style="display: none;">
+          <div class="decision-log-header">
+            <span>Redacted Decision Log (C7)</span>
+            <span class="decision-log-count">${logEntries.length} entries</span>
+          </div>
+          <pre class="decision-log-viewer" id="decision-log-content">${escapeHtml(globalDecisionLogger.exportJson())}</pre>
+        </div>
 
         <footer class="conversation-footer">
           <form class="conversation-composer" id="conversation-composer-form" autocomplete="off">
@@ -72,14 +95,20 @@ export function renderConversationOverlay(store: ActionStateStore): string {
   `;
 }
 
-function renderTranscriptItems(transcript: readonly MessageItem[]): string {
+export function renderTranscriptItems(
+  transcript: readonly MessageItem[],
+  isInteractive: boolean = false
+): string {
   if (transcript.length === 0) {
     return `<div class="transcript-empty">No messages yet. Ask Yori about your departure or travel route.</div>`;
   }
 
   return transcript
-    .map((msg) => {
+    .map((msg, idx) => {
       const isUser = msg.sender === 'user';
+      const isLatestMessage = idx === transcript.length - 1;
+      const canInteract = isInteractive && isLatestMessage;
+
       return `
         <article class="chat-bubble-wrapper ${isUser ? 'chat-bubble-user' : 'chat-bubble-assistant'}" id="${escapeHtml(msg.id)}">
           ${
@@ -105,9 +134,18 @@ function renderTranscriptItems(transcript: readonly MessageItem[]): string {
                   ${msg.comparisonOptions
                     .map(
                       (opt) => `
-                    <div class="chat-comparison-card ${opt.isLateRisk ? 'is-late' : 'is-on-time'}">
+                    <div class="chat-comparison-card ${opt.isLateRisk ? 'is-late' : 'is-on-time'} ${opt.isRecommended ? 'is-recommended' : ''}">
                       <div class="chat-comparison-card-header">
                         <span class="chat-comparison-tag">${opt.isLateRisk ? 'Late Risk' : 'Latest On-Time'}</span>
+                        ${
+                          opt.isRecommended
+                            ? `<span class="chat-comparison-recommendation">Recommended${
+                                opt.recommendationReasonCode
+                                  ? ` · ${escapeHtml(opt.recommendationReasonCode.replace(/_/g, ' '))}`
+                                  : ''
+                              }</span>`
+                            : ''
+                        }
                         <span class="chat-comparison-margin">${
                           opt.isLateRisk ? `Late by ${Math.abs(opt.marginMinutes)}m` : 'On time · 0m buffer'
                         }</span>
@@ -115,7 +153,12 @@ function renderTranscriptItems(transcript: readonly MessageItem[]): string {
                       <div class="chat-comparison-times">
                         Leave <strong>${escapeHtml(opt.leaveTime)}</strong> · Arrive by <strong>${escapeHtml(opt.arrivalTime)}</strong>
                       </div>
-                      <button type="button" class="btn btn-outline btn-sm btn-select-comparison" data-delta="${opt.deltaMinutes}">
+                      <button
+                        type="button"
+                        class="btn btn-outline btn-sm btn-select-comparison ${!canInteract ? 'is-stale' : ''}"
+                        data-delta="${opt.deltaMinutes}"
+                        ${!canInteract ? 'disabled aria-disabled="true"' : ''}
+                      >
                         ${opt.deltaMinutes === 0 ? 'Keep current departure' : `Choose: Leave ${opt.deltaMinutes}m later`}
                       </button>
                     </div>
@@ -133,10 +176,21 @@ function renderTranscriptItems(transcript: readonly MessageItem[]): string {
               <div class="chat-confirm-box">
                 <div class="chat-confirm-notice">Confirm change for this time only:</div>
                 <div class="chat-confirm-actions">
-                  <button type="button" class="btn btn-primary btn-sm" id="btn-chat-confirm" data-plan-id="${escapeHtml(msg.pendingPlan.id)}">
+                  <button
+                    type="button"
+                    class="btn btn-primary btn-sm ${!canInteract ? 'is-stale' : ''}"
+                    id="btn-chat-confirm"
+                    data-plan-id="${escapeHtml(msg.pendingPlan.id)}"
+                    ${!canInteract ? 'disabled aria-disabled="true"' : ''}
+                  >
                     Confirm for this time only
                   </button>
-                  <button type="button" class="btn btn-outline btn-sm" id="btn-chat-reject">
+                  <button
+                    type="button"
+                    class="btn btn-outline btn-sm ${!canInteract ? 'is-stale' : ''}"
+                    id="btn-chat-reject"
+                    ${!canInteract ? 'disabled aria-disabled="true"' : ''}
+                  >
                     Cancel
                   </button>
                 </div>
@@ -159,29 +213,36 @@ export function attachConversationEvents(
   const overlay = container.querySelector<HTMLElement>('#conversation-overlay');
   const closeBtn = container.querySelector<HTMLButtonElement>('#conversation-close-btn');
   const pinBtn = container.querySelector<HTMLButtonElement>('#conversation-pin-btn');
+  const transcriptEl = container.querySelector<HTMLElement>('#conversation-transcript');
   const form = container.querySelector<HTMLFormElement>('#conversation-composer-form');
   const input = container.querySelector<HTMLInputElement>('#conversation-input');
-  const transcriptEl = container.querySelector<HTMLElement>('#conversation-transcript');
 
   // Push history state if not already pushed (for browser back navigation)
   if (typeof window !== 'undefined' && window.history && !window.history.state?.yoriConversationOpen) {
     window.history.pushState({ yoriConversationOpen: true }, '', window.location.href);
   }
 
-  // Focus composer immediately on mount
-  if (input) {
-    requestAnimationFrame(() => {
-      input.focus();
-    });
-  }
-
-  // Scroll transcript to bottom
-  if (transcriptEl) {
-    transcriptEl.scrollTop = transcriptEl.scrollHeight;
-  }
-
   let isClosed = false;
-  const performClose = (reason: string) => {
+
+  const updateStatusChip = () => {
+    const chip = overlay?.querySelector<HTMLElement>('#engine-status-chip');
+    if (chip) {
+      chip.textContent = store.getEngineStatusLabel();
+    }
+  };
+
+  const updateDecisionLogDrawer = () => {
+    const viewer = overlay?.querySelector<HTMLElement>('#decision-log-content');
+    if (viewer) {
+      viewer.textContent = globalDecisionLogger.exportJson();
+    }
+    const countEl = overlay?.querySelector<HTMLElement>('.decision-log-count');
+    if (countEl) {
+      countEl.textContent = `${globalDecisionLogger.getEntries().length} entries`;
+    }
+  };
+
+  const performClose = (reason?: string) => {
     if (isClosed) return;
     isClosed = true;
     store.closeConversation(reason);
@@ -200,12 +261,21 @@ export function attachConversationEvents(
 
   const wireTranscriptButtons = () => {
     if (!transcriptEl) return;
-    const confirmBtn = transcriptEl.querySelector<HTMLButtonElement>('#btn-chat-confirm');
+
+    const confirmBtn = transcriptEl.querySelector<HTMLButtonElement>(
+      '#btn-chat-confirm:not([disabled]):not(.is-stale)'
+    );
     if (confirmBtn) {
       confirmBtn.addEventListener('click', (e) => {
         e.preventDefault();
+        if (confirmBtn.disabled || confirmBtn.classList.contains('is-stale')) return;
         const res = store.submitMessage('Looks good');
-        transcriptEl.innerHTML = renderTranscriptItems(store.getTranscript());
+        transcriptEl.innerHTML = renderTranscriptItems(
+          store.getTranscript(),
+          store.getActionState().status === 'needs-confirmation'
+        );
+        updateStatusChip();
+        updateDecisionLogDrawer();
         transcriptEl.scrollTop = transcriptEl.scrollHeight;
         if (res.collapsed) {
           safeClose('auto_collapse');
@@ -213,26 +283,42 @@ export function attachConversationEvents(
       });
     }
 
-    const rejectBtn = transcriptEl.querySelector<HTMLButtonElement>('#btn-chat-reject');
+    const rejectBtn = transcriptEl.querySelector<HTMLButtonElement>(
+      '#btn-chat-reject:not([disabled]):not(.is-stale)'
+    );
     if (rejectBtn) {
       rejectBtn.addEventListener('click', (e) => {
         e.preventDefault();
+        if (rejectBtn.disabled || rejectBtn.classList.contains('is-stale')) return;
         store.rejectPending();
-        transcriptEl.innerHTML = renderTranscriptItems(store.getTranscript());
+        transcriptEl.innerHTML = renderTranscriptItems(
+          store.getTranscript(),
+          store.getActionState().status === 'needs-confirmation'
+        );
+        updateStatusChip();
+        updateDecisionLogDrawer();
         transcriptEl.scrollTop = transcriptEl.scrollHeight;
       });
     }
 
-    const comparisonButtons = transcriptEl.querySelectorAll<HTMLButtonElement>('.btn-select-comparison');
+    const comparisonButtons = transcriptEl.querySelectorAll<HTMLButtonElement>(
+      '.btn-select-comparison:not([disabled]):not(.is-stale)'
+    );
     comparisonButtons.forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
+        if (btn.disabled || btn.classList.contains('is-stale')) return;
         const delta = btn.dataset.delta;
         if (delta === undefined) return;
         const numDelta = parseInt(delta, 10);
         const msg = numDelta === 0 ? 'Keep current departure' : `Leave ${delta} minutes later`;
         const res = store.submitMessage(msg);
-        transcriptEl.innerHTML = renderTranscriptItems(store.getTranscript());
+        transcriptEl.innerHTML = renderTranscriptItems(
+          store.getTranscript(),
+          store.getActionState().status === 'needs-confirmation'
+        );
+        updateStatusChip();
+        updateDecisionLogDrawer();
         transcriptEl.scrollTop = transcriptEl.scrollHeight;
         wireTranscriptButtons();
         if (res.collapsed) {
@@ -244,6 +330,30 @@ export function attachConversationEvents(
 
   wireTranscriptButtons();
 
+  // Redacted decision log panel toggle & export
+  const toggleLogBtn = overlay?.querySelector<HTMLButtonElement>('#btn-toggle-decision-log');
+  const drawer = overlay?.querySelector<HTMLElement>('#decision-log-drawer');
+  if (toggleLogBtn && drawer) {
+    toggleLogBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const isHidden = drawer.style.display === 'none';
+      drawer.style.display = isHidden ? 'block' : 'none';
+      toggleLogBtn.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+      updateDecisionLogDrawer();
+    });
+  }
+
+  const exportLogBtn = overlay?.querySelector<HTMLButtonElement>('#btn-export-decision-log');
+  if (exportLogBtn) {
+    exportLogBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const jsonStr = globalDecisionLogger.exportJson();
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(jsonStr).catch(() => {});
+      }
+    });
+  }
+
   // Popstate listener for system / browser Back navigation
   const handlePopState = () => {
     if (isClosed) return;
@@ -251,42 +361,30 @@ export function attachConversationEvents(
   };
   window.addEventListener('popstate', handlePopState);
 
-  // Focus trap inside modal overlay
-  const focusableSelector =
-    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-  const handleKeydown = (e: KeyboardEvent) => {
+  // Esc key listener (unless pinned or Esc closed)
+  const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
-      safeClose('esc_pressed');
-      return;
-    }
-
-    if (e.key === 'Tab' && overlay) {
-      const focusables = Array.from(overlay.querySelectorAll<HTMLElement>(focusableSelector)).filter(
-        el => el.offsetParent !== null || el === input
-      );
-      if (focusables.length === 0) {
-        e.preventDefault();
+      if (drawer && drawer.style.display !== 'none') {
+        drawer.style.display = 'none';
+        toggleLogBtn?.setAttribute('aria-expanded', 'false');
         return;
       }
-      const first = focusables[0]!;
-      const last = focusables[focusables.length - 1]!;
-
-      if (e.shiftKey) {
-        if (document.activeElement === first || !overlay.contains(document.activeElement)) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else {
-        if (document.activeElement === last || !overlay.contains(document.activeElement)) {
-          e.preventDefault();
-          first.focus();
-        }
+      const shouldClose = store.handleEsc();
+      if (shouldClose) {
+        safeClose('esc_key');
       }
     }
   };
-  window.addEventListener('keydown', handleKeydown);
+  document.addEventListener('keydown', handleKeyDown);
+
+  // Backdrop click listener: click outside the shell closes the conversation
+  const handleOverlayClick = (e: MouseEvent) => {
+    if (e.target === overlay) {
+      safeClose('backdrop_click');
+    }
+  };
+  overlay?.addEventListener('click', handleOverlayClick);
 
   if (closeBtn) {
     closeBtn.addEventListener('click', (e) => {
@@ -299,11 +397,11 @@ export function attachConversationEvents(
     pinBtn.addEventListener('click', (e) => {
       e.preventDefault();
       const newPinned = store.togglePin();
-      pinBtn.setAttribute('aria-pressed', newPinned ? 'true' : 'false');
       pinBtn.classList.toggle('is-pinned', newPinned);
-      const span = pinBtn.querySelector('span');
-      if (span) {
-        span.textContent = newPinned ? STRINGS.conversation.pinnedActive : 'Pin';
+      pinBtn.setAttribute('aria-pressed', newPinned ? 'true' : 'false');
+      const textSpan = pinBtn.querySelector('span');
+      if (textSpan) {
+        textSpan.textContent = newPinned ? STRINGS.conversation.pinnedActive : 'Pin';
       }
     });
   }
@@ -318,7 +416,12 @@ export function attachConversationEvents(
       const result = store.submitMessage(text);
 
       if (transcriptEl) {
-        transcriptEl.innerHTML = renderTranscriptItems(store.getTranscript());
+        transcriptEl.innerHTML = renderTranscriptItems(
+          store.getTranscript(),
+          store.getActionState().status === 'needs-confirmation'
+        );
+        updateStatusChip();
+        updateDecisionLogDrawer();
         transcriptEl.scrollTop = transcriptEl.scrollHeight;
         wireTranscriptButtons();
       }
@@ -331,9 +434,37 @@ export function attachConversationEvents(
     });
   }
 
-  // Cleanup handler
+  // Focus trap inside the modal overlay
+  const handleFocusTrap = (e: KeyboardEvent) => {
+    if (e.key !== 'Tab' || !overlay) return;
+    const focusable = overlay.querySelectorAll<HTMLElement>(
+      'button:not([disabled]):not([aria-disabled="true"]):not(.is-stale), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length === 0) return;
+
+    const first = focusable[0] as HTMLElement | undefined;
+    const last = focusable[focusable.length - 1] as HTMLElement | undefined;
+
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last?.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first?.focus();
+    }
+  };
+  overlay?.addEventListener('keydown', handleFocusTrap);
+
+  // Focus input automatically on open
+  setTimeout(() => {
+    input?.focus();
+  }, 50);
+
+  // Return cleanup function
   return () => {
-    window.removeEventListener('keydown', handleKeydown);
     window.removeEventListener('popstate', handlePopState);
+    document.removeEventListener('keydown', handleKeyDown);
+    overlay?.removeEventListener('click', handleOverlayClick);
+    overlay?.removeEventListener('keydown', handleFocusTrap);
   };
 }

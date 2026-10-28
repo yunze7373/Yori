@@ -17,7 +17,15 @@ import type {
   WorkingSubstate,
 } from './types.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
-import { defaultCommandInterpreter } from '../conversation/grammar.js';
+import {
+  type CommandInterpreter,
+  type SituationAttribution,
+} from '../conversation/grammar.js';
+import { defaultModelCommandInterpreter } from '../conversation/model-interpreter.js';
+import {
+  globalDecisionLogger,
+  type EngineStatus,
+} from '../../adapters/model/decision-log.js';
 import { departPreparer } from '../../plugins/depart/preparer.js';
 import {
   createUserRequestOverride,
@@ -48,6 +56,8 @@ export class DefaultActionStateStore implements ActionStateStore {
   private commandContext?: ActionCommandContext;
   private currentOverride: UserRequestOverride | null = null;
   private pendingOverride: UserRequestOverride | null = null;
+  private interpreter: CommandInterpreter;
+  private currentSituationAttribution?: SituationAttribution;
 
   constructor(options: ActionStateStoreOptions = {}) {
     this.actionState = {
@@ -57,6 +67,7 @@ export class DefaultActionStateStore implements ActionStateStore {
     };
     this.interactionState = options.initialInteractionState ?? 'HOME';
     this.reducedMotionOption = options.reducedMotion;
+    this.interpreter = options.interpreter ?? defaultModelCommandInterpreter;
   }
 
   public getActionState(): ActionStateRecord {
@@ -93,9 +104,43 @@ export class DefaultActionStateStore implements ActionStateStore {
   public clearOverride(): void {
     this.currentOverride = null;
     this.pendingOverride = null;
+    this.currentSituationAttribution = undefined;
+  }
+
+  public getEngineStatus(): EngineStatus {
+    return globalDecisionLogger.getEngineStatus();
+  }
+
+  public getEngineStatusLabel(): string {
+    return globalDecisionLogger.getEngineStatusLabel();
+  }
+
+  public getSituationAttribution(): SituationAttribution | undefined {
+    return this.currentSituationAttribution;
+  }
+
+  public setInterpreter(interpreter: CommandInterpreter): void {
+    this.interpreter = interpreter;
   }
 
   public setCommandContext(ctx: ActionCommandContext): void {
+    // Carry-over (b): If scene changed, clear any stale pending confirmation
+    if (
+      this.commandContext &&
+      ctx.sceneId &&
+      this.commandContext.sceneId &&
+      ctx.sceneId !== this.commandContext.sceneId
+    ) {
+      if (this.actionState.status === 'needs-confirmation') {
+        this.actionState = {
+          status: 'idle',
+          timestamp: new Date().toISOString(),
+        };
+        this.pendingOverride = null;
+        this.currentSituationAttribution = undefined;
+        this.notify();
+      }
+    }
     this.commandContext = ctx;
   }
 
@@ -389,11 +434,58 @@ export class DefaultActionStateStore implements ActionStateStore {
       }
     }
 
-    // Interpret command using deterministic closed grammar (model-off)
-    const cmd = defaultCommandInterpreter.interpret(trimmed, {
+    // Gather available signals from context
+    const availableSignalIds: string[] = [];
+    if (ctx?.snapshot?.signals) {
+      for (const s of ctx.snapshot.signals) {
+        if (s.issuedAt) availableSignalIds.push(`${s.kind}:${s.issuedAt}`);
+        availableSignalIds.push(s.kind);
+      }
+    }
+    if (ctx?.plan?.why?.evidenceSignals) {
+      for (const s of ctx.plan.why.evidenceSignals) {
+        if (s.issuedAt) availableSignalIds.push(`${s.kind}:${s.issuedAt}`);
+        availableSignalIds.push(s.kind);
+      }
+    }
+
+    // Gather confirmed facts from memory
+    const confirmedFactKeys: string[] = [];
+    if (ctx?.memory) {
+      for (const f of ctx.memory) {
+        if (f.status === 'confirmed') confirmedFactKeys.push(f.key);
+      }
+    }
+    if (ctx?.plan?.why?.memoryFactsUsed) {
+      for (const f of ctx.plan.why.memoryFactsUsed) {
+        confirmedFactKeys.push(f.key);
+      }
+    }
+
+    const validTimes: string[] = [];
+    const validPlaces: string[] = [];
+    if (ctx?.plan) {
+      if (ctx.plan.leaveAt) validTimes.push(ctx.plan.leaveAt);
+      if (ctx.plan.prepareAt) validTimes.push(ctx.plan.prepareAt);
+      if (ctx.plan.apptAt) validTimes.push(ctx.plan.apptAt);
+      if (ctx.plan.subjectTitle) validPlaces.push(ctx.plan.subjectTitle);
+      if ((ctx.plan as any).destination) validPlaces.push((ctx.plan as any).destination);
+    }
+
+    // Interpret command using configured interpreter (ModelCommandInterpreter or Deterministic)
+    const cmd = this.interpreter.interpret(trimmed, {
       availableModes: availableModes.length > 0 ? availableModes : ['drive', 'bus'],
       currentPlanIntent: ctx?.plan?.intentId,
+      availableSignalIds,
+      confirmedFactKeys,
+      validTimes,
+      validPlaces,
+      sceneId: ctx?.sceneId,
     });
+
+    if (cmd.situationAttribution) {
+      this.currentSituationAttribution = cmd.situationAttribution;
+    }
 
     // 1. ACCEPT ('Looks good', 'Accept', 'Confirm')
     if (cmd.intent === 'ACCEPT') {
@@ -537,9 +629,8 @@ export class DefaultActionStateStore implements ActionStateStore {
           : '';
 
         const safeMargin = safeTiming?.marginMinutes ?? 0;
-        const lateMargin = lateTiming?.marginMinutes ?? -10;
-        const latenessMin = Math.abs(lateMargin);
 
+        const isSafeRecommended = cmd.recommendedOptionDelta === safeDelta;
         const comparisonOptions: DepartureComparisonItem[] = [];
         if (safePlan && safeTiming) {
           comparisonOptions.push({
@@ -550,25 +641,35 @@ export class DefaultActionStateStore implements ActionStateStore {
             marginMinutes: safeMargin,
             isLateRisk: safeTiming.isLate,
             plan: safePlan,
+            isRecommended: isSafeRecommended,
+            recommendationReasonCode: isSafeRecommended ? cmd.reasonCodes?.[0] : undefined,
           });
         }
         if (latePlan && lateTiming) {
+          const isLateRecommended = cmd.recommendedOptionDelta === lateDelta;
           comparisonOptions.push({
             deltaMinutes: lateDelta,
             headline: latePlan.headline,
             leaveTime: lateLeaveStr,
             arrivalTime: lateArriveStr,
-            marginMinutes: lateMargin,
+            marginMinutes: lateTiming.marginMinutes,
             isLateRisk: lateTiming.isLate,
             plan: latePlan,
+            isRecommended: isLateRecommended,
+            recommendationReasonCode: isLateRecommended ? cmd.reasonCodes?.[0] : undefined,
           });
         }
 
         let comparisonText: string;
-        if (safeDelta > 0) {
-          comparisonText = `Comparing departure options: You can leave up to ${safeDelta} minutes later (${safeLeaveStr}) and still arrive on time (0m buffer). Leaving ${lateDelta} minutes later (${lateLeaveStr}) arrives at ${lateArriveStr} (${latenessMin}m late) for ${ctx.plan.subjectTitle}. Which option would you prefer?`;
+        if (lateTiming) {
+          const latenessMin = Math.abs(lateTiming.marginMinutes);
+          if (safeDelta > 0) {
+            comparisonText = `Comparing departure options: You can leave up to ${safeDelta} minutes later (${safeLeaveStr}) and still arrive on time (0m buffer). Leaving ${lateDelta} minutes later (${lateLeaveStr}) arrives at ${lateArriveStr} (${latenessMin}m late) for ${ctx.plan.subjectTitle}. Which option would you prefer?`;
+          } else {
+            comparisonText = `Comparing departure options: You are on the latest departure to arrive on time (${safeLeaveStr}, 0m buffer). Leaving ${lateDelta} minutes later (${lateLeaveStr}) arrives at ${lateArriveStr} (${latenessMin}m late) for ${ctx.plan.subjectTitle}. Which option would you prefer?`;
+          }
         } else {
-          comparisonText = `Comparing departure options: You are on the latest departure to arrive on time (${safeLeaveStr}, 0m buffer). Leaving ${lateDelta} minutes later (${lateLeaveStr}) arrives at ${lateArriveStr} (${latenessMin}m late) for ${ctx.plan.subjectTitle}. Which option would you prefer?`;
+          comparisonText = `Comparing departure options: You can leave up to ${safeDelta} minutes later (${safeLeaveStr}) and arrive at ${safeArriveStr} on time (${safeMargin}m buffer). Which option would you prefer?`;
         }
 
         this.resolveNeedsConfirmation(comparisonText, safePlan ?? undefined);

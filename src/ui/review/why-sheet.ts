@@ -170,7 +170,12 @@ export function renderWhySheet(
   plan: PreparedPlan,
   orderingRationale?: string,
   timezone?: string,
-  userConfirmedKeys?: ReadonlySet<string>
+  userConfirmedKeys?: ReadonlySet<string>,
+  situationAttribution?: {
+    readonly signalId: string;
+    readonly reasonCode: string;
+    readonly explanation?: string;
+  }
 ): string {
   const tz = timezone || plan.timezone || 'America/Los_Angeles';
   const signals = plan.why.evidenceSignals;
@@ -193,6 +198,26 @@ export function renderWhySheet(
           <section class="why-section" id="why-order-section" aria-labelledby="why-order-heading">
             <h3 id="why-order-heading" class="why-section-title">${escapeHtml(STRINGS.whySheet.whyOrderTitle)}</h3>
             <p class="why-derivation-text" id="why-order-text">${escapeHtml(orderingRationale)}</p>
+          </section>
+          `
+              : ''
+          }
+
+          ${
+            situationAttribution
+              ? `
+          <!-- Situation Attribution Section (V2a-2) -->
+          <section class="why-section" id="why-situation-section" aria-labelledby="why-situation-heading">
+            <h3 id="why-situation-heading" class="why-section-title">Situation Attribution</h3>
+            <div class="why-situation-badge-row">
+              <span class="badge-reason-code">${escapeHtml(situationAttribution.reasonCode.replace(/_/g, ' '))}</span>
+              <span class="badge-signal-id">${escapeHtml(situationAttribution.signalId)}</span>
+            </div>
+            ${
+              situationAttribution.explanation
+                ? `<p class="why-situation-text">${escapeHtml(situationAttribution.explanation)}</p>`
+                : ''
+            }
           </section>
           `
               : ''

@@ -822,3 +822,190 @@ export function createModelIntentCandidate(
     }),
   });
 }
+
+export type DecisionCommandIntent =
+  | 'LEAVE_LATER'
+  | 'CHANGE_ROUTE'
+  | 'WHY'
+  | 'ACCEPT'
+  | 'UNDO'
+  | 'UNSUPPORTED';
+
+export const CLOSED_DECISION_INTENTS: ReadonlySet<string> = new Set([
+  'LEAVE_LATER',
+  'CHANGE_ROUTE',
+  'WHY',
+  'ACCEPT',
+  'UNDO',
+  'UNSUPPORTED',
+]);
+
+export interface DecisionCommandOutput {
+  readonly intent: DecisionCommandIntent;
+  readonly slots: {
+    readonly deltaMinutes?: number;
+    readonly mode?: 'drive' | 'bus';
+  };
+  readonly situationAttribution?: {
+    readonly signalId: string;
+    readonly reasonCode: ReasoningReasonCode;
+    readonly explanation?: string;
+  };
+  readonly recommendedOptionDelta?: number;
+  readonly citedSignalIds: readonly string[];
+  readonly citedFactKeys: readonly string[];
+  readonly reasonCodes: readonly ReasoningReasonCode[];
+  readonly explanation?: string;
+}
+
+export interface DecisionCommandValidationContext {
+  readonly availableModes?: readonly string[];
+  readonly availableSignalIds?: readonly string[];
+  readonly confirmedFactKeys?: readonly string[];
+  readonly validTimes?: readonly string[];
+  readonly validPlaces?: readonly string[];
+}
+
+/**
+ * Validates Muse Spark Decision Engine output against strict schema, closed intents, and citations.
+ * Discards any uncited claims, out-of-set intents, or unlisted tokens.
+ */
+export function validateDecisionCommandOutput(
+  raw: unknown,
+  context?: DecisionCommandValidationContext
+): { readonly valid: true; readonly data: DecisionCommandOutput } | { readonly valid: false; readonly reason: string; readonly error: string } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { valid: false, reason: 'schema_invalid', error: 'Output must be a non-null JSON object' };
+  }
+
+  const obj = raw as Record<string, unknown>;
+
+  // 1. Intent must be in the closed set
+  if (typeof obj.intent !== 'string' || !CLOSED_DECISION_INTENTS.has(obj.intent)) {
+    return {
+      valid: false,
+      reason: 'out_of_set_intent',
+      error: `Intent '${String(obj.intent)}' is outside the closed intent set`,
+    };
+  }
+
+  // 2. Validate slots
+  if (!obj.slots || typeof obj.slots !== 'object' || Array.isArray(obj.slots)) {
+    return { valid: false, reason: 'schema_invalid', error: "'slots' must be an object" };
+  }
+  const slots = obj.slots as Record<string, unknown>;
+  if (slots.mode !== undefined) {
+    if (slots.mode !== 'drive' && slots.mode !== 'bus') {
+      return { valid: false, reason: 'schema_invalid', error: `Unsupported mode '${String(slots.mode)}'` };
+    }
+    if (context?.availableModes && !context.availableModes.includes(slots.mode as string)) {
+      return { valid: false, reason: 'unknown_mode', error: `Mode '${slots.mode}' not in available modes` };
+    }
+  }
+  if (slots.deltaMinutes !== undefined) {
+    if (typeof slots.deltaMinutes !== 'number' || slots.deltaMinutes <= 0 || slots.deltaMinutes > 240) {
+      return { valid: false, reason: 'schema_invalid', error: `Invalid deltaMinutes '${String(slots.deltaMinutes)}'` };
+    }
+  }
+
+  // 3. Validate citedSignalIds
+  if (!Array.isArray(obj.citedSignalIds)) {
+    return { valid: false, reason: 'schema_invalid', error: "'citedSignalIds' must be an array" };
+  }
+  if (context?.availableSignalIds && context.availableSignalIds.length > 0) {
+    const allowedSignalSet = new Set(context.availableSignalIds);
+    for (const sigId of obj.citedSignalIds) {
+      if (!allowedSignalSet.has(sigId)) {
+        return {
+          valid: false,
+          reason: 'unknown_signal_id',
+          error: `Signal citation '${sigId}' not found in availableSignalIds`,
+        };
+      }
+    }
+  }
+
+  // 4. Validate citedFactKeys
+  if (!Array.isArray(obj.citedFactKeys)) {
+    return { valid: false, reason: 'schema_invalid', error: "'citedFactKeys' must be an array" };
+  }
+  if (context?.confirmedFactKeys && context.confirmedFactKeys.length > 0) {
+    const allowedFactSet = new Set(context.confirmedFactKeys);
+    for (const factKey of obj.citedFactKeys) {
+      if (!allowedFactSet.has(factKey)) {
+        return {
+          valid: false,
+          reason: 'unknown_fact_key',
+          error: `Fact citation '${factKey}' not found in confirmedFactKeys`,
+        };
+      }
+    }
+  }
+
+  // 5. Validate reasonCodes
+  if (!Array.isArray(obj.reasonCodes)) {
+    return { valid: false, reason: 'schema_invalid', error: "'reasonCodes' must be an array" };
+  }
+  for (const code of obj.reasonCodes) {
+    if (typeof code !== 'string' || !VALID_REASON_CODES.has(code)) {
+      return {
+        valid: false,
+        reason: 'invalid_reason_code',
+        error: `Reason code '${String(code)}' is not in VALID_REASON_CODES`,
+      };
+    }
+  }
+
+  // 6. Validate situationAttribution if present
+  if (obj.situationAttribution !== undefined) {
+    if (
+      !obj.situationAttribution ||
+      typeof obj.situationAttribution !== 'object' ||
+      Array.isArray(obj.situationAttribution)
+    ) {
+      return { valid: false, reason: 'schema_invalid', error: "'situationAttribution' must be an object" };
+    }
+    const sa = obj.situationAttribution as Record<string, unknown>;
+    if (typeof sa.signalId !== 'string') {
+      return { valid: false, reason: 'schema_invalid', error: 'situationAttribution.signalId must be a string' };
+    }
+    if (context?.availableSignalIds && context.availableSignalIds.length > 0) {
+      if (!context.availableSignalIds.includes(sa.signalId)) {
+        return {
+          valid: false,
+          reason: 'unknown_signal_id',
+          error: `situationAttribution signalId '${sa.signalId}' not in availableSignalIds`,
+        };
+      }
+    }
+    if (typeof sa.reasonCode !== 'string' || !VALID_REASON_CODES.has(sa.reasonCode)) {
+      return {
+        valid: false,
+        reason: 'invalid_reason_code',
+        error: `situationAttribution reasonCode '${String(sa.reasonCode)}' is not valid`,
+      };
+    }
+  }
+
+  // 7. Fact check on explanation text (defense in depth)
+  if (typeof obj.explanation === 'string' && obj.explanation.length > 0) {
+    const validTimes = context?.validTimes ?? [];
+    const validPlaces = context?.validPlaces ?? [];
+    const check = validateFactsInWording(obj.explanation, {
+      times: validTimes,
+      places: validPlaces,
+    });
+    if (!check.valid) {
+      return {
+        valid: false,
+        reason: 'unlisted_fact_token',
+        error: `Explanation contains unlisted token: ${check.unlistedTokens.join(', ')}`,
+      };
+    }
+  }
+
+  return {
+    valid: true,
+    data: obj as unknown as DecisionCommandOutput,
+  };
+}

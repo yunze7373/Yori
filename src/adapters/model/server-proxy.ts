@@ -29,10 +29,27 @@ import {
   type ReasoningInput,
   type ReasoningOutput,
   type ReasoningValidationFailureReason,
+  type DecisionCommandOutput,
   deterministicReasoningFallback,
   validateReasoningOutput,
   validateReasoningInputSchema,
+  validateDecisionCommandOutput,
 } from './reasoning.js';
+
+export interface ModelCommandResponse {
+  readonly result: DecisionCommandOutput | null;
+  readonly usedFallback: boolean;
+  readonly fallbackReason?:
+    | 'disabled'
+    | 'timeout'
+    | 'error'
+    | 'schema_invalid'
+    | 'unknown_signal_id'
+    | 'unknown_fact_key'
+    | 'invalid_reason_code'
+    | 'out_of_set_intent'
+    | 'unlisted_fact_token';
+}
 
 export interface ModelReasoningResponse {
   readonly result: ReasoningOutput;
@@ -260,7 +277,8 @@ export class ModelDevProxy {
     if (
       url !== '/api/model/diagnostics' &&
       url !== '/api/model/refine' &&
-      url !== '/api/model/reason'
+      url !== '/api/model/reason' &&
+      url !== '/api/model/command'
     ) {
       return false;
     }
@@ -472,6 +490,85 @@ export class ModelDevProxy {
               return;
             }
             const result = await this.handleReasoning(inputValidation.data!);
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify(result));
+            resolve(true);
+          } catch {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Invalid JSON payload' }));
+            resolve(true);
+          }
+        });
+
+        req.on('error', () => {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Request read error' }));
+          resolve(true);
+        });
+      });
+    }
+
+    // Route: POST /api/model/command (V2a-2 Muse Spark Constrained Decision Engine)
+    if (url === '/api/model/command') {
+      if (req.method !== 'POST') {
+        res.statusCode = 405;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return true;
+      }
+
+      const contentType = ((req.headers?.['content-type'] as string) || '').toLowerCase();
+      if (!contentType.startsWith('application/json')) {
+        res.statusCode = 415;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Unsupported Media Type: application/json required' }));
+        return true;
+      }
+
+      if (!this.rateLimiter.check()) {
+        res.statusCode = 429;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Retry-After', '60');
+        res.end(JSON.stringify({ error: 'Too Many Requests: rate limit exceeded' }));
+        return true;
+      }
+
+      return new Promise<boolean>(resolve => {
+        let body = '';
+        let bytesCount = 0;
+        let isOversize = false;
+
+        req.on('data', (chunk: Buffer | string) => {
+          if (isOversize) return;
+          const chunkLen = typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
+          bytesCount += chunkLen;
+          if (bytesCount > 8192) {
+            isOversize = true;
+            res.statusCode = 413;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Payload Too Large: maximum body size is 8KB' }));
+            resolve(true);
+            return;
+          }
+          body += chunk.toString();
+        });
+
+        req.on('end', async () => {
+          if (isOversize) return;
+          try {
+            const parsed = JSON.parse(body);
+            const reqValidation = validateTemplateRequest(parsed);
+            if (!reqValidation.valid) {
+              res.statusCode = reqValidation.statusCode || 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: reqValidation.error }));
+              resolve(true);
+              return;
+            }
+            const result = await this.handleCommand(reqValidation.facts);
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify(result));
@@ -777,6 +874,129 @@ export class ModelDevProxy {
       const isTimeout = err instanceof Error && err.name === 'AbortError';
       return {
         result: fallback,
+        usedFallback: true,
+        fallbackReason: isTimeout ? 'timeout' : 'error',
+      };
+    }
+  }
+
+  /**
+   * Performs constrained command decision handling via Muse Spark (V2a-2).
+   */
+  public async handleCommand(
+    facts: Record<string, unknown>
+  ): Promise<ModelCommandResponse> {
+    const diag = this.getDiagnostics();
+    if (diag.status === 'disabled') {
+      return {
+        result: null,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+
+    const tmpl = getTemplate('decision_command');
+    if (!tmpl) {
+      return {
+        result: null,
+        usedFallback: true,
+        fallbackReason: 'error',
+      };
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const userMessageContent = JSON.stringify({
+        templateId: tmpl.id,
+        instruction: tmpl.promptInstruction,
+        facts,
+      });
+
+      const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.config.modelName,
+          max_tokens: 300,
+          messages: [
+            {
+              role: 'system',
+              content: tmpl.systemPrompt,
+            },
+            {
+              role: 'user',
+              content: userMessageContent,
+            },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        return {
+          result: null,
+          usedFallback: true,
+          fallbackReason: 'error',
+        };
+      }
+
+      const json = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const content = json.choices?.[0]?.message?.content;
+      if (!content) {
+        return {
+          result: null,
+          usedFallback: true,
+          fallbackReason: 'schema_invalid',
+        };
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(content);
+      } catch {
+        return {
+          result: null,
+          usedFallback: true,
+          fallbackReason: 'schema_invalid',
+        };
+      }
+
+      const validation = validateDecisionCommandOutput(parsed, {
+        availableModes: Array.isArray(facts.availableModes) ? (facts.availableModes as string[]) : undefined,
+        availableSignalIds: Array.isArray(facts.availableSignalIds) ? (facts.availableSignalIds as string[]) : undefined,
+        confirmedFactKeys: Array.isArray(facts.confirmedFactKeys) ? (facts.confirmedFactKeys as string[]) : undefined,
+        validTimes: Array.isArray(facts.validTimes) ? (facts.validTimes as string[]) : undefined,
+        validPlaces: Array.isArray(facts.validPlaces) ? (facts.validPlaces as string[]) : undefined,
+      });
+
+      if (!validation.valid) {
+        this.logger(
+          `[ModelProxy] Discarding command decision output due to validation failure (${validation.reason}): ${validation.error}`
+        );
+        return {
+          result: null,
+          usedFallback: true,
+          fallbackReason: (validation.reason as any) || 'schema_invalid',
+        };
+      }
+
+      return {
+        result: validation.data,
+        usedFallback: false,
+      };
+    } catch (err: unknown) {
+      const isTimeout = err instanceof Error && err.name === 'AbortError';
+      return {
+        result: null,
         usedFallback: true,
         fallbackReason: isTimeout ? 'timeout' : 'error',
       };

@@ -16,6 +16,9 @@
  * - FIND_LUNCH is V2b and FIND_FUEL is V5-FUEL; both cleanly map to UNSUPPORTED.
  */
 
+import type { ReasoningReasonCode } from '../../adapters/model/reasoning.js';
+import type { EngineStatus } from '../../adapters/model/decision-log.js';
+
 export type CommandIntent =
   | 'LEAVE_LATER'
   | 'CHANGE_ROUTE'
@@ -31,17 +34,34 @@ export interface CommandSlotValues {
   readonly mode?: SupportedMode;
 }
 
+export interface SituationAttribution {
+  readonly signalId: string;
+  readonly reasonCode: ReasoningReasonCode;
+  readonly explanation?: string;
+}
+
 export interface InterpretedCommand {
   readonly intent: CommandIntent;
   readonly rawText: string;
   readonly slots: CommandSlotValues;
   readonly explanation?: string;
   readonly honestAnswer?: string;
+  readonly situationAttribution?: SituationAttribution;
+  readonly recommendedOptionDelta?: number;
+  readonly reasonCodes?: readonly ReasoningReasonCode[];
+  readonly citedSignalIds?: readonly string[];
+  readonly citedFactKeys?: readonly string[];
+  readonly engineStatus?: EngineStatus;
 }
 
 export interface CommandInterpretationContext {
   readonly availableModes?: readonly string[];
   readonly currentPlanIntent?: string;
+  readonly availableSignalIds?: readonly string[];
+  readonly confirmedFactKeys?: readonly string[];
+  readonly validTimes?: readonly string[];
+  readonly validPlaces?: readonly string[];
+  readonly sceneId?: string;
 }
 
 export interface CommandInterpreter {

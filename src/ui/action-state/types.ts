@@ -10,6 +10,8 @@ import type {
   IntentCandidate,
 } from '../../core/contracts/index.js';
 import type { UserRequestOverride } from '../../plugins/depart/request-override.js';
+import type { EngineStatus } from '../../adapters/model/decision-log.js';
+import type { CommandInterpreter, SituationAttribution } from '../conversation/grammar.js';
 
 export interface ActionCommandContext {
   readonly plan: PreparedPlan | null;
@@ -59,6 +61,8 @@ export interface DepartureComparisonItem {
   readonly marginMinutes: number;
   readonly isLateRisk: boolean;
   readonly plan: PreparedPlan;
+  readonly isRecommended?: boolean;
+  readonly recommendationReasonCode?: string;
 }
 
 export interface MessageItem {
@@ -93,6 +97,7 @@ export interface ActionStateStoreOptions {
   initialActionState?: Partial<ActionStateRecord>;
   initialInteractionState?: InteractionState;
   reducedMotion?: boolean;
+  interpreter?: CommandInterpreter;
 }
 
 export interface ActionStateStore {
@@ -105,6 +110,11 @@ export interface ActionStateStore {
   isReducedMotion(): boolean;
   getCurrentOverride(): UserRequestOverride | null;
   clearOverride(): void;
+
+  getEngineStatus(): EngineStatus;
+  getEngineStatusLabel(): string;
+  getSituationAttribution(): SituationAttribution | undefined;
+  setInterpreter(interpreter: CommandInterpreter): void;
 
   setCommandContext(ctx: ActionCommandContext): void;
   getCommandContext(): ActionCommandContext | undefined;

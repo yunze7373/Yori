@@ -1316,7 +1316,8 @@ export function renderApp(
                 activeModal.plan,
                 reasoningState?.rationales[activeModal.plan.id],
                 snapshotTimezone,
-                userConfirmedKeys
+                userConfirmedKeys,
+                actionStore.getSituationAttribution()
               )
             : activeModal?.type === 'adjust'
             ? renderAdjustDialog(activeModal.values)
