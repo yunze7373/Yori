@@ -86,4 +86,31 @@ describe('MemoryPort (XMemo & Local Adapters)', () => {
       /MemoryPort invariant violation/
     );
   });
+
+  it('XMemoRemoteAdapter supports typed OAuth config surface for Workstream C (AC-203-1)', async () => {
+    const oauthConfig = {
+      issuer: 'https://xmemo.dev',
+      authorizationEndpoint: 'https://xmemo.dev/oauth/authorize',
+      tokenEndpoint: 'https://xmemo.dev/oauth/token',
+      registrationEndpoint: 'https://xmemo.dev/oauth/register',
+      revocationEndpoint: 'https://xmemo.dev/oauth/revoke',
+      clientId: 'yori-demo-client',
+      scopes: ['memory:read', 'memory:write'],
+    };
+
+    const adapter = new XMemoRemoteAdapter({
+      oauth: oauthConfig,
+      appAuthToken: 'token-abc',
+    });
+
+    expect(adapter.getStatus().isRemoteConfigured).toBe(true);
+    expect(adapter.getOAuthConfig()).toEqual(oauthConfig);
+    expect(adapter.getStatus().statusText).toBe('XMemo remote adapter configured');
+
+    const unauthedAdapter = new XMemoRemoteAdapter({
+      oauth: oauthConfig,
+    });
+    expect(unauthedAdapter.getStatus().isRemoteConfigured).toBe(false);
+    expect(unauthedAdapter.getOAuthConfig()?.issuer).toBe('https://xmemo.dev');
+  });
 });

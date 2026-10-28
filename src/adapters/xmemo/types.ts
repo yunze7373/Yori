@@ -17,6 +17,28 @@ export interface MemoryPortStatus {
   readonly statusText: string;
 }
 
+/**
+ * Verified XMemo OAuth Configuration
+ * Derived from RFC 8414 metadata at https://xmemo.dev/.well-known/oauth-authorization-server (AC-203-1).
+ */
+export interface XMemoOAuthConfig {
+  readonly issuer: string;
+  readonly authorizationEndpoint: string;
+  readonly tokenEndpoint: string;
+  readonly registrationEndpoint?: string;
+  readonly revocationEndpoint?: string;
+  readonly clientId?: string;
+  readonly scopes: readonly string[];
+}
+
+/**
+ * Remote Memory Adapter Configuration Surface
+ */
+export interface RemoteMemoryAdapterConfig {
+  readonly appAuthToken?: string;
+  readonly oauth?: XMemoOAuthConfig;
+}
+
 export interface MemoryPort {
   loadFacts(): Promise<readonly MemoryFact[]>;
   writeBack(fact: MemoryFact): Promise<{ readonly success: boolean; readonly error?: string }>;

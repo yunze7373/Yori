@@ -8,11 +8,30 @@
  * - Writes back confirmed facts only.
  */
 
-import type { MemoryPort, MemoryPortStatus } from './types.js';
+import type {
+  MemoryPort,
+  MemoryPortStatus,
+  RemoteMemoryAdapterConfig,
+  XMemoOAuthConfig,
+} from './types.js';
 import type { MemoryFact } from '../../core/contracts/index.js';
 
 export class XMemoRemoteAdapter implements MemoryPort {
-  constructor(private readonly appAuthToken?: string) {}
+  private readonly appAuthToken?: string;
+  private readonly oauthConfig?: XMemoOAuthConfig;
+
+  constructor(configOrToken?: string | RemoteMemoryAdapterConfig) {
+    if (typeof configOrToken === 'string') {
+      this.appAuthToken = configOrToken;
+    } else if (configOrToken) {
+      this.appAuthToken = configOrToken.appAuthToken;
+      this.oauthConfig = configOrToken.oauth;
+    }
+  }
+
+  public getOAuthConfig(): XMemoOAuthConfig | undefined {
+    return this.oauthConfig;
+  }
 
   public getStatus(): MemoryPortStatus {
     const isConfigured = Boolean(this.appAuthToken);
