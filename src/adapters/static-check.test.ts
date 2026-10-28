@@ -182,4 +182,29 @@ describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
     expect(parsed.searchParams.get('latitude')).toBe('37.7749');
     expect(parsed.searchParams.get('longitude')).toBe('-122.4194');
   });
+
+  it('ensures zero real calendar/route provider code or live GPS paths exist in src (PH-002 D2, AC-204-2)', () => {
+    const srcFiles = collectFiles(path.resolve('src'));
+    const forbiddenPatterns = [
+      /googleapis\.com\/calendar/i,
+      /graph\.microsoft\.com.*calendar/i,
+      /api\.mapbox\.com\/directions/i,
+      /router\.project-osrm\.org/i,
+      /api\.openrouteservice\.org/i,
+      /maps\.googleapis\.com\/maps\/api\/directions/i,
+      /navigator\.geolocation/i,
+      /watchPosition/i,
+    ];
+
+    for (const filePath of srcFiles) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      for (const pattern of forbiddenPatterns) {
+        const match = pattern.exec(content);
+        expect(
+          match,
+          `Forbidden real calendar/route/GPS provider integration found in ${path.relative(process.cwd(), filePath)}: ${match?.[0]}`
+        ).toBeNull();
+      }
+    }
+  });
 });
