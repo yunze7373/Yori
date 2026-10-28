@@ -15,6 +15,7 @@
 export interface FactFieldRule {
   readonly type: 'string' | 'number' | 'boolean' | 'string_array';
   readonly required?: boolean;
+  readonly minItems?: number;
   readonly maxLength?: number;
   readonly maxItems?: number;
   readonly itemMaxLength?: number;
@@ -100,6 +101,12 @@ export function validateFactsSchema(
     } else if (rule.type === 'string_array') {
       if (!Array.isArray(value)) {
         return { valid: false, error: `Invalid facts: property '${key}' must be an array of strings` };
+      }
+      if (rule.minItems !== undefined && value.length < rule.minItems) {
+        return {
+          valid: false,
+          error: `Invalid facts: property '${key}' must contain at least ${rule.minItems} item(s)`,
+        };
       }
       if (rule.maxItems !== undefined && value.length > rule.maxItems) {
         return {
@@ -335,6 +342,7 @@ export const SERVER_TEMPLATES: Readonly<Record<string, ServerTemplate>> = Object
       utterance: { type: 'string', required: true, maxLength: 200 },
       availableModes: { type: 'string_array', maxItems: 10, itemMaxLength: 20 },
       availableSignalIds: { type: 'string_array', maxItems: 20, itemMaxLength: 80 },
+      knownFactKeys: { type: 'string_array', required: true, minItems: 1, maxItems: 20, itemMaxLength: 80 },
       confirmedFactKeys: { type: 'string_array', maxItems: 20, itemMaxLength: 80 },
       validTimes: { type: 'string_array', maxItems: 20, itemMaxLength: 50 },
       validPlaces: { type: 'string_array', maxItems: 20, itemMaxLength: 100 },

@@ -46,6 +46,7 @@ export interface ModelCommandResponse {
     | 'schema_invalid'
     | 'unknown_signal_id'
     | 'unknown_fact_key'
+    | 'unconfirmed_fact_used'
     | 'invalid_reason_code'
     | 'out_of_set_intent'
     | 'unlisted_fact_token';
@@ -904,6 +905,20 @@ export class ModelDevProxy {
       };
     }
 
+    // Strict schema check: knownFactKeys is required and must not be empty (G3-PARITY)
+    // Rejects before any upstream model call
+    const knownFactKeys = facts.knownFactKeys;
+    if (!Array.isArray(knownFactKeys) || knownFactKeys.length === 0) {
+      this.logger(
+        '[ModelProxy] Rejecting command decision request: knownFactKeys is missing or empty'
+      );
+      return {
+        result: null,
+        usedFallback: true,
+        fallbackReason: 'schema_invalid',
+      };
+    }
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
@@ -973,6 +988,7 @@ export class ModelDevProxy {
       const validation = validateDecisionCommandOutput(parsed, {
         availableModes: Array.isArray(facts.availableModes) ? (facts.availableModes as string[]) : undefined,
         availableSignalIds: Array.isArray(facts.availableSignalIds) ? (facts.availableSignalIds as string[]) : undefined,
+        knownFactKeys: Array.isArray(facts.knownFactKeys) ? (facts.knownFactKeys as string[]) : undefined,
         confirmedFactKeys: Array.isArray(facts.confirmedFactKeys) ? (facts.confirmedFactKeys as string[]) : undefined,
         validTimes: Array.isArray(facts.validTimes) ? (facts.validTimes as string[]) : undefined,
         validPlaces: Array.isArray(facts.validPlaces) ? (facts.validPlaces as string[]) : undefined,

@@ -12,13 +12,15 @@ import {
   createModelProxyMiddleware,
   resolveBindHost,
 } from './server-proxy.js';
-import { SERVER_TEMPLATES } from './template-registry.js';
+import { SERVER_TEMPLATES, validateTemplateRequest } from './template-registry.js';
 import {
   buildReasoningInput,
   reorderPlansWithReasoning,
   createModelIntentCandidate,
   validateReasoningOutput,
+  validateDecisionCommandOutput,
 } from './reasoning.js';
+import { ModelCommandInterpreter } from '../../ui/conversation/model-interpreter.js';
 import {
   createSimulatedSignal,
   createMemoryFact,
@@ -2164,3 +2166,437 @@ describe('Slice B1: Constrained Muse Spark Reasoning Port (AC-202-1, AC-202-3)',
     });
   });
 });
+
+describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpreter (AC-202-1, AC-202-2)', () => {
+    const clientInterpreter = new ModelCommandInterpreter({ mode: 'scripted_fixture' });
+
+    interface ParityTestCase {
+      readonly name: string;
+      readonly output: unknown;
+      readonly context: {
+        readonly availableModes?: readonly string[];
+        readonly availableSignalIds?: readonly string[];
+        readonly knownFactKeys?: readonly string[];
+        readonly confirmedFactKeys?: readonly string[];
+        readonly validTimes?: readonly string[];
+        readonly validPlaces?: readonly string[];
+      };
+      readonly expectValid: boolean;
+      readonly expectedReason?: string;
+    }
+
+    const PARITY_TEST_TABLE: readonly ParityTestCase[] = [
+      {
+        name: 'rejects unknown fact key',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['known_fact_alpha'],
+          confirmedFactKeys: ['known_fact_alpha'],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['unknown_fact_key_xyz'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_fact_key',
+      },
+      {
+        name: 'rejects citations when knownFactKeys is empty',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: [],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['known_fact_alpha'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_fact_key',
+      },
+      {
+        name: 'rejects matches_confirmed_preference with empty cites',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['confirmed_key_one'],
+          confirmedFactKeys: ['confirmed_key_one'],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: [],
+          reasonCodes: ['matches_confirmed_preference'],
+        },
+        expectValid: false,
+        expectedReason: 'unconfirmed_fact_used',
+      },
+      {
+        name: 'rejects matches_confirmed_preference citing a sample key',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one', 'confirmed_key_one'],
+          confirmedFactKeys: ['confirmed_key_one'],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['matches_confirmed_preference'],
+        },
+        expectValid: false,
+        expectedReason: 'unconfirmed_fact_used',
+      },
+      {
+        name: 'rejects SA-level matches_confirmed_preference with a sample key',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one', 'confirmed_key_one'],
+          confirmedFactKeys: ['confirmed_key_one'],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          situationAttribution: {
+            signalId: 'weather:2026-10-28T20:35:00.000Z',
+            reasonCode: 'matches_confirmed_preference',
+            citedFactKeys: ['sample_key_one'],
+          },
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['confirmed_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unconfirmed_fact_used',
+      },
+      {
+        name: 'rejects unknown SA fact key',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          situationAttribution: {
+            signalId: 'weather:2026-10-28T20:35:00.000Z',
+            reasonCode: 'free_window_fit',
+            citedFactKeys: ['unknown_sa_key_123'],
+          },
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_fact_key',
+      },
+      {
+        name: 'rejects non-string keys in citedFactKeys',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: [12345],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'schema_invalid',
+      },
+      {
+        name: "rejects '__proto__' fact key",
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['__proto__'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_fact_key',
+      },
+      {
+        name: "rejects 'constructor' fact key",
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['constructor'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unknown_fact_key',
+      },
+      {
+        name: 'rejects invented time/place token in explanation',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+          validTimes: ['12:30 PM'],
+          validPlaces: ['Piano Studio'],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+          explanation: 'Meet at Central Park at 8:45 PM for dinner.',
+        },
+        expectValid: false,
+        expectedReason: 'unlisted_fact_token',
+      },
+      {
+        name: 'accepts sample cite without matches_confirmed_preference (legitimate)',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: true,
+      },
+      {
+        name: 'accepts matches_confirmed_preference citing confirmed key (legitimate)',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one', 'confirmed_key_one'],
+          confirmedFactKeys: ['confirmed_key_one'],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['confirmed_key_one'],
+          reasonCodes: ['matches_confirmed_preference'],
+        },
+        expectValid: true,
+      },
+      {
+        name: 'accepts SA-level matches_confirmed_preference citing confirmed key (legitimate)',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one', 'confirmed_key_one'],
+          confirmedFactKeys: ['confirmed_key_one'],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          situationAttribution: {
+            signalId: 'weather:2026-10-28T20:35:00.000Z',
+            reasonCode: 'matches_confirmed_preference',
+            citedFactKeys: ['confirmed_key_one'],
+          },
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['confirmed_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: true,
+      },
+    ];
+
+    describe('Part 1: Shared Parity Table Execution', () => {
+      for (const testCase of PARITY_TEST_TABLE) {
+        it(`evaluates identically on server and client: ${testCase.name}`, () => {
+          const serverResult = validateDecisionCommandOutput(testCase.output, testCase.context);
+          const clientResult = clientInterpreter.validateDecisionOutput(testCase.output, testCase.context);
+
+          expect(serverResult.valid).toBe(testCase.expectValid);
+          expect(clientResult.valid).toBe(testCase.expectValid);
+
+          if (!testCase.expectValid) {
+            expect((serverResult as { valid: false; reason: string }).reason).toBe(testCase.expectedReason);
+            expect((clientResult as { valid: false; reason: string }).reason).toBe(testCase.expectedReason);
+            expect((serverResult as { valid: false; reason: string }).reason).toBe(
+              (clientResult as { valid: false; reason: string }).reason
+            );
+          }
+        });
+      }
+    });
+
+    describe('Part 2: Schema & Server Proxy Pre-Model Rejection', () => {
+      function createMockReq(options: {
+        url: string;
+        method: string;
+        headers?: Record<string, string>;
+        body?: string;
+      }) {
+        const req = new EventEmitter() as any;
+        req.url = options.url;
+        req.method = options.method;
+        req.headers = { host: '127.0.0.1:5173', ...options.headers };
+
+        process.nextTick(() => {
+          if (options.body !== undefined) {
+            req.emit('data', Buffer.from(options.body));
+          }
+          req.emit('end');
+        });
+
+        return req;
+      }
+
+      function createMockRes() {
+        return {
+          statusCode: 200,
+          headers: {} as Record<string, string>,
+          body: '',
+          setHeader(name: string, value: string) {
+            this.headers[name.toLowerCase()] = value;
+          },
+          end(data?: string) {
+            if (data) this.body = data;
+          },
+        };
+      }
+
+      it('template-registry schema rejects payload omitting knownFactKeys', () => {
+        const validation = validateTemplateRequest({
+          templateId: 'decision_command',
+          facts: {
+            utterance: 'Leave later',
+            availableModes: ['drive', 'bus'],
+          },
+        });
+        expect(validation.valid).toBe(false);
+        expect((validation as any).error).toContain("required property 'knownFactKeys' is missing");
+        expect((validation as any).statusCode).toBe(400);
+      });
+
+      it('template-registry schema rejects payload with empty knownFactKeys', () => {
+        const validation = validateTemplateRequest({
+          templateId: 'decision_command',
+          facts: {
+            utterance: 'Leave later',
+            availableModes: ['drive', 'bus'],
+            knownFactKeys: [],
+          },
+        });
+        expect(validation.valid).toBe(false);
+        expect((validation as any).error).toContain('must contain at least 1 item(s)');
+        expect((validation as any).statusCode).toBe(400);
+      });
+
+      it('server proxy rejects POST /api/model/command omitting knownFactKeys before upstream model call', async () => {
+        process.env.MODEL_API_KEY = 'test-key-mock';
+        const proxy = new ModelDevProxy();
+        const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+        const req = createMockReq({
+          url: '/api/model/command',
+          method: 'POST',
+          headers: {
+            host: 'localhost:5173',
+            origin: 'http://localhost:5173',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            templateId: 'decision_command',
+            facts: {
+              utterance: 'Can I leave later?',
+              availableModes: ['drive', 'bus'],
+              availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+            },
+          }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(JSON.parse(res.body).error).toContain("required property 'knownFactKeys' is missing");
+        expect(fetchSpy).not.toHaveBeenCalled();
+      });
+
+      it('server proxy rejects POST /api/model/command with empty knownFactKeys before upstream model call', async () => {
+        process.env.MODEL_API_KEY = 'test-key-mock';
+        const proxy = new ModelDevProxy();
+        const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+        const req = createMockReq({
+          url: '/api/model/command',
+          method: 'POST',
+          headers: {
+            host: 'localhost:5173',
+            origin: 'http://localhost:5173',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            templateId: 'decision_command',
+            facts: {
+              utterance: 'Can I leave later?',
+              availableModes: ['drive', 'bus'],
+              availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+              knownFactKeys: [],
+            },
+          }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(JSON.parse(res.body).error).toContain('must contain at least 1 item(s)');
+        expect(fetchSpy).not.toHaveBeenCalled();
+      });
+
+      it('handleCommand directly rejects missing knownFactKeys without calling upstream fetch', async () => {
+        process.env.MODEL_API_KEY = 'test-key-mock';
+        const proxy = new ModelDevProxy();
+        const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+        const result = await proxy.handleCommand({
+          utterance: 'Can I leave later?',
+          availableModes: ['drive', 'bus'],
+        });
+
+        expect(result.usedFallback).toBe(true);
+        expect(result.fallbackReason).toBe('schema_invalid');
+        expect(fetchSpy).not.toHaveBeenCalled();
+      });
+
+      it('handleCommand directly rejects empty knownFactKeys without calling upstream fetch', async () => {
+        process.env.MODEL_API_KEY = 'test-key-mock';
+        const proxy = new ModelDevProxy();
+        const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+        const result = await proxy.handleCommand({
+          utterance: 'Can I leave later?',
+          availableModes: ['drive', 'bus'],
+          knownFactKeys: [],
+        });
+
+        expect(result.usedFallback).toBe(true);
+        expect(result.fallbackReason).toBe('schema_invalid');
+        expect(fetchSpy).not.toHaveBeenCalled();
+      });
+    });
+  });

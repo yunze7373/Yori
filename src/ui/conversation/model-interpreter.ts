@@ -207,7 +207,19 @@ export class ModelCommandInterpreter implements CommandInterpreter {
         : (context?.confirmedFactKeys ?? []);
     const knownFactSet = new Set(knownFactList);
     for (const factKey of obj.citedFactKeys) {
-      if (!knownFactSet.has(factKey)) {
+      if (typeof factKey !== 'string') {
+        return {
+          valid: false,
+          reason: 'schema_invalid',
+          error: "Items in 'citedFactKeys' must be strings",
+        };
+      }
+      if (
+        factKey === '__proto__' ||
+        factKey === 'constructor' ||
+        factKey === 'prototype' ||
+        !knownFactSet.has(factKey)
+      ) {
         return {
           valid: false,
           reason: 'unknown_fact_key',
@@ -259,9 +271,28 @@ export class ModelCommandInterpreter implements CommandInterpreter {
           error: `situationAttribution reasonCode '${String(sa.reasonCode)}' is not valid`,
         };
       }
-      if (Array.isArray(sa.citedFactKeys)) {
+      if (sa.citedFactKeys !== undefined) {
+        if (!Array.isArray(sa.citedFactKeys)) {
+          return {
+            valid: false,
+            reason: 'schema_invalid',
+            error: 'situationAttribution.citedFactKeys must be an array',
+          };
+        }
         for (const factKey of sa.citedFactKeys) {
-          if (!knownFactSet.has(factKey)) {
+          if (typeof factKey !== 'string') {
+            return {
+              valid: false,
+              reason: 'schema_invalid',
+              error: 'Items in situationAttribution.citedFactKeys must be strings',
+            };
+          }
+          if (
+            factKey === '__proto__' ||
+            factKey === 'constructor' ||
+            factKey === 'prototype' ||
+            !knownFactSet.has(factKey)
+          ) {
             return {
               valid: false,
               reason: 'unknown_fact_key',
@@ -275,9 +306,16 @@ export class ModelCommandInterpreter implements CommandInterpreter {
     // 6b. Validate confirmed preference discipline:
     // matches_confirmed_preference (reason code or attribution) must require citedFactKeys
     // to be non-empty and a subset of confirmedFactKeys.
+    // When SA carries its own citedFactKeys, those are subset-checked as well.
     const confirmedFactSet = new Set(context?.confirmedFactKeys ?? []);
     const hasConfirmedPrefReason = obj.reasonCodes.includes('matches_confirmed_preference');
-    const saReasonCode = (obj.situationAttribution as Record<string, unknown> | undefined)?.reasonCode;
+    const sa =
+      obj.situationAttribution &&
+      typeof obj.situationAttribution === 'object' &&
+      !Array.isArray(obj.situationAttribution)
+        ? (obj.situationAttribution as Record<string, unknown>)
+        : undefined;
+    const saReasonCode = sa?.reasonCode;
     const hasConfirmedPrefAttribution = saReasonCode === 'matches_confirmed_preference';
 
     if (hasConfirmedPrefReason || hasConfirmedPrefAttribution) {
@@ -289,12 +327,30 @@ export class ModelCommandInterpreter implements CommandInterpreter {
         };
       }
       for (const factKey of obj.citedFactKeys) {
-        if (!confirmedFactSet.has(factKey)) {
+        if (!confirmedFactSet.has(factKey as string)) {
           return {
             valid: false,
             reason: 'unconfirmed_fact_used',
             error: `Reason code 'matches_confirmed_preference' requires all cited facts to be confirmed; '${factKey}' is unconfirmed`,
           };
+        }
+      }
+      if (sa && Array.isArray(sa.citedFactKeys)) {
+        if (sa.citedFactKeys.length === 0) {
+          return {
+            valid: false,
+            reason: 'unconfirmed_fact_used',
+            error: "situationAttribution with 'matches_confirmed_preference' requires non-empty citedFactKeys",
+          };
+        }
+        for (const factKey of sa.citedFactKeys) {
+          if (!confirmedFactSet.has(factKey as string)) {
+            return {
+              valid: false,
+              reason: 'unconfirmed_fact_used',
+              error: `situationAttribution requires all cited facts to be confirmed for 'matches_confirmed_preference'; '${factKey}' is unconfirmed`,
+            };
+          }
         }
       }
     }
@@ -463,6 +519,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
             utterance: input,
             availableModes: context?.availableModes ?? ['drive', 'bus'],
             availableSignalIds: context?.availableSignalIds ?? [],
+            knownFactKeys: context?.knownFactKeys ?? [],
             confirmedFactKeys: context?.confirmedFactKeys ?? [],
             validTimes: context?.validTimes ?? [],
             validPlaces: context?.validPlaces ?? [],

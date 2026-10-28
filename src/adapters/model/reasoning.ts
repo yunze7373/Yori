@@ -826,6 +826,7 @@ export function createModelIntentCandidate(
 export type DecisionCommandIntent =
   | 'LEAVE_LATER'
   | 'CHANGE_ROUTE'
+  | 'FIND_LUNCH'
   | 'WHY'
   | 'ACCEPT'
   | 'UNDO'
@@ -834,6 +835,7 @@ export type DecisionCommandIntent =
 export const CLOSED_DECISION_INTENTS: ReadonlySet<string> = new Set([
   'LEAVE_LATER',
   'CHANGE_ROUTE',
+  'FIND_LUNCH',
   'WHY',
   'ACCEPT',
   'UNDO',
@@ -845,11 +847,13 @@ export interface DecisionCommandOutput {
   readonly slots: {
     readonly deltaMinutes?: number;
     readonly mode?: 'drive' | 'bus';
+    readonly filters?: readonly string[];
   };
   readonly situationAttribution?: {
     readonly signalId: string;
     readonly reasonCode: ReasoningReasonCode;
     readonly explanation?: string;
+    readonly citedFactKeys?: readonly string[];
   };
   readonly recommendedOptionDelta?: number;
   readonly citedSignalIds: readonly string[];
@@ -861,6 +865,7 @@ export interface DecisionCommandOutput {
 export interface DecisionCommandValidationContext {
   readonly availableModes?: readonly string[];
   readonly availableSignalIds?: readonly string[];
+  readonly knownFactKeys?: readonly string[];
   readonly confirmedFactKeys?: readonly string[];
   readonly validTimes?: readonly string[];
   readonly validPlaces?: readonly string[];
@@ -907,6 +912,17 @@ export function validateDecisionCommandOutput(
       return { valid: false, reason: 'schema_invalid', error: `Invalid deltaMinutes '${String(slots.deltaMinutes)}'` };
     }
   }
+  if (slots.filters !== undefined) {
+    if (!Array.isArray(slots.filters)) {
+      return { valid: false, reason: 'schema_invalid', error: "'filters' must be an array" };
+    }
+    const allowedFilters = new Set(['quieter', 'vegetarian', 'nearer']);
+    for (const f of slots.filters) {
+      if (typeof f !== 'string' || !allowedFilters.has(f)) {
+        return { valid: false, reason: 'unknown_filter', error: `Unsupported filter '${String(f)}'` };
+      }
+    }
+  }
 
   // 3. Validate citedSignalIds
   if (!Array.isArray(obj.citedSignalIds)) {
@@ -925,20 +941,34 @@ export function validateDecisionCommandOutput(
     }
   }
 
-  // 4. Validate citedFactKeys
+  // 4. Validate citedFactKeys (existence against knownFactKeys, always enforced)
   if (!Array.isArray(obj.citedFactKeys)) {
     return { valid: false, reason: 'schema_invalid', error: "'citedFactKeys' must be an array" };
   }
-  if (context?.confirmedFactKeys && context.confirmedFactKeys.length > 0) {
-    const allowedFactSet = new Set(context.confirmedFactKeys);
-    for (const factKey of obj.citedFactKeys) {
-      if (!allowedFactSet.has(factKey)) {
-        return {
-          valid: false,
-          reason: 'unknown_fact_key',
-          error: `Fact citation '${factKey}' not found in confirmedFactKeys`,
-        };
-      }
+  const knownFactList =
+    context?.knownFactKeys !== undefined
+      ? context.knownFactKeys
+      : (context?.confirmedFactKeys ?? []);
+  const knownFactSet = new Set(knownFactList);
+  for (const factKey of obj.citedFactKeys) {
+    if (typeof factKey !== 'string') {
+      return {
+        valid: false,
+        reason: 'schema_invalid',
+        error: "Items in 'citedFactKeys' must be strings",
+      };
+    }
+    if (
+      factKey === '__proto__' ||
+      factKey === 'constructor' ||
+      factKey === 'prototype' ||
+      !knownFactSet.has(factKey)
+    ) {
+      return {
+        valid: false,
+        reason: 'unknown_fact_key',
+        error: `Fact citation '${factKey}' not found in knownFactKeys`,
+      };
     }
   }
 
@@ -984,6 +1014,88 @@ export function validateDecisionCommandOutput(
         reason: 'invalid_reason_code',
         error: `situationAttribution reasonCode '${String(sa.reasonCode)}' is not valid`,
       };
+    }
+    if (sa.citedFactKeys !== undefined) {
+      if (!Array.isArray(sa.citedFactKeys)) {
+        return {
+          valid: false,
+          reason: 'schema_invalid',
+          error: 'situationAttribution.citedFactKeys must be an array',
+        };
+      }
+      for (const factKey of sa.citedFactKeys) {
+        if (typeof factKey !== 'string') {
+          return {
+            valid: false,
+            reason: 'schema_invalid',
+            error: 'Items in situationAttribution.citedFactKeys must be strings',
+          };
+        }
+        if (
+          factKey === '__proto__' ||
+          factKey === 'constructor' ||
+          factKey === 'prototype' ||
+          !knownFactSet.has(factKey)
+        ) {
+          return {
+            valid: false,
+            reason: 'unknown_fact_key',
+            error: `situationAttribution fact citation '${factKey}' not found in knownFactKeys`,
+          };
+        }
+      }
+    }
+  }
+
+  // 6b. Validate confirmed preference discipline:
+  // matches_confirmed_preference (reason code or attribution) must require citedFactKeys
+  // to be non-empty and a subset of confirmedFactKeys.
+  // When SA carries its own citedFactKeys, those are subset-checked as well.
+  const confirmedFactSet = new Set(context?.confirmedFactKeys ?? []);
+  const hasConfirmedPrefReason = obj.reasonCodes.includes('matches_confirmed_preference');
+  const sa =
+    obj.situationAttribution &&
+    typeof obj.situationAttribution === 'object' &&
+    !Array.isArray(obj.situationAttribution)
+      ? (obj.situationAttribution as Record<string, unknown>)
+      : undefined;
+  const saReasonCode = sa?.reasonCode;
+  const hasConfirmedPrefAttribution = saReasonCode === 'matches_confirmed_preference';
+
+  if (hasConfirmedPrefReason || hasConfirmedPrefAttribution) {
+    if (obj.citedFactKeys.length === 0) {
+      return {
+        valid: false,
+        reason: 'unconfirmed_fact_used',
+        error: "Reason code 'matches_confirmed_preference' requires non-empty citedFactKeys",
+      };
+    }
+    for (const factKey of obj.citedFactKeys) {
+      if (!confirmedFactSet.has(factKey as string)) {
+        return {
+          valid: false,
+          reason: 'unconfirmed_fact_used',
+          error: `Reason code 'matches_confirmed_preference' requires all cited facts to be confirmed; '${factKey}' is unconfirmed`,
+        };
+      }
+    }
+    if (sa && Array.isArray(sa.citedFactKeys)) {
+      if (sa.citedFactKeys.length === 0) {
+        return {
+          valid: false,
+          reason: 'unconfirmed_fact_used',
+          error: "situationAttribution with 'matches_confirmed_preference' requires non-empty citedFactKeys",
+        };
+      }
+      for (const factKey of sa.citedFactKeys) {
+        if (!confirmedFactSet.has(factKey as string)) {
+          return {
+            valid: false,
+            reason: 'unconfirmed_fact_used',
+            error: `situationAttribution requires all cited facts to be confirmed for 'matches_confirmed_preference'; '${factKey}' is unconfirmed`,
+          };
+        }
+      }
     }
   }
 
