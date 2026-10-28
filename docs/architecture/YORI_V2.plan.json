@@ -269,6 +269,42 @@
       ]
     },
     {
+      "id": "G3-PARITY",
+      "slice": 5,
+      "title": "Fact-key parity: server validateDecisionCommandOutput matches the client rule (S1-LIVE precondition)",
+      "priority": "P0",
+      "goal": "Bring validateDecisionCommandOutput in src/adapters/model/reasoning.ts to parity with the V2b-REV3 client rule: knownFactKeys always enforced, an empty knownFactKeys set REJECTS (closing today's fail-open when confirmedFactKeys is empty), and matches_confirmed_preference requires a non-empty subset of confirmed keys. The live payload/template schema carries knownFactKeys. This slice is a hard precondition: the SUBMIT plan's S1-LIVE must not run until G3-PARITY is approved.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": [
+        "V2b"
+      ],
+      "goal_ids": [
+        "G-202"
+      ],
+      "acceptance_ids": [
+        "AC-202-1",
+        "AC-202-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-102"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/reasoning.ts",
+        "src/adapters/model/model.test.ts"
+      ],
+      "checks": [
+        "Parity test: the same suite of malicious decision outputs (unknown fact keys, empty key set, preference match with empty or non-confirmed subset, invented tokens) is rejected by BOTH the server validator and the client rule, case by case (AC-202-1)",
+        "Schema check: the live payload and template-registry schemas carry knownFactKeys as a required field, and a payload omitting it or carrying an empty set is rejected before any model call",
+        "Golden D1-D6 and causality goldens unchanged with the model off; git diff f43c6c1d -- src/core empty (AC-202-2)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id G3-PARITY --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
       "id": "GATE-P-LOC",
       "slice": 5,
       "title": "OWNER GATE P-LOC: provider choice and coordinate-disclosure consent",
@@ -339,7 +375,7 @@
       "slice": 5,
       "title": "PlacesProvider (Overpass default) + fuel plugin + FIND_FUEL + navigate handoff",
       "priority": "P1",
-      "goal": "PlacesProvider seam shared by lunch (real mode) and the new fuel plugin (detector+preparer+adapter, zero core diff, AC-EXT-1 path). FIND_FUEL joins the closed grammar ('gas'/'find gas'/'加油' with context disambiguation and needs-confirmation when ambiguous). Navigate handoff only on user click via unit-tested Google/Apple Maps URL builders with platform fallback. Provider-unavailable is prominent; no fabricated merchants, distances, or ETAs (straight-line labelled, or OSRM with terms noted). If the owner chose Google Places, GATE-P-BILL must be DONE first and the key lives server-side only. Build and test against a recorded/simulated PlacesProvider fixture (clearly labelled simulated); the live provider call is NOT part of this slice.",
+      "goal": "PlacesProvider seam shared by lunch (real mode) and the new fuel plugin (detector+preparer+adapter, zero core diff, AC-EXT-1 path). FIND_FUEL joins the closed grammar ('gas'/'find gas'/'加油' with context disambiguation and needs-confirmation when ambiguous). Navigate handoff only on user click via unit-tested Google/Apple Maps URL builders with platform fallback. Provider-unavailable is prominent; no fabricated merchants, distances, or ETAs (straight-line labelled, or OSRM with terms noted). If the owner chose Google Places, GATE-P-BILL must be DONE first and the key lives server-side only. Build and test against a recorded/simulated PlacesProvider fixture (clearly labelled simulated); the live provider call is NOT part of this slice. Rev6 GROUNDING: provider results become EvidenceRecords in a session EvidenceBundle; every displayed POI/ETA/route/weather value carries sourceRef {recordId, field} (provenance classes via the existing classifyFactSource, no core types). GroundedRecommendationVerifier.verify runs INSIDE the render view-model path and INSIDE the navigate-URL builder (not skippable): on failure the field shows unknown or the card is withheld, navigation is disabled (no URL built), and the reason is logged redacted to the Decision Log. It EXTENDS the G12-CORE verifier (already guarding the recorded scenes) to PlacesProvider results and the navigate-URL builder.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
@@ -368,6 +404,8 @@
       "checks": [
         "Fixture-based evidence (labelled simulated/recorded): POI candidates change after the fixture location changes, 'gas' resolves to gas_station results, and the built navigate URL targets the fixture coordinates exactly on desktop and mobile fallback (AC-212-1)",
         "Negative tests: denied consent, empty result set, provider failure, and cost-off fallback each degrade prominently; URL builder unit tests pin exact coordinates and encoding; core zero diff and grocery AC-EXT-1 proof unregressed (AC-212-2)",
+        "GROUNDING G1: every rendered POI/ETA/route/weather value in tests resolves through sourceRef to a bundle record whose normalized field equals the displayed value; provenance class matches the record (simulated/recorded/live/sample/confirmed/session distinct)",
+        "GROUNDING G2 negative suite (all must fail closed): tampered displayed value, missing ref, stale fetchedAt, simulated record labelled live, model-invented place, model-selected candidate outside the bundle, and forced verifier failure - each yields unknown/withheld card, NO navigate URL built, and a redacted Decision Log entry",
         "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id V5-FUEL --plan-ref docs/architecture/YORI_V2.plan.json"
       ]
@@ -475,6 +513,7 @@
       "checks": [
         "Evidence on Mac localhost (a secure context) at 390x844 emulation, stated honestly: a mealtime proactive lunch card from fixture/recorded POIs with preference-based ranking explanation; a second trigger in the same window produces no duplicate reminder. Phone-device evidence is optional and applies only if GATE-P-HTTPS is DONE (AC-213-1)",
         "Simulated-scenario switch restores the fully reproducible recorded demo; real and simulated cards are never shown blended or mislabelled; core zero diff; golden 10/10 (AC-213-2)",
+        "GROUNDING G2/G4: the verifier also guards lunch cards here; three consecutive model validation failures pause the model for the session - the engine chip shows the honest deterministic-fallback status, the pause is in the Decision Log, and no retry loop occurs (fault-injection test)",
         "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id V5-LUNCH --plan-ref docs/architecture/YORI_V2.plan.json"
       ]
@@ -623,6 +662,46 @@
       ]
     },
     {
+      "id": "G12-CORE",
+      "slice": 4,
+      "title": "Grounding core over the recorded scenes: EvidenceBundle + sourceRef + verifier in Rain/Lunch render view-models",
+      "priority": "P0",
+      "goal": "Implement EvidenceRecord/EvidenceBundle + sourceRef over the existing Rain/Lunch fixture and simulated records (calendar, weather, travel estimate, mock places, sample habits) and call GroundedRecommendationVerifier inside those scenes' render view-models, using the section 12 freshness windows (scene clock for simulated/recorded) and normalize rules. This makes the V4 recordings audit passable without depending on the optional V5 chain; V5-FUEL later extends the same verifier to PlacesProvider results and the navigate-URL builder.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 4,
+      "dependencies": [
+        "DOC-RESYNC"
+      ],
+      "goal_ids": [
+        "G-105",
+        "G-102",
+        "G-103"
+      ],
+      "acceptance_ids": [
+        "AC-105-1",
+        "AC-102-1",
+        "AC-103-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/view-models",
+        "src/ui/living-context/presentation.ts",
+        "src/adapters/mock/index.ts"
+      ],
+      "checks": [
+        "Every place, number and time rendered in the Rain and Lunch scenes resolves via sourceRef to a bundle record with normalized equality; provenance class matches the record",
+        "G2 negative tests that apply to fixture scenes (tampered value, missing ref, stale vs scene clock, simulated mislabelled as live, model candidate outside bundle) all fail closed: unknown/withheld, redacted Decision Log entry",
+        "Gate: core zero diff; golden 10/10 (D1-D6 expectations unchanged); causality goldens G-RAIN/G-PREF/G-QUIET unregressed",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id G12-CORE --plan-ref docs/architecture/YORI_V2.plan.json"
+      ]
+    },
+    {
       "id": "V4",
       "slice": 4,
       "title": "Closeout: operable local preview and two end-to-end recordings",
@@ -635,7 +714,8 @@
       "estimated_hours": 7,
       "dependencies": [
         "DOC-RESYNC",
-        "V3"
+        "V3",
+        "G12-CORE"
       ],
       "goal_ids": [
         "G-105",
@@ -677,6 +757,7 @@
         "tests/golden changes in V2 are add-only: existing D1-D6 expectations byte-unchanged (diff over golden expectations shows additions only)",
         "Both recordings exist and match the owner loop scripts step for step; a static-looking build is explicitly not acceptance",
         "Rev4 evidence: AC-EXT-1 grocery-stub zero-core-diff code diff and its passing tests are included in the evidence pack (not just asserted); an XMemo write-back moment in the recordings is labelled local-only while X1 is unauthorized; the engine-status honesty (live vs fallback) is visible in at least one recording",
+        "GROUNDING evidence audit: an automated audit over every place, number and time rendered in the two recordings resolves each to a bundle/fixture sourceRef - pass bar is 0 ungrounded items",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id V4 --plan-ref docs/architecture/YORI_V2.plan.json"
       ]
     },

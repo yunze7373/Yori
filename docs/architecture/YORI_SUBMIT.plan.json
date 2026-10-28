@@ -107,6 +107,7 @@
         "src/adapters/model/fact-checker.ts"
       ],
       "checks": [
+        "Cross-plan precondition: YORI_V2 slice G3-PARITY approved (approving review id recorded in this task's evidence) BEFORE any live call runs; without it this slice does not start, regardless of GATE-S1",
         "Live run record: at most 10 calls, server-side only, max_tokens cap evidenced; fact-check pass-rate report written (accepted/discarded with reasons) (AC-202-1)",
         "D1-D6 golden outputs remain byte-identical with live mode on and off; git diff f43c6c1d -- src/core empty; no secret in repo or logs (AC-202-2)",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id S1-LIVE --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
@@ -433,7 +434,10 @@
         "G-104",
         "G-105",
         "G-106",
-        "G-107"
+        "G-107",
+        "G-211",
+        "G-212",
+        "G-213"
       ],
       "acceptance_ids": [
         "AC-201-3",
@@ -447,7 +451,10 @@
         "AC-104-2",
         "AC-105-1",
         "AC-106-2",
-        "AC-EXT-1"
+        "AC-EXT-1",
+        "AC-211-2",
+        "AC-212-2",
+        "AC-213-2"
       ],
       "arch_contract_refs": [
         "ADR-101",

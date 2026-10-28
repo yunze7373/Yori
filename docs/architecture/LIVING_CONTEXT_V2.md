@@ -524,6 +524,81 @@ V5 chain interleaved only while time permits before the 11/4
 freeze — the coordinator decides the interleaving at the
 CUTLINE_CHECK_V2 decision point.
 
+## 12. Amendment Rev6 — GROUNDING (ARCH-V2-005)
+
+Design pattern borrowed (design only, no code copied; the reference
+repo carries no licence) from a legal-agent workshop: verification
+sits **inside** the tool path so the model cannot skip it,
+citations match recorded facts exactly, incomplete evidence blocks,
+and repeated refusals escalate. Where that pattern fails open,
+Yori fails **closed**.
+
+- **G1 EvidenceBundle (V5-FUEL).** Every provider result becomes an
+  `EvidenceRecord {id, provider, kind: poi|route|eta|weather|habit,
+  fetchedAt, fields}` in a session `EvidenceBundle`. Every displayed
+  POI/ETA/route/weather/habit value carries
+  `sourceRef {recordId, field}`. Provenance classes stay distinct —
+  simulated / recorded / live / sample / confirmed / session —
+  reusing the existing `classifyFactSource`
+  (`src/ui/view-models/provenance.ts`); no core types are added.
+- **G2 Non-skippable verifier (V5-FUEL, applied in V5-LUNCH).**
+  `GroundedRecommendationVerifier.verify(card, bundle)` is called
+  **inside** the render view-model path and **inside** the
+  navigate-URL builder — there is no call site that bypasses it. It
+  checks: the ref exists; displayed value equals
+  `normalize(record field)`; `fetchedAt` is within freshness; the
+  provenance label matches the record; and any model-selected
+  candidate id is in the bundle. On failure the field shows
+  "unknown" or the card is withheld, navigation is disabled (no URL
+  is built), and the reason is written to the Decision Log
+  (redacted, fact ids only). Negative tests are gate items:
+  tampered value, missing ref, stale record, simulated labelled as
+  live, model-invented place, candidate outside the bundle, and
+  verifier failure ⇒ no URL.
+- **G3 Fact-key parity (precondition to S1-LIVE).**
+  `validateDecisionCommandOutput` in
+  `src/adapters/model/reasoning.ts` must reach parity with the
+  client rule (V2b-REV3): `knownFactKeys` is always enforced and an
+  **empty set rejects** (today it can fail open when
+  `confirmedFactKeys` is empty); `matches_confirmed_preference`
+  requires a non-empty subset of the confirmed keys. The live
+  payload/template schema carries `knownFactKeys`. A parity test
+  runs the same malicious outputs through server and client; both
+  must reject. The SUBMIT plan's S1-LIVE must not run until this
+  parity slice is approved.
+- **G4 Three-strike model pause (V5-LUNCH).** Three consecutive
+  model validation failures in a session pause the model for that
+  session: the engine chip shows the honest deterministic-fallback
+  status, the Decision Log records the pause, and there is no retry
+  loop.
+- **V4 evidence audit.** The closeout adds an audit test over every
+  place, number, and time shown in the two recordings: **0
+  ungrounded items** is the pass bar. The bundle/verifier machinery
+  for the recorded (fixture) scenes is built in slice **G12-CORE**
+  before V4, over the existing Rain/Lunch fixture and simulated
+  records (calendar, weather, travel estimate, mock places, sample
+  habits) with the verifier inside those scenes' render
+  view-models; V5-FUEL later extends the same verifier to
+  PlacesProvider results and the navigate-URL builder.
+
+**Freshness and normalization (testable definitions).** Freshness
+is judged per kind: `weather` — within the forecast validity window
+from `issuedAt`; `route`/`eta` — 30 minutes from `fetchedAt`;
+`poi` — 24 hours from `fetchedAt`; `habit`/`confirmed` — no expiry
+while status stays confirmed. For **simulated and recorded**
+records, freshness is judged against the **scene clock** (the
+replayed snapshot time), never the wall clock, so fixtures with
+fixed timestamps stay valid deterministically. `normalize` means:
+times compared as scene-timezone 12-hour strings at minute
+precision; durations as integer minutes; distances in the record's
+own unit after conversion to metres; places matched by exact name
+**and** record id. A displayed value that differs after
+normalization is a tamper/failure, by definition.
+
+No owner gate moves (P-LOC, P-BILL, P-HTTPS, S1, X1); no real API,
+GPS upload, paid service, or key is enabled by this amendment; no
+model claims-judge call is added. Release order is unchanged.
+
 ## 7. Blocked visual finalization and image channel
 
 R0–R3 are not on this Mac and the Bridge cannot carry binaries.
