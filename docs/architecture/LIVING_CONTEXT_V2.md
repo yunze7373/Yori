@@ -469,3 +469,19 @@ finalized against them. Until then: token values and layout
 specifics stay PROVISIONAL, visual-dependent acceptance in the plan
 is gated on the reference-arrival task, and no concept image is
 described as an implemented screen.
+
+## 11. Cut-Line Decision Record (CUTLINE_CHECK_V2)
+
+- **Date:** 2026-10-29 (evaluated ahead of the 2026-11-01 12:00 JST deadline).
+- **Gate Results & Reviewer Decisions:**
+  - **V2a-1:** Approved (decision `fcfaf197` @ commit `0f9f5d7`).
+  - **V2a-2:** Approved (decision `ccd3c033` @ commit `d8b4a3f`).
+  - **V2b:** Approved (decision `a08c3164-792d-4217-a23d-243012f9e7ef` on review request `8d3dbbfd-3526-4a6b-b01f-1c0809e9ec47` @ commit `f3d3740`).
+- **Outcome:** **CONTINUE** with Living Context V2 UI. Both core loops (leave-later/transit switch and lunch filter/re-rank) are formally Reviewer-approved with zero core diff, causality goldens (G-RAIN, G-PREF, G-QUIET), and full Playwright e2e passes. No fallback to the `yori-approved-ui` (V-ANCHOR) is required.
+- **Release Order:** `V3 → DOC-RESYNC → V4` first (recordable demo), with the V5 chain (`V5-GEO → V5-FUEL → V5-LIVE-POI / V5-LUNCH`) interleaved only while time permits before the 2026-11-04 freeze.
+- **Coordinator Interleaving:** Default order stands unless the coordinator explicitly instructs otherwise.
+- **Milestone Schedule Targets:**
+  - Rough-cut target: real e2e of both loops usable by **2026-11-02**.
+  - Re-record & final polish window: **2026-11-03 – 2026-11-04**.
+  - Internal freeze: **2026-11-04**.
+  - External deadline: **2026-11-05 11:00 JST**.

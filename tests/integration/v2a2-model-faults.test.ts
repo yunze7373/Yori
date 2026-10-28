@@ -21,6 +21,8 @@ import {
 import { renderWhySheet } from '../../src/ui/review/why-sheet.js';
 import {
   type ModelCommandDecisionOutput,
+  FIXTURE_CMD_CHANGE_ROUTE_BUS,
+  FIXTURE_CMD_CHANGE_ROUTE_DRIVE,
   FIXTURE_FAULT_OUT_OF_SET_INTENT,
   FIXTURE_FAULT_UNCITED_SIGNAL,
   FIXTURE_FAULT_UNCITED_FACT,
@@ -570,6 +572,19 @@ describe('V2a-2: Muse Spark Constrained Decision Engine & Decision Log', () => {
       const html = renderTranscriptItems(transcript, true);
       expect(html).toContain('chat-comparison-recommendation');
       expect(html).toContain('Recommended');
+    });
+  });
+
+  describe('Carry-over C-1 (CUTLINE_CHECK_V2): CHANGE_ROUTE Fixture Truthfulness', () => {
+    it('bus fixture does not claim shorter_trip; drive fixture claims shorter_trip agreeing with Rain estimates', () => {
+      // In the Rain scene (d2), drive travel estimate is 25 min vs bus 40 min.
+      // Bus is NOT a shorter trip (40m > 25m), so it must not claim shorter_trip.
+      expect(FIXTURE_CMD_CHANGE_ROUTE_BUS.reasonCodes).not.toContain('shorter_trip');
+      expect(FIXTURE_CMD_CHANGE_ROUTE_BUS.reasonCodes).toEqual(['weather_adjusted']);
+
+      // Drive IS a shorter trip (25m < 40m), so it legitimately claims shorter_trip.
+      expect(FIXTURE_CMD_CHANGE_ROUTE_DRIVE.reasonCodes).toContain('shorter_trip');
+      expect(FIXTURE_CMD_CHANGE_ROUTE_DRIVE.situationAttribution?.reasonCode).toBe('shorter_trip');
     });
   });
 });

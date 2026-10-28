@@ -91,7 +91,7 @@ export const FIXTURE_CMD_CHANGE_ROUTE_BUS: ModelCommandDecisionOutput = {
   },
   citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
   citedFactKeys: ['rain_transport_preference'],
-  reasonCodes: ['weather_adjusted', 'shorter_trip'],
+  reasonCodes: ['weather_adjusted'],
   explanation: 'Switch travel mode to bus.',
 };
 
