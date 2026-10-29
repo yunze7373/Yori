@@ -134,10 +134,13 @@ Every integration's live/off status is stated truthfully exactly as classified i
 
 | Integration | Classification | Status & Enforcement |
 |---|---|---|
+| **Core Living Context Pipeline** | `DONE + LOCAL-TESTED` | Fully operable locally on loopback (`127.0.0.1:5173`). 540 unit tests, 18 golden acceptance fixtures, 56 degradation drills, 192 Playwright E2E tests, zero core diff vs baseline anchor. |
 | **Meta Muse Spark Reasoning (S1)** | `IMPLEMENTED-BUT-OFF` | `MODEL_API_KEY` unset, diagnostics `disabled`, keySource `none`. Zero live calls run. Model interpreter executes strictly against verified offline fixtures with engine status `'Scripted model fixture · not a live model call'`. Strict parity between server validator and client interpreter (G3-PARITY). |
-| **XMemo Cloud Memory (X1)** | `IMPLEMENTED-BUT-OFF` | Flag `XMEMO_OAUTH_ENABLED=false`. Code marks proxy mapping `UNVERIFIED_XMEMO_MCP_MAPPING`. Local browser storage is the active and sovereign source of truth. Confirm-only memory (INV-107) enforced client-side and server-side. |
-| **Live Weather (Open-Meteo)** | `IMPLEMENTED-BUT-OFF` | Flag `WEATHER_LIVE_ENABLED=false`. All scenes run on recorded, labelled fixtures with fixed city coordinates. Zero device geolocation or GPS calls anywhere. |
-| **Core Living Context Pipeline** | `DONE + LOCAL-TESTED` | Fully operable locally on loopback (`127.0.0.1:5173`). 454 unit tests, 18 golden acceptance fixtures, 53 degradation drills, 128 Playwright E2E tests, zero core diff vs baseline anchor. |
+| **Muse Spark Live Calls** | `LIVE-UNVERIFIED` | Never called live in production or recordings. Missing: owner key + billed-call approval (GATE-S1) and live verification slice (S1-LIVE). |
+| **XMemo Cloud Memory (X1)** | `IMPLEMENTED-BUT-OFF` | Flag `XMEMO_OAUTH_ENABLED=false`. Local browser storage is the active and sovereign source of truth. Confirm-only memory (INV-107) enforced client-side and server-side. |
+| **XMemo Live Mapping (`recall`/`remember`)** | `LIVE-UNVERIFIED` | Code marks proxy mapping `UNVERIFIED_XMEMO_MCP_MAPPING`. Missing: owner-authorized probe against the real MCP server on the owner's account (GATE-X1, S2-LIVE). |
+| **Live Weather (Open-Meteo)** | `IMPLEMENTED-BUT-OFF` | Flag `WEATHER_LIVE_ENABLED=false`. All scenes run on recorded, labelled fixtures with fixed city coordinates. Zero device geolocation or GPS calls anywhere. Commercial/terms qualification is owner action (GATE-W1). |
+| **Device Geolocation & Live POI** | `IMPLEMENTED-BUT-OFF` | Zero device GPS calls. Transparent consent gating with explicit flag-off notice; manual coordinate input supported with straight-line distance calculations only. Zero real geotracking or live place network calls. |
 
 ---
 
@@ -150,7 +153,7 @@ Every criterion is mapped strictly to demonstrable, recorded, and verifiable cod
 | **Impact & Value** | **30 pts** | • Solves real-world cognitive overload: replaces passive chat prompting and noisy notification feeds with a proactive, calm Living Context.<br>• At most one actionable NOW card with clear travel and preparation windows.<br>• Calm Quiet State (*"Nothing needs your attention right now."*) respects user peace of mind.<br>• Proactive prompt budget (max 3/day) prevents notification fatigue.<br>• Accessibility-first: 0 Axe violations across WCAG contrast, touch targets (≥44px), and reduced-motion instant duration collapse. |
 | **Meta Tooling Integration** | **25 pts** | • Architecture designed around Meta Muse Spark 1.3 (`muse-spark-1.3`) for contextual ranking and conversational natural language command interpretation.<br>• Server-side dev proxy implements factual hallucination filtering, input schema validation, and closed decision intents.<br>• Strict fact-key parity (G3-PARITY): validates citations against confirmed memory keys, preventing synthetic fact invention.<br>• Transparent UI engine badge: displays truthful `'Offline fallback · deterministic'` and `'Scripted model fixture · not a live model call'` rather than faking live model connectivity. |
 | **Quality of Demo & Presentation** | **25 pts** | • Fully synchronized 3-minute video demonstration script ([`docs/submission/VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md)) with every on-screen string and flow sequence asserted verbatim by automated Playwright E2E tests.<br>• Two comprehensive interactive user loops: Rain Re-Plan (transit adaptation + umbrella) and Away Lunch (candidate cards + local illustrations + dietary filters).<br>• Fully explainable review loop: Why Sheet displays plain-language evidence derivations without raw timestamps or technical jargon.<br>• Sovereign Me tab demonstrates explicit Confirm-Only memory (INV-107) and live timing recomputation. |
-| **Technical Execution & Architecture** | **20 pts** | • Layered architecture with pure domain core (`src/core/`) frozen with zero diffs (`git diff --stat f43c6c1d HEAD -- src/core` 100% empty).<br>• Test-driven rigor: 454 unit & integration tests, 18 golden acceptance fixtures, 53 degradation drills, 128 Playwright E2E tests across full suite.<br>• Deterministic replay: core domain has zero ambient clock calls (`Date.now()`) and zero network imports.<br>• Storage envelope with corruption detection, recovery reset, and raw JSON export.<br>• Strict design token system verified by Playwright pixel sampler (10/10 PASS). |
+| **Technical Execution & Architecture** | **20 pts** | • Layered architecture with pure domain core (`src/core/`) frozen with zero diffs (`git diff --stat f43c6c1d HEAD -- src/core` 100% empty).<br>• Test-driven rigor: 540 unit & integration tests, 18 golden acceptance fixtures, 56 degradation drills, 192 Playwright E2E tests across full suite.<br>• Deterministic replay: core domain has zero ambient clock calls (`Date.now()`) and zero network imports.<br>• Storage envelope with corruption detection, recovery reset, and raw JSON export.<br>• Strict design token system verified by Playwright pixel sampler (10/10 PASS). |
 | **Best Agentic Workflow (Bonus)** | **Bonus** | • Autonomous agentic loop: proactive context synthesis -> habit-informed candidate ranking -> conversational command adjustment -> user proposal generation -> confirm-only promotion -> deterministic re-planning.<br>• Full-page conversational shell (Ask Yori) seamlessly integrates natural language commands with structured Living Context cards.<br>• Complete user sovereignty: AI suggests, user controls, memory only learns on explicit confirmation. |
 
 ---
@@ -158,9 +161,9 @@ Every criterion is mapped strictly to demonstrable, recorded, and verifiable cod
 ## 9. Built During the Hackathon Statement & Feature Delta
 
 ### Hackathon Commit Statement
-> **Verified Commit Range:** `f7dd63d..ccfc0b7` (As of commit `ccfc0b79499aed67f0038f3757f0abc6b439e916`: 70 commits, verified via `git log --oneline f7dd63d..ccfc0b7 | wc -l`)  
+> **Verified Commit Range:** `f7dd63d..1ee4645` (100 commits, verified via `git log --oneline f7dd63d..HEAD | wc -l`)  
 > **Initial Scaffolding Commit:** `f7dd63de5f74d285f6eef6ae44258d79650004d4` on Wed Oct 28 03:56:28 2026 +0900  
-> **Milestone Commit:** `ccfc0b79499aed67f0038f3757f0abc6b439e916` on Thu Oct 29 03:15:01 2026 +0900  
+> **Latest Milestone Commit:** `1ee4645ffc95293e865b346f181e978d6b450562` on Thu Oct 30 02:08:52 2026 +0900  
 > 
 > *All commits in the Yori codebase across `f7dd63d..HEAD` were authored and committed entirely within the Meta Global AI Developer Hackathon period, beginning from initial repository scaffolding through feature implementation, testing, and documentation.*
 
@@ -176,6 +179,11 @@ Every criterion is mapped strictly to demonstrable, recorded, and verifiable cod
 | **Slice 2b** | **Lunch Loop & Candidates Hero** | Candidates Hero view for dining recommendations, local labelled SVG illustrations for food categories, dietary filter chips (quieter, vegetarian), and restaurant detail views. |
 | **Slice 3 (V3)** | **Tokens & Micro-Motion Polish** | Finalized design token system: warm ivory ground (`#F8F8F5`), crisp card surface (`#FFFFFF`), pine brand (`#162824` / `#16382F`), serif display typography, 44px touch targets, and micro-motion easing. |
 | **Slice 5 (G3-PARITY)** | **Validator & Interpreter Parity** | Server proxy pre-model validator and client interpreter fact-key parity (`knownFactKeys`, subset checking against confirmed facts, closed intents set, prototype pollution protection). |
+| **Slice 4 (V4 Loops)** | **Closed Owner Loops** | Complete interactive loops for Rain Re-Plan (D2) and Away Lunch (D3/D4) with Why Sheet provenance, candidate card illustrations, and deterministic quiet state. |
+| **Slice 5a (V5-GEO)** | **Transparent Geolocation Notice** | Honest location notice banner with consent gating, manual coordinate input, and explicit flag-off disclosure (zero device GPS). |
+| **Slice 5b (V5-FUEL)** | **Low Fuel Context & Handoff** | Contextual low fuel warning, simulated candidate stations with straight-line distance, and verified external navigation modal handoff. |
+| **Slice 5c (V5-LUNCH)** | **Dynamic Lunch Re-Ranking** | Dynamic lunch candidate re-ranking with conversational dietary filters, straight-line distance bounds, and quiet-state fallback. |
+| **PRE-S1 (A–D)** | **Submission Readiness & Hardening** | Confirmed-only memory provenance classification, slot-aware DOM audit verification, compile-time test hook tree-shaking from shipping production builds, and synchronized 3:00 storyboard. |
 
 ---
 
