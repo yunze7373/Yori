@@ -1817,5 +1817,27 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
         expect(homeVMEmpty.habitNote).toBeUndefined();
       });
     });
+
+    describe('PRE-S1-B: Anchored Time Verification & Injection Resistance', () => {
+      it('rejects fabricated text around a valid time (anchored match fail-closed)', () => {
+        const bundle = createRainEvidenceBundle();
+        // Exact 2:30 PM is valid
+        const validRes = GroundedRecommendationVerifier.verifyField(
+          { recordId: 'eta-drive-piano', field: 'leaveTime' },
+          '2:30 PM',
+          bundle
+        );
+        expect(validRes.valid).toBe(true);
+
+        // Appended text around valid time fails closed as tampered_value
+        const tamperedRes = GroundedRecommendationVerifier.verifyField(
+          { recordId: 'eta-drive-piano', field: 'leaveTime' },
+          'Drive · leave 2:30 PM (arrive 3:45 PM, free parking guaranteed)',
+          bundle
+        );
+        expect(tamperedRes.valid).toBe(false);
+        expect(tamperedRes.reason).toBe('tampered_value');
+      });
+    });
   });
 });

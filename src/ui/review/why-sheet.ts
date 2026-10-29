@@ -272,8 +272,8 @@ export function renderWhySheet(
     <div class="modal-backdrop" id="why-sheet-backdrop" role="presentation">
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="why-sheet-title">
         <div class="modal-header">
-          <h2 id="why-sheet-title" class="modal-title">${escapeHtml(STRINGS.whySheet.title)}</h2>
-          <button type="button" class="btn-close" id="btn-close-why" aria-label="${escapeHtml(STRINGS.whySheet.close)}">&times;</button>
+          <h2 id="why-sheet-title" class="modal-title" data-slot="chrome" data-slot-reason="Why sheet title">${escapeHtml(STRINGS.whySheet.title)}</h2>
+          <button type="button" class="btn-close" id="btn-close-why" aria-label="${escapeHtml(STRINGS.whySheet.close)}" data-slot="chrome" data-slot-reason="Modal close button">&times;</button>
         </div>
 
         <div class="modal-body">
@@ -282,8 +282,8 @@ export function renderWhySheet(
               ? `
           <!-- Ordering Rationale Section -->
           <section class="why-section" id="why-order-section" aria-labelledby="why-order-heading">
-            <h3 id="why-order-heading" class="why-section-title">${escapeHtml(STRINGS.whySheet.whyOrderTitle)}</h3>
-            <p class="why-derivation-text" id="why-order-text">${escapeHtml(orderingRationale)}</p>
+            <h3 id="why-order-heading" class="why-section-title" data-slot="chrome" data-slot-reason="Ordering rationale heading">${escapeHtml(STRINGS.whySheet.whyOrderTitle)}</h3>
+            <p class="why-derivation-text" id="why-order-text" data-slot="chrome" data-slot-reason="Ordering rationale text">${escapeHtml(orderingRationale)}</p>
           </section>
           `
               : ''
@@ -328,13 +328,13 @@ export function renderWhySheet(
                   return `
           <!-- Situation Attribution Section (V2a-2) -->
           <section class="why-section" id="why-situation-section" aria-labelledby="why-situation-heading">
-            <h3 id="why-situation-heading" class="why-section-title">Situation Attribution</h3>
+            <h3 id="why-situation-heading" class="why-section-title" data-slot="chrome" data-slot-reason="Situation attribution heading">Situation Attribution</h3>
             <div class="why-situation-item">
               <div class="why-situation-badge-row">
-                <span class="badge-reason-code">${escapeHtml(reasonTitle)}</span>
-                <span class="badge-signal-id">${escapeHtml(signalLabel)}</span>
+                <span class="badge-reason-code" data-slot="chrome" data-slot-reason="Situation attribution code badge">${escapeHtml(reasonTitle)}</span>
+                <span class="badge-signal-id" data-slot="chrome" data-slot-reason="Situation attribution signal label">${escapeHtml(signalLabel)}</span>
               </div>
-              <p class="why-situation-text">${escapeHtml(reasonDesc)}</p>
+              <p class="why-situation-text" data-slot="chrome" data-slot-reason="Situation attribution description">${escapeHtml(reasonDesc)}</p>
             </div>
           </section>
           `;
@@ -379,7 +379,7 @@ export function renderWhySheet(
                             }
                             ${
                               timeStr && !isUserRequest
-                                ? `<span class="why-item-time" ${timeRef ? `data-source-ref="${timeRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Signal recorded time"`}>Recorded at ${escapeHtml(timeStr)}</span>`
+                                ? `<span class="why-item-time"><span data-slot="chrome" data-slot-reason="Recorded time prefix">Recorded at </span><span class="why-recorded-time" ${timeRef ? `data-source-ref="${escapeHtml(timeRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Signal recorded time"`}>${escapeHtml(timeStr)}</span></span>`
                                 : ''
                             }
                           </div>
@@ -417,9 +417,9 @@ export function renderWhySheet(
                       <div class="why-item-row">
                         <div class="why-item-main">
                           <span class="why-item-label" data-slot="chrome" data-slot-reason="Memory preference label">${escapeHtml(humanizeMemoryKey(fact.key))}</span>
-                          <span class="why-item-desc" data-source-ref="${fact.key}.description" data-slot="domain">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</span>
+                          <span class="why-item-desc" data-source-ref="${escapeHtml(fact.key)}.description" data-slot="domain">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</span>
                         </div>
-                        <span class="card-badge ${badgeClass}" data-source-ref="${fact.key}.provenance" data-slot="domain">${escapeHtml(badgeText)}</span>
+                        <span class="card-badge ${badgeClass}" data-source-ref="${escapeHtml(fact.key)}.provenance" data-slot="domain">${escapeHtml(badgeText)}</span>
                       </div>
                     `;
                       })

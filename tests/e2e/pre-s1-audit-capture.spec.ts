@@ -80,6 +80,7 @@ async function extractRenderedSlots(
         sourceRefElements.forEach((el, idx) => {
           if (seenElements.has(el)) return;
           seenElements.add(el);
+          el.querySelectorAll('*').forEach(c => seenElements.add(c));
 
           const rawRef = el.getAttribute('data-source-ref') || '';
           const lastDot = rawRef.lastIndexOf('.');
@@ -106,6 +107,7 @@ async function extractRenderedSlots(
         taggedSlots.forEach((el, idx) => {
           if (seenElements.has(el)) return;
           seenElements.add(el);
+          el.querySelectorAll('*').forEach(c => seenElements.add(c));
 
           const slotType = el.getAttribute('data-slot') as 'chrome' | 'out_of_scope' | 'domain';
           if (slotType === 'domain') return; // Handled above if data-source-ref was present
@@ -125,20 +127,27 @@ async function extractRenderedSlots(
           });
         });
 
-        // 3. Scan leaf text elements to catch any unannotated elements
-        const leafElements = container.querySelectorAll('button, span, h1, h2, h3, p, strong');
-        leafElements.forEach((el, idx) => {
-          if (seenElements.has(el)) return;
-          const text = (el as HTMLElement).innerText?.trim();
+        // 3. Scan leaf text elements to catch any unannotated elements (must FAIL audit as 'unclassified')
+        const allCandidates = container.querySelectorAll('button, span, h1, h2, h3, h4, p, strong, a, label, code, div');
+        allCandidates.forEach((el, idx) => {
+          if (seenElements.has(el) || el.closest('[data-source-ref], [data-slot]')) return;
+          // Check if any child element has non-empty text (if so, el is a container, not a leaf)
+          const hasChildElementWithText = Array.from(el.children).some(child => {
+            const cText = (child as HTMLElement).innerText?.trim() || child.textContent?.trim();
+            return Boolean(cText && cText.length > 0);
+          });
+          if (hasChildElementWithText) return;
+
+          const text = (el as HTMLElement).innerText?.trim() || el.textContent?.trim();
           if (!text) return;
           seenElements.add(el);
 
-          // Classify known static buttons / labels as chrome
+          // Mark as UNCLASSIFIED -> This will FAIL the audit unless explicitly annotated!
           results.push({
-            slotId: `${component}-unannotated-chrome-${idx}`,
-            slotType: 'chrome',
+            slotId: `${component}-unannotated-leaf-${idx}`,
+            slotType: 'unclassified' as any,
             renderedText: text,
-            reason: `Static UI element (${el.tagName.toLowerCase()}.${el.className || 'none'})`,
+            reason: `Unannotated DOM text leaf (${el.tagName.toLowerCase()}.${el.className || 'none'})`,
             component,
             step,
             scene,
@@ -221,29 +230,40 @@ test.describe('PRE-S1-B: Slot-Aware Grounding Walkthrough Capture Suite', () => 
     await closeWhyBtn.click();
     await expect(whySheet).not.toBeVisible();
 
-    // Step 5: Ask Yori late shift query
+    // Step 5: Ask Yori late shift query (open conversation via Ask bar)
+    const askBar = page.locator('#ask-bar');
+    await expect(askBar).toBeVisible();
+    await askBar.click();
+
+    const overlay = page.locator('#conversation-overlay');
+    await expect(overlay).toBeVisible();
+
     const chatInput = page.locator('#conversation-input');
-    if (await chatInput.isVisible()) {
-      await chatInput.fill('Can I leave 15 minutes later?');
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(600);
-      const confirmShiftBtn = page.locator('#btn-confirm-leave-later');
-      if (await confirmShiftBtn.isVisible()) {
-        await confirmShiftBtn.click();
-        await page.waitForTimeout(500);
-      }
-      steps.push('After Late Shift Confirmed');
-      allSlots.push(...(await extractRenderedSlots(page, scene, 'After Late Shift Confirmed', vpSuffix)));
-    }
+    await expect(chatInput).toBeVisible();
+    await chatInput.fill('Can I leave 15 minutes later?');
+    await page.locator('#conversation-send-btn').click();
+
+    const confirmBox = page.locator('.chat-confirm-box');
+    await expect(confirmBox).toBeVisible({ timeout: 5000 });
+    const confirmBtn = page.locator('#btn-chat-confirm');
+    await expect(confirmBtn).toBeVisible();
+    await confirmBtn.click();
+
+    // Verify auto-collapse back to updated Home
+    await expect(overlay).toHaveCount(0, { timeout: 5000 });
+    await expect(page.locator('.now-card')).toBeVisible();
+
+    steps.push('After Late Shift Confirmed');
+    allSlots.push(...(await extractRenderedSlots(page, scene, 'After Late Shift Confirmed', vpSuffix)));
 
     // Step 6: Me Sovereign Memory Tab
     const meTab = page.locator(isMobile ? '#tab-me' : '#desktop-nav-me');
-    if (await meTab.isVisible()) {
-      await meTab.click();
-      await page.waitForTimeout(400);
-      steps.push('Me Sovereign Memory Tab');
-      allSlots.push(...(await extractRenderedSlots(page, scene, 'Me Sovereign Memory Tab', vpSuffix)));
-    }
+    await expect(meTab).toBeVisible();
+    await meTab.click();
+    await page.waitForTimeout(400);
+    await expect(page.locator('.me-view-container')).toBeVisible();
+    steps.push('Me Sovereign Memory Tab');
+    allSlots.push(...(await extractRenderedSlots(page, scene, 'Me Sovereign Memory Tab', vpSuffix)));
 
     saveDump(scene, vpSuffix, steps, allSlots);
     expect(allSlots.length).toBeGreaterThan(0);

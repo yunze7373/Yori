@@ -67,29 +67,29 @@ export function renderMeView(state: MeViewState): string {
   return `
     <div class="me-view-container">
       <header class="me-header">
-        <h1 class="me-title">${escapeHtml(STRINGS.me.title)}</h1>
-        <p class="me-subtitle">${escapeHtml(STRINGS.me.subtitle)}</p>
+        <h1 class="me-title" data-slot="chrome" data-slot-reason="Me page title">${escapeHtml(STRINGS.me.title)}</h1>
+        <p class="me-subtitle" data-slot="chrome" data-slot-reason="Me page subtitle">${escapeHtml(STRINGS.me.subtitle)}</p>
       </header>
 
       ${
         state.isPersistent === false
-          ? `<div class="storage-notice banner-warning" role="status">${escapeHtml(STRINGS.me.persistenceUnavailable)}</div>`
+          ? `<div class="storage-notice banner-warning" role="status" data-slot="chrome" data-slot-reason="Storage status notice">${escapeHtml(STRINGS.me.persistenceUnavailable)}</div>`
           : ''
       }
 
       ${
         state.actionNotice
-          ? `<div class="storage-feedback" role="status">${escapeHtml(state.actionNotice)}</div>`
+          ? `<div class="storage-feedback" role="status" data-slot="chrome" data-slot-reason="Storage feedback message">${escapeHtml(state.actionNotice)}</div>`
           : ''
       }
 
       <!-- 1. Proactive Prompt Budget (INV-105) -->
       <section class="card me-card" aria-labelledby="me-budget-title">
         <div class="me-card-header">
-          <h2 id="me-budget-title" class="section-label">${escapeHtml(STRINGS.me.budgetTitle)}</h2>
-          <span class="card-badge badge-budget">${escapeHtml(budgetUsageText)}</span>
+          <h2 id="me-budget-title" class="section-label" data-slot="chrome" data-slot-reason="Daily budget section label">${escapeHtml(STRINGS.me.budgetTitle)}</h2>
+          <span class="card-badge badge-budget" data-slot="chrome" data-slot-reason="Daily prompt budget badge">${escapeHtml(budgetUsageText)}</span>
         </div>
-        <p class="me-card-desc">${escapeHtml(STRINGS.me.budgetSubtitle)}</p>
+        <p class="me-card-desc" data-slot="chrome" data-slot-reason="Daily budget description">${escapeHtml(STRINGS.me.budgetSubtitle)}</p>
         <div class="budget-meter-track" role="progressbar" aria-valuenow="${state.promptBudget.count}" aria-valuemin="0" aria-valuemax="${state.maxDailyPrompts}">
           <div class="budget-meter-fill" style="width: ${Math.min(100, (state.promptBudget.count / state.maxDailyPrompts) * 100)}%;"></div>
         </div>
@@ -97,7 +97,7 @@ export function renderMeView(state: MeViewState): string {
 
       <!-- 2. Confirmed Preferences -->
       <section class="card me-card" aria-labelledby="me-confirmed-title">
-        <h2 id="me-confirmed-title" class="section-label">${escapeHtml(STRINGS.me.confirmedTitle)}</h2>
+        <h2 id="me-confirmed-title" class="section-label" data-slot="chrome" data-slot-reason="Confirmed preferences section label">${escapeHtml(STRINGS.me.confirmedTitle)}</h2>
         <div class="memory-list" id="confirmed-facts-list">
           ${
             confirmed.length > 0
@@ -107,16 +107,16 @@ export function renderMeView(state: MeViewState): string {
                     return `
                     <div class="memory-row" id="fact-${escapeHtml(fact.key)}">
                       <div class="memory-main">
-                        <div class="memory-key">${escapeHtml(humanizeMemoryKey(fact.key))}</div>
-                        <div class="memory-val">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</div>
-                        <div class="memory-meta">${escapeHtml(formatProvenanceSource(fact.provenance.source))} · Updated ${escapeHtml(time)}</div>
+                        <div class="memory-key" data-slot="chrome" data-slot-reason="Memory preference key">${escapeHtml(humanizeMemoryKey(fact.key))}</div>
+                        <div class="memory-val" data-source-ref="${escapeHtml(fact.key)}.value" data-slot="domain">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</div>
+                        <div class="memory-meta" data-source-ref="${escapeHtml(fact.key)}.provenance" data-slot="domain">${escapeHtml(formatProvenanceSource(fact.provenance.source))} · Updated ${escapeHtml(time)}</div>
                       </div>
-                      <span class="card-badge badge-confirmed">Confirmed</span>
+                      <span class="card-badge badge-confirmed" data-slot="chrome" data-slot-reason="Confirmed preference badge">Confirmed</span>
                     </div>
                   `;
                   })
                   .join('')
-              : `<p class="memory-empty">${escapeHtml(STRINGS.me.confirmedEmpty)}</p>`
+              : `<p class="memory-empty" data-slot="chrome" data-slot-reason="Empty confirmed preferences notice">${escapeHtml(STRINGS.me.confirmedEmpty)}</p>`
           }
         </div>
       </section>
@@ -124,10 +124,10 @@ export function renderMeView(state: MeViewState): string {
       <!-- 3. Pending Proposals (Confirm / Not true) -->
       <section class="card me-card" aria-labelledby="me-pending-title">
         <div class="me-card-header">
-          <h2 id="me-pending-title" class="section-label">${escapeHtml(STRINGS.me.pendingTitle)}</h2>
-          <span class="card-badge badge-pending">${pending.length} Pending</span>
+          <h2 id="me-pending-title" class="section-label" data-slot="chrome" data-slot-reason="Pending proposals section label">${escapeHtml(STRINGS.me.pendingTitle)}</h2>
+          <span class="card-badge badge-pending" data-slot="chrome" data-slot-reason="Pending proposals count badge">${pending.length} Pending</span>
         </div>
-        <p class="me-card-desc">${escapeHtml(STRINGS.me.pendingSubtitle)}</p>
+        <p class="me-card-desc" data-slot="chrome" data-slot-reason="Pending proposals description">${escapeHtml(STRINGS.me.pendingSubtitle)}</p>
 
         <div class="memory-list" id="pending-proposals-list">
           ${
@@ -138,18 +138,18 @@ export function renderMeView(state: MeViewState): string {
                     return `
                     <div class="memory-row pending-row" id="proposal-${escapeHtml(fact.key)}">
                       <div class="memory-main">
-                        <div class="memory-key">${escapeHtml(humanizeMemoryKey(fact.key))}</div>
-                        <div class="memory-val">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</div>
-                        <div class="memory-meta">
+                        <div class="memory-key" data-slot="chrome" data-slot-reason="Memory preference key">${escapeHtml(humanizeMemoryKey(fact.key))}</div>
+                        <div class="memory-val" data-slot="chrome" data-slot-reason="Pending proposal value">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</div>
+                        <div class="memory-meta" data-slot="chrome" data-slot-reason="Pending proposal metadata">
                           ${fact.provenance.note ? `${escapeHtml(fact.provenance.note)} · ` : ''}
                           Created ${escapeHtml(time)}
                         </div>
                       </div>
                       <div class="proposal-actions">
-                        <button type="button" class="btn btn-sm btn-primary btn-confirm-proposal" data-key="${escapeHtml(fact.key)}">
+                        <button type="button" class="btn btn-sm btn-primary btn-confirm-proposal" data-key="${escapeHtml(fact.key)}" data-slot="chrome" data-slot-reason="Confirm proposal button">
                           ${escapeHtml(STRINGS.actions.confirm)}
                         </button>
-                        <button type="button" class="btn btn-sm btn-outline btn-reject-proposal" data-key="${escapeHtml(fact.key)}">
+                        <button type="button" class="btn btn-sm btn-outline btn-reject-proposal" data-key="${escapeHtml(fact.key)}" data-slot="chrome" data-slot-reason="Reject proposal button">
                           ${escapeHtml(STRINGS.actions.notTrue)}
                         </button>
                       </div>
@@ -157,15 +157,15 @@ export function renderMeView(state: MeViewState): string {
                   `;
                   })
                   .join('')
-              : `<p class="memory-empty">${escapeHtml(STRINGS.me.pendingEmpty)}</p>`
+              : `<p class="memory-empty" data-slot="chrome" data-slot-reason="Empty pending proposals notice">${escapeHtml(STRINGS.me.pendingEmpty)}</p>`
           }
         </div>
       </section>
 
       <!-- 4. Rejected Proposals (Audit Trail) -->
       <section class="card me-card" aria-labelledby="me-rejected-title">
-        <h2 id="me-rejected-title" class="section-label">${escapeHtml(STRINGS.me.rejectedTitle)}</h2>
-        <p class="me-card-desc">${escapeHtml(STRINGS.me.rejectedSubtitle)}</p>
+        <h2 id="me-rejected-title" class="section-label" data-slot="chrome" data-slot-reason="Rejected proposals section label">${escapeHtml(STRINGS.me.rejectedTitle)}</h2>
+        <p class="me-card-desc" data-slot="chrome" data-slot-reason="Rejected proposals description">${escapeHtml(STRINGS.me.rejectedSubtitle)}</p>
 
         <div class="memory-list" id="rejected-proposals-list">
           ${
@@ -176,16 +176,16 @@ export function renderMeView(state: MeViewState): string {
                     return `
                     <div class="memory-row rejected-row" id="rejected-${escapeHtml(fact.key)}">
                       <div class="memory-main">
-                        <div class="memory-key">${escapeHtml(humanizeMemoryKey(fact.key))}</div>
-                        <div class="memory-val">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</div>
-                        <div class="memory-meta">Declined by user · Recorded ${escapeHtml(time)}</div>
+                        <div class="memory-key" data-slot="chrome" data-slot-reason="Memory preference key">${escapeHtml(humanizeMemoryKey(fact.key))}</div>
+                        <div class="memory-val" data-slot="chrome" data-slot-reason="Rejected proposal value">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</div>
+                        <div class="memory-meta" data-slot="chrome" data-slot-reason="Rejected proposal metadata">Declined by user · Recorded ${escapeHtml(time)}</div>
                       </div>
-                      <span class="card-badge badge-rejected">Rejected</span>
+                      <span class="card-badge badge-rejected" data-slot="chrome" data-slot-reason="Rejected proposal badge">Rejected</span>
                     </div>
                   `;
                   })
                   .join('')
-              : `<p class="memory-empty">${escapeHtml(STRINGS.me.rejectedEmpty)}</p>`
+              : `<p class="memory-empty" data-slot="chrome" data-slot-reason="Empty rejected proposals notice">${escapeHtml(STRINGS.me.rejectedEmpty)}</p>`
           }
         </div>
       </section>
@@ -196,12 +196,12 @@ export function renderMeView(state: MeViewState): string {
           ? `
       <section class="card me-card" aria-labelledby="me-xmemo-title">
         <div class="me-card-header">
-          <h2 id="me-xmemo-title" class="section-label">${escapeHtml(STRINGS.xmemo.title)}</h2>
-          <span class="card-badge ${state.xmemoStatus.connected ? 'badge-confirmed' : 'badge-pending'}">
+          <h2 id="me-xmemo-title" class="section-label" data-slot="chrome" data-slot-reason="XMemo sync section label">${escapeHtml(STRINGS.xmemo.title)}</h2>
+          <span class="card-badge ${state.xmemoStatus.connected ? 'badge-confirmed' : 'badge-pending'}" data-slot="chrome" data-slot-reason="XMemo status badge">
             ${escapeHtml(state.xmemoStatus.connected ? STRINGS.xmemo.connectedBadge : STRINGS.xmemo.disconnectedBadge)}
           </span>
         </div>
-        <p class="me-card-desc">
+        <p class="me-card-desc" data-slot="chrome" data-slot-reason="XMemo status description">
           ${escapeHtml(
             state.xmemoStatus.connected
               ? STRINGS.xmemo.connectedDesc
@@ -211,8 +211,8 @@ export function renderMeView(state: MeViewState): string {
         <div class="data-actions-row">
           ${
             state.xmemoStatus.connected
-              ? `<button type="button" class="btn btn-outline" id="btn-xmemo-disconnect">${escapeHtml(STRINGS.xmemo.disconnectBtn)}</button>`
-              : `<button type="button" class="btn btn-primary" id="btn-xmemo-connect">${escapeHtml(STRINGS.xmemo.connectBtn)}</button>`
+              ? `<button type="button" class="btn btn-outline" id="btn-xmemo-disconnect" data-slot="chrome" data-slot-reason="Disconnect XMemo button">${escapeHtml(STRINGS.xmemo.disconnectBtn)}</button>`
+              : `<button type="button" class="btn btn-primary" id="btn-xmemo-connect" data-slot="chrome" data-slot-reason="Connect XMemo button">${escapeHtml(STRINGS.xmemo.connectBtn)}</button>`
           }
         </div>
       </section>
@@ -222,12 +222,12 @@ export function renderMeView(state: MeViewState): string {
 
       <!-- 6. Data Controls & Storage (INV-110) -->
       <section class="card me-card" aria-labelledby="me-data-title">
-        <h2 id="me-data-title" class="section-label">${escapeHtml(STRINGS.me.dataControlsTitle)}</h2>
+        <h2 id="me-data-title" class="section-label" data-slot="chrome" data-slot-reason="Data controls section label">${escapeHtml(STRINGS.me.dataControlsTitle)}</h2>
         <div class="data-actions-row">
-          <button type="button" class="btn btn-secondary" id="btn-me-export">
+          <button type="button" class="btn btn-secondary" id="btn-me-export" data-slot="chrome" data-slot-reason="Export raw data button">
             ${escapeHtml(STRINGS.me.exportBtn)}
           </button>
-          <button type="button" class="btn btn-danger" id="btn-me-reset">
+          <button type="button" class="btn btn-danger" id="btn-me-reset" data-slot="chrome" data-slot-reason="Reset storage button">
             ${escapeHtml(STRINGS.me.resetBtn)}
           </button>
         </div>

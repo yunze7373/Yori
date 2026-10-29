@@ -1986,18 +1986,20 @@ export function renderApp(
             modalEl.innerHTML = `
               <div class="v2-navigate-modal" id="navigate-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="nav-modal-title">
                 <div class="v2-modal-header">
-                  <h2 id="nav-modal-title">Start Navigation</h2>
-                  <span class="v2-illustration-badge">Verified handoff</span>
+                  <h2 id="nav-modal-title" data-slot="chrome" data-slot-reason="Navigation modal title">Start Navigation</h2>
+                  <span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Navigation verified handoff badge">Verified handoff</span>
                 </div>
                 <p class="v2-modal-body">
-                  Open driving directions to <strong>${escapeHtml(candidate.name || candidate.label)}</strong> in ${mapsAppName}?
+                  <span data-slot="chrome" data-slot-reason="Navigation directions prefix">Open driving directions to </span>
+                  <strong data-source-ref="${escapeHtml(recId)}.name" data-slot="domain">${escapeHtml(candidate.name || candidate.label)}</strong>
+                  <span data-slot="chrome" data-slot-reason="Navigation directions suffix"> in ${escapeHtml(mapsAppName)}?</span>
                 </p>
                 <div class="v2-modal-url-preview">
-                  <span class="v2-url-label">Verified Destination URL:</span>
-                  <code class="v2-url-code" id="navigate-verified-url">${escapeHtml(navUrl)}</code>
+                  <span class="v2-url-label" data-slot="chrome" data-slot-reason="Verified URL label">Verified Destination URL:</span>
+                  <code class="v2-url-code" id="navigate-verified-url" data-slot="chrome" data-slot-reason="Verified URL preview">${escapeHtml(navUrl)}</code>
                 </div>
                 <div class="v2-modal-actions">
-                  <button type="button" class="btn btn-secondary" id="btn-cancel-navigate">Cancel</button>
+                  <button type="button" class="btn btn-secondary" id="btn-cancel-navigate" data-slot="chrome" data-slot-reason="Cancel navigation button">Cancel</button>
                   <a
                     href="${escapeHtml(navUrl)}"
                     target="_blank"
@@ -2005,6 +2007,8 @@ export function renderApp(
                     class="btn btn-primary"
                     id="btn-confirm-navigate"
                     role="button"
+                    data-slot="chrome"
+                    data-slot-reason="Confirm navigation button"
                   >
                     Open Maps
                   </a>

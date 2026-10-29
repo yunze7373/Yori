@@ -1,7 +1,7 @@
 {
   "scene": "away-lunch",
   "viewport": "1280x800",
-  "recordedAt": "2026-10-29T15:01:30.925Z",
+  "recordedAt": "2026-10-29T15:55:58.768Z",
   "steps": [
     "Proactive Away Lunch Card",
     "Why Provenance Sheet"
@@ -32,26 +32,6 @@
       "slotType": "chrome",
       "renderedText": "Lunch locations near you",
       "reason": "Map schematic destination label",
-      "component": "v2-map-card",
-      "step": "Proactive Away Lunch Card",
-      "scene": "away-lunch",
-      "viewport": "1280x800"
-    },
-    {
-      "slotId": "v2-map-card-unannotated-chrome-1",
-      "slotType": "chrome",
-      "renderedText": "NEARBY PLACES MAP",
-      "reason": "Static UI element (span.v2-heading-desktop)",
-      "component": "v2-map-card",
-      "step": "Proactive Away Lunch Card",
-      "scene": "away-lunch",
-      "viewport": "1280x800"
-    },
-    {
-      "slotId": "v2-map-card-unannotated-chrome-2",
-      "slotType": "chrome",
-      "renderedText": "Places Map",
-      "reason": "Static UI element (span.v2-heading-mobile)",
       "component": "v2-map-card",
       "step": "Proactive Away Lunch Card",
       "scene": "away-lunch",
@@ -269,7 +249,7 @@
       "slotId": "now-card-slot-chrome-16",
       "slotType": "chrome",
       "renderedText": "Quiet",
-      "reason": "Filter tag",
+      "reason": "Noise filter tag",
       "component": "now-card",
       "step": "Proactive Away Lunch Card",
       "scene": "away-lunch",
@@ -279,7 +259,7 @@
       "slotId": "now-card-slot-chrome-17",
       "slotType": "chrome",
       "renderedText": "Vegetarian",
-      "reason": "Filter tag",
+      "reason": "Dietary filter tag",
       "component": "now-card",
       "step": "Proactive Away Lunch Card",
       "scene": "away-lunch",
@@ -329,7 +309,7 @@
       "slotId": "now-card-slot-chrome-25",
       "slotType": "chrome",
       "renderedText": "Quiet",
-      "reason": "Filter tag",
+      "reason": "Noise filter tag",
       "component": "now-card",
       "step": "Proactive Away Lunch Card",
       "scene": "away-lunch",
@@ -456,26 +436,6 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "v2-map-card-unannotated-chrome-1",
-      "slotType": "chrome",
-      "renderedText": "NEARBY PLACES MAP",
-      "reason": "Static UI element (span.v2-heading-desktop)",
-      "component": "v2-map-card",
-      "step": "Why Provenance Sheet",
-      "scene": "away-lunch",
-      "viewport": "1280x800"
-    },
-    {
-      "slotId": "v2-map-card-unannotated-chrome-2",
-      "slotType": "chrome",
-      "renderedText": "Places Map",
-      "reason": "Static UI element (span.v2-heading-mobile)",
-      "component": "v2-map-card",
-      "step": "Why Provenance Sheet",
-      "scene": "away-lunch",
-      "viewport": "1280x800"
-    },
-    {
       "slotId": "now-card-mock-place-1-name-0",
       "slotType": "domain",
       "sourceRef": "mock-place-1.name",
@@ -687,7 +647,7 @@
       "slotId": "now-card-slot-chrome-16",
       "slotType": "chrome",
       "renderedText": "Quiet",
-      "reason": "Filter tag",
+      "reason": "Noise filter tag",
       "component": "now-card",
       "step": "Why Provenance Sheet",
       "scene": "away-lunch",
@@ -697,7 +657,7 @@
       "slotId": "now-card-slot-chrome-17",
       "slotType": "chrome",
       "renderedText": "Vegetarian",
-      "reason": "Filter tag",
+      "reason": "Dietary filter tag",
       "component": "now-card",
       "step": "Why Provenance Sheet",
       "scene": "away-lunch",
@@ -747,7 +707,7 @@
       "slotId": "now-card-slot-chrome-25",
       "slotType": "chrome",
       "renderedText": "Quiet",
-      "reason": "Filter tag",
+      "reason": "Noise filter tag",
       "component": "now-card",
       "step": "Why Provenance Sheet",
       "scene": "away-lunch",
@@ -894,6 +854,26 @@
     {
       "slotId": "why-sheet-backdrop-slot-chrome-0",
       "slotType": "chrome",
+      "renderedText": "Why you're seeing this",
+      "reason": "Why sheet title",
+      "component": "why-sheet-backdrop",
+      "step": "Why Provenance Sheet",
+      "scene": "away-lunch",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-1",
+      "slotType": "chrome",
+      "renderedText": "×",
+      "reason": "Modal close button",
+      "component": "why-sheet-backdrop",
+      "step": "Why Provenance Sheet",
+      "scene": "away-lunch",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-2",
+      "slotType": "chrome",
       "renderedText": "EVIDENCE & SIGNALS",
       "reason": "Evidence section heading",
       "component": "why-sheet-backdrop",
@@ -902,7 +882,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-1",
+      "slotId": "why-sheet-backdrop-slot-chrome-3",
       "slotType": "chrome",
       "renderedText": "Current location status",
       "reason": "Signal category label",
@@ -912,7 +892,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-2",
+      "slotId": "why-sheet-backdrop-slot-chrome-4",
       "slotType": "chrome",
       "renderedText": "You're away from home",
       "reason": "Signal descriptive text",
@@ -922,9 +902,19 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-3",
+      "slotId": "why-sheet-backdrop-slot-chrome-5",
       "slotType": "chrome",
-      "renderedText": "Recorded at 12:10 PM",
+      "renderedText": "Recorded at",
+      "reason": "Recorded time prefix",
+      "component": "why-sheet-backdrop",
+      "step": "Why Provenance Sheet",
+      "scene": "away-lunch",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-6",
+      "slotType": "chrome",
+      "renderedText": "12:10 PM",
       "reason": "Signal recorded time",
       "component": "why-sheet-backdrop",
       "step": "Why Provenance Sheet",
@@ -932,7 +922,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-4",
+      "slotId": "why-sheet-backdrop-slot-chrome-7",
       "slotType": "chrome",
       "renderedText": "SIMULATED",
       "reason": "Signal simulated badge",
@@ -942,7 +932,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-5",
+      "slotId": "why-sheet-backdrop-slot-chrome-8",
       "slotType": "chrome",
       "renderedText": "Schedule window",
       "reason": "Signal category label",
@@ -952,7 +942,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-6",
+      "slotId": "why-sheet-backdrop-slot-chrome-9",
       "slotType": "chrome",
       "renderedText": "Available schedule window",
       "reason": "Signal descriptive text",
@@ -962,40 +952,10 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-7",
-      "slotType": "chrome",
-      "renderedText": "Recorded at 12:10 PM",
-      "reason": "Signal recorded time",
-      "component": "why-sheet-backdrop",
-      "step": "Why Provenance Sheet",
-      "scene": "away-lunch",
-      "viewport": "1280x800"
-    },
-    {
-      "slotId": "why-sheet-backdrop-slot-chrome-8",
-      "slotType": "chrome",
-      "renderedText": "SIMULATED",
-      "reason": "Signal simulated badge",
-      "component": "why-sheet-backdrop",
-      "step": "Why Provenance Sheet",
-      "scene": "away-lunch",
-      "viewport": "1280x800"
-    },
-    {
-      "slotId": "why-sheet-backdrop-slot-chrome-9",
-      "slotType": "chrome",
-      "renderedText": "Meal timing status",
-      "reason": "Signal category label",
-      "component": "why-sheet-backdrop",
-      "step": "Why Provenance Sheet",
-      "scene": "away-lunch",
-      "viewport": "1280x800"
-    },
-    {
       "slotId": "why-sheet-backdrop-slot-chrome-10",
       "slotType": "chrome",
-      "renderedText": "Lunch has not been eaten today",
-      "reason": "Signal descriptive text",
+      "renderedText": "Recorded at",
+      "reason": "Recorded time prefix",
       "component": "why-sheet-backdrop",
       "step": "Why Provenance Sheet",
       "scene": "away-lunch",
@@ -1004,7 +964,7 @@
     {
       "slotId": "why-sheet-backdrop-slot-chrome-11",
       "slotType": "chrome",
-      "renderedText": "Recorded at 12:10 PM",
+      "renderedText": "12:10 PM",
       "reason": "Signal recorded time",
       "component": "why-sheet-backdrop",
       "step": "Why Provenance Sheet",
@@ -1024,7 +984,7 @@
     {
       "slotId": "why-sheet-backdrop-slot-chrome-13",
       "slotType": "chrome",
-      "renderedText": "Nearby places",
+      "renderedText": "Meal timing status",
       "reason": "Signal category label",
       "component": "why-sheet-backdrop",
       "step": "Why Provenance Sheet",
@@ -1034,7 +994,7 @@
     {
       "slotId": "why-sheet-backdrop-slot-chrome-14",
       "slotType": "chrome",
-      "renderedText": "Demo place list",
+      "renderedText": "Lunch has not been eaten today",
       "reason": "Signal descriptive text",
       "component": "why-sheet-backdrop",
       "step": "Why Provenance Sheet",
@@ -1044,8 +1004,8 @@
     {
       "slotId": "why-sheet-backdrop-slot-chrome-15",
       "slotType": "chrome",
-      "renderedText": "Recorded at 12:10 PM",
-      "reason": "Signal recorded time",
+      "renderedText": "Recorded at",
+      "reason": "Recorded time prefix",
       "component": "why-sheet-backdrop",
       "step": "Why Provenance Sheet",
       "scene": "away-lunch",
@@ -1053,6 +1013,16 @@
     },
     {
       "slotId": "why-sheet-backdrop-slot-chrome-16",
+      "slotType": "chrome",
+      "renderedText": "12:10 PM",
+      "reason": "Signal recorded time",
+      "component": "why-sheet-backdrop",
+      "step": "Why Provenance Sheet",
+      "scene": "away-lunch",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-17",
       "slotType": "chrome",
       "renderedText": "SIMULATED",
       "reason": "Signal simulated badge",
@@ -1062,7 +1032,57 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-17",
+      "slotId": "why-sheet-backdrop-slot-chrome-18",
+      "slotType": "chrome",
+      "renderedText": "Nearby places",
+      "reason": "Signal category label",
+      "component": "why-sheet-backdrop",
+      "step": "Why Provenance Sheet",
+      "scene": "away-lunch",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-19",
+      "slotType": "chrome",
+      "renderedText": "Demo place list",
+      "reason": "Signal descriptive text",
+      "component": "why-sheet-backdrop",
+      "step": "Why Provenance Sheet",
+      "scene": "away-lunch",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-20",
+      "slotType": "chrome",
+      "renderedText": "Recorded at",
+      "reason": "Recorded time prefix",
+      "component": "why-sheet-backdrop",
+      "step": "Why Provenance Sheet",
+      "scene": "away-lunch",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-21",
+      "slotType": "chrome",
+      "renderedText": "12:10 PM",
+      "reason": "Signal recorded time",
+      "component": "why-sheet-backdrop",
+      "step": "Why Provenance Sheet",
+      "scene": "away-lunch",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-22",
+      "slotType": "chrome",
+      "renderedText": "SIMULATED",
+      "reason": "Signal simulated badge",
+      "component": "why-sheet-backdrop",
+      "step": "Why Provenance Sheet",
+      "scene": "away-lunch",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-23",
       "slotType": "chrome",
       "renderedText": "MEMORY & HABITS",
       "reason": "Memory section heading",
@@ -1072,7 +1092,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-18",
+      "slotId": "why-sheet-backdrop-slot-chrome-24",
       "slotType": "chrome",
       "renderedText": "Dining taste preferences",
       "reason": "Memory preference label",
@@ -1082,7 +1102,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-21",
+      "slotId": "why-sheet-backdrop-slot-chrome-27",
       "slotType": "chrome",
       "renderedText": "Favorite cuisine",
       "reason": "Memory preference label",
@@ -1092,7 +1112,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-24",
+      "slotId": "why-sheet-backdrop-slot-chrome-30",
       "slotType": "chrome",
       "renderedText": "HOW THIS WAS DERIVED",
       "reason": "Derivation section heading",
@@ -1102,7 +1122,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-25",
+      "slotId": "why-sheet-backdrop-slot-chrome-31",
       "slotType": "chrome",
       "renderedText": "Detected that you are away from home during a free schedule window. Recommended places within walking distance that align with sample taste preferences from the demo profile.",
       "reason": "Derivation synthesis narrative",
@@ -1112,30 +1132,10 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-26",
+      "slotId": "why-sheet-backdrop-slot-chrome-32",
       "slotType": "chrome",
       "renderedText": "Close",
       "reason": "Close why sheet",
-      "component": "why-sheet-backdrop",
-      "step": "Why Provenance Sheet",
-      "scene": "away-lunch",
-      "viewport": "1280x800"
-    },
-    {
-      "slotId": "why-sheet-backdrop-unannotated-chrome-0",
-      "slotType": "chrome",
-      "renderedText": "Why you're seeing this",
-      "reason": "Static UI element (h2.modal-title)",
-      "component": "why-sheet-backdrop",
-      "step": "Why Provenance Sheet",
-      "scene": "away-lunch",
-      "viewport": "1280x800"
-    },
-    {
-      "slotId": "why-sheet-backdrop-unannotated-chrome-1",
-      "slotType": "chrome",
-      "renderedText": "×",
-      "reason": "Static UI element (button.btn-close)",
       "component": "why-sheet-backdrop",
       "step": "Why Provenance Sheet",
       "scene": "away-lunch",

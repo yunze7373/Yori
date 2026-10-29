@@ -347,7 +347,17 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             </div>
             <div class="v2-insight-body">
               <h2 class="v2-insight-title" data-source-ref="weather-rain.rainBanner" data-slot="domain">${escapeHtml(vm.rainBanner)}</h2>
-              <p class="v2-insight-desc" data-slot="chrome" data-slot-reason="Insight alert description">${escapeHtml(vm.rainInsightDesc || "I've prepared an updated departure schedule.")}</p>
+              ${
+                vm.weatherIssuedTime && vm.fieldSourceRefs?.weatherIssuedTime
+                  ? `
+                <p class="v2-insight-desc">
+                  <span data-slot="chrome" data-slot-reason="Insight alert prefix">Rain in the forecast for your travel window · simulated (issued </span><span class="v2-insight-issued-time" data-source-ref="${escapeHtml(vm.fieldSourceRefs.weatherIssuedTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.weatherIssuedTime.field)}" data-slot="domain">${escapeHtml(vm.weatherIssuedTime)}</span><span data-slot="chrome" data-slot-reason="Insight alert suffix">). I've prepared an updated departure schedule.</span>
+                </p>
+              `
+                  : `
+                <p class="v2-insight-desc" data-slot="chrome" data-slot-reason="Insight alert description">${escapeHtml(vm.rainInsightDesc || "I've prepared an updated departure schedule.")}</p>
+              `
+              }
               ${
                 vm.umbrellaChip
                   ? `
@@ -376,8 +386,28 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             <div class="v2-card-header">
               <span class="section-label" data-slot="chrome" data-slot-reason="Section header label">${escapeHtml(STRINGS.sections.now)}</span>
               <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
-              <h2 class="now-subject" data-slot="summary" data-slot-reason="Appointment subject heading">${escapeHtml(vm.title)}</h2>
-              <div class="now-title" id="now-title" data-slot="summary" data-slot-reason="Departure compound schedule">${escapeHtml(vm.headline)}</div>
+              ${
+                vm.fieldSourceRefs?.subjectTitle && vm.fieldSourceRefs?.apptTime && vm.apptTimeStr
+                  ? `
+                <h2 class="now-subject">
+                  <span class="now-subject-title" data-source-ref="${escapeHtml(vm.fieldSourceRefs.subjectTitle.recordId)}.${escapeHtml(vm.fieldSourceRefs.subjectTitle.field)}" data-slot="domain">${escapeHtml(vm.subjectTitle || vm.title)}</span><span data-slot="chrome" data-slot-reason="Appointment time connector"> at </span><span class="now-subject-time" data-source-ref="${escapeHtml(vm.fieldSourceRefs.apptTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.apptTime.field)}" data-slot="domain">${escapeHtml(vm.apptTimeStr)}</span>
+                </h2>
+              `
+                  : `
+                <h2 class="now-subject" data-slot="chrome" data-slot-reason="Appointment subject heading">${escapeHtml(vm.title)}</h2>
+              `
+              }
+              ${
+                vm.fieldSourceRefs?.prepareTime && vm.fieldSourceRefs?.leaveTime && vm.prepareTimeStr && vm.leaveTimeStr
+                  ? `
+                <div class="now-title" id="now-title">
+                  <span data-slot="chrome" data-slot-reason="Departure prep prefix">Get ready at </span><span class="now-prep-time" data-source-ref="${escapeHtml(vm.fieldSourceRefs.prepareTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.prepareTime.field)}" data-slot="domain">${escapeHtml(vm.prepareTimeStr)}</span><span data-slot="chrome" data-slot-reason="Departure leave connector">, leave by </span><span class="now-leave-time" data-source-ref="${escapeHtml(vm.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.leaveTime.field)}" data-slot="domain">${escapeHtml(vm.leaveTimeStr)}</span>
+                </div>
+              `
+                  : `
+                <div class="now-title" id="now-title" data-slot="chrome" data-slot-reason="Departure schedule headline">${escapeHtml(vm.headline)}</div>
+              `
+              }
               ${
                 vm.umbrellaChip
                   ? `
@@ -414,13 +444,22 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                       const stepLabelRef = step.fieldSourceRefs?.subjectTitle
                         ? `${step.fieldSourceRefs.subjectTitle.recordId}.${step.fieldSourceRefs.subjectTitle.field}`
                         : '';
+                      let detailHtml = '';
+                      if (step.detail) {
+                        if (step.detail.startsWith('Take umbrella · ')) {
+                          const durationText = step.detail.replace('Take umbrella · ', '');
+                          detailHtml = `<span class="v2-step-detail"><span data-slot="chrome" data-slot-reason="Checklist prep prefix">Take umbrella · </span><span class="v2-step-duration" ${stepDetailRef ? `data-source-ref="${escapeHtml(stepDetailRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Timeline step detail"`}>${escapeHtml(durationText)}</span></span>`;
+                        } else {
+                          detailHtml = `<span class="v2-step-detail" ${stepDetailRef ? `data-source-ref="${escapeHtml(stepDetailRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Timeline step detail"`}>${escapeHtml(step.detail)}</span>`;
+                        }
+                      }
                       return `
                   <div class="v2-timeline-step ${step.isPrimary ? 'primary' : ''} ${step.isEvent ? 'event' : ''}">
-                    <span class="v2-step-time" ${stepTimeRef ? `data-source-ref="${stepTimeRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Timeline step time"`}>${escapeHtml(step.time)}</span>
+                    <span class="v2-step-time" ${stepTimeRef ? `data-source-ref="${escapeHtml(stepTimeRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Timeline step time"`}>${escapeHtml(step.time)}</span>
                     <span class="v2-step-node" aria-hidden="true"></span>
                     <div class="v2-step-content">
-                      <strong class="v2-step-label" ${stepLabelRef ? `data-source-ref="${stepLabelRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Static timeline step label"`}>${escapeHtml(step.label)}</strong>
-                      ${step.detail ? `<span class="v2-step-detail" ${stepDetailRef ? `data-source-ref="${stepDetailRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Timeline step detail"`}>${escapeHtml(step.detail)}</span>` : ''}
+                      <strong class="v2-step-label" ${stepLabelRef ? `data-source-ref="${escapeHtml(stepLabelRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Static timeline step label"`}>${escapeHtml(step.label)}</strong>
+                      ${detailHtml}
                     </div>
                   </div>
                 `;
@@ -451,13 +490,17 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                       const optBasisRef = opt.fieldSourceRefs?.rankingBasis
                         ? `${opt.fieldSourceRefs.rankingBasis.recordId}.${opt.fieldSourceRefs.rankingBasis.field}`
                         : 'rain_transport_preference.rankingBasis';
+                      const modeLabel = opt.mode ? opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1) : (opt.title.startsWith('Bus') ? 'Bus' : 'Drive');
+                      const leaveTimeVal = opt.leaveTime || (opt.title.includes('leave ') ? opt.title.split('leave ')[1] : '');
                       return `
                   <div class="v2-option-card ${opt.isSelected ? 'selected' : ''}">
                     <div class="v2-option-top">
-                      <span class="v2-option-label" ${optTitleRef ? `data-source-ref="${optTitleRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option title"`}>${escapeHtml(opt.title)}</span>
+                      <span class="v2-option-label">
+                        <span data-slot="chrome" data-slot-reason="Option mode label">${escapeHtml(modeLabel)} · leave </span><span class="v2-option-leave-time" ${optTitleRef ? `data-source-ref="${escapeHtml(optTitleRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option leave time"`}>${escapeHtml(leaveTimeVal || opt.title)}</span>
+                      </span>
                       ${opt.badge ? `<span class="v2-option-badge ${opt.isRecommended ? 'recommended' : ''}" data-slot="chrome" data-slot-reason="Option recommendation badge">${escapeHtml(opt.badge)}</span>` : ''}
                     </div>
-                    ${opt.detail ? `<div class="v2-option-meta" ${optMetaRef ? `data-source-ref="${optMetaRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(opt.detail)}</div>` : ''}
+                    ${opt.detail ? `<div class="v2-option-meta" ${optMetaRef ? `data-source-ref="${escapeHtml(optMetaRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(opt.detail)}</div>` : ''}
                     ${opt.rankingBasis ? `<div class="v2-option-basis" data-source-ref="${optBasisRef}" data-slot="domain">${escapeHtml(opt.rankingBasis)}</div>` : ''}
                   </div>
                 `;
@@ -492,7 +535,17 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           <span class="section-label" data-slot="chrome" data-slot-reason="Section header label">${escapeHtml(STRINGS.sections.now)}</span>
           <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
           <h2 class="now-subject" data-slot="chrome" data-slot-reason="Candidates hero title">${escapeHtml(vm.title)}</h2>
-          <div class="now-title" id="now-title" data-slot="chrome" data-slot-reason="Candidates hero headline">${escapeHtml(vm.headline)}</div>
+          ${
+            vm.fieldSourceRefs?.topCandidateName && vm.fieldSourceRefs?.topCandidateDistance && vm.topCandidateName && vm.topCandidateDistance
+              ? `
+            <div class="now-title" id="now-title">
+              <span class="hero-candidate-name" data-source-ref="${escapeHtml(vm.fieldSourceRefs.topCandidateName.recordId)}.${escapeHtml(vm.fieldSourceRefs.topCandidateName.field)}" data-slot="domain">${escapeHtml(vm.topCandidateName)}</span><span data-slot="chrome" data-slot-reason="Hero candidate separator"> · </span><span class="hero-candidate-dist" data-source-ref="${escapeHtml(vm.fieldSourceRefs.topCandidateDistance.recordId)}.${escapeHtml(vm.fieldSourceRefs.topCandidateDistance.field)}" data-slot="domain">${escapeHtml(vm.topCandidateDistance)}</span>
+            </div>
+          `
+              : `
+            <div class="now-title" id="now-title" data-slot="chrome" data-slot-reason="Candidates hero headline">${escapeHtml(vm.headline)}</div>
+          `
+          }
           <div class="mock-places-notice" data-slot="chrome" data-slot-reason="Places disclosure notice">${escapeHtml(
             vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
               ? STRINGS.fuel.mockPlacesNotice
@@ -502,7 +555,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') || Boolean(vm.locationLabel)
               ? `
             <div class="v2-active-location-bar" role="region" aria-label="Active Location" data-slot="chrome" data-slot-reason="Location status bar">
-              <span class="v2-location-badge">📍 Location: ${escapeHtml(
+              <span class="v2-location-badge" data-slot="chrome" data-slot-reason="Simulated location status badge">📍 Location: ${escapeHtml(
                 vm.locationLabel || 'Selected City (simulated)'
               )}</span>
               <button type="button" class="btn btn-outline btn-sm v2-change-loc-btn" id="btn-change-location" aria-expanded="false" aria-controls="v2-manual-location-section" data-slot="chrome" data-slot-reason="Change location button">
@@ -510,12 +563,12 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               </button>
             </div>
             <div class="v2-manual-location-section" id="v2-manual-location-section" style="display: none; margin-bottom: var(--space-4);">
-              <div class="v2-city-chips-label">Demo City Presets:</div>
+              <div class="v2-city-chips-label" data-slot="chrome" data-slot-reason="City preset selector label">Demo City Presets:</div>
               <div class="v2-city-chips-group" role="group" aria-label="Demo City Presets">
-                <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-sf" data-lat="37.7749" data-lng="-122.4194">
+                <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-sf" data-lat="37.7749" data-lng="-122.4194" data-slot="chrome" data-slot-reason="City preset selection button">
                   San Francisco
                 </button>
-                <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-la" data-lat="34.0522" data-lng="-118.2437">
+                <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-la" data-lat="34.0522" data-lng="-118.2437" data-slot="chrome" data-slot-reason="City preset selection button">
                   Los Angeles
                 </button>
               </div>
@@ -550,12 +603,12 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   <span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Simulated illustration badge">${escapeHtml(c.photo.simulatedBadge)}</span>
                 </div>
                 <div class="v2-candidate-info">
-                  <h3 class="v2-candidate-name" data-source-ref="${c.fieldSourceRefs?.name ? `${c.fieldSourceRefs.name.recordId}.${c.fieldSourceRefs.name.field}` : `${c.id}.name`}" data-slot="domain">${escapeHtml(c.name)}</h3>
+                  <h3 class="v2-candidate-name" data-source-ref="${c.fieldSourceRefs?.name ? `${escapeHtml(c.fieldSourceRefs.name.recordId)}.${escapeHtml(c.fieldSourceRefs.name.field)}` : `${escapeHtml(c.id)}.name`}" data-slot="domain">${escapeHtml(c.name)}</h3>
                   <div class="v2-candidate-tags">
-                    <span class="v2-cuisine-chip" data-source-ref="${c.fieldSourceRefs?.cuisine ? `${c.fieldSourceRefs.cuisine.recordId}.${c.fieldSourceRefs.cuisine.field}` : (c.fieldSourceRefs?.category ? `${c.fieldSourceRefs.category.recordId}.${c.fieldSourceRefs.category.field}` : `${c.id}.cuisine`)}" data-slot="domain">${escapeHtml(c.cuisine)}</span>
-                    <span class="v2-distance-chip" data-source-ref="${c.fieldSourceRefs?.distanceText ? `${c.fieldSourceRefs.distanceText.recordId}.${c.fieldSourceRefs.distanceText.field}` : `${c.id}.distanceText`}" data-slot="domain">${escapeHtml(c.distanceText)}</span>
-                    ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Filter tag">Quiet</span>` : ''}
-                    ${c.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Filter tag">Vegetarian</span>` : ''}
+                    <span class="v2-cuisine-chip" ${c.fieldSourceRefs?.cuisine ? `data-source-ref="${escapeHtml(c.fieldSourceRefs.cuisine.recordId)}.${escapeHtml(c.fieldSourceRefs.cuisine.field)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Candidate category label"`}>${escapeHtml(c.cuisine)}</span>
+                    <span class="v2-distance-chip" data-source-ref="${c.fieldSourceRefs?.distanceText ? `${escapeHtml(c.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(c.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(c.id)}.distanceText`}" data-slot="domain">${escapeHtml(c.distanceText)}</span>
+                    ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
+                    ${c.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Dietary filter tag">Vegetarian</span>` : ''}
                   </div>
                   <div class="v2-candidate-basis" ${
                     c.fieldSourceRefs?.basis
@@ -613,14 +666,14 @@ function renderCollapsibleSecondary(vm: HomeCompositionVM): string {
         vm.aheadItems.length > 0
           ? `
         <section aria-label="${escapeHtml(STRINGS.sections.ahead)}">
-          <h2 class="section-label">${escapeHtml(STRINGS.sections.ahead)}</h2>
+          <h2 class="section-label" data-slot="chrome" data-slot-reason="Secondary section label">${escapeHtml(STRINGS.sections.ahead)}</h2>
           <div class="ahead-list">
             ${vm.aheadItems
               .map(
                 item => `
-              <div class="card ahead-card" data-ahead-id="${escapeHtml(item.id)}">
-                <h3 class="ahead-title">${escapeHtml(item.title)}</h3>
-                <p class="ahead-subtitle">${escapeHtml(item.subtitle)}</p>
+              <div class="card ahead-card" data-ahead-id="${escapeHtml(item.id)}" data-slot="chrome" data-slot-reason="Ahead card container">
+                <h3 class="ahead-title" data-slot="chrome" data-slot-reason="Ahead card title">${escapeHtml(item.title)}</h3>
+                <p class="ahead-subtitle" data-slot="chrome" data-slot-reason="Ahead card subtitle">${escapeHtml(item.subtitle)}</p>
               </div>
             `
               )
@@ -635,14 +688,14 @@ function renderCollapsibleSecondary(vm: HomeCompositionVM): string {
         vm.proposals.length > 0
           ? `
         <section aria-label="${escapeHtml(STRINGS.sections.forYou)}">
-          <h2 class="section-label">${escapeHtml(STRINGS.sections.forYou)}</h2>
+          <h2 class="section-label" data-slot="chrome" data-slot-reason="Secondary section label">${escapeHtml(STRINGS.sections.forYou)}</h2>
           <div class="for-you-list">
             ${vm.proposals
               .map(
                 prop => `
-              <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}">
-                <h3 class="proposal-title">${escapeHtml(prop.title)}</h3>
-                ${prop.basis ? `<p class="proposal-basis">${escapeHtml(prop.basis)}</p>` : ''}
+              <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-slot="chrome" data-slot-reason="Proposal card container">
+                <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Proposal card title">${escapeHtml(prop.title)}</h3>
+                ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Proposal card basis">${escapeHtml(prop.basis)}</p>` : ''}
               </div>
             `
               )

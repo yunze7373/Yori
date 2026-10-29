@@ -125,8 +125,8 @@ export function normalizeFieldValue(
           return formatTime(trimmed, timezone);
         }
       }
-      // If it contains a 12-hour time string like "2:30 PM", "Drive · leave 2:30 PM", or "Recorded at 10:00 AM"
-      const match = trimmed.match(/\b0?(\d{1,2}):(\d{2})\s*(AM|PM)\b/i);
+      // If it matches a 12-hour time string like "2:30 PM" or "10:00 AM" (anchored strictly)
+      const match = trimmed.match(/^0?(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
       if (match) {
         const hour = parseInt(match[1]!, 10);
         const minute = match[2];
@@ -149,22 +149,13 @@ export function normalizeFieldValue(
     }
   }
 
-  // 2b. Prep text normalization (e.g. "Take umbrella · 20m prep + 5m buffer" -> "20m prep + 5m buffer")
-  if (fieldLower === 'preptext') {
-    if (typeof val === 'string') {
-      const match = val.match(/\b\d+m\s+prep\s*\+\s*\d+m\s+buffer\b/i);
-      if (match) {
-        return match[0].toLowerCase();
-      }
-    }
-  }
-
-  // 2. Duration / buffer / margin normalization (integer minutes)
+  // 2. Duration / buffer / margin / late normalization (integer minutes)
   if (
     fieldLower.includes('minute') ||
     fieldLower.includes('duration') ||
     fieldLower.includes('buffer') ||
-    fieldLower.includes('margin')
+    fieldLower.includes('margin') ||
+    fieldLower.includes('late')
   ) {
     if (typeof val === 'number') {
       return Number.isFinite(val) ? Math.round(val) : undefined;
@@ -764,70 +755,6 @@ export function createRainEvidenceBundle(options?: {
     },
   ];
 
-  // Add one habit record per memory fact used (from default facts or options.memoryFacts; never plan.why.memoryFactsUsed)
-  const defaultMemoryFacts: readonly { key: string; value?: unknown; status?: string; provenance?: unknown }[] = [
-    { key: 'rain_transport_preference', value: 'drive_first', status: isConfirmedHabit ? 'confirmed' : 'pending' },
-    { key: 'prep_buffer_minutes', value: bufferMinutes, status: 'pending' },
-    { key: 'prep_duration_minutes', value: prepMinutes, status: 'pending' },
-  ];
-
-  const factMap = new Map<string, { key: string; value?: unknown; status?: string; provenance?: unknown }>();
-  if (options?.memoryFacts) {
-    for (const f of options.memoryFacts) factMap.set(f.key, f);
-  } else {
-    for (const f of defaultMemoryFacts) factMap.set(f.key, f);
-  }
-
-  for (const fact of factMap.values()) {
-    const factKind = classifyFactSource(
-      fact as FactLike,
-      options?.userConfirmedKeys,
-      options?.memoryFacts
-    );
-    const isConfirmed = options?.userConfirmedKeys !== undefined
-      ? factKind === 'user_confirmed'
-      : (fact.key === 'rain_transport_preference' ? isConfirmedHabit : false);
-    const provStr: EvidenceProvenance = isConfirmed ? 'confirmed' : 'sample';
-    const provLabel = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
-
-    records.push({
-      id: fact.key,
-      provider: 'memory',
-      kind: 'habit',
-      fetchedAt: sceneClockIso,
-      provenance: provStr,
-      fields: {
-        key: fact.key,
-        value: fact.value,
-        bufferMinutes: fact.key === 'prep_buffer_minutes' ? fact.value : bufferMinutes,
-        prepMinutes: fact.key === 'prep_duration_minutes' ? fact.value : prepMinutes,
-        prepText: `${prepMinutes}m prep + ${bufferMinutes}m buffer`,
-        bufferText: `${bufferMinutes}m buffer`,
-        rankingBasis: fact.key === 'rain_transport_preference'
-          ? `Ranked by habit: Rain travel habit (${provLabel})`
-          : undefined,
-        basis: fact.key === 'rain_transport_preference'
-          ? `Rain travel habit (${provLabel})`
-          : fact.key === 'prep_buffer_minutes'
-            ? `Buffer: ${fact.value ?? bufferMinutes} min (${provLabel})`
-            : fact.key === 'prep_duration_minutes'
-              ? `Prep: ${fact.value ?? prepMinutes} min (${provLabel})`
-              : undefined,
-        provenance: provStr,
-        habitNote: fact.key === 'rain_transport_preference'
-          ? (fact.value === 'bus_first' ? STRINGS.habit.rainTransit : STRINGS.habit.rainDrive)
-          : undefined,
-        description: fact.key === 'rain_transport_preference'
-          ? (fact.value === 'bus_first' ? STRINGS.memory.rainTransitValue : STRINGS.memory.rainDriveValue)
-          : fact.key === 'prep_buffer_minutes'
-            ? `${fact.value ?? bufferMinutes} min`
-            : fact.key === 'prep_duration_minutes'
-              ? `${fact.value ?? prepMinutes} min`
-              : undefined,
-      },
-    });
-  }
-
   // User request override: recompute expected timing from base eta + request delta
   // Governed by Living Context §2.3 and G12 Check 1 (Zero Circular Evidence)
   const userReqSig =
@@ -835,6 +762,9 @@ export function createRainEvidenceBundle(options?: {
     options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'user_request');
   const overrideObj = options?.override;
   const hasUserRequest = Boolean(overrideObj || userReqSig);
+
+  let isLate = false;
+  let overrideRecord: EvidenceRecord | undefined;
 
   if (hasUserRequest) {
     const overrideRecordId = 'user_override_timing';
@@ -897,9 +827,9 @@ export function createRainEvidenceBundle(options?: {
     const primaryArriveTimeStr = formatTime(new Date(primaryArriveMs).toISOString(), timezone);
 
     const marginMinutes = Math.round((apptMs - primaryArriveMs) / 60000);
-    const isLate = marginMinutes < 0;
+    isLate = marginMinutes < 0;
 
-    records.push({
+    overrideRecord = {
       id: overrideRecordId,
       provider: 'user_request',
       kind: 'habit',
@@ -916,6 +846,7 @@ export function createRainEvidenceBundle(options?: {
         arrivalTime: primaryArriveTimeStr,
         marginMinutes,
         lateMinutes: isLate ? Math.abs(marginMinutes) : 0,
+        bufferMinutes: isLate ? Math.abs(marginMinutes) : marginMinutes,
         isLate,
         driveLeaveTime: driveLeaveTimeStr,
         drivePrepareTime: drivePrepTimeStr,
@@ -926,7 +857,75 @@ export function createRainEvidenceBundle(options?: {
         busArrivalTime: busArriveTimeStr,
         busTravelMinutes: busMinutes,
       },
+    };
+  }
+
+  // Add one habit record per memory fact used (from default facts or options.memoryFacts; never plan.why.memoryFactsUsed)
+  const defaultMemoryFacts: readonly { key: string; value?: unknown; status?: string; provenance?: unknown }[] = [
+    { key: 'rain_transport_preference', value: 'drive_first', status: isConfirmedHabit ? 'confirmed' : 'pending' },
+    { key: 'prep_buffer_minutes', value: bufferMinutes, status: 'pending' },
+    { key: 'prep_duration_minutes', value: prepMinutes, status: 'pending' },
+  ];
+
+  const factMap = new Map<string, { key: string; value?: unknown; status?: string; provenance?: unknown }>();
+  if (options?.memoryFacts) {
+    for (const f of options.memoryFacts) factMap.set(f.key, f);
+  } else {
+    for (const f of defaultMemoryFacts) factMap.set(f.key, f);
+  }
+
+  for (const fact of factMap.values()) {
+    const factKind = classifyFactSource(
+      fact as FactLike,
+      options?.userConfirmedKeys,
+      options?.memoryFacts
+    );
+    const isConfirmed = options?.userConfirmedKeys !== undefined
+      ? factKind === 'user_confirmed'
+      : (fact.key === 'rain_transport_preference' ? isConfirmedHabit : false);
+    const provStr: EvidenceProvenance = isConfirmed ? 'confirmed' : 'sample';
+    const provLabel = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+
+    records.push({
+      id: fact.key,
+      provider: 'memory',
+      kind: 'habit',
+      fetchedAt: sceneClockIso,
+      provenance: provStr,
+      fields: {
+        key: fact.key,
+        value: fact.value,
+        bufferMinutes: fact.key === 'prep_buffer_minutes' ? fact.value : bufferMinutes,
+        prepMinutes: fact.key === 'prep_duration_minutes' ? fact.value : prepMinutes,
+        prepText: isLate ? `${prepMinutes}m prep` : `${prepMinutes}m prep + ${bufferMinutes}m buffer`,
+        bufferText: `${bufferMinutes}m buffer`,
+        rankingBasis: fact.key === 'rain_transport_preference'
+          ? `Ranked by habit: Rain travel habit (${provLabel})`
+          : undefined,
+        basis: fact.key === 'rain_transport_preference'
+          ? `Rain travel habit (${provLabel})`
+          : fact.key === 'prep_buffer_minutes'
+            ? `Buffer: ${fact.value ?? bufferMinutes} min (${provLabel})`
+            : fact.key === 'prep_duration_minutes'
+              ? `Prep: ${fact.value ?? prepMinutes} min (${provLabel})`
+              : undefined,
+        provenance: provStr,
+        habitNote: fact.key === 'rain_transport_preference'
+          ? (fact.value === 'bus_first' ? STRINGS.habit.rainTransit : STRINGS.habit.rainDrive)
+          : undefined,
+        description: fact.key === 'rain_transport_preference'
+          ? (fact.value === 'bus_first' ? STRINGS.memory.rainTransitValue : STRINGS.memory.rainDriveValue)
+          : fact.key === 'prep_buffer_minutes'
+            ? `${fact.value ?? bufferMinutes} min`
+            : fact.key === 'prep_duration_minutes'
+              ? `${fact.value ?? prepMinutes} min`
+              : undefined,
+      },
     });
+  }
+
+  if (overrideRecord) {
+    records.push(overrideRecord);
   }
 
   const aliases = new Map<string, string>([
@@ -1195,13 +1194,11 @@ export function createFuelEvidenceBundle(options?: {
         lat: place.coords.lat,
         lng: place.coords.lng,
         category: place.category,
-        cuisine: 'Gas Station',
         address: place.address,
         brand: place.brand,
         distanceMeters: distMeters,
         straightLineDistance: distLabel,
         straightLineDistanceLabel: distLabel,
-        basis: place.brand ? `Simulated fixture · ${place.brand}` : 'Simulated fixture',
         provenance: 'simulated',
         straight_line: true,
       },

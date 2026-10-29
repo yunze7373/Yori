@@ -235,8 +235,9 @@ export function deriveTimelineVM(
       ? new Date(Date.parse(activeLeaveAt) + travelDurationMinutes * 60 * 1000).toISOString()
       : undefined);
 
+    let marginMinutes: number | undefined;
     if (plan.apptAt && arrivalIso) {
-      const marginMinutes = Math.round((Date.parse(plan.apptAt) - Date.parse(arrivalIso)) / 60000);
+      marginMinutes = Math.round((Date.parse(plan.apptAt) - Date.parse(arrivalIso)) / 60000);
       if (marginMinutes < 0) {
         arriveDetail = `Late by ${Math.abs(marginMinutes)}m`;
       } else if (marginMinutes > 0) {
@@ -257,7 +258,9 @@ export function deriveTimelineVM(
       sourceRef: { recordId: arriveRecId, field: arriveField },
       fieldSourceRefs: {
         arrivalTime: { recordId: arriveRecId, field: arriveField },
-        bufferMinutes: { recordId: etaRecId, field: 'bufferMinutes' },
+        bufferMinutes: hasOverride
+          ? { recordId: 'user_override_timing', field: (marginMinutes !== undefined && marginMinutes < 0) ? 'lateMinutes' : 'marginMinutes' }
+          : { recordId: etaRecId, field: 'bufferMinutes' },
       },
     });
   }

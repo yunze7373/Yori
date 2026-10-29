@@ -149,6 +149,15 @@ export interface HomeCompositionVM {
   readonly umbrellaChip?: string;
   readonly habitNote?: string;
 
+  // Structured field substrings for slot-aware grounding
+  readonly subjectTitle?: string;
+  readonly apptTimeStr?: string;
+  readonly prepareTimeStr?: string;
+  readonly leaveTimeStr?: string;
+  readonly weatherIssuedTime?: string;
+  readonly topCandidateName?: string;
+  readonly topCandidateDistance?: string;
+
   // Rich Carriers
   readonly map?: MapVM;
   readonly timeline?: TimelineVM;

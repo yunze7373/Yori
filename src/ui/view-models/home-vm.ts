@@ -336,14 +336,19 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       plan.why.evidenceSignals.some(s => s.description?.toLowerCase().includes('rain'));
 
     let rainInsightDesc: string | undefined;
-    if (isRain) {
-      const weatherSignal =
-        snapshot?.signals.find(s => s.kind === 'weather') ??
-        plan.why.evidenceSignals.find(s => s.kind === 'weather');
+    const weatherSignal = isRain
+      ? snapshot?.signals.find(s => s.kind === 'weather') ??
+        plan.why.evidenceSignals.find(s => s.kind === 'weather')
+      : undefined;
+    const weatherRecId =
+      (weatherSignal as any)?.id ||
+      (weatherSignal?.issuedAt ? `${weatherSignal.kind}:${weatherSignal.issuedAt}` : undefined) ||
+      'weather-rain';
+    const weatherIssuedTime = weatherSignal?.issuedAt ? formatTime(weatherSignal.issuedAt, tz) : undefined;
 
-      const issuedTime = weatherSignal?.issuedAt ? formatTime(weatherSignal.issuedAt, tz) : undefined;
-      rainInsightDesc = issuedTime
-        ? `Rain in the forecast for your travel window · simulated (issued ${issuedTime}). I've prepared an updated departure schedule.`
+    if (isRain) {
+      rainInsightDesc = weatherIssuedTime
+        ? `Rain in the forecast for your travel window · simulated (issued ${weatherIssuedTime}). I've prepared an updated departure schedule.`
         : `Rain in the forecast for your travel window · simulated. I've prepared an updated departure schedule.`;
     }
 
@@ -362,8 +367,9 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       'cal-piano';
 
     const hasOverride = bundle?.hasRecord('user_override_timing') || bundle?.hasRecord('user-override');
-    const prepRecId = hasOverride ? 'user_override_timing' : calRecId;
-    const leaveRecId = hasOverride ? 'user_override_timing' : calRecId;
+    const etaRecId = 'eta-drive-piano';
+    const prepRecId = hasOverride ? 'user_override_timing' : etaRecId;
+    const leaveRecId = hasOverride ? 'user_override_timing' : etaRecId;
 
     let displayTitle = title;
     let displayHeadline = headline;
@@ -443,11 +449,20 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       aheadItems: compileAheadItems(aheadPlans),
       proposals: compileProposals(proposals),
       evidenceBundle: bundle,
+      subjectTitle: plan.subjectTitle || 'Piano lesson',
+      apptTimeStr,
+      prepareTimeStr: prepareStr,
+      leaveTimeStr: leaveStr,
+      weatherIssuedTime,
       sourceRef: { recordId: calRecId, field: 'subjectTitle' },
       fieldSourceRefs: {
         prepareTime: { recordId: prepRecId, field: 'prepareTime' },
         leaveTime: { recordId: leaveRecId, field: 'leaveTime' },
         apptTime: { recordId: calRecId, field: 'apptTime' },
+        subjectTitle: { recordId: calRecId, field: 'subjectTitle' },
+        ...(isRain && weatherIssuedTime
+          ? { weatherIssuedTime: { recordId: weatherRecId, field: 'issuedTime' } }
+          : {}),
       },
     };
   }
@@ -620,9 +635,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           const sourceRef: SourceRef = { recordId: recId, field: 'name' };
           const fieldSourceRefs: Record<string, SourceRef> = {
             name: { recordId: recId, field: 'name' },
-            cuisine: { recordId: recId, field: 'cuisine' },
             distanceText: { recordId: recId, field: 'straightLineDistanceLabel' },
-            basis: { recordId: recId, field: 'basis' },
           };
 
           const card: CandidateCardVM = {
@@ -651,8 +664,13 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
 
     let headline = plan.headline;
     const topOption = plan.optionsOrSteps?.[0] as any;
+    const topRecId = topOption ? (topOption.recordId || topOption.id || topOption.placeId) : undefined;
+    const topName = topOption?.name;
+    const topDistClean = topOption?.straightLineDistanceLabel
+      ? topOption.straightLineDistanceLabel.replace(' (straight-line)', ' straight-line')
+      : undefined;
+
     if (bundle && topOption) {
-      const topRecId = topOption.recordId || topOption.id || topOption.placeId;
       const vHead = GroundedRecommendationVerifier.verifyField(
         { recordId: topRecId, field: 'name' },
         topOption.name,
@@ -701,6 +719,8 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       planId: plan.id,
       title: 'Low Fuel Warning',
       headline,
+      topCandidateName: topName,
+      topCandidateDistance: topDistClean,
       basis: 'Nearby gas stations · straight-line distances · simulated',
       isRain: false,
       map,
@@ -713,6 +733,10 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       proposals: compileProposals(proposals),
       evidenceBundle: bundle,
       sourceRef: { recordId: 'loc-fuel-origin', field: 'name' },
+      fieldSourceRefs: topRecId ? {
+        topCandidateName: { recordId: topRecId, field: 'name' },
+        topCandidateDistance: { recordId: topRecId, field: 'straightLineDistanceLabel' },
+      } : undefined,
       locationLabel,
     };
   }

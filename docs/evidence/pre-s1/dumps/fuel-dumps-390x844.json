@@ -1,7 +1,7 @@
 {
   "scene": "fuel",
   "viewport": "390x844",
-  "recordedAt": "2026-10-29T15:01:28.144Z",
+  "recordedAt": "2026-10-29T15:55:54.975Z",
   "steps": [
     "Low Fuel Hero Card",
     "Navigate Handoff Modal"
@@ -40,26 +40,6 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "v2-map-card-unannotated-chrome-1",
-      "slotType": "chrome",
-      "renderedText": "Spatial Context Map",
-      "reason": "Static UI element (span.v2-heading-desktop)",
-      "component": "v2-map-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "v2-map-card-unannotated-chrome-2",
-      "slotType": "chrome",
-      "renderedText": "ROUTE MAP",
-      "reason": "Static UI element (span.v2-heading-mobile)",
-      "component": "v2-map-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
       "slotId": "now-card-fuel-sf-1-name-0",
       "slotType": "domain",
       "sourceRef": "fuel-sf-1.name",
@@ -72,36 +52,36 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-fuel-sf-1-cuisine-1",
+      "slotId": "now-card-fuel-sf-1-straightLineDistanceLabel-1",
       "slotType": "domain",
-      "sourceRef": "fuel-sf-1.cuisine",
+      "sourceRef": "fuel-sf-1.straightLineDistanceLabel",
       "recordId": "fuel-sf-1",
-      "field": "cuisine",
-      "renderedText": "Gas Station",
+      "field": "straightLineDistanceLabel",
+      "renderedText": "140 m straight-line",
       "component": "now-card",
       "step": "Low Fuel Hero Card",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-fuel-sf-1-straightLineDistanceLabel-2",
+      "slotId": "now-card-fuel-sf-1-name-2",
+      "slotType": "domain",
+      "sourceRef": "fuel-sf-1.name",
+      "recordId": "fuel-sf-1",
+      "field": "name",
+      "renderedText": "Metro Gas & Go",
+      "component": "now-card",
+      "step": "Low Fuel Hero Card",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-fuel-sf-1-straightLineDistanceLabel-3",
       "slotType": "domain",
       "sourceRef": "fuel-sf-1.straightLineDistanceLabel",
       "recordId": "fuel-sf-1",
       "field": "straightLineDistanceLabel",
       "renderedText": "140 m (straight-line)",
-      "component": "now-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-fuel-sf-1-basis-3",
-      "slotType": "domain",
-      "sourceRef": "fuel-sf-1.basis",
-      "recordId": "fuel-sf-1",
-      "field": "basis",
-      "renderedText": "Simulated fixture · Metro Gas",
       "component": "now-card",
       "step": "Low Fuel Hero Card",
       "scene": "fuel",
@@ -120,19 +100,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-fuel-sf-2-cuisine-5",
-      "slotType": "domain",
-      "sourceRef": "fuel-sf-2.cuisine",
-      "recordId": "fuel-sf-2",
-      "field": "cuisine",
-      "renderedText": "Gas Station",
-      "component": "now-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-fuel-sf-2-straightLineDistanceLabel-6",
+      "slotId": "now-card-fuel-sf-2-straightLineDistanceLabel-5",
       "slotType": "domain",
       "sourceRef": "fuel-sf-2.straightLineDistanceLabel",
       "recordId": "fuel-sf-2",
@@ -144,19 +112,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-fuel-sf-2-basis-7",
-      "slotType": "domain",
-      "sourceRef": "fuel-sf-2.basis",
-      "recordId": "fuel-sf-2",
-      "field": "basis",
-      "renderedText": "Simulated fixture · Sunset Petroleum",
-      "component": "now-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-fuel-sf-3-name-8",
+      "slotId": "now-card-fuel-sf-3-name-6",
       "slotType": "domain",
       "sourceRef": "fuel-sf-3.name",
       "recordId": "fuel-sf-3",
@@ -168,36 +124,12 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-fuel-sf-3-cuisine-9",
-      "slotType": "domain",
-      "sourceRef": "fuel-sf-3.cuisine",
-      "recordId": "fuel-sf-3",
-      "field": "cuisine",
-      "renderedText": "Gas Station",
-      "component": "now-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-fuel-sf-3-straightLineDistanceLabel-10",
+      "slotId": "now-card-fuel-sf-3-straightLineDistanceLabel-7",
       "slotType": "domain",
       "sourceRef": "fuel-sf-3.straightLineDistanceLabel",
       "recordId": "fuel-sf-3",
       "field": "straightLineDistanceLabel",
       "renderedText": "518 m (straight-line)",
-      "component": "now-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-fuel-sf-3-basis-11",
-      "slotType": "domain",
-      "sourceRef": "fuel-sf-3.basis",
-      "recordId": "fuel-sf-3",
-      "field": "basis",
-      "renderedText": "Simulated fixture · Bayfront",
       "component": "now-card",
       "step": "Low Fuel Hero Card",
       "scene": "fuel",
@@ -234,17 +166,17 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-3",
+      "slotId": "now-card-slot-chrome-4",
       "slotType": "chrome",
-      "renderedText": "Metro Gas & Go · 140 m straight-line",
-      "reason": "Candidates hero headline",
+      "renderedText": "·",
+      "reason": "Hero candidate separator",
       "component": "now-card",
       "step": "Low Fuel Hero Card",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-4",
+      "slotId": "now-card-slot-chrome-6",
       "slotType": "chrome",
       "renderedText": "Nearby gas stations from simulated fixture · straight-line distances shown",
       "reason": "Places disclosure notice",
@@ -254,7 +186,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-5",
+      "slotId": "now-card-slot-chrome-7",
       "slotType": "chrome",
       "renderedText": "📍 Location: Selected City (simulated)\nChange Location",
       "reason": "Location status bar",
@@ -264,20 +196,20 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-6",
+      "slotId": "now-card-slot-chrome-10",
       "slotType": "chrome",
-      "renderedText": "Change Location",
-      "reason": "Change location button",
+      "renderedText": "Demo City Presets:",
+      "reason": "City preset selector label",
       "component": "now-card",
       "step": "Low Fuel Hero Card",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-7",
+      "slotId": "now-card-slot-chrome-11",
       "slotType": "chrome",
-      "renderedText": "Illustration · simulated",
-      "reason": "Simulated illustration badge",
+      "renderedText": "San Francisco",
+      "reason": "City preset selection button",
       "component": "now-card",
       "step": "Low Fuel Hero Card",
       "scene": "fuel",
@@ -286,8 +218,8 @@
     {
       "slotId": "now-card-slot-chrome-12",
       "slotType": "chrome",
-      "renderedText": "Directions →",
-      "reason": "Navigation trigger button",
+      "renderedText": "Los Angeles",
+      "reason": "City preset selection button",
       "component": "now-card",
       "step": "Low Fuel Hero Card",
       "scene": "fuel",
@@ -296,18 +228,38 @@
     {
       "slotId": "now-card-slot-chrome-13",
       "slotType": "chrome",
-      "renderedText": "Details →",
-      "reason": "View details button",
+      "renderedText": "Illustration · simulated",
+      "reason": "Simulated illustration badge",
       "component": "now-card",
       "step": "Low Fuel Hero Card",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-14",
+      "slotId": "now-card-slot-chrome-15",
       "slotType": "chrome",
-      "renderedText": "Illustration · simulated",
-      "reason": "Simulated illustration badge",
+      "renderedText": "Gas Station",
+      "reason": "Candidate category label",
+      "component": "now-card",
+      "step": "Low Fuel Hero Card",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-17",
+      "slotType": "chrome",
+      "renderedText": "Simulated fixture · Metro Gas",
+      "reason": "Recommendation ranking basis label",
+      "component": "now-card",
+      "step": "Low Fuel Hero Card",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-18",
+      "slotType": "chrome",
+      "renderedText": "Directions →",
+      "reason": "Navigation trigger button",
       "component": "now-card",
       "step": "Low Fuel Hero Card",
       "scene": "fuel",
@@ -316,16 +268,6 @@
     {
       "slotId": "now-card-slot-chrome-19",
       "slotType": "chrome",
-      "renderedText": "Directions →",
-      "reason": "Navigation trigger button",
-      "component": "now-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-slot-chrome-20",
-      "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
       "component": "now-card",
@@ -334,7 +276,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-21",
+      "slotId": "now-card-slot-chrome-20",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -344,7 +286,27 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-26",
+      "slotId": "now-card-slot-chrome-22",
+      "slotType": "chrome",
+      "renderedText": "Gas Station",
+      "reason": "Candidate category label",
+      "component": "now-card",
+      "step": "Low Fuel Hero Card",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-24",
+      "slotType": "chrome",
+      "renderedText": "Simulated fixture · Sunset Petroleum",
+      "reason": "Recommendation ranking basis label",
+      "component": "now-card",
+      "step": "Low Fuel Hero Card",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-25",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -354,7 +316,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-27",
+      "slotId": "now-card-slot-chrome-26",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -364,7 +326,57 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-28",
+      "slotId": "now-card-slot-chrome-27",
+      "slotType": "chrome",
+      "renderedText": "Illustration · simulated",
+      "reason": "Simulated illustration badge",
+      "component": "now-card",
+      "step": "Low Fuel Hero Card",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-29",
+      "slotType": "chrome",
+      "renderedText": "Gas Station",
+      "reason": "Candidate category label",
+      "component": "now-card",
+      "step": "Low Fuel Hero Card",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-31",
+      "slotType": "chrome",
+      "renderedText": "Simulated fixture · Bayfront",
+      "reason": "Recommendation ranking basis label",
+      "component": "now-card",
+      "step": "Low Fuel Hero Card",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-32",
+      "slotType": "chrome",
+      "renderedText": "Directions →",
+      "reason": "Navigation trigger button",
+      "component": "now-card",
+      "step": "Low Fuel Hero Card",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-33",
+      "slotType": "chrome",
+      "renderedText": "Details →",
+      "reason": "View details button",
+      "component": "now-card",
+      "step": "Low Fuel Hero Card",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-34",
       "slotType": "chrome",
       "renderedText": "Nearby gas stations · straight-line distances · simulated",
       "reason": "Static basis template",
@@ -374,7 +386,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-29",
+      "slotId": "now-card-slot-chrome-35",
       "slotType": "chrome",
       "renderedText": "Accept",
       "reason": "Accept plan button",
@@ -384,7 +396,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-30",
+      "slotId": "now-card-slot-chrome-36",
       "slotType": "chrome",
       "renderedText": "Adjust",
       "reason": "Adjust plan button",
@@ -394,7 +406,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-31",
+      "slotId": "now-card-slot-chrome-37",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "Trip details action button",
@@ -404,7 +416,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-32",
+      "slotId": "now-card-slot-chrome-38",
       "slotType": "chrome",
       "renderedText": "Dismiss",
       "reason": "Dismiss plan button",
@@ -414,40 +426,10 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-33",
+      "slotId": "now-card-slot-chrome-39",
       "slotType": "chrome",
       "renderedText": "Why",
       "reason": "Why provenance action button",
-      "component": "now-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-3",
-      "slotType": "chrome",
-      "renderedText": "📍 Location: Selected City (simulated)",
-      "reason": "Static UI element (span.v2-location-badge)",
-      "component": "now-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-5",
-      "slotType": "chrome",
-      "renderedText": "San Francisco",
-      "reason": "Static UI element (button.btn btn-outline v2-city-chip)",
-      "component": "now-card",
-      "step": "Low Fuel Hero Card",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-6",
-      "slotType": "chrome",
-      "renderedText": "Los Angeles",
-      "reason": "Static UI element (button.btn btn-outline v2-city-chip)",
       "component": "now-card",
       "step": "Low Fuel Hero Card",
       "scene": "fuel",
@@ -486,26 +468,6 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "v2-map-card-unannotated-chrome-1",
-      "slotType": "chrome",
-      "renderedText": "Spatial Context Map",
-      "reason": "Static UI element (span.v2-heading-desktop)",
-      "component": "v2-map-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "v2-map-card-unannotated-chrome-2",
-      "slotType": "chrome",
-      "renderedText": "ROUTE MAP",
-      "reason": "Static UI element (span.v2-heading-mobile)",
-      "component": "v2-map-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
       "slotId": "now-card-fuel-sf-1-name-0",
       "slotType": "domain",
       "sourceRef": "fuel-sf-1.name",
@@ -518,36 +480,36 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-fuel-sf-1-cuisine-1",
+      "slotId": "now-card-fuel-sf-1-straightLineDistanceLabel-1",
       "slotType": "domain",
-      "sourceRef": "fuel-sf-1.cuisine",
+      "sourceRef": "fuel-sf-1.straightLineDistanceLabel",
       "recordId": "fuel-sf-1",
-      "field": "cuisine",
-      "renderedText": "Gas Station",
+      "field": "straightLineDistanceLabel",
+      "renderedText": "140 m straight-line",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-fuel-sf-1-straightLineDistanceLabel-2",
+      "slotId": "now-card-fuel-sf-1-name-2",
+      "slotType": "domain",
+      "sourceRef": "fuel-sf-1.name",
+      "recordId": "fuel-sf-1",
+      "field": "name",
+      "renderedText": "Metro Gas & Go",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-fuel-sf-1-straightLineDistanceLabel-3",
       "slotType": "domain",
       "sourceRef": "fuel-sf-1.straightLineDistanceLabel",
       "recordId": "fuel-sf-1",
       "field": "straightLineDistanceLabel",
       "renderedText": "140 m (straight-line)",
-      "component": "now-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-fuel-sf-1-basis-3",
-      "slotType": "domain",
-      "sourceRef": "fuel-sf-1.basis",
-      "recordId": "fuel-sf-1",
-      "field": "basis",
-      "renderedText": "Simulated fixture · Metro Gas",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
@@ -566,19 +528,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-fuel-sf-2-cuisine-5",
-      "slotType": "domain",
-      "sourceRef": "fuel-sf-2.cuisine",
-      "recordId": "fuel-sf-2",
-      "field": "cuisine",
-      "renderedText": "Gas Station",
-      "component": "now-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-fuel-sf-2-straightLineDistanceLabel-6",
+      "slotId": "now-card-fuel-sf-2-straightLineDistanceLabel-5",
       "slotType": "domain",
       "sourceRef": "fuel-sf-2.straightLineDistanceLabel",
       "recordId": "fuel-sf-2",
@@ -590,19 +540,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-fuel-sf-2-basis-7",
-      "slotType": "domain",
-      "sourceRef": "fuel-sf-2.basis",
-      "recordId": "fuel-sf-2",
-      "field": "basis",
-      "renderedText": "Simulated fixture · Sunset Petroleum",
-      "component": "now-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-fuel-sf-3-name-8",
+      "slotId": "now-card-fuel-sf-3-name-6",
       "slotType": "domain",
       "sourceRef": "fuel-sf-3.name",
       "recordId": "fuel-sf-3",
@@ -614,36 +552,12 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-fuel-sf-3-cuisine-9",
-      "slotType": "domain",
-      "sourceRef": "fuel-sf-3.cuisine",
-      "recordId": "fuel-sf-3",
-      "field": "cuisine",
-      "renderedText": "Gas Station",
-      "component": "now-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-fuel-sf-3-straightLineDistanceLabel-10",
+      "slotId": "now-card-fuel-sf-3-straightLineDistanceLabel-7",
       "slotType": "domain",
       "sourceRef": "fuel-sf-3.straightLineDistanceLabel",
       "recordId": "fuel-sf-3",
       "field": "straightLineDistanceLabel",
       "renderedText": "518 m (straight-line)",
-      "component": "now-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-fuel-sf-3-basis-11",
-      "slotType": "domain",
-      "sourceRef": "fuel-sf-3.basis",
-      "recordId": "fuel-sf-3",
-      "field": "basis",
-      "renderedText": "Simulated fixture · Bayfront",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
@@ -680,17 +594,17 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-3",
+      "slotId": "now-card-slot-chrome-4",
       "slotType": "chrome",
-      "renderedText": "Metro Gas & Go · 140 m straight-line",
-      "reason": "Candidates hero headline",
+      "renderedText": "·",
+      "reason": "Hero candidate separator",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-4",
+      "slotId": "now-card-slot-chrome-6",
       "slotType": "chrome",
       "renderedText": "Nearby gas stations from simulated fixture · straight-line distances shown",
       "reason": "Places disclosure notice",
@@ -700,7 +614,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-5",
+      "slotId": "now-card-slot-chrome-7",
       "slotType": "chrome",
       "renderedText": "📍 Location: Selected City (simulated)\nChange Location",
       "reason": "Location status bar",
@@ -710,20 +624,20 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-6",
+      "slotId": "now-card-slot-chrome-10",
       "slotType": "chrome",
-      "renderedText": "Change Location",
-      "reason": "Change location button",
+      "renderedText": "Demo City Presets:",
+      "reason": "City preset selector label",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-7",
+      "slotId": "now-card-slot-chrome-11",
       "slotType": "chrome",
-      "renderedText": "Illustration · simulated",
-      "reason": "Simulated illustration badge",
+      "renderedText": "San Francisco",
+      "reason": "City preset selection button",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
@@ -732,8 +646,8 @@
     {
       "slotId": "now-card-slot-chrome-12",
       "slotType": "chrome",
-      "renderedText": "Directions →",
-      "reason": "Navigation trigger button",
+      "renderedText": "Los Angeles",
+      "reason": "City preset selection button",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
@@ -742,18 +656,38 @@
     {
       "slotId": "now-card-slot-chrome-13",
       "slotType": "chrome",
-      "renderedText": "Details →",
-      "reason": "View details button",
+      "renderedText": "Illustration · simulated",
+      "reason": "Simulated illustration badge",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-14",
+      "slotId": "now-card-slot-chrome-15",
       "slotType": "chrome",
-      "renderedText": "Illustration · simulated",
-      "reason": "Simulated illustration badge",
+      "renderedText": "Gas Station",
+      "reason": "Candidate category label",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-17",
+      "slotType": "chrome",
+      "renderedText": "Simulated fixture · Metro Gas",
+      "reason": "Recommendation ranking basis label",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-18",
+      "slotType": "chrome",
+      "renderedText": "Directions →",
+      "reason": "Navigation trigger button",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
@@ -762,16 +696,6 @@
     {
       "slotId": "now-card-slot-chrome-19",
       "slotType": "chrome",
-      "renderedText": "Directions →",
-      "reason": "Navigation trigger button",
-      "component": "now-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-slot-chrome-20",
-      "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
       "component": "now-card",
@@ -780,7 +704,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-21",
+      "slotId": "now-card-slot-chrome-20",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -790,7 +714,27 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-26",
+      "slotId": "now-card-slot-chrome-22",
+      "slotType": "chrome",
+      "renderedText": "Gas Station",
+      "reason": "Candidate category label",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-24",
+      "slotType": "chrome",
+      "renderedText": "Simulated fixture · Sunset Petroleum",
+      "reason": "Recommendation ranking basis label",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-25",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -800,7 +744,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-27",
+      "slotId": "now-card-slot-chrome-26",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -810,7 +754,57 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-28",
+      "slotId": "now-card-slot-chrome-27",
+      "slotType": "chrome",
+      "renderedText": "Illustration · simulated",
+      "reason": "Simulated illustration badge",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-29",
+      "slotType": "chrome",
+      "renderedText": "Gas Station",
+      "reason": "Candidate category label",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-31",
+      "slotType": "chrome",
+      "renderedText": "Simulated fixture · Bayfront",
+      "reason": "Recommendation ranking basis label",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-32",
+      "slotType": "chrome",
+      "renderedText": "Directions →",
+      "reason": "Navigation trigger button",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-33",
+      "slotType": "chrome",
+      "renderedText": "Details →",
+      "reason": "View details button",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-34",
       "slotType": "chrome",
       "renderedText": "Nearby gas stations · straight-line distances · simulated",
       "reason": "Static basis template",
@@ -820,7 +814,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-29",
+      "slotId": "now-card-slot-chrome-35",
       "slotType": "chrome",
       "renderedText": "Accept",
       "reason": "Accept plan button",
@@ -830,7 +824,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-30",
+      "slotId": "now-card-slot-chrome-36",
       "slotType": "chrome",
       "renderedText": "Adjust",
       "reason": "Adjust plan button",
@@ -840,7 +834,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-31",
+      "slotId": "now-card-slot-chrome-37",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "Trip details action button",
@@ -850,7 +844,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-32",
+      "slotId": "now-card-slot-chrome-38",
       "slotType": "chrome",
       "renderedText": "Dismiss",
       "reason": "Dismiss plan button",
@@ -860,7 +854,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-33",
+      "slotId": "now-card-slot-chrome-39",
       "slotType": "chrome",
       "renderedText": "Why",
       "reason": "Why provenance action button",
@@ -870,90 +864,92 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-unannotated-chrome-3",
-      "slotType": "chrome",
-      "renderedText": "📍 Location: Selected City (simulated)",
-      "reason": "Static UI element (span.v2-location-badge)",
-      "component": "now-card",
+      "slotId": "navigate-confirm-modal-fuel-sf-1-name-0",
+      "slotType": "domain",
+      "sourceRef": "fuel-sf-1.name",
+      "recordId": "fuel-sf-1",
+      "field": "name",
+      "renderedText": "Metro Gas & Go",
+      "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-unannotated-chrome-5",
-      "slotType": "chrome",
-      "renderedText": "San Francisco",
-      "reason": "Static UI element (button.btn btn-outline v2-city-chip)",
-      "component": "now-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-6",
-      "slotType": "chrome",
-      "renderedText": "Los Angeles",
-      "reason": "Static UI element (button.btn btn-outline v2-city-chip)",
-      "component": "now-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "fuel",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-0",
+      "slotId": "navigate-confirm-modal-slot-chrome-0",
       "slotType": "chrome",
       "renderedText": "Start Navigation",
-      "reason": "Static UI element (h2.none)",
+      "reason": "Navigation modal title",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-1",
+      "slotId": "navigate-confirm-modal-slot-chrome-1",
       "slotType": "chrome",
       "renderedText": "Verified handoff",
-      "reason": "Static UI element (span.v2-illustration-badge)",
+      "reason": "Navigation verified handoff badge",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-2",
+      "slotId": "navigate-confirm-modal-slot-chrome-2",
       "slotType": "chrome",
-      "renderedText": "Open driving directions to Metro Gas & Go in Apple Maps?",
-      "reason": "Static UI element (p.v2-modal-body)",
+      "renderedText": "Open driving directions to",
+      "reason": "Navigation directions prefix",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-3",
+      "slotId": "navigate-confirm-modal-slot-chrome-4",
       "slotType": "chrome",
-      "renderedText": "Metro Gas & Go",
-      "reason": "Static UI element (strong.none)",
+      "renderedText": "in Apple Maps?",
+      "reason": "Navigation directions suffix",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-4",
+      "slotId": "navigate-confirm-modal-slot-chrome-5",
       "slotType": "chrome",
       "renderedText": "VERIFIED DESTINATION URL:",
-      "reason": "Static UI element (span.v2-url-label)",
+      "reason": "Verified URL label",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",
       "viewport": "390x844"
     },
     {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-5",
+      "slotId": "navigate-confirm-modal-slot-chrome-6",
+      "slotType": "chrome",
+      "renderedText": "https://maps.apple.com/?daddr=37.7755,-122.418&dirflg=d&q=Metro%20Gas%20%26%20Go",
+      "reason": "Verified URL preview",
+      "component": "navigate-confirm-modal",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "navigate-confirm-modal-slot-chrome-7",
       "slotType": "chrome",
       "renderedText": "Cancel",
-      "reason": "Static UI element (button.btn btn-secondary)",
+      "reason": "Cancel navigation button",
+      "component": "navigate-confirm-modal",
+      "step": "Navigate Handoff Modal",
+      "scene": "fuel",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "navigate-confirm-modal-slot-chrome-8",
+      "slotType": "chrome",
+      "renderedText": "Open Maps",
+      "reason": "Confirm navigation button",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "fuel",

@@ -1,7 +1,7 @@
 {
   "scene": "dynamic-lunch",
   "viewport": "390x844",
-  "recordedAt": "2026-10-29T15:01:28.825Z",
+  "recordedAt": "2026-10-29T15:55:55.670Z",
   "steps": [
     "Dynamic Lunch Proactive Card",
     "Navigate Handoff Modal",
@@ -39,26 +39,6 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "v2-map-card-unannotated-chrome-1",
-      "slotType": "chrome",
-      "renderedText": "Nearby Places Map",
-      "reason": "Static UI element (span.v2-heading-desktop)",
-      "component": "v2-map-card",
-      "step": "Dynamic Lunch Proactive Card",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "v2-map-card-unannotated-chrome-2",
-      "slotType": "chrome",
-      "renderedText": "PLACES MAP",
-      "reason": "Static UI element (span.v2-heading-mobile)",
-      "component": "v2-map-card",
-      "step": "Dynamic Lunch Proactive Card",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
       "slotId": "now-card-lunch-sf-1-name-0",
       "slotType": "domain",
       "sourceRef": "lunch-sf-1.name",
@@ -227,17 +207,37 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-6",
+      "slotId": "now-card-slot-chrome-8",
       "slotType": "chrome",
-      "renderedText": "Change Location",
-      "reason": "Change location button",
+      "renderedText": "Demo City Presets:",
+      "reason": "City preset selector label",
       "component": "now-card",
       "step": "Dynamic Lunch Proactive Card",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-7",
+      "slotId": "now-card-slot-chrome-9",
+      "slotType": "chrome",
+      "renderedText": "San Francisco",
+      "reason": "City preset selection button",
+      "component": "now-card",
+      "step": "Dynamic Lunch Proactive Card",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-10",
+      "slotType": "chrome",
+      "renderedText": "Los Angeles",
+      "reason": "City preset selection button",
+      "component": "now-card",
+      "step": "Dynamic Lunch Proactive Card",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-11",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -247,7 +247,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-11",
+      "slotId": "now-card-slot-chrome-15",
       "slotType": "chrome",
       "renderedText": "Based on taste: Japanese (Demo profile · sample)",
       "reason": "Recommendation ranking basis label",
@@ -257,7 +257,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-12",
+      "slotId": "now-card-slot-chrome-16",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -267,7 +267,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-13",
+      "slotId": "now-card-slot-chrome-17",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -277,7 +277,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-14",
+      "slotId": "now-card-slot-chrome-18",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -287,27 +287,27 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-18",
+      "slotId": "now-card-slot-chrome-22",
       "slotType": "chrome",
       "renderedText": "Quiet",
-      "reason": "Filter tag",
+      "reason": "Noise filter tag",
       "component": "now-card",
       "step": "Dynamic Lunch Proactive Card",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-19",
+      "slotId": "now-card-slot-chrome-23",
       "slotType": "chrome",
       "renderedText": "Vegetarian",
-      "reason": "Filter tag",
+      "reason": "Dietary filter tag",
       "component": "now-card",
       "step": "Dynamic Lunch Proactive Card",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-20",
+      "slotId": "now-card-slot-chrome-24",
       "slotType": "chrome",
       "renderedText": "Based on taste: Salad (Demo profile · sample)",
       "reason": "Recommendation ranking basis label",
@@ -317,7 +317,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-21",
+      "slotId": "now-card-slot-chrome-25",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -327,7 +327,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-22",
+      "slotId": "now-card-slot-chrome-26",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -337,7 +337,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-23",
+      "slotId": "now-card-slot-chrome-27",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -347,17 +347,17 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-27",
+      "slotId": "now-card-slot-chrome-31",
       "slotType": "chrome",
       "renderedText": "Quiet",
-      "reason": "Filter tag",
+      "reason": "Noise filter tag",
       "component": "now-card",
       "step": "Dynamic Lunch Proactive Card",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-28",
+      "slotId": "now-card-slot-chrome-32",
       "slotType": "chrome",
       "renderedText": "Based on taste: Japanese (Demo profile · sample)",
       "reason": "Recommendation ranking basis label",
@@ -367,7 +367,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-29",
+      "slotId": "now-card-slot-chrome-33",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -377,7 +377,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-30",
+      "slotId": "now-card-slot-chrome-34",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -387,7 +387,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-31",
+      "slotId": "now-card-slot-chrome-35",
       "slotType": "chrome",
       "renderedText": "Based on your location, schedule window, and what you usually like.",
       "reason": "Static basis template",
@@ -397,7 +397,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-32",
+      "slotId": "now-card-slot-chrome-36",
       "slotType": "chrome",
       "renderedText": "Accept",
       "reason": "Accept plan button",
@@ -407,7 +407,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-33",
+      "slotId": "now-card-slot-chrome-37",
       "slotType": "chrome",
       "renderedText": "Adjust",
       "reason": "Adjust plan button",
@@ -417,7 +417,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-34",
+      "slotId": "now-card-slot-chrome-38",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "Trip details action button",
@@ -427,7 +427,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-35",
+      "slotId": "now-card-slot-chrome-39",
       "slotType": "chrome",
       "renderedText": "Dismiss",
       "reason": "Dismiss plan button",
@@ -437,40 +437,10 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-36",
+      "slotId": "now-card-slot-chrome-40",
       "slotType": "chrome",
       "renderedText": "Why",
       "reason": "Why provenance action button",
-      "component": "now-card",
-      "step": "Dynamic Lunch Proactive Card",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-3",
-      "slotType": "chrome",
-      "renderedText": "📍 Location: Selected City (simulated)",
-      "reason": "Static UI element (span.v2-location-badge)",
-      "component": "now-card",
-      "step": "Dynamic Lunch Proactive Card",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-5",
-      "slotType": "chrome",
-      "renderedText": "San Francisco",
-      "reason": "Static UI element (button.btn btn-outline v2-city-chip)",
-      "component": "now-card",
-      "step": "Dynamic Lunch Proactive Card",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-6",
-      "slotType": "chrome",
-      "renderedText": "Los Angeles",
-      "reason": "Static UI element (button.btn btn-outline v2-city-chip)",
       "component": "now-card",
       "step": "Dynamic Lunch Proactive Card",
       "scene": "dynamic-lunch",
@@ -507,26 +477,6 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "v2-map-card-unannotated-chrome-1",
-      "slotType": "chrome",
-      "renderedText": "Nearby Places Map",
-      "reason": "Static UI element (span.v2-heading-desktop)",
-      "component": "v2-map-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "v2-map-card-unannotated-chrome-2",
-      "slotType": "chrome",
-      "renderedText": "PLACES MAP",
-      "reason": "Static UI element (span.v2-heading-mobile)",
-      "component": "v2-map-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
       "slotId": "now-card-lunch-sf-1-name-0",
       "slotType": "domain",
       "sourceRef": "lunch-sf-1.name",
@@ -695,17 +645,37 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-6",
+      "slotId": "now-card-slot-chrome-8",
       "slotType": "chrome",
-      "renderedText": "Change Location",
-      "reason": "Change location button",
+      "renderedText": "Demo City Presets:",
+      "reason": "City preset selector label",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-7",
+      "slotId": "now-card-slot-chrome-9",
+      "slotType": "chrome",
+      "renderedText": "San Francisco",
+      "reason": "City preset selection button",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-10",
+      "slotType": "chrome",
+      "renderedText": "Los Angeles",
+      "reason": "City preset selection button",
+      "component": "now-card",
+      "step": "Navigate Handoff Modal",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-11",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -715,7 +685,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-11",
+      "slotId": "now-card-slot-chrome-15",
       "slotType": "chrome",
       "renderedText": "Based on taste: Japanese (Demo profile · sample)",
       "reason": "Recommendation ranking basis label",
@@ -725,7 +695,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-12",
+      "slotId": "now-card-slot-chrome-16",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -735,7 +705,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-13",
+      "slotId": "now-card-slot-chrome-17",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -745,7 +715,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-14",
+      "slotId": "now-card-slot-chrome-18",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -755,27 +725,27 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-18",
+      "slotId": "now-card-slot-chrome-22",
       "slotType": "chrome",
       "renderedText": "Quiet",
-      "reason": "Filter tag",
+      "reason": "Noise filter tag",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-19",
+      "slotId": "now-card-slot-chrome-23",
       "slotType": "chrome",
       "renderedText": "Vegetarian",
-      "reason": "Filter tag",
+      "reason": "Dietary filter tag",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-20",
+      "slotId": "now-card-slot-chrome-24",
       "slotType": "chrome",
       "renderedText": "Based on taste: Salad (Demo profile · sample)",
       "reason": "Recommendation ranking basis label",
@@ -785,7 +755,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-21",
+      "slotId": "now-card-slot-chrome-25",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -795,7 +765,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-22",
+      "slotId": "now-card-slot-chrome-26",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -805,7 +775,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-23",
+      "slotId": "now-card-slot-chrome-27",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -815,17 +785,17 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-27",
+      "slotId": "now-card-slot-chrome-31",
       "slotType": "chrome",
       "renderedText": "Quiet",
-      "reason": "Filter tag",
+      "reason": "Noise filter tag",
       "component": "now-card",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-28",
+      "slotId": "now-card-slot-chrome-32",
       "slotType": "chrome",
       "renderedText": "Based on taste: Japanese (Demo profile · sample)",
       "reason": "Recommendation ranking basis label",
@@ -835,7 +805,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-29",
+      "slotId": "now-card-slot-chrome-33",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -845,7 +815,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-30",
+      "slotId": "now-card-slot-chrome-34",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -855,7 +825,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-31",
+      "slotId": "now-card-slot-chrome-35",
       "slotType": "chrome",
       "renderedText": "Based on your location, schedule window, and what you usually like.",
       "reason": "Static basis template",
@@ -865,7 +835,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-32",
+      "slotId": "now-card-slot-chrome-36",
       "slotType": "chrome",
       "renderedText": "Accept",
       "reason": "Accept plan button",
@@ -875,7 +845,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-33",
+      "slotId": "now-card-slot-chrome-37",
       "slotType": "chrome",
       "renderedText": "Adjust",
       "reason": "Adjust plan button",
@@ -885,7 +855,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-34",
+      "slotId": "now-card-slot-chrome-38",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "Trip details action button",
@@ -895,7 +865,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-35",
+      "slotId": "now-card-slot-chrome-39",
       "slotType": "chrome",
       "renderedText": "Dismiss",
       "reason": "Dismiss plan button",
@@ -905,7 +875,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-36",
+      "slotId": "now-card-slot-chrome-40",
       "slotType": "chrome",
       "renderedText": "Why",
       "reason": "Why provenance action button",
@@ -915,90 +885,92 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-unannotated-chrome-3",
-      "slotType": "chrome",
-      "renderedText": "📍 Location: Selected City (simulated)",
-      "reason": "Static UI element (span.v2-location-badge)",
-      "component": "now-card",
+      "slotId": "navigate-confirm-modal-lunch-sf-1-name-0",
+      "slotType": "domain",
+      "sourceRef": "lunch-sf-1.name",
+      "recordId": "lunch-sf-1",
+      "field": "name",
+      "renderedText": "Pacific Ramen Bar",
+      "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-unannotated-chrome-5",
-      "slotType": "chrome",
-      "renderedText": "San Francisco",
-      "reason": "Static UI element (button.btn btn-outline v2-city-chip)",
-      "component": "now-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-6",
-      "slotType": "chrome",
-      "renderedText": "Los Angeles",
-      "reason": "Static UI element (button.btn btn-outline v2-city-chip)",
-      "component": "now-card",
-      "step": "Navigate Handoff Modal",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-0",
+      "slotId": "navigate-confirm-modal-slot-chrome-0",
       "slotType": "chrome",
       "renderedText": "Start Navigation",
-      "reason": "Static UI element (h2.none)",
+      "reason": "Navigation modal title",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-1",
+      "slotId": "navigate-confirm-modal-slot-chrome-1",
       "slotType": "chrome",
       "renderedText": "Verified handoff",
-      "reason": "Static UI element (span.v2-illustration-badge)",
+      "reason": "Navigation verified handoff badge",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-2",
+      "slotId": "navigate-confirm-modal-slot-chrome-2",
       "slotType": "chrome",
-      "renderedText": "Open driving directions to Pacific Ramen Bar in Apple Maps?",
-      "reason": "Static UI element (p.v2-modal-body)",
+      "renderedText": "Open driving directions to",
+      "reason": "Navigation directions prefix",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-3",
+      "slotId": "navigate-confirm-modal-slot-chrome-4",
       "slotType": "chrome",
-      "renderedText": "Pacific Ramen Bar",
-      "reason": "Static UI element (strong.none)",
+      "renderedText": "in Apple Maps?",
+      "reason": "Navigation directions suffix",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-4",
+      "slotId": "navigate-confirm-modal-slot-chrome-5",
       "slotType": "chrome",
       "renderedText": "VERIFIED DESTINATION URL:",
-      "reason": "Static UI element (span.v2-url-label)",
+      "reason": "Verified URL label",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "navigate-confirm-modal-unannotated-chrome-5",
+      "slotId": "navigate-confirm-modal-slot-chrome-6",
+      "slotType": "chrome",
+      "renderedText": "https://maps.apple.com/?daddr=37.776,-122.4175&dirflg=d&q=Pacific%20Ramen%20Bar",
+      "reason": "Verified URL preview",
+      "component": "navigate-confirm-modal",
+      "step": "Navigate Handoff Modal",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "navigate-confirm-modal-slot-chrome-7",
       "slotType": "chrome",
       "renderedText": "Cancel",
-      "reason": "Static UI element (button.btn btn-secondary)",
+      "reason": "Cancel navigation button",
+      "component": "navigate-confirm-modal",
+      "step": "Navigate Handoff Modal",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "navigate-confirm-modal-slot-chrome-8",
+      "slotType": "chrome",
+      "renderedText": "Open Maps",
+      "reason": "Confirm navigation button",
       "component": "navigate-confirm-modal",
       "step": "Navigate Handoff Modal",
       "scene": "dynamic-lunch",
@@ -1029,26 +1001,6 @@
       "slotType": "chrome",
       "renderedText": "Lunch locations near you",
       "reason": "Map schematic destination label",
-      "component": "v2-map-card",
-      "step": "Why Sheet",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "v2-map-card-unannotated-chrome-1",
-      "slotType": "chrome",
-      "renderedText": "Nearby Places Map",
-      "reason": "Static UI element (span.v2-heading-desktop)",
-      "component": "v2-map-card",
-      "step": "Why Sheet",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "v2-map-card-unannotated-chrome-2",
-      "slotType": "chrome",
-      "renderedText": "PLACES MAP",
-      "reason": "Static UI element (span.v2-heading-mobile)",
       "component": "v2-map-card",
       "step": "Why Sheet",
       "scene": "dynamic-lunch",
@@ -1223,17 +1175,37 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-6",
+      "slotId": "now-card-slot-chrome-8",
       "slotType": "chrome",
-      "renderedText": "Change Location",
-      "reason": "Change location button",
+      "renderedText": "Demo City Presets:",
+      "reason": "City preset selector label",
       "component": "now-card",
       "step": "Why Sheet",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-7",
+      "slotId": "now-card-slot-chrome-9",
+      "slotType": "chrome",
+      "renderedText": "San Francisco",
+      "reason": "City preset selection button",
+      "component": "now-card",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-10",
+      "slotType": "chrome",
+      "renderedText": "Los Angeles",
+      "reason": "City preset selection button",
+      "component": "now-card",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "now-card-slot-chrome-11",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -1243,7 +1215,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-11",
+      "slotId": "now-card-slot-chrome-15",
       "slotType": "chrome",
       "renderedText": "Based on taste: Japanese (Demo profile · sample)",
       "reason": "Recommendation ranking basis label",
@@ -1253,7 +1225,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-12",
+      "slotId": "now-card-slot-chrome-16",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -1263,7 +1235,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-13",
+      "slotId": "now-card-slot-chrome-17",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -1273,7 +1245,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-14",
+      "slotId": "now-card-slot-chrome-18",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -1283,27 +1255,27 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-18",
+      "slotId": "now-card-slot-chrome-22",
       "slotType": "chrome",
       "renderedText": "Quiet",
-      "reason": "Filter tag",
+      "reason": "Noise filter tag",
       "component": "now-card",
       "step": "Why Sheet",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-19",
+      "slotId": "now-card-slot-chrome-23",
       "slotType": "chrome",
       "renderedText": "Vegetarian",
-      "reason": "Filter tag",
+      "reason": "Dietary filter tag",
       "component": "now-card",
       "step": "Why Sheet",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-20",
+      "slotId": "now-card-slot-chrome-24",
       "slotType": "chrome",
       "renderedText": "Based on taste: Salad (Demo profile · sample)",
       "reason": "Recommendation ranking basis label",
@@ -1313,7 +1285,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-21",
+      "slotId": "now-card-slot-chrome-25",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -1323,7 +1295,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-22",
+      "slotId": "now-card-slot-chrome-26",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -1333,7 +1305,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-23",
+      "slotId": "now-card-slot-chrome-27",
       "slotType": "chrome",
       "renderedText": "Illustration · simulated",
       "reason": "Simulated illustration badge",
@@ -1343,17 +1315,17 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-27",
+      "slotId": "now-card-slot-chrome-31",
       "slotType": "chrome",
       "renderedText": "Quiet",
-      "reason": "Filter tag",
+      "reason": "Noise filter tag",
       "component": "now-card",
       "step": "Why Sheet",
       "scene": "dynamic-lunch",
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-28",
+      "slotId": "now-card-slot-chrome-32",
       "slotType": "chrome",
       "renderedText": "Based on taste: Japanese (Demo profile · sample)",
       "reason": "Recommendation ranking basis label",
@@ -1363,7 +1335,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-29",
+      "slotId": "now-card-slot-chrome-33",
       "slotType": "chrome",
       "renderedText": "Directions →",
       "reason": "Navigation trigger button",
@@ -1373,7 +1345,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-30",
+      "slotId": "now-card-slot-chrome-34",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "View details button",
@@ -1383,7 +1355,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-31",
+      "slotId": "now-card-slot-chrome-35",
       "slotType": "chrome",
       "renderedText": "Based on your location, schedule window, and what you usually like.",
       "reason": "Static basis template",
@@ -1393,7 +1365,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-32",
+      "slotId": "now-card-slot-chrome-36",
       "slotType": "chrome",
       "renderedText": "Accept",
       "reason": "Accept plan button",
@@ -1403,7 +1375,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-33",
+      "slotId": "now-card-slot-chrome-37",
       "slotType": "chrome",
       "renderedText": "Adjust",
       "reason": "Adjust plan button",
@@ -1413,7 +1385,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-34",
+      "slotId": "now-card-slot-chrome-38",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "Trip details action button",
@@ -1423,7 +1395,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-35",
+      "slotId": "now-card-slot-chrome-39",
       "slotType": "chrome",
       "renderedText": "Dismiss",
       "reason": "Dismiss plan button",
@@ -1433,40 +1405,10 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "now-card-slot-chrome-36",
+      "slotId": "now-card-slot-chrome-40",
       "slotType": "chrome",
       "renderedText": "Why",
       "reason": "Why provenance action button",
-      "component": "now-card",
-      "step": "Why Sheet",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-3",
-      "slotType": "chrome",
-      "renderedText": "📍 Location: Selected City (simulated)",
-      "reason": "Static UI element (span.v2-location-badge)",
-      "component": "now-card",
-      "step": "Why Sheet",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-5",
-      "slotType": "chrome",
-      "renderedText": "San Francisco",
-      "reason": "Static UI element (button.btn btn-outline v2-city-chip)",
-      "component": "now-card",
-      "step": "Why Sheet",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "now-card-unannotated-chrome-6",
-      "slotType": "chrome",
-      "renderedText": "Los Angeles",
-      "reason": "Static UI element (button.btn btn-outline v2-city-chip)",
       "component": "now-card",
       "step": "Why Sheet",
       "scene": "dynamic-lunch",
@@ -1523,6 +1465,26 @@
     {
       "slotId": "why-sheet-backdrop-slot-chrome-0",
       "slotType": "chrome",
+      "renderedText": "Why you're seeing this",
+      "reason": "Why sheet title",
+      "component": "why-sheet-backdrop",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-1",
+      "slotType": "chrome",
+      "renderedText": "×",
+      "reason": "Modal close button",
+      "component": "why-sheet-backdrop",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-2",
+      "slotType": "chrome",
       "renderedText": "EVIDENCE & SIGNALS",
       "reason": "Evidence section heading",
       "component": "why-sheet-backdrop",
@@ -1531,7 +1493,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-1",
+      "slotId": "why-sheet-backdrop-slot-chrome-3",
       "slotType": "chrome",
       "renderedText": "Current location status",
       "reason": "Signal category label",
@@ -1541,7 +1503,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-2",
+      "slotId": "why-sheet-backdrop-slot-chrome-4",
       "slotType": "chrome",
       "renderedText": "You're away from home",
       "reason": "Signal descriptive text",
@@ -1551,9 +1513,19 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-3",
+      "slotId": "why-sheet-backdrop-slot-chrome-5",
       "slotType": "chrome",
-      "renderedText": "Recorded at 12:10 PM",
+      "renderedText": "Recorded at",
+      "reason": "Recorded time prefix",
+      "component": "why-sheet-backdrop",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-6",
+      "slotType": "chrome",
+      "renderedText": "12:10 PM",
       "reason": "Signal recorded time",
       "component": "why-sheet-backdrop",
       "step": "Why Sheet",
@@ -1561,7 +1533,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-4",
+      "slotId": "why-sheet-backdrop-slot-chrome-7",
       "slotType": "chrome",
       "renderedText": "SIMULATED",
       "reason": "Signal simulated badge",
@@ -1571,7 +1543,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-5",
+      "slotId": "why-sheet-backdrop-slot-chrome-8",
       "slotType": "chrome",
       "renderedText": "Schedule window",
       "reason": "Signal category label",
@@ -1581,7 +1553,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-6",
+      "slotId": "why-sheet-backdrop-slot-chrome-9",
       "slotType": "chrome",
       "renderedText": "Available schedule window",
       "reason": "Signal descriptive text",
@@ -1591,40 +1563,10 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-7",
-      "slotType": "chrome",
-      "renderedText": "Recorded at 12:10 PM",
-      "reason": "Signal recorded time",
-      "component": "why-sheet-backdrop",
-      "step": "Why Sheet",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "why-sheet-backdrop-slot-chrome-8",
-      "slotType": "chrome",
-      "renderedText": "SIMULATED",
-      "reason": "Signal simulated badge",
-      "component": "why-sheet-backdrop",
-      "step": "Why Sheet",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "why-sheet-backdrop-slot-chrome-9",
-      "slotType": "chrome",
-      "renderedText": "Meal timing status",
-      "reason": "Signal category label",
-      "component": "why-sheet-backdrop",
-      "step": "Why Sheet",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
       "slotId": "why-sheet-backdrop-slot-chrome-10",
       "slotType": "chrome",
-      "renderedText": "Lunch has not been eaten today",
-      "reason": "Signal descriptive text",
+      "renderedText": "Recorded at",
+      "reason": "Recorded time prefix",
       "component": "why-sheet-backdrop",
       "step": "Why Sheet",
       "scene": "dynamic-lunch",
@@ -1633,7 +1575,7 @@
     {
       "slotId": "why-sheet-backdrop-slot-chrome-11",
       "slotType": "chrome",
-      "renderedText": "Recorded at 12:10 PM",
+      "renderedText": "12:10 PM",
       "reason": "Signal recorded time",
       "component": "why-sheet-backdrop",
       "step": "Why Sheet",
@@ -1653,7 +1595,7 @@
     {
       "slotId": "why-sheet-backdrop-slot-chrome-13",
       "slotType": "chrome",
-      "renderedText": "places lunch",
+      "renderedText": "Meal timing status",
       "reason": "Signal category label",
       "component": "why-sheet-backdrop",
       "step": "Why Sheet",
@@ -1663,8 +1605,8 @@
     {
       "slotId": "why-sheet-backdrop-slot-chrome-14",
       "slotType": "chrome",
-      "renderedText": "Recorded at 12:10 PM",
-      "reason": "Signal recorded time",
+      "renderedText": "Lunch has not been eaten today",
+      "reason": "Signal descriptive text",
       "component": "why-sheet-backdrop",
       "step": "Why Sheet",
       "scene": "dynamic-lunch",
@@ -1672,6 +1614,26 @@
     },
     {
       "slotId": "why-sheet-backdrop-slot-chrome-15",
+      "slotType": "chrome",
+      "renderedText": "Recorded at",
+      "reason": "Recorded time prefix",
+      "component": "why-sheet-backdrop",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-16",
+      "slotType": "chrome",
+      "renderedText": "12:10 PM",
+      "reason": "Signal recorded time",
+      "component": "why-sheet-backdrop",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-17",
       "slotType": "chrome",
       "renderedText": "SIMULATED",
       "reason": "Signal simulated badge",
@@ -1681,7 +1643,47 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-16",
+      "slotId": "why-sheet-backdrop-slot-chrome-18",
+      "slotType": "chrome",
+      "renderedText": "places lunch",
+      "reason": "Signal category label",
+      "component": "why-sheet-backdrop",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-19",
+      "slotType": "chrome",
+      "renderedText": "Recorded at",
+      "reason": "Recorded time prefix",
+      "component": "why-sheet-backdrop",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-20",
+      "slotType": "chrome",
+      "renderedText": "12:10 PM",
+      "reason": "Signal recorded time",
+      "component": "why-sheet-backdrop",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-21",
+      "slotType": "chrome",
+      "renderedText": "SIMULATED",
+      "reason": "Signal simulated badge",
+      "component": "why-sheet-backdrop",
+      "step": "Why Sheet",
+      "scene": "dynamic-lunch",
+      "viewport": "390x844"
+    },
+    {
+      "slotId": "why-sheet-backdrop-slot-chrome-22",
       "slotType": "chrome",
       "renderedText": "MEMORY & HABITS",
       "reason": "Memory section heading",
@@ -1691,7 +1693,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-17",
+      "slotId": "why-sheet-backdrop-slot-chrome-23",
       "slotType": "chrome",
       "renderedText": "Dining taste preferences",
       "reason": "Memory preference label",
@@ -1701,7 +1703,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-20",
+      "slotId": "why-sheet-backdrop-slot-chrome-26",
       "slotType": "chrome",
       "renderedText": "Favorite cuisine",
       "reason": "Memory preference label",
@@ -1711,7 +1713,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-23",
+      "slotId": "why-sheet-backdrop-slot-chrome-29",
       "slotType": "chrome",
       "renderedText": "HOW THIS WAS DERIVED",
       "reason": "Derivation section heading",
@@ -1721,7 +1723,7 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-24",
+      "slotId": "why-sheet-backdrop-slot-chrome-30",
       "slotType": "chrome",
       "renderedText": "Detected that you are away from home during a free schedule window. Recommended places within walking distance that align with sample taste preferences from the demo profile.",
       "reason": "Derivation synthesis narrative",
@@ -1731,30 +1733,10 @@
       "viewport": "390x844"
     },
     {
-      "slotId": "why-sheet-backdrop-slot-chrome-25",
+      "slotId": "why-sheet-backdrop-slot-chrome-31",
       "slotType": "chrome",
       "renderedText": "Close",
       "reason": "Close why sheet",
-      "component": "why-sheet-backdrop",
-      "step": "Why Sheet",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "why-sheet-backdrop-unannotated-chrome-0",
-      "slotType": "chrome",
-      "renderedText": "Why you're seeing this",
-      "reason": "Static UI element (h2.modal-title)",
-      "component": "why-sheet-backdrop",
-      "step": "Why Sheet",
-      "scene": "dynamic-lunch",
-      "viewport": "390x844"
-    },
-    {
-      "slotId": "why-sheet-backdrop-unannotated-chrome-1",
-      "slotType": "chrome",
-      "renderedText": "×",
-      "reason": "Static UI element (button.btn-close)",
       "component": "why-sheet-backdrop",
       "step": "Why Sheet",
       "scene": "dynamic-lunch",
