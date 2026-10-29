@@ -843,21 +843,19 @@ export function renderApp(
     originatingElementId?: string;
   } | null = null;
 
+  const testHooksEnabled =
+    typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined'
+      ? __YORI_ENABLE_TEST_HOOKS__
+      : Boolean((import.meta as any).env?.DEV);
+
   const isDev = Boolean((import.meta as any).env?.DEV);
   const isTest =
     typeof window !== 'undefined' &&
     typeof window.location?.search === 'string' &&
     new URLSearchParams(window.location.search).get('test') === '1';
-  const isDevOrTest = isDev || isTest;
+  const isDevOrTest = testHooksEnabled && (isDev || isTest);
 
-  const getTestHookName = (suffix: string) => ['__', 'YORI', '_', suffix, '__'].join('');
-  const registerHook = (suffix: string, value: unknown) => {
-    if (typeof window !== 'undefined') {
-      (window as any)[getTestHookName(suffix)] = value;
-    }
-  };
-
-  if (typeof window !== 'undefined' && window.location?.search && isDevOrTest) {
+  if (isDevOrTest && typeof window !== 'undefined' && window.location?.search) {
     try {
       const params = new URLSearchParams(window.location.search);
       const urlScene = params.get('scene') as DemoSceneId | null;
@@ -899,18 +897,15 @@ export function renderApp(
 
   let currentEvidenceBundle: EvidenceBundle | undefined = undefined;
 
-  if (isDevOrTest) {
-    registerHook(
-      'SET_LOCATION',
-      (
-        status: 'available' | 'unavailable' | 'denied' | 'prompt',
-        coords?: { lat: number; lng: number }
-      ) => {
-        defaultLocationPort.setLocation(status, coords);
-        update();
-      }
-    );
-    registerHook('SET_PLACES_ERROR', (shouldError: boolean) => {
+  if (isDevOrTest && typeof window !== 'undefined') {
+    (window as any).__YORI_SET_LOCATION__ = (
+      status: 'available' | 'unavailable' | 'denied' | 'prompt',
+      coords?: { lat: number; lng: number }
+    ) => {
+      defaultLocationPort.setLocation(status, coords);
+      update();
+    };
+    (window as any).__YORI_SET_PLACES_ERROR__ = (shouldError: boolean) => {
       const provider = mockFuelAdapter.getProvider();
       if ('setSimulateError' in provider && typeof (provider as any).setSimulateError === 'function') {
         (provider as any).setSimulateError(shouldError);
@@ -920,13 +915,13 @@ export function renderApp(
         (lunchProvider as any).setSimulateError(shouldError);
       }
       update();
-    });
-    registerHook('DECISION_LOGGER', globalDecisionLogger);
-    registerHook('BUILD_NAV_URL', buildGroundedNavigateUrl);
-    registerHook('GET_CURRENT_EVIDENCE_BUNDLE', () => currentEvidenceBundle);
-    registerHook('ACTION_STORE', actionStore);
-    registerHook('MODEL_INTERPRETER', defaultModelCommandInterpreter);
-    registerHook('MODEL_COMMAND_INTERPRETER_CLASS', ModelCommandInterpreter);
+    };
+    (window as any).__YORI_DECISION_LOGGER__ = globalDecisionLogger;
+    (window as any).__YORI_BUILD_NAV_URL__ = buildGroundedNavigateUrl;
+    (window as any).__YORI_GET_CURRENT_EVIDENCE_BUNDLE__ = () => currentEvidenceBundle;
+    (window as any).__YORI_ACTION_STORE__ = actionStore;
+    (window as any).__YORI_MODEL_INTERPRETER__ = defaultModelCommandInterpreter;
+    (window as any).__YORI_MODEL_COMMAND_INTERPRETER_CLASS__ = ModelCommandInterpreter;
   }
 
   let activeModal:
@@ -2032,9 +2027,9 @@ export function renderApp(
               if (ev.target === modalEl) closeModal();
             });
             modalEl.querySelector('#btn-confirm-navigate')?.addEventListener('click', ev => {
-              if (isDevOrTest && (window as any)[getTestHookName('TEST_INTERCEPT_NAV')]) {
+              if (isDevOrTest && (window as any).__YORI_TEST_INTERCEPT_NAV__) {
                 ev.preventDefault();
-                (window as any)[getTestHookName('LAST_NAV_URL')] = navUrl;
+                (window as any).__YORI_LAST_NAV_URL__ = navUrl;
                 closeModal();
               }
             });

@@ -55,6 +55,7 @@ node_modules/
 .pnp.*
 *.tsbuildinfo
 dist/
+dist-test/
 build/
 out/
 .next/

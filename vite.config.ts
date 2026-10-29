@@ -52,22 +52,36 @@ function weatherProxyPlugin(): Plugin {
  * Vite Configuration for Yori Living Context
  *
  * Governed by Architecture Rev3 Section 5 and PRE-S1-C Production Gating:
- * - Production builds must contain zero `__YORI_` window hook names or prefixes.
- * - Test/dev hooks and URL parameter forcing (?scene=, ?geo=) are strictly gated
- *   behind `import.meta.env.DEV` or an explicit `?test=1` query flag.
- * - In production preview, absent `?test=1`, URL forcing is inert and no test hooks ship.
+ * - Production builds must compile with `__YORI_ENABLE_TEST_HOOKS__ = false`,
+ *   enabling Rollup dead-code elimination (tree-shaking) of all dev/test hooks
+ *   and URL forcing (?scene=, ?geo=, ?geo_consent=).
+ * - Shipping bundles in dist/ contain zero `__YORI_` hook names, tokens, or control surfaces.
+ * - Test/e2e builds (mode 'test' / 'e2e' or TEST_BUILD=1) compile with
+ *   `__YORI_ENABLE_TEST_HOOKS__ = true`, enabling hooks and URL forcing under `?test=1`.
  */
 
 const bindHost = resolveBindHost();
 
-export default defineConfig({
-  plugins: [modelProxyPlugin(), xmemoProxyPlugin(), weatherProxyPlugin()],
-  server: {
-    port: 5173,
-    host: bindHost,
-  },
-  preview: {
-    port: 4173,
-    host: bindHost,
-  },
+export default defineConfig(({ mode }) => {
+  const isTestMode =
+    mode === 'test' ||
+    mode === 'e2e' ||
+    Boolean(process.env.VITE_TEST_BUILD) ||
+    Boolean(process.env.TEST_BUILD);
+  const enableTestHooks = mode === 'development' || isTestMode;
+
+  return {
+    define: {
+      __YORI_ENABLE_TEST_HOOKS__: JSON.stringify(enableTestHooks),
+    },
+    plugins: [modelProxyPlugin(), xmemoProxyPlugin(), weatherProxyPlugin()],
+    server: {
+      port: 5173,
+      host: bindHost,
+    },
+    preview: {
+      port: 4173,
+      host: bindHost,
+    },
+  };
 });

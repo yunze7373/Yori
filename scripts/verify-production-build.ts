@@ -1,14 +1,17 @@
 /**
  * PRE-S1-C: Production Build Absence Verification Script
  *
- * Verifies that production build artifacts in dist/ contain NO `__YORI_`
- * window hook names, identifiers, or prefixes.
+ * Verifies that the shipping production build artifacts in dist/ contain NO:
+ * 1. `__YORI_` window hook names or prefixes.
+ * 2. Hook suffix tokens (SET_LOCATION, ACTION_STORE, etc.).
+ * 3. URL forcing keys (geo_consent, etc.).
  *
  * Enforces AC-201-3 spirit: no hidden control surface ships in production builds.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -32,7 +35,21 @@ const KNOWN_HOOK_NAMES = [
   '__YORI_WATCH_CALL_COUNT__',
 ] as const;
 
-const FORBIDDEN_PREFIX = ['__', 'YORI', '_'].join('');
+const FORBIDDEN_PREFIX = '__YORI_';
+
+const FORBIDDEN_SUFFIX_TOKENS = [
+  'SET_LOCATION',
+  'SET_PLACES_ERROR',
+  'BUILD_NAV_URL',
+  'GET_CURRENT_EVIDENCE_BUNDLE',
+  'ACTION_STORE',
+  'TEST_INTERCEPT_NAV',
+  'LAST_NAV_URL',
+] as const;
+
+const FORBIDDEN_URL_FORCING_KEYS = [
+  'geo_consent',
+] as const;
 
 function findFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) {
@@ -55,17 +72,22 @@ export function verifyProductionBuild(): {
   scannedFiles: string[];
   totalHits: number;
   hookHits: Record<string, number>;
+  suffixHits: Record<string, number>;
+  forcingHits: Record<string, number>;
   prefixHits: number;
 } {
   console.log('===============================================================');
   console.log('🔒 YORI LIVING CONTEXT — PRODUCTION BUILD GATING AUDIT (PRE-S1-C)');
   console.log('===============================================================');
 
+  console.log('Building clean shipping bundle: npm run build ...');
+  execSync('npm run build', { cwd: projectRoot, stdio: 'inherit' });
+
   const files = findFiles(distDir).filter(
     f => f.endsWith('.js') || f.endsWith('.css') || f.endsWith('.html')
   );
 
-  console.log(`Scanning ${files.length} built distribution files in dist/...`);
+  console.log(`\nScanning ${files.length} built distribution files in dist/...`);
 
   let totalHits = 0;
   const hookHits: Record<string, number> = {};
@@ -73,6 +95,16 @@ export function verifyProductionBuild(): {
     hookHits[name] = 0;
   }
   let prefixHits = 0;
+
+  const suffixHits: Record<string, number> = {};
+  for (const token of FORBIDDEN_SUFFIX_TOKENS) {
+    suffixHits[token] = 0;
+  }
+
+  const forcingHits: Record<string, number> = {};
+  for (const key of FORBIDDEN_URL_FORCING_KEYS) {
+    forcingHits[key] = 0;
+  }
 
   for (const filePath of files) {
     const relPath = path.relative(projectRoot, filePath);
@@ -93,23 +125,50 @@ export function verifyProductionBuild(): {
       totalHits += count;
       console.error(`❌ Found ${count} occurrence(s) of forbidden prefix '${FORBIDDEN_PREFIX}' in ${relPath}`);
     }
+
+    for (const suffix of FORBIDDEN_SUFFIX_TOKENS) {
+      if (content.includes(suffix)) {
+        const count = content.split(suffix).length - 1;
+        suffixHits[suffix] += count;
+        totalHits += count;
+        console.error(`❌ Found ${count} occurrence(s) of suffix token '${suffix}' in ${relPath}`);
+      }
+    }
+
+    for (const key of FORBIDDEN_URL_FORCING_KEYS) {
+      if (content.includes(key)) {
+        const count = content.split(key).length - 1;
+        forcingHits[key] += count;
+        totalHits += count;
+        console.error(`❌ Found ${count} occurrence(s) of URL forcing key '${key}' in ${relPath}`);
+      }
+    }
   }
 
   console.log('\n--- Audit Summary ---');
   console.log(`Distribution Files Scanned: ${files.length}`);
+  console.log('1. Known Hook Names:');
   for (const [hook, count] of Object.entries(hookHits)) {
-    console.log(`  - ${hook}: ${count} hits (pass bar: 0)`);
+    console.log(`   - ${hook}: ${count} hits (pass bar: 0)`);
   }
-  console.log(`  - Prefix '${FORBIDDEN_PREFIX}': ${prefixHits} hits (pass bar: 0)`);
+  console.log(`2. Prefix '${FORBIDDEN_PREFIX}': ${prefixHits} hits (pass bar: 0)`);
+  console.log('3. Suffix Tokens:');
+  for (const [suffix, count] of Object.entries(suffixHits)) {
+    console.log(`   - ${suffix}: ${count} hits (pass bar: 0)`);
+  }
+  console.log('4. URL Forcing Keys:');
+  for (const [key, count] of Object.entries(forcingHits)) {
+    console.log(`   - ${key}: ${count} hits (pass bar: 0)`);
+  }
   console.log(`Total Forbidden Occurrences: ${totalHits}`);
 
   if (totalHits > 0) {
-    console.error('\n❌ FAIL: Production build contains dev/test hook names or forbidden prefixes!');
+    console.error('\n❌ FAIL: Shipping production build contains dev/test hooks or forcing keys!');
     process.exit(1);
   }
 
-  console.log('\n✅ PASS: Production build is completely free of __YORI_* hooks and prefixes.\n');
-  return { scannedFiles: files, totalHits, hookHits, prefixHits };
+  console.log('\n✅ PASS: Shipping production build is 100% free of __YORI_* hooks, suffix tokens, and forcing keys.\n');
+  return { scannedFiles: files, totalHits, hookHits, suffixHits, forcingHits, prefixHits };
 }
 
 // Execute when run as CLI
