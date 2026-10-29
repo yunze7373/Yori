@@ -25,7 +25,6 @@ import { deriveTimelineVM } from './timeline-vm.js';
 import { deriveOptionCardVMs } from './option-card-vm.js';
 import { deriveMapVM } from './map-vm.js';
 import { getLocalIllustration } from './photo-vm.js';
-import { classifyFactSource } from './provenance.js';
 import { formatStraightLineDistance } from '../../adapters/providers/simulated-places-provider.js';
 import {
   GroundedRecommendationVerifier,
@@ -79,18 +78,18 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
         })
       : plan?.intentId === 'depart'
         ? createRainEvidenceBundle({
-            plan,
             snapshot,
             sceneClockIso: snapshot?.asOf ?? '2026-10-28T20:35:00.000Z',
             timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+            userConfirmedKeys,
             isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
           })
         : plan?.intentId === 'lunch'
           ? createLunchEvidenceBundle({
-              plan,
               snapshot,
               sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
               timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+              userConfirmedKeys,
               isConfirmedTaste: userConfirmedKeys?.has('taste_preference_lunch_cuisine'),
             })
           : plan?.intentId === 'fuel' || snapshot?.signals?.some(s => s.kind === 'fuel_percent' || s.kind === 'fuel_status' || s.kind === 'places_fuel')
@@ -349,11 +348,9 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     }
 
     let habitNote: string | undefined;
-    const rainFact = plan.why.memoryFactsUsed.find(
-      f => f.key === 'rain_transport_preference' && f.status === 'confirmed'
-    );
-    if (rainFact) {
-      habitNote = rainFact.value === 'bus_first' ? STRINGS.habit.rainTransit : STRINGS.habit.rainDrive;
+    const rainHabitRec = bundle?.getRecord('rain_transport_preference');
+    if (rainHabitRec && rainHabitRec.provenance === 'confirmed') {
+      habitNote = rainHabitRec.fields?.value === 'bus_first' ? STRINGS.habit.rainTransit : STRINGS.habit.rainDrive;
     }
 
     const calSig =
@@ -490,12 +487,12 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           const photo = getLocalIllustration(opt.cuisine || 'dining', name);
 
           // Check if taste preference or cuisine fact is confirmed by the user
-          const tasteFact = plan.why?.memoryFactsUsed?.find(
-            f => f.key.includes('taste') || f.key.includes('cuisine')
-          );
-          const isConfirmed = tasteFact
-            ? classifyFactSource(tasteFact, userConfirmedKeys) === 'user_confirmed'
-            : false;
+          const habitRec =
+            bundle?.getRecord('taste_preference') ||
+            bundle?.getRecord('favorite_cuisine') ||
+            bundle?.getRecord('taste_preference_lunch_cuisine') ||
+            bundle?.getAllRecords().find(r => r.kind === 'habit');
+          const isConfirmed = habitRec?.provenance === 'confirmed';
           const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
           const basis = `Based on taste: ${cuisine} (${provenance})`;
 

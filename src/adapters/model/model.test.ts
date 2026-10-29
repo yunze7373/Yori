@@ -2256,6 +2256,62 @@ describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpr
         expectedReason: 'unconfirmed_fact_used',
       },
       {
+        name: 'rejects empty confirmed set with matches_confirmed_preference citing a sample key',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['matches_confirmed_preference'],
+        },
+        expectValid: false,
+        expectedReason: 'unconfirmed_fact_used',
+      },
+      {
+        name: 'rejects empty confirmed set and empty cites with matches_confirmed_preference',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: [],
+          reasonCodes: ['matches_confirmed_preference'],
+        },
+        expectValid: false,
+        expectedReason: 'unconfirmed_fact_used',
+      },
+      {
+        name: 'rejects SA-level matches_confirmed_preference with empty confirmed set',
+        context: {
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          knownFactKeys: ['sample_key_one'],
+          confirmedFactKeys: [],
+        },
+        output: {
+          intent: 'FIND_LUNCH',
+          slots: {},
+          situationAttribution: {
+            signalId: 'weather:2026-10-28T20:35:00.000Z',
+            reasonCode: 'matches_confirmed_preference',
+            citedFactKeys: ['sample_key_one'],
+          },
+          citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          citedFactKeys: ['sample_key_one'],
+          reasonCodes: ['free_window_fit'],
+        },
+        expectValid: false,
+        expectedReason: 'unconfirmed_fact_used',
+      },
+      {
         name: 'rejects SA-level matches_confirmed_preference with a sample key',
         context: {
           availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],

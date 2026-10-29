@@ -323,6 +323,21 @@ export class DefaultActionStateStore implements ActionStateStore {
       this.pendingOverride = null;
     }
 
+    const ctx = this.commandContext;
+    if (this.currentOverride && (ctx?.plan?.intentId === 'depart' || ctx?.sceneId === 'rain')) {
+      const rainBundle = createRainEvidenceBundle({
+        snapshot: ctx?.snapshot,
+        override: this.currentOverride,
+        sceneClockIso: ctx?.snapshot?.asOf,
+        timezone: ctx?.plan?.timezone ?? ctx?.snapshot?.timezone,
+        userConfirmedKeys: ctx?.userConfirmedKeys,
+        isConfirmedHabit: ctx?.userConfirmedKeys?.has('rain_transport_preference'),
+        memoryFacts: ctx?.memory,
+      });
+      this.activeEvidenceBundle = rainBundle;
+      this.activeSnapshot = ctx?.snapshot;
+    }
+
     this.actionState = {
       status: 'updated',
       resultSummary: summary,
@@ -484,20 +499,22 @@ export class DefaultActionStateStore implements ActionStateStore {
       ctx?.evidenceBundle ??
       (ctx?.plan?.intentId === 'depart' || ctx?.sceneId === 'rain'
         ? createRainEvidenceBundle({
-            plan: ctx?.plan ?? undefined,
             snapshot: ctx?.snapshot,
             override: this.currentOverride,
             sceneClockIso: ctx?.snapshot?.asOf,
             timezone: ctx?.plan?.timezone ?? ctx?.snapshot?.timezone,
+            userConfirmedKeys: ctx?.userConfirmedKeys,
             isConfirmedHabit: ctx?.userConfirmedKeys?.has('rain_transport_preference'),
+            memoryFacts: ctx?.memory,
           })
         : ctx?.plan?.intentId === 'lunch' || ctx?.sceneId === 'away-lunch'
           ? createLunchEvidenceBundle({
-              plan: ctx?.plan ?? undefined,
               snapshot: ctx?.snapshot,
               sceneClockIso: ctx?.snapshot?.asOf,
               timezone: ctx?.plan?.timezone ?? ctx?.snapshot?.timezone,
+              userConfirmedKeys: ctx?.userConfirmedKeys,
               isConfirmedTaste: ctx?.userConfirmedKeys?.has('taste_preference_lunch_cuisine'),
+              memory: ctx?.memory,
             })
           : undefined);
 
@@ -524,15 +541,10 @@ export class DefaultActionStateStore implements ActionStateStore {
       }
     }
 
-    // Gather known facts from memory and plan (any provenance)
+    // Gather known facts from MemoryPort memory facts (never plan overlay)
     const knownFactKeysSet = new Set<string>();
     if (ctx?.memory) {
       for (const f of ctx.memory) {
-        knownFactKeysSet.add(f.key);
-      }
-    }
-    if (ctx?.plan?.why?.memoryFactsUsed) {
-      for (const f of ctx.plan.why.memoryFactsUsed) {
         knownFactKeysSet.add(f.key);
       }
     }
@@ -543,16 +555,6 @@ export class DefaultActionStateStore implements ActionStateStore {
     if (ctx?.memory) {
       for (const f of ctx.memory) {
         if (classifyFactSource(f, ctx.userConfirmedKeys) === 'user_confirmed') {
-          confirmedFactKeys.push(f.key);
-        }
-      }
-    }
-    if (ctx?.plan?.why?.memoryFactsUsed) {
-      for (const f of ctx.plan.why.memoryFactsUsed) {
-        if (
-          classifyFactSource(f, ctx.userConfirmedKeys) === 'user_confirmed' &&
-          !confirmedFactKeys.includes(f.key)
-        ) {
           confirmedFactKeys.push(f.key);
         }
       }
@@ -607,6 +609,8 @@ export class DefaultActionStateStore implements ActionStateStore {
           },
           override: this.currentOverride,
           timestamp: now,
+          evidenceBundle: this.activeEvidenceBundle,
+          snapshot: ctx?.snapshot,
         });
         this.confirmPending('Plan confirmed for this time only', confirmedPlan);
         const response = 'Confirmed for this time only. Your departure plan is updated.';
@@ -893,9 +897,23 @@ export class DefaultActionStateStore implements ActionStateStore {
         },
         override: this.currentOverride,
         timestamp: now,
+        evidenceBundle: this.activeEvidenceBundle,
+        snapshot: ctx.snapshot,
       });
 
       this.currentOverride = override;
+
+      const rainBundle = createRainEvidenceBundle({
+        snapshot: ctx.snapshot,
+        override,
+        sceneClockIso: ctx.snapshot?.asOf,
+        timezone: ctx.plan?.timezone ?? ctx.snapshot?.timezone,
+        userConfirmedKeys: ctx.userConfirmedKeys,
+        isConfirmedHabit: ctx.userConfirmedKeys?.has('rain_transport_preference'),
+        memoryFacts: ctx.memory,
+      });
+      this.activeEvidenceBundle = rainBundle;
+      this.activeSnapshot = ctx.snapshot;
 
       this.resolveExecutable(
         `Depart plan updated to leave ${deltaMinutes} min later.`,
@@ -978,9 +996,23 @@ export class DefaultActionStateStore implements ActionStateStore {
         },
         override: this.currentOverride,
         timestamp: now,
+        evidenceBundle: this.activeEvidenceBundle,
+        snapshot: ctx.snapshot,
       });
 
       this.currentOverride = override;
+
+      const rainBundle = createRainEvidenceBundle({
+        snapshot: ctx.snapshot,
+        override,
+        sceneClockIso: ctx.snapshot?.asOf,
+        timezone: ctx.plan?.timezone ?? ctx.snapshot?.timezone,
+        userConfirmedKeys: ctx.userConfirmedKeys,
+        isConfirmedHabit: ctx.userConfirmedKeys?.has('rain_transport_preference'),
+        memoryFacts: ctx.memory,
+      });
+      this.activeEvidenceBundle = rainBundle;
+      this.activeSnapshot = ctx.snapshot;
 
       this.resolveExecutable(`Primary route switched to ${mode}.`, newPlan);
       const successMsg = `Switched primary route to ${mode}: ${newPlan.headline}.`;

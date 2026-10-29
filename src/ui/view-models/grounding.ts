@@ -267,6 +267,7 @@ export type GroundingFailureReason =
   | 'tampered_value'
   | 'stale_record'
   | 'simulated_mislabelled_as_live'
+  | 'sample_mislabelled_as_confirmed'
   | 'candidate_outside_bundle';
 
 export interface GroundingVerificationResult {
@@ -325,6 +326,15 @@ export class GroundedRecommendationVerifier {
           record.id,
           sourceRef.field,
           `Record '${record.id}' is simulated but labelled as live`,
+          bundle
+        );
+      }
+      if (record.provenance === 'sample' && expectedProvenance === 'confirmed') {
+        return this.fail(
+          'sample_mislabelled_as_confirmed',
+          record.id,
+          sourceRef.field,
+          `Record '${record.id}' is sample preference but labelled as confirmed`,
           bundle
         );
       }
@@ -583,7 +593,7 @@ export function createRainEvidenceBundle(options?: {
     'travel_estimate:2026-10-28T20:35:00.000Z';
   const travelFetchedAt = travelSig?.issuedAt ?? '2026-10-28T20:35:00.000Z';
 
-  const memFacts = options?.memoryFacts ?? options?.plan?.why?.memoryFactsUsed;
+  const memFacts = options?.memoryFacts;
   const bufferMinutes = typeof memFacts?.find(f => f.key === 'prep_buffer_minutes')?.value === 'number'
     ? (memFacts.find(f => f.key === 'prep_buffer_minutes')!.value as number)
     : 5;
@@ -711,34 +721,38 @@ export function createRainEvidenceBundle(options?: {
     },
   ];
 
-  // Add one habit record per memory fact used (from default facts, options.memoryFacts, or plan facts)
-  const defaultMemoryFacts: readonly { key: string; value?: unknown; status?: string }[] = [
+  // Add one habit record per memory fact used (from default facts or options.memoryFacts; never plan.why.memoryFactsUsed)
+  const defaultMemoryFacts: readonly { key: string; value?: unknown; status?: string; provenance?: unknown }[] = [
     { key: 'rain_transport_preference', value: 'drive_first', status: isConfirmedHabit ? 'confirmed' : 'pending' },
     { key: 'prep_buffer_minutes', value: bufferMinutes, status: 'pending' },
     { key: 'prep_duration_minutes', value: prepMinutes, status: 'pending' },
   ];
 
-  const factMap = new Map<string, { key: string; value?: unknown; status?: string }>();
+  const factMap = new Map<string, { key: string; value?: unknown; status?: string; provenance?: unknown }>();
   if (options?.memoryFacts) {
     for (const f of options.memoryFacts) factMap.set(f.key, f);
   } else {
     for (const f of defaultMemoryFacts) factMap.set(f.key, f);
-    if (options?.plan?.why?.memoryFactsUsed) {
-      for (const f of options.plan.why.memoryFactsUsed) factMap.set(f.key, f);
-    }
   }
 
   for (const fact of factMap.values()) {
-    const isConfirmed = options?.userConfirmedKeys
-      ? options.userConfirmedKeys.has(fact.key)
-      : (fact.key === 'rain_transport_preference' ? isConfirmedHabit : fact.status === 'confirmed');
+    const factKind = classifyFactSource(
+      fact as FactLike,
+      options?.userConfirmedKeys,
+      options?.memoryFacts
+    );
+    const isConfirmed = options?.userConfirmedKeys !== undefined
+      ? factKind === 'user_confirmed'
+      : (fact.key === 'rain_transport_preference' ? isConfirmedHabit : false);
+    const provStr: EvidenceProvenance = isConfirmed ? 'confirmed' : 'sample';
+    const provLabel = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
 
     records.push({
       id: fact.key,
       provider: 'memory',
       kind: 'habit',
       fetchedAt: sceneClockIso,
-      provenance: isConfirmed ? 'confirmed' : 'sample',
+      provenance: provStr,
       fields: {
         key: fact.key,
         value: fact.value,
@@ -747,10 +761,15 @@ export function createRainEvidenceBundle(options?: {
         prepText: `${prepMinutes}m prep + ${bufferMinutes}m buffer`,
         bufferText: `${bufferMinutes}m buffer`,
         rankingBasis: fact.key === 'rain_transport_preference'
-          ? (isConfirmed
-              ? 'Ranked by habit: Rain travel habit (You confirmed)'
-              : 'Ranked by habit: Rain travel habit (Demo profile · sample)')
+          ? `Ranked by habit: Rain travel habit (${provLabel})`
           : undefined,
+        basis: fact.key === 'rain_transport_preference'
+          ? `Rain travel habit (${provLabel})`
+          : fact.key === 'prep_buffer_minutes'
+            ? `Buffer: ${fact.value ?? bufferMinutes} min (${provLabel})`
+            : fact.key === 'prep_duration_minutes'
+              ? `Prep: ${fact.value ?? prepMinutes} min (${provLabel})`
+              : undefined,
       },
     });
   }
@@ -876,10 +895,11 @@ export function createLunchEvidenceBundle(options?: {
   sceneClockIso?: string;
   timezone?: string;
   isConfirmedTaste?: boolean;
+  userConfirmedKeys?: ReadonlySet<string>;
+  memory?: readonly (MemoryFact | FactLike)[];
 }): EvidenceBundle {
   const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T19:10:00.000Z';
   const timezone = options?.timezone ?? options?.snapshot?.timezone ?? 'America/Los_Angeles';
-  const isConfirmedTaste = options?.isConfirmedTaste ?? false;
 
   const recordMap = new Map<string, EvidenceRecord>();
   const habitId = 'taste_preference_lunch_cuisine';
@@ -976,17 +996,21 @@ export function createLunchEvidenceBundle(options?: {
     }
   }
 
+  const isConfirmed = options?.userConfirmedKeys
+    ? options.userConfirmedKeys.has(habitId) || options.userConfirmedKeys.has('taste_preference') || options.userConfirmedKeys.has('favorite_cuisine')
+    : (options?.isConfirmedTaste ?? false);
+
   recordMap.set(habitId, {
     id: habitId,
     provider: 'memory',
     kind: 'habit',
     fetchedAt: sceneClockIso,
-    provenance: isConfirmedTaste ? 'confirmed' : 'sample',
+    provenance: isConfirmed ? 'confirmed' : 'sample',
     fields: {
       key: 'taste_preference_lunch_cuisine',
       value: 'japanese',
       cuisine: 'Japanese',
-      basis: isConfirmedTaste
+      basis: isConfirmed
         ? 'Based on taste: Japanese (You confirmed)'
         : 'Based on taste: Japanese (Demo profile · sample)',
     },

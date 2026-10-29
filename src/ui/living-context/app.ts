@@ -83,6 +83,7 @@ import {
   buildHomeComposition,
   deriveTripDetailVM,
   deriveRestaurantDetailVM,
+  createRainEvidenceBundle,
   createLunchEvidenceBundle,
   createLunchPlacesEvidenceBundle,
   createFuelEvidenceBundle,
@@ -307,6 +308,14 @@ export function computeSceneState(
           }
         : null;
 
+      const rainBundle = createRainEvidenceBundle({
+        snapshot,
+        sceneClockIso: snapshot.asOf,
+        timezone: snapshot.timezone || 'America/Los_Angeles',
+        userConfirmedKeys: storedUserConfirmedKeys,
+        memoryFacts: combinedMemory,
+      });
+
       return {
         pipelineResult: result,
         spatialMapEvidence: mapEvidence,
@@ -316,6 +325,7 @@ export function computeSceneState(
         snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
         snapshot,
         combinedMemory,
+        evidenceBundle: rainBundle,
       };
     }
 
@@ -347,6 +357,14 @@ export function computeSceneState(
           }
         : null;
 
+      const awayLunchBundle = createLunchEvidenceBundle({
+        snapshot,
+        sceneClockIso: snapshot.asOf,
+        timezone: snapshot.timezone || 'America/Los_Angeles',
+        userConfirmedKeys: storedUserConfirmedKeys,
+        memory: combinedMemory,
+      });
+
       return {
         pipelineResult: result,
         spatialMapEvidence: mapEvidence,
@@ -356,6 +374,7 @@ export function computeSceneState(
         snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
         snapshot,
         combinedMemory,
+        evidenceBundle: awayLunchBundle,
       };
     }
 
@@ -1027,23 +1046,6 @@ export function renderApp(
       }
     }
 
-    const living = pipelineResult.livingContext;
-    const baseNowPlan = reasoningState && reasoningState.scene === currentScene ? reasoningState.now : living.now;
-    const actionState = actionStore.getActionState();
-    const storePlan =
-      actionState.status === 'updated' || (actionState.status === 'working' && actionState.plan)
-        ? actionState.plan
-        : undefined;
-    const nowPlan = storePlan ?? baseNowPlan;
-
-    const effectiveEvidenceBundle =
-      ((nowPlan?.intentId === 'fuel' || nowPlan?.intentId === 'lunch') ? actionStore.getActiveEvidenceBundle() : undefined) ?? evidenceBundle;
-    const effectiveSnapshot =
-      ((nowPlan?.intentId === 'fuel' || nowPlan?.intentId === 'lunch') ? actionStore.getActiveSnapshot() : undefined) ?? snapshot;
-
-    currentEvidenceBundle = effectiveEvidenceBundle;
-    const aheadPlans = reasoningState && reasoningState.scene === currentScene ? reasoningState.ahead : living.ahead;
-    const notices = pipelineResult.notices;
     const acceptedPlanIds: readonly string[] = storedEnvelope?.payload.acceptedPlanIds ?? [];
     const rawStoredConfirmed = storedEnvelope?.payload.memoryFacts ?? [];
     const activeStoredConfirmed: MemoryFact[] = [...rawStoredConfirmed.filter(f => f.status === 'confirmed')];
@@ -1062,6 +1064,36 @@ export function renderApp(
       }
     }
     const userConfirmedKeys = new Set(activeStoredConfirmed.map(f => f.key));
+
+    const living = pipelineResult.livingContext;
+    const baseNowPlan = reasoningState && reasoningState.scene === currentScene ? reasoningState.now : living.now;
+    const actionState = actionStore.getActionState();
+    const storePlan =
+      actionState.status === 'updated' || (actionState.status === 'working' && actionState.plan)
+        ? actionState.plan
+        : undefined;
+    const nowPlan = storePlan ?? baseNowPlan;
+
+    const effectiveEvidenceBundle =
+      ((nowPlan?.intentId === 'fuel' || nowPlan?.intentId === 'lunch' || nowPlan?.intentId === 'depart')
+        ? actionStore.getActiveEvidenceBundle()
+        : undefined) ??
+      (nowPlan?.intentId === 'depart' && actionStore.getCurrentOverride()
+        ? createRainEvidenceBundle({
+            snapshot,
+            override: actionStore.getCurrentOverride(),
+            sceneClockIso: snapshot?.asOf,
+            timezone: snapshot?.timezone,
+            userConfirmedKeys,
+            memoryFacts: combinedMemory,
+          })
+        : evidenceBundle);
+    const effectiveSnapshot =
+      ((nowPlan?.intentId === 'fuel' || nowPlan?.intentId === 'lunch' || nowPlan?.intentId === 'depart') ? actionStore.getActiveSnapshot() : undefined) ?? snapshot;
+
+    currentEvidenceBundle = effectiveEvidenceBundle;
+    const aheadPlans = reasoningState && reasoningState.scene === currentScene ? reasoningState.ahead : living.ahead;
+    const notices = pipelineResult.notices;
 
     // Keep ActionStateStore command context synchronized with the pipeline-admitted plan and candidate
     const admittedCandidate =
@@ -1136,11 +1168,15 @@ export function renderApp(
         const defaultCandId =
           typeof firstOpt !== 'string' && firstOpt ? firstOpt.id : 'cand-1';
         const candidateId = activeDetail.candidateId || defaultCandId;
-        const restaurantBundle = createLunchEvidenceBundle({
-          sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
-          timezone: snapshotTimezone,
-          isConfirmedTaste: userConfirmedKeys.has('taste_preference_lunch_cuisine'),
-        });
+        const restaurantBundle =
+          effectiveEvidenceBundle ??
+          createLunchEvidenceBundle({
+            sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
+            timezone: snapshotTimezone,
+            userConfirmedKeys,
+            isConfirmedTaste: userConfirmedKeys.has('taste_preference_lunch_cuisine'),
+            memory: combinedMemory,
+          });
         const restaurantVM = deriveRestaurantDetailVM({
           candidateId,
           plan: nowPlan,
@@ -1917,7 +1953,9 @@ export function renderApp(
               ? createFuelEvidenceBundle({ snapshot: effectiveSnapshot })
               : effectiveSnapshot?.signals?.some(s => s.kind === 'places_lunch')
                 ? createLunchPlacesEvidenceBundle({ snapshot: effectiveSnapshot, userConfirmedKeys, memory: combinedMemory })
-                : createLunchEvidenceBundle({ plan: nowPlan ?? undefined, snapshot: effectiveSnapshot }));
+                : nowPlan?.intentId === 'depart'
+                  ? createRainEvidenceBundle({ snapshot: effectiveSnapshot, userConfirmedKeys, memoryFacts: combinedMemory })
+                  : createLunchEvidenceBundle({ snapshot: effectiveSnapshot, userConfirmedKeys, memory: combinedMemory }));
 
           const navPlatform =
             typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent || '')

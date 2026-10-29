@@ -24,6 +24,7 @@ import { createSimulatedSignal } from '../../core/contracts/index.js';
 import type { PlaceItem } from '../../adapters/providers/places-types.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
 import { d3MemoryFacts } from '../../../tests/fixtures/index.js';
+import { d2MemoryFacts } from '../../../tests/fixtures/d2.js';
 
 describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', () => {
   beforeEach(() => {
@@ -1608,6 +1609,146 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       const confirmedHabit = confirmedBundle.getRecord('taste_preference')!;
       expect(confirmedHabit.provenance).toBe('confirmed');
       expect(confirmedHabit.fields.basis).toContain('You confirmed');
+    });
+
+    describe('PRE-S1-A: Memory Evidence & Provenance-Class Hardening', () => {
+      it('Check 1 (Rain bundle): d2 persona facts with status confirmed and empty stored keys yield provenance sample and Demo profile · sample basis; verifying with confirmed fails closed', () => {
+        const emptyStoredConfirmations = new Set<string>();
+        const sampleBundle = createRainEvidenceBundle({
+          memoryFacts: d2MemoryFacts,
+          userConfirmedKeys: emptyStoredConfirmations,
+        });
+
+        // 1. Records are present, not absent
+        expect(sampleBundle.hasRecord('prep_buffer_minutes')).toBe(true);
+        expect(sampleBundle.hasRecord('rain_transport_preference')).toBe(true);
+
+        const prepRec = sampleBundle.getRecord('prep_buffer_minutes')!;
+        expect(prepRec.provenance).toBe('sample');
+        expect(prepRec.fields.basis).toContain('Demo profile · sample');
+
+        const habitRec = sampleBundle.getRecord('rain_transport_preference')!;
+        expect(habitRec.provenance).toBe('sample');
+        expect(habitRec.fields.basis).toContain('Demo profile · sample');
+        expect(habitRec.fields.rankingBasis).toContain('Demo profile · sample');
+
+        // Negative: verifying with expectedProvenance 'confirmed' fails with sample_mislabelled_as_confirmed
+        const vHabitFail = GroundedRecommendationVerifier.verifyField(
+          { recordId: 'rain_transport_preference', field: 'value' },
+          'drive_first',
+          sampleBundle,
+          'confirmed'
+        );
+        expect(vHabitFail.valid).toBe(false);
+        expect(vHabitFail.reason).toBe('sample_mislabelled_as_confirmed');
+
+        // Any render labelled 'You confirmed' for basis fails normalized equality
+        const vRenderFail = GroundedRecommendationVerifier.verifyField(
+          { recordId: 'rain_transport_preference', field: 'basis' },
+          'Rain travel habit (You confirmed)',
+          sampleBundle
+        );
+        expect(vRenderFail.valid).toBe(false);
+        expect(vRenderFail.reason).toBe('tampered_value');
+
+        // Positive: after stored confirmation, yields provenance 'confirmed' and 'You confirmed'
+        const storedKeys = new Set<string>(['prep_buffer_minutes', 'rain_transport_preference']);
+        const confirmedBundle = createRainEvidenceBundle({
+          memoryFacts: d2MemoryFacts,
+          userConfirmedKeys: storedKeys,
+        });
+
+        const confirmedPrep = confirmedBundle.getRecord('prep_buffer_minutes')!;
+        expect(confirmedPrep.provenance).toBe('confirmed');
+        expect(confirmedPrep.fields.basis).toContain('You confirmed');
+
+        const confirmedHabit = confirmedBundle.getRecord('rain_transport_preference')!;
+        expect(confirmedHabit.provenance).toBe('confirmed');
+        expect(confirmedHabit.fields.basis).toContain('You confirmed');
+        expect(confirmedHabit.fields.rankingBasis).toContain('You confirmed');
+
+        const vHabitPass = GroundedRecommendationVerifier.verifyField(
+          { recordId: 'rain_transport_preference', field: 'value' },
+          'drive_first',
+          confirmedBundle,
+          'confirmed'
+        );
+        expect(vHabitPass.valid).toBe(true);
+      });
+
+      it('Check 1 (Rain prep rows): G12 rain prep rows (5/20 min in Details/Why) stay green throughout', () => {
+        const storedKeys = new Set<string>();
+        const sampleBundle = createRainEvidenceBundle({
+          memoryFacts: d2MemoryFacts,
+          userConfirmedKeys: storedKeys,
+        });
+
+        const planWithAllFacts: PreparedPlan = {
+          ...rainPlan,
+          why: {
+            ...rainPlan.why,
+            memoryFactsUsed: [
+              { key: 'prep_buffer_minutes', value: 5, status: 'confirmed' },
+              { key: 'prep_duration_minutes', value: 20, status: 'confirmed' },
+              { key: 'rain_transport_preference', value: 'drive_first', status: 'confirmed' },
+            ],
+          },
+        };
+
+        const detail = deriveTripDetailVM({
+          plan: planWithAllFacts,
+          spatialEvidence: null,
+          evidenceBundle: sampleBundle,
+          userConfirmedKeys: storedKeys,
+        });
+
+        const bufferRow = detail.whyHabits.find(h => h.label.includes('Buffer before leaving'))!;
+        expect(bufferRow).toBeDefined();
+        expect(bufferRow.value).toBe('5 min');
+        expect(bufferRow.provenanceText).toBe('Demo profile · sample');
+        expect(bufferRow.isConfirmed).toBe(false);
+
+        const prepRow = detail.whyHabits.find(h => h.label.includes('Time to get ready'))!;
+        expect(prepRow).toBeDefined();
+        expect(prepRow.value).toBe('20 min');
+        expect(prepRow.provenanceText).toBe('Demo profile · sample');
+        expect(prepRow.isConfirmed).toBe(false);
+      });
+
+      it('Check 2: No code path overlays plan.why.memoryFactsUsed or grounds plan memory against the plan itself', () => {
+        const forgedPlan: PreparedPlan = {
+          ...rainPlan,
+          why: {
+            ...rainPlan.why,
+            memoryFactsUsed: [
+              { key: 'forged_overlay_key', value: 'malicious_value', status: 'confirmed' },
+            ],
+          },
+        };
+
+        // Calling createRainEvidenceBundle with plan carrying memoryFactsUsed does not overlay or include it
+        const bundleFromForgedPlan = createRainEvidenceBundle({
+          plan: forgedPlan,
+        });
+        expect(bundleFromForgedPlan.hasRecord('forged_overlay_key')).toBe(false);
+
+        // Calling createLunchPlacesEvidenceBundle with plan carrying memoryFactsUsed does not include it
+        const lunchBundle = createLunchPlacesEvidenceBundle({
+          snapshot: sfSnapshot,
+          ...({ plan: forgedPlan } as any),
+        });
+        expect(lunchBundle.hasRecord('forged_overlay_key')).toBe(false);
+
+        // buildHomeComposition ignores plan.why.memoryFactsUsed for habit notes and derives from bundle
+        const homeVM = buildHomeComposition({
+          plan: forgedPlan,
+          spatialEvidence: null,
+          evidenceBundle: bundleFromForgedPlan,
+          userConfirmedKeys: new Set(),
+        });
+        // Since forged_overlay_key is not in bundle and not confirmed, habitNote is not set from plan
+        expect(homeVM.habitNote).toBeUndefined();
+      });
     });
   });
 });

@@ -5,7 +5,7 @@ import { d2Scenario, d2MemoryFacts, d3Scenario, d3MemoryFacts } from '../../../t
 import { createFixedClock, replayScenarioTimeline } from '../../app/scenario-player/index.js';
 import { departPreparer } from '../../plugins/depart/preparer.js';
 import { lunchPreparer } from '../../plugins/lunch/preparer.js';
-import type { IntentCandidate } from '../../core/contracts/index.js';
+import { createMemoryFact, type IntentCandidate, type PreparedPlan } from '../../core/contracts/index.js';
 import { defaultLocationPort, DEFAULT_DEMO_COORDS } from '../../adapters/providers/location-port.js';
 
 describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
@@ -623,6 +623,67 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
 
       // Restore location port
       defaultLocationPort.setLocation('available', DEFAULT_DEMO_COORDS);
+    });
+
+    it('PRE-S1-A: derives knownFactKeys and confirmedFactKeys strictly from memory and userConfirmedKeys, never from plan.why.memoryFactsUsed', () => {
+      let capturedContext: any = null;
+      const mockInterpreter = {
+        interpret: vi.fn((_input: string, context?: any) => {
+          capturedContext = context;
+          return { intent: 'UNKNOWN' };
+        }),
+      };
+
+      const store = createActionStateStore({ interpreter: mockInterpreter as any });
+      store.openConversation();
+
+      const planWithOverlay: PreparedPlan = {
+        id: 'plan-overlay',
+        intentId: 'depart',
+        headline: 'Test plan',
+        requiresConfirmation: false,
+        createdAt: '2026-10-28T20:35:00.000Z',
+        why: {
+          evidenceSignals: [],
+          memoryFactsUsed: [
+            { key: 'plan_forged_key', value: 'bad', status: 'confirmed' },
+          ],
+          derivation: '',
+        },
+        optionsOrSteps: [],
+      };
+
+      store.setCommandContext({
+        plan: planWithOverlay,
+        candidate: undefined,
+        snapshot: {
+          id: 'snap-1',
+          asOf: '2026-10-28T19:10:00.000Z',
+          timezone: 'America/Los_Angeles',
+          signals: [],
+        },
+        memory: [
+          createMemoryFact('valid_sample_key', 'val1', 'confirmed', { source: 'seed', recordedAt: '2026-10-28T19:10:00.000Z' }, '2026-10-28T19:10:00.000Z'),
+          createMemoryFact('valid_confirmed_key', 'val2', 'confirmed', { source: 'user_confirmed', recordedAt: '2026-10-28T19:10:00.000Z' }, '2026-10-28T19:10:00.000Z'),
+        ],
+        userConfirmedKeys: new Set(['valid_confirmed_key']),
+        sceneId: 'clear',
+      });
+
+      store.submitMessage('hello');
+
+      expect(mockInterpreter.interpret).toHaveBeenCalled();
+      expect(capturedContext).toBeDefined();
+
+      // knownFactKeys contains memory keys but NOT plan.why.memoryFactsUsed
+      expect(capturedContext.knownFactKeys).toContain('valid_sample_key');
+      expect(capturedContext.knownFactKeys).toContain('valid_confirmed_key');
+      expect(capturedContext.knownFactKeys).not.toContain('plan_forged_key');
+
+      // confirmedFactKeys contains only user_confirmed keys in userConfirmedKeys
+      expect(capturedContext.confirmedFactKeys).toEqual(['valid_confirmed_key']);
+      expect(capturedContext.confirmedFactKeys).not.toContain('valid_sample_key');
+      expect(capturedContext.confirmedFactKeys).not.toContain('plan_forged_key');
     });
   });
 
