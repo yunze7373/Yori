@@ -848,12 +848,12 @@ export function renderApp(
       ? __YORI_ENABLE_TEST_HOOKS__
       : Boolean((import.meta as any).env?.DEV);
 
-  const isDev = Boolean((import.meta as any).env?.DEV);
-  const isTest =
-    typeof window !== 'undefined' &&
-    typeof window.location?.search === 'string' &&
-    new URLSearchParams(window.location.search).get('test') === '1';
-  const isDevOrTest = testHooksEnabled && (isDev || isTest);
+  const isDevOrTest =
+    testHooksEnabled &&
+    (Boolean((import.meta as any).env?.DEV) ||
+      (typeof window !== 'undefined' &&
+        typeof window.location?.search === 'string' &&
+        new URLSearchParams(window.location.search).get('test') === '1'));
 
   if (isDevOrTest && typeof window !== 'undefined' && window.location?.search) {
     try {

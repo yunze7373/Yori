@@ -66,8 +66,8 @@ export default defineConfig(({ mode }) => {
   const isTestMode =
     mode === 'test' ||
     mode === 'e2e' ||
-    Boolean(process.env.VITE_TEST_BUILD) ||
-    Boolean(process.env.TEST_BUILD);
+    process.env.VITE_TEST_BUILD === '1' ||
+    process.env.TEST_BUILD === '1';
   const enableTestHooks = mode === 'development' || isTestMode;
 
   return {
