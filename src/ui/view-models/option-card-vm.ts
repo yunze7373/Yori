@@ -98,7 +98,6 @@ export function deriveOptionCardVMs(
       const fieldSourceRefs: Record<string, SourceRef> = {
         mode: { recordId: recId, field: 'mode' },
         travelMinutes: { recordId: recId, field: 'travelMinutes' },
-        leaveTime: { recordId: recId, field: 'leaveTime' },
         badge: { recordId: recId, field: 'badge' },
       };
       if (bufferMinutes !== undefined) {

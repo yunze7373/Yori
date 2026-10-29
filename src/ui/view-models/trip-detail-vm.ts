@@ -240,8 +240,9 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
   const map = deriveMapVM(plan, spatialEvidence, 'prominent', {
     snapshot,
     mode: selectedTab.mode,
+    evidenceBundle: bundle,
   })!;
-  const timeline = deriveTimelineVM(plan, snapshot, selectedTab.mode);
+  const timeline = deriveTimelineVM(plan, snapshot, selectedTab.mode, bundle);
   const steps = timeline?.steps ?? [];
 
   // Why Provenance Section
@@ -249,7 +250,17 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
   if (plan.why?.memoryFactsUsed) {
     for (const fact of plan.why.memoryFactsUsed) {
       const label = humanizeMemoryKey(fact.key);
-      const value = humanizeMemoryValue(fact.key, fact.value);
+      let value = humanizeMemoryValue(fact.key, fact.value);
+      if (bundle && bundle.hasRecord(fact.key)) {
+        const vHabit = GroundedRecommendationVerifier.verifyField(
+          { recordId: fact.key, field: 'value' },
+          fact.value,
+          bundle
+        );
+        if (!vHabit.valid) {
+          value = 'unknown';
+        }
+      }
       const isConfirmed = userConfirmedKeys?.has(fact.key) ?? false;
       const provenanceText = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
       whyHabits.push({

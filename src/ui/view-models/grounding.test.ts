@@ -15,6 +15,7 @@ import { deriveOptionCardVMs } from './option-card-vm.js';
 import { deriveRestaurantDetailVM } from './restaurant-detail-vm.js';
 import { deriveTripDetailVM } from './trip-detail-vm.js';
 import { deriveTimelineVM } from './timeline-vm.js';
+import { deriveMapVM } from './map-vm.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
 
@@ -141,8 +142,9 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(driveCard).toBeDefined();
       expect(driveCard.sourceRef).toEqual({ recordId: 'eta-drive-piano', field: 'mode' });
       expect(driveCard.fieldSourceRefs).toBeDefined();
-      expect(driveCard.fieldSourceRefs!.leaveTime).toEqual({ recordId: 'eta-drive-piano', field: 'leaveTime' });
+      expect(driveCard.fieldSourceRefs!.mode).toEqual({ recordId: 'eta-drive-piano', field: 'mode' });
       expect(driveCard.fieldSourceRefs!.travelMinutes).toEqual({ recordId: 'eta-drive-piano', field: 'travelMinutes' });
+      expect(driveCard.fieldSourceRefs!.badge).toEqual({ recordId: 'eta-drive-piano', field: 'badge' });
 
       // Verifier passes on clean card
       const driveVerify = GroundedRecommendationVerifier.verifyOptionCard(driveCard, bundle);
@@ -237,16 +239,16 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       const cards = deriveOptionCardVMs(rainPlan, new Set(), bundle);
       const driveCard = cards.find(c => c.mode === 'drive')!;
 
-      // Tamper driveCard time
+      // Tamper driveCard travelMinutes (grounded numeric field)
       const tamperedCard = {
         ...driveCard,
-        leaveTime: '4:15 PM', // Tampered! Expected 2:30 PM
+        travelMinutes: 99, // Tampered! Expected 25
       };
 
       const result = GroundedRecommendationVerifier.verifyOptionCard(tamperedCard, bundle);
       expect(result.valid).toBe(false);
       expect(result.reason).toBe('tampered_value');
-      expect(result.field).toBe('leaveTime');
+      expect(result.field).toBe('travelMinutes');
 
       // Check Decision Log entry
       const latest = globalDecisionLogger.getLatest()!;
@@ -254,7 +256,7 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(latest.validationResult.reason).toBe('tampered_value');
       expect(latest.outputReasonCodes).toContain('tampered_value');
       expect(latest.inputSignalIds).toEqual(['eta-drive-piano']);
-      expect(latest.inputFactKeys).toEqual(['leaveTime']);
+      expect(latest.inputFactKeys).toEqual(['travelMinutes']);
 
       // Restaurant detail with tampered name
       const lunchBundle = createLunchEvidenceBundle({ plan: lunchPlan });
@@ -583,11 +585,19 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
         requiresConfirmation: true,
       };
 
-      const timeline = deriveTimelineVM(latePlan);
+      const timeline = deriveTimelineVM(latePlan, null, undefined, bundle);
       expect(timeline).toBeDefined();
+      const prepStep = timeline!.steps.find(s => s.id === 'step-prep')!;
+      expect(prepStep.detail).toBe('Take umbrella · 20m prep'); // Drops "+ 5m buffer" when late so it doesn't contradict arrive status
       const arriveStep = timeline!.steps.find(s => s.id === 'step-arrive')!;
       expect(arriveStep.time).toBe('3:10 PM');
       expect(arriveStep.detail).toBe('Late by 10m'); // Truth in arrival status! Never 'On time'
+
+      // Option cards render in post-shift state (does not withhold due to shifted leaveTime)
+      const cards = deriveOptionCardVMs(latePlan, new Set(), bundle);
+      expect(cards).toHaveLength(1);
+      expect(cards[0]!.mode).toBe('drive');
+      expect(cards[0]!.travelMinutes).toBe(25);
 
       const tripDetail = deriveTripDetailVM({
         plan: latePlan,
@@ -670,6 +680,99 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
 
       expect(home.map).toBeDefined();
       expect(home.map!.destinationArea).toBe('Downtown');
+    });
+
+    it('Surface Check-1 Tamper Negatives: timeline step time becomes "unknown" when plan time is tampered', () => {
+      const bundle = createRainEvidenceBundle();
+      const tamperedPlan: PreparedPlan = {
+        ...rainPlan,
+        prepareAt: '2026-10-28T21:50:00.000Z', // Tampered to 2:50 PM (expected 2:10 PM in cal-piano)
+      };
+
+      const timeline = deriveTimelineVM(tamperedPlan, null, undefined, bundle);
+      expect(timeline).toBeDefined();
+      const prepStep = timeline!.steps.find(s => s.id === 'step-prep')!;
+      expect(prepStep.time).toBe('unknown'); // Fails closed!
+
+      const latest = globalDecisionLogger.getLatest()!;
+      expect(latest.validationResult.valid).toBe(false);
+      expect(latest.validationResult.reason).toBe('tampered_value');
+    });
+
+    it('Surface Check-1 Tamper Negatives: home NOW title becomes "unknown" when plan apptAt is tampered', () => {
+      const bundle = createRainEvidenceBundle();
+      const tamperedPlan: PreparedPlan = {
+        ...rainPlan,
+        apptAt: '2026-10-28T23:00:00.000Z', // 4:00 PM (expected 3:00 PM)
+      };
+
+      const home = buildHomeComposition({
+        plan: tamperedPlan,
+        spatialEvidence: null,
+        evidenceBundle: bundle,
+      });
+
+      expect(home.title).toBe('unknown'); // Fails closed!
+
+      const latest = globalDecisionLogger.getLatest()!;
+      expect(latest.validationResult.valid).toBe(false);
+      expect(latest.validationResult.reason).toBe('tampered_value');
+    });
+
+    it('Surface Check-1 Tamper Negatives: map weather callout subtext becomes "unknown" when plan weather time is tampered', () => {
+      const bundle = createRainEvidenceBundle();
+      const tamperedPlan: PreparedPlan = {
+        ...rainPlan,
+        why: {
+          ...rainPlan.why,
+          evidenceSignals: [
+            {
+              kind: 'weather',
+              source: 'simulated',
+              issuedAt: '2026-10-28T19:00:00.000Z', // 12:00 PM instead of 1:35 PM
+              description: 'Tampered rain',
+            },
+          ],
+        },
+      };
+
+      const map = deriveMapVM(tamperedPlan, null, 'prominent', {
+        snapshot: { signals: [{ kind: 'weather', issuedAt: '2026-10-28T20:35:00.000Z' }] },
+        evidenceBundle: bundle,
+      });
+      expect(map).toBeDefined();
+      expect(map!.weatherCallout).toBeDefined();
+      expect(map!.weatherCallout!.subtext).toBe('unknown'); // Fails closed!
+
+      const latest = globalDecisionLogger.getLatest()!;
+      expect(latest.validationResult.valid).toBe(false);
+      expect(latest.validationResult.reason).toBe('tampered_value');
+    });
+
+    it('Surface Check-1 Tamper Negatives: trip detail why row value becomes "unknown" when habit value is tampered', () => {
+      const bundle = createRainEvidenceBundle();
+      const tamperedPlan: PreparedPlan = {
+        ...rainPlan,
+        why: {
+          ...rainPlan.why,
+          memoryFactsUsed: [
+            {
+              key: 'rain_transport_preference',
+              value: 'helicopter', // Tampered! Expected drive_first
+              status: 'confirmed',
+            },
+          ],
+        },
+      };
+
+      const detail = deriveTripDetailVM({
+        plan: tamperedPlan,
+        spatialEvidence: null,
+        evidenceBundle: bundle,
+      });
+
+      const habitItem = detail.whyHabits.find(h => h.label.includes('Rain travel habit'))!;
+      expect(habitItem.value).toBe('unknown'); // Fails closed!
     });
   });
 });

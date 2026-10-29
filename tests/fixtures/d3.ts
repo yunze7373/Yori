@@ -88,6 +88,7 @@ export const d3Scenario: Scenario = {
         kind: 'mock_places',
         value: [
           {
+            id: 'mock-place-1',
             name: 'Demo Place A · Ramen',
             cuisine: 'japanese',
             distanceMinutes: 5,
@@ -95,6 +96,7 @@ export const d3Scenario: Scenario = {
             vegetarian: false,
           },
           {
+            id: 'mock-place-2',
             name: 'Demo Place B · Salad',
             cuisine: 'salad',
             distanceMinutes: 7,
@@ -102,6 +104,7 @@ export const d3Scenario: Scenario = {
             vegetarian: true,
           },
           {
+            id: 'mock-place-3',
             name: 'Demo Place C · Sushi',
             cuisine: 'japanese',
             distanceMinutes: 10,
@@ -109,6 +112,7 @@ export const d3Scenario: Scenario = {
             vegetarian: false,
           },
           {
+            id: 'mock-place-4',
             name: 'Demo Place D · Fast Food',
             cuisine: 'fast_food',
             distanceMinutes: 8,

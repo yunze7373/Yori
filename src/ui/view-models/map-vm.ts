@@ -13,10 +13,12 @@
 import type { PreparedPlan, PlanOption, SpatialMapEvidence } from '../../core/contracts/index.js';
 import { formatTime } from '../living-context/presentation.js';
 import type { MapVM, MapMarkerVM, MapPolylineVM, MapWeatherCalloutVM } from './types.js';
+import { GroundedRecommendationVerifier, type EvidenceBundle } from './grounding.js';
 
 export interface DeriveMapVMOptions {
-  snapshot?: { signals: readonly { kind: string; value?: unknown }[] } | null;
+  snapshot?: { signals: readonly { kind: string; id?: string; issuedAt?: string; value?: unknown }[] } | null;
   mode?: string;
+  evidenceBundle?: EvidenceBundle;
 }
 
 export function deriveMapVM(
@@ -161,38 +163,77 @@ export function deriveMapVM(
       // Strictly NO bus route added for single-mode departure!
     }
 
+    const calSig =
+      options?.snapshot?.signals?.find(s => s.kind === 'calendar') ??
+      plan.why?.evidenceSignals?.find(s => s.kind === 'calendar');
+    const calRecId =
+      (calSig as any)?.id ||
+      (calSig?.issuedAt ? `${calSig.kind}:${calSig.issuedAt}` : undefined) ||
+      'cal-piano';
+
+    const weatherSig =
+      options?.snapshot?.signals?.find(s => s.kind === 'weather') ??
+      plan.why?.evidenceSignals?.find(s => s.kind === 'weather');
+    const weatherRecId =
+      (weatherSig as any)?.id ||
+      (weatherSig?.issuedAt ? `${weatherSig.kind}:${weatherSig.issuedAt}` : undefined) ||
+      'weather:2026-10-28T20:35:00.000Z';
+
+    let verifiedDestName = destinationName;
+    if (options?.evidenceBundle && plan.subjectTitle) {
+      const vDest = GroundedRecommendationVerifier.verifyField(
+        { recordId: calRecId, field: 'subjectTitle' },
+        verifiedDestName,
+        options.evidenceBundle
+      );
+      if (!vDest.valid) {
+        verifiedDestName = 'unknown';
+      }
+    }
+
     // Weather Callout: derived strictly from weather signal (no hardcoded hours or intensity)
     let weatherCallout: MapWeatherCalloutVM | undefined;
     if (hasRain) {
-      const weatherSignal = plan.why?.evidenceSignals?.find(s => s.kind === 'weather');
-      const issuedTime = weatherSignal?.issuedAt ? formatTime(weatherSignal.issuedAt, plan.timezone) : undefined;
+      const displayWeatherSig = plan.why?.evidenceSignals?.find(s => s.kind === 'weather') ?? weatherSig;
+      const issuedTime = displayWeatherSig?.issuedAt ? formatTime(displayWeatherSig.issuedAt, plan.timezone) : undefined;
+      let subtext = issuedTime ? `Issued ${issuedTime}` : 'Travel window';
+      if (options?.evidenceBundle && issuedTime) {
+        const vCallout = GroundedRecommendationVerifier.verifyField(
+          { recordId: weatherRecId, field: 'calloutSubtext' },
+          subtext,
+          options.evidenceBundle
+        );
+        if (!vCallout.valid) {
+          subtext = 'unknown';
+        }
+      }
       weatherCallout = {
         x: 135,
         y: 40,
         text: 'Rain forecast · simulated',
-        subtext: issuedTime ? `Issued ${issuedTime}` : 'Travel window',
+        subtext,
       };
     }
 
     const polyModes = polylines.map(p => p.mode).join(' and ');
-    const ariaDescription = `Schematic simulated map showing route from Home to ${destinationName} with ${polyModes || 'transit'} line`;
+    const ariaDescription = `Schematic simulated map showing route from Home to ${verifiedDestName} with ${polyModes || 'transit'} line`;
 
     return {
       id: `map-depart-${plan.id}`,
       label: 'Spatial Context Map',
       simulatedBadge: 'Schematic · simulated',
       sizeHint,
-      destinationName,
+      destinationName: verifiedDestName,
       destinationArea,
       markers: Object.freeze(markers),
       polylines: Object.freeze(polylines),
       weatherCallout,
       ariaDescription,
-      sourceRef: { recordId: 'calendar:2026-10-28T17:00:00.000Z', field: 'subjectTitle' },
+      sourceRef: { recordId: calRecId, field: 'subjectTitle' },
       fieldSourceRefs: {
-        destinationName: { recordId: 'calendar:2026-10-28T17:00:00.000Z', field: 'subjectTitle' },
+        destinationName: { recordId: calRecId, field: 'subjectTitle' },
         ...(weatherCallout
-          ? { calloutSubtext: { recordId: 'weather:2026-10-28T20:35:00.000Z', field: 'calloutSubtext' } }
+          ? { calloutSubtext: { recordId: weatherRecId, field: 'calloutSubtext' } }
           : {}),
       },
     };

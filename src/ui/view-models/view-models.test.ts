@@ -159,7 +159,7 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
     headline: 'Lunch options near you',
     optionsOrSteps: [
       {
-        id: 'place-a',
+        id: 'mock-place-1',
         label: 'Demo Place A · Ramen',
         name: 'Demo Place A · Ramen',
         cuisine: 'japanese',
@@ -167,7 +167,7 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
         requiresConfirmation: false,
       },
       {
-        id: 'place-b',
+        id: 'mock-place-2',
         label: 'Demo Place B · Salad',
         name: 'Demo Place B · Salad',
         cuisine: 'salad',
@@ -175,7 +175,7 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
         requiresConfirmation: false,
       },
       {
-        id: 'place-c',
+        id: 'mock-place-3',
         label: 'Demo Place C · Sushi',
         name: 'Demo Place C · Sushi',
         cuisine: 'japanese',

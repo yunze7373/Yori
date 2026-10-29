@@ -28,6 +28,7 @@ export interface RankedPlaceOption {
   readonly requiresConfirmation: boolean;
   readonly noiseLevel?: string;
   readonly vegetarian?: boolean;
+  readonly recordId?: string;
 }
 
 export class LunchPreparer implements Preparer {
@@ -167,9 +168,12 @@ export class LunchPreparer implements Preparer {
       if (p.noiseLevel) extraTags.push(p.noiseLevel);
       if (p.vegetarian) extraTags.push('vegetarian');
       const tagsSuffix = extraTags.length > 0 ? ` · ${extraTags.join(' · ')}` : '';
+      const matchedAdapterPlace = mockPlaceAdapter.getPlaces().find(ap => ap.name === p.name);
+      const placeId = p.id || matchedAdapterPlace?.id || `mock-place-${idx + 1}`;
 
       return Object.freeze({
         id: `opt-${idx + 1}-${p.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+        recordId: placeId,
         label: `${p.name} (${p.cuisine}) · ${p.distanceMinutes}m away${tagsSuffix}`,
         name: p.name,
         cuisine: p.cuisine,

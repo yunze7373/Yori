@@ -16,7 +16,7 @@
 import { formatTime } from '../living-context/presentation.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
-import { DEFAULT_MOCK_PLACES } from '../../adapters/mock/index.js';
+import { mockPlaceAdapter } from '../../adapters/mock/index.js';
 
 export type EvidenceKind = 'poi' | 'route' | 'eta' | 'weather' | 'habit' | 'calendar';
 
@@ -496,26 +496,70 @@ export function buildNavigateUrl(
 
 export function createRainEvidenceBundle(options?: {
   plan?: PreparedPlan;
+  snapshot?: { asOf?: string; timezone?: string; signals?: readonly { kind: string; id?: string; issuedAt?: string; value?: unknown }[] } | null;
   sceneClockIso?: string;
   timezone?: string;
   isConfirmedHabit?: boolean;
+  memoryFacts?: readonly { key: string; value?: unknown; status?: string }[];
 }): EvidenceBundle {
-  const sceneClockIso = options?.sceneClockIso ?? '2026-10-28T20:35:00.000Z';
-  const timezone = options?.timezone ?? 'America/Los_Angeles';
+  const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T20:35:00.000Z';
+  const timezone = options?.timezone ?? options?.snapshot?.timezone ?? options?.plan?.timezone ?? 'America/Los_Angeles';
   const isConfirmedHabit = options?.isConfirmedHabit ?? false;
 
-  // Authoritative fixture inputs (not read from plan to ensure non-circularity)
-  const apptAt = '2026-10-28T22:00:00.000Z'; // 3:00 PM local
-  const subjectTitle = 'Piano Studio (Rain Route)';
-  const destination = '123 Harmony Way';
-  const driveMinutes = 25;
-  const busMinutes = 40;
-  const bufferMinutes = 5;
-  const prepMinutes = 20;
+  // Extract source inputs from snapshot or plan signals, fallback to fixture defaults
+  const calSig =
+    options?.snapshot?.signals?.find(s => s.kind === 'calendar') ??
+    options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'calendar');
+  const calVal = ((calSig as any)?.value as Record<string, unknown>) ?? {};
+  const apptAt = typeof calVal.startTime === 'string'
+    ? calVal.startTime
+    : (options?.plan?.apptAt ?? '2026-10-28T22:00:00.000Z');
+  const subjectTitle = typeof calVal.title === 'string'
+    ? calVal.title
+    : (options?.plan?.subjectTitle ?? 'Piano Studio (Rain Route)');
+  const destination = typeof calVal.location === 'string'
+    ? calVal.location
+    : '123 Harmony Way';
+  const calRecordId =
+    (calSig as any)?.id ||
+    (calSig?.issuedAt ? `${calSig.kind}:${calSig.issuedAt}` : undefined) ||
+    'calendar:2026-10-28T17:00:00.000Z';
+  const calFetchedAt = calSig?.issuedAt ?? '2026-10-28T17:00:00.000Z';
+
+  const weatherSig =
+    options?.snapshot?.signals?.find(s => s.kind === 'weather') ??
+    options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'weather');
+  const weatherVal = ((weatherSig as any)?.value as Record<string, unknown>) ?? {};
+  const weatherRecordId =
+    (weatherSig as any)?.id ||
+    (weatherSig?.issuedAt ? `${weatherSig.kind}:${weatherSig.issuedAt}` : undefined) ||
+    'weather:2026-10-28T20:35:00.000Z';
+  const weatherIssuedAt = weatherSig?.issuedAt ?? '2026-10-28T20:35:00.000Z';
+  const weatherIssuedTime = formatTime(weatherIssuedAt, timezone);
+
+  const travelSig =
+    options?.snapshot?.signals?.find(s => s.kind === 'travel_estimate') ??
+    options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'travel_estimate');
+  const travelVal = ((travelSig as any)?.value as Record<string, unknown>) ?? {};
+  const driveMinutes = typeof travelVal.driveMinutes === 'number' ? travelVal.driveMinutes : 25;
+  const busMinutes = typeof travelVal.busMinutes === 'number' ? travelVal.busMinutes : 40;
+  const travelRecordId =
+    (travelSig as any)?.id ||
+    (travelSig?.issuedAt ? `${travelSig.kind}:${travelSig.issuedAt}` : undefined) ||
+    'travel_estimate:2026-10-28T20:35:00.000Z';
+  const travelFetchedAt = travelSig?.issuedAt ?? '2026-10-28T20:35:00.000Z';
+
+  const memFacts = options?.memoryFacts ?? options?.plan?.why?.memoryFactsUsed;
+  const bufferMinutes = typeof memFacts?.find(f => f.key === 'prep_buffer_minutes')?.value === 'number'
+    ? (memFacts.find(f => f.key === 'prep_buffer_minutes')!.value as number)
+    : 5;
+  const prepMinutes = typeof memFacts?.find(f => f.key === 'prep_duration_minutes')?.value === 'number'
+    ? (memFacts.find(f => f.key === 'prep_duration_minutes')!.value as number)
+    : 20;
 
   const apptMs = Date.parse(apptAt);
 
-  // Derive timing records mathematically from fixture inputs
+  // Derive timing records mathematically from source inputs
   const driveArriveMs = apptMs - bufferMinutes * 60000;
   const driveLeaveMs = driveArriveMs - driveMinutes * 60000;
   const drivePrepMs = driveLeaveMs - prepMinutes * 60000;
@@ -540,9 +584,6 @@ export function createRainEvidenceBundle(options?: {
   const busArriveTime = formatTime(busArriveIso, timezone);
   const busPrepTime = formatTime(busPrepIso, timezone);
 
-  const calRecordId = 'calendar:2026-10-28T17:00:00.000Z';
-  const weatherRecordId = 'weather:2026-10-28T20:35:00.000Z';
-  const travelRecordId = 'travel_estimate:2026-10-28T20:35:00.000Z';
   const habitRecordId = 'rain_transport_preference';
 
   const records: EvidenceRecord[] = [
@@ -550,7 +591,7 @@ export function createRainEvidenceBundle(options?: {
       id: calRecordId,
       provider: 'calendar',
       kind: 'calendar',
-      fetchedAt: '2026-10-28T17:00:00.000Z',
+      fetchedAt: calFetchedAt,
       provenance: 'simulated',
       fields: {
         subjectTitle,
@@ -568,17 +609,17 @@ export function createRainEvidenceBundle(options?: {
       id: weatherRecordId,
       provider: 'weather',
       kind: 'weather',
-      fetchedAt: '2026-10-28T20:35:00.000Z',
+      fetchedAt: weatherIssuedAt,
       validFor: 7200000, // 2 hours
       provenance: 'simulated',
       fields: {
-        condition: 'rain',
+        condition: (weatherVal.condition as string) || 'rain',
         description: 'Rain forecast · simulated',
-        issuedAt: '2026-10-28T20:35:00.000Z',
-        issuedTime: '1:35 PM',
+        issuedAt: weatherIssuedAt,
+        issuedTime: weatherIssuedTime,
         whatChanged: 'Rain starting in 25 min (simulated)',
         calloutText: 'Rain forecast · simulated',
-        calloutSubtext: 'Issued 1:35 PM',
+        calloutSubtext: `Issued ${weatherIssuedTime}`,
         rainBanner: 'What changed: rain forecast',
       },
     },
@@ -586,7 +627,7 @@ export function createRainEvidenceBundle(options?: {
       id: travelRecordId,
       provider: 'traffic',
       kind: 'eta',
-      fetchedAt: '2026-10-28T20:35:00.000Z',
+      fetchedAt: travelFetchedAt,
       validFor: 7200000,
       provenance: 'simulated',
       fields: {
@@ -598,13 +639,14 @@ export function createRainEvidenceBundle(options?: {
       id: 'eta-drive-piano',
       provider: 'traffic',
       kind: 'eta',
-      fetchedAt: '2026-10-28T20:35:00.000Z',
+      fetchedAt: travelFetchedAt,
       provenance: 'simulated',
       fields: {
         mode: 'drive',
         travelMinutes: driveMinutes,
         bufferMinutes,
         leaveTime: driveLeaveTime,
+        prepareTime: drivePrepTime,
         leaveAt: driveLeaveIso,
         arrivalTime: driveArriveTime,
         arrivalAt: driveArriveIso,
@@ -617,7 +659,7 @@ export function createRainEvidenceBundle(options?: {
       id: 'eta-bus-piano',
       provider: 'transit',
       kind: 'eta',
-      fetchedAt: '2026-10-28T20:35:00.000Z',
+      fetchedAt: travelFetchedAt,
       provenance: 'simulated',
       fields: {
         mode: 'bus',
@@ -637,7 +679,7 @@ export function createRainEvidenceBundle(options?: {
       id: habitRecordId,
       provider: 'memory',
       kind: 'habit',
-      fetchedAt: '2026-10-28T20:35:00.000Z',
+      fetchedAt: sceneClockIso,
       provenance: isConfirmedHabit ? 'confirmed' : 'sample',
       fields: {
         key: 'rain_transport_preference',
@@ -653,10 +695,37 @@ export function createRainEvidenceBundle(options?: {
     },
   ];
 
+  // If user requested an override (e.g. leave-later shift), record session override in bundle
+  const userReqSig = options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'user_request');
+  if (userReqSig && options?.plan) {
+    const overrideRecordId = 'user_override_timing';
+    const overridePrepIso = options.plan.prepareAt;
+    const overrideLeaveIso = options.plan.leaveAt;
+    const overridePrepTime = overridePrepIso ? formatTime(overridePrepIso, timezone) : undefined;
+    const overrideLeaveTime = overrideLeaveIso ? formatTime(overrideLeaveIso, timezone) : undefined;
+
+    records.push({
+      id: overrideRecordId,
+      provider: 'user_request',
+      kind: 'habit',
+      fetchedAt: userReqSig.issuedAt || sceneClockIso,
+      provenance: 'session',
+      fields: {
+        prepareAt: overridePrepIso,
+        prepareTime: overridePrepTime,
+        leaveAt: overrideLeaveIso,
+        leaveTime: overrideLeaveTime,
+      },
+    });
+  }
+
   const aliases = new Map<string, string>([
     ['cal-piano', calRecordId],
     ['weather-rain', weatherRecordId],
     ['habit-rain-transport', habitRecordId],
+    ['user-override', 'user_override_timing'],
+    [`${travelRecordId}:drive`, 'eta-drive-piano'],
+    [`${travelRecordId}:bus`, 'eta-bus-piano'],
     ['travel_estimate:2026-10-28T20:35:00.000Z:drive', 'eta-drive-piano'],
     ['travel_estimate:2026-10-28T20:35:00.000Z:bus', 'eta-bus-piano'],
   ]);
@@ -666,12 +735,13 @@ export function createRainEvidenceBundle(options?: {
 
 export function createLunchEvidenceBundle(options?: {
   plan?: PreparedPlan;
+  snapshot?: { asOf?: string; timezone?: string; signals?: readonly { kind: string; id?: string; issuedAt?: string; value?: unknown }[] } | null;
   sceneClockIso?: string;
   timezone?: string;
   isConfirmedTaste?: boolean;
 }): EvidenceBundle {
-  const sceneClockIso = options?.sceneClockIso ?? '2026-10-28T19:10:00.000Z';
-  const timezone = options?.timezone ?? 'America/Los_Angeles';
+  const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T19:10:00.000Z';
+  const timezone = options?.timezone ?? options?.snapshot?.timezone ?? 'America/Los_Angeles';
   const isConfirmedTaste = options?.isConfirmedTaste ?? false;
 
   const recordMap = new Map<string, EvidenceRecord>();
@@ -681,56 +751,45 @@ export function createLunchEvidenceBundle(options?: {
     ['habit-taste-cuisine', habitId],
   ]);
 
-  // Add mock places strictly from DEFAULT_MOCK_PLACES (source fixture, not plan)
-  for (let idx = 0; idx < DEFAULT_MOCK_PLACES.length; idx++) {
-    const p = DEFAULT_MOCK_PLACES[idx]!;
-    const placeId = p.id || `mock-place-${idx + 1}`;
-    recordMap.set(placeId, {
-      id: placeId,
-      provider: 'mock-place-adapter',
-      kind: 'poi',
-      fetchedAt: sceneClockIso,
-      provenance: 'simulated',
-      fields: {
-        id: placeId,
-        name: p.name,
-        cuisine: p.cuisine,
-        distanceMinutes: p.distanceMinutes,
-        distanceText: `${p.distanceMinutes}m away`,
-        noiseLevel: p.noiseLevel,
-        vegetarian: p.vegetarian,
-      },
+  // Load POI records from the scene adapter's getEvidenceRecords()
+  const evidenceRecords = mockPlaceAdapter.getEvidenceRecords(sceneClockIso);
+  for (const rec of evidenceRecords) {
+    recordMap.set(rec.id, {
+      id: rec.id,
+      provider: rec.provider,
+      kind: rec.kind,
+      fetchedAt: rec.fetchedAt,
+      provenance: rec.provenance,
+      fields: rec.fields,
     });
-
-    // Identifiers and slugs used across scenes, preparer, and test fixtures:
-    aliases.set(`mock-place-${idx + 1}`, placeId);
-    aliases.set(`place-${String.fromCharCode(97 + idx)}`, placeId);
-    aliases.set(`cand-${idx + 1}`, placeId);
-    aliases.set(`candidate-${idx}`, placeId);
-    aliases.set(`opt-${idx + 1}`, placeId);
-    const slug = p.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-    aliases.set(slug, placeId);
-    for (let k = 1; k <= DEFAULT_MOCK_PLACES.length; k++) {
-      aliases.set(`opt-${k}-${slug}`, placeId);
-    }
-    aliases.set(p.name.toLowerCase(), placeId);
-    aliases.set(p.name, placeId);
   }
 
-  // Real signal IDs
-  recordMap.set('mock_places:2026-10-28T19:10:00.000Z', {
-    id: 'mock_places:2026-10-28T19:10:00.000Z',
+  // Real signal ID from snapshot or default
+  const mockPlacesSig = options?.snapshot?.signals?.find(s => s.kind === 'mock_places');
+  const mockPlacesSigId =
+    (mockPlacesSig as any)?.id ||
+    (mockPlacesSig?.issuedAt ? `${mockPlacesSig.kind}:${mockPlacesSig.issuedAt}` : undefined) ||
+    'mock_places:2026-10-28T19:10:00.000Z';
+
+  recordMap.set(mockPlacesSigId, {
+    id: mockPlacesSigId,
     provider: 'mock-place-adapter',
     kind: 'poi',
     fetchedAt: sceneClockIso,
     provenance: 'simulated',
     fields: {
-      count: DEFAULT_MOCK_PLACES.length,
+      count: evidenceRecords.length,
     },
   });
 
-  recordMap.set('location_status:2026-10-28T19:10:00.000Z', {
-    id: 'location_status:2026-10-28T19:10:00.000Z',
+  const locSig = options?.snapshot?.signals?.find(s => s.kind === 'location_status');
+  const locSigId =
+    (locSig as any)?.id ||
+    (locSig?.issuedAt ? `${locSig.kind}:${locSig.issuedAt}` : undefined) ||
+    'location_status:2026-10-28T19:10:00.000Z';
+
+  recordMap.set(locSigId, {
+    id: locSigId,
     provider: 'location',
     kind: 'poi',
     fetchedAt: sceneClockIso,

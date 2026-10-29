@@ -85,6 +85,9 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await expect(nowCard).toContainText('2:45 PM');
     await expect(nowCard).toContainText('2:25 PM'); // prepare time shifted equally (+15m from 2:10 PM)
 
+    // Assert both Rain option cards render after confirmed leave-later shift
+    await expect(optionCards).toHaveCount(2);
+
     // 7. Verify Why sheet carries user_request provenance
     const whyBtn = page.locator('#btn-why');
     await expect(whyBtn).toBeVisible();
@@ -115,7 +118,22 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     // Prior plan restored: leave 2:30 PM
     await expect(nowCard).toContainText('2:30 PM');
 
-    // 9. Axe accessibility audit
+    // Assert both Rain option cards render after Undo
+    await expect(optionCards).toHaveCount(2);
+
+    // 9. Adjust prep/buffer and confirm: assert both option cards render
+    const adjustBtn = page.locator('#btn-adjust');
+    await expect(adjustBtn).toBeVisible();
+    await adjustBtn.click();
+
+    await expect(page.locator('#input-prep-minutes')).toBeVisible();
+    await page.locator('#input-prep-minutes').fill('25');
+    await page.locator('#btn-adjust-for-today').click();
+
+    // Verify option cards still render with count 2 after confirmed prep/buffer change
+    await expect(optionCards).toHaveCount(2);
+
+    // 10. Axe accessibility audit
     await checkAxe(page);
 
     // 10. Capture screenshot evidence

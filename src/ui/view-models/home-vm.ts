@@ -142,18 +142,84 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       habitNote = rainFact.value === 'bus_first' ? STRINGS.habit.rainTransit : STRINGS.habit.rainDrive;
     }
 
-    const map = deriveMapVM(plan, spatialEvidence, 'prominent', { snapshot });
-    const timeline = deriveTimelineVM(plan, snapshot);
+    const calSig =
+      snapshot?.signals?.find(s => s.kind === 'calendar') ??
+      plan.why?.evidenceSignals?.find(s => s.kind === 'calendar');
+    const calRecId =
+      (calSig as any)?.id ||
+      (calSig?.issuedAt ? `${calSig.kind}:${calSig.issuedAt}` : undefined) ||
+      'cal-piano';
+
+    const hasOverride = bundle?.hasRecord('user_override_timing') || bundle?.hasRecord('user-override');
+    const prepRecId = hasOverride ? 'user_override_timing' : calRecId;
+    const leaveRecId = hasOverride ? 'user_override_timing' : calRecId;
+
+    let displayTitle = title;
+    let displayHeadline = headline;
+    let rainBanner: string | undefined = isRain ? STRINGS.rain.whatChanged : undefined;
+
+    if (bundle) {
+      if (plan.apptAt) {
+        const vAppt = GroundedRecommendationVerifier.verifyField(
+          { recordId: calRecId, field: 'apptTime' },
+          apptTimeStr,
+          bundle
+        );
+        if (!vAppt.valid) {
+          displayTitle = 'unknown';
+        }
+      }
+      if (plan.prepareAt && prepareStr) {
+        const vPrep = GroundedRecommendationVerifier.verifyField(
+          { recordId: prepRecId, field: 'prepareTime' },
+          prepareStr,
+          bundle
+        );
+        if (!vPrep.valid) {
+          displayHeadline = 'unknown';
+        }
+      }
+      if (plan.leaveAt && leaveStr) {
+        const vLeave = GroundedRecommendationVerifier.verifyField(
+          { recordId: leaveRecId, field: 'leaveTime' },
+          leaveStr,
+          bundle
+        );
+        if (!vLeave.valid) {
+          displayHeadline = 'unknown';
+        }
+      }
+      if (isRain && rainBanner) {
+        const weatherSig =
+          snapshot?.signals?.find(s => s.kind === 'weather') ??
+          plan.why?.evidenceSignals?.find(s => s.kind === 'weather');
+        const weatherRecId =
+          (weatherSig as any)?.id ||
+          (weatherSig?.issuedAt ? `${weatherSig.kind}:${weatherSig.issuedAt}` : undefined) ||
+          'weather:2026-10-28T20:35:00.000Z';
+        const vBanner = GroundedRecommendationVerifier.verifyField(
+          { recordId: weatherRecId, field: 'rainBanner' },
+          rainBanner,
+          bundle
+        );
+        if (!vBanner.valid) {
+          rainBanner = 'unknown';
+        }
+      }
+    }
+
+    const map = deriveMapVM(plan, spatialEvidence, 'prominent', { snapshot, evidenceBundle: bundle });
+    const timeline = deriveTimelineVM(plan, snapshot, undefined, bundle);
     const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys, bundle);
 
     return {
       layoutKind: 'journey',
       planId: plan.id,
-      title,
-      headline,
+      title: displayTitle,
+      headline: displayHeadline,
       basis: STRINGS.depart.basisLine,
       isRain,
-      rainBanner: isRain ? STRINGS.rain.whatChanged : undefined,
+      rainBanner,
       rainInsightDesc,
       umbrellaChip: hasRainChecklist ? STRINGS.rain.umbrellaChip : undefined,
       habitNote,
@@ -166,11 +232,11 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       aheadItems: compileAheadItems(aheadPlans),
       proposals: compileProposals(proposals),
       evidenceBundle: bundle,
-      sourceRef: { recordId: 'cal-piano', field: 'subjectTitle' },
+      sourceRef: { recordId: calRecId, field: 'subjectTitle' },
       fieldSourceRefs: {
-        prepareTime: { recordId: 'cal-piano', field: 'prepareTime' },
-        leaveTime: { recordId: 'cal-piano', field: 'leaveTime' },
-        apptTime: { recordId: 'cal-piano', field: 'apptTime' },
+        prepareTime: { recordId: prepRecId, field: 'prepareTime' },
+        leaveTime: { recordId: leaveRecId, field: 'leaveTime' },
+        apptTime: { recordId: calRecId, field: 'apptTime' },
       },
     };
   }
@@ -211,13 +277,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
           const basis = `Based on taste: ${cuisine} (${provenance})`;
 
-          const matchedRec = bundle
-            ? bundle.getRecord(opt.id) ||
-              bundle.getRecord(name) ||
-              bundle.getRecord(name.toLowerCase()) ||
-              bundle.getRecord(`mock-place-${i + 1}`)
-            : undefined;
-          const recId = matchedRec?.id || opt.id || `mock-place-${i + 1}`;
+          const recId = (opt as any).recordId || opt.id;
           const sourceRef: SourceRef = { recordId: recId, field: 'name' };
           const fieldSourceRefs: Record<string, SourceRef> = {
             name: { recordId: recId, field: 'name' },
@@ -256,7 +316,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       }
     }
 
-    const map = deriveMapVM(plan, spatialEvidence, 'compact', { snapshot });
+    const map = deriveMapVM(plan, spatialEvidence, 'compact', { snapshot, evidenceBundle: bundle });
 
     return {
       layoutKind: 'candidates',

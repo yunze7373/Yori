@@ -12,11 +12,13 @@ import type { PreparedPlan } from '../../core/contracts/index.js';
 import { formatTime } from '../living-context/presentation.js';
 import { derivePlanTimingFacts } from './timing.js';
 import type { TimelineVM, TimelineStepVM } from './types.js';
+import { GroundedRecommendationVerifier, type EvidenceBundle } from './grounding.js';
 
 export function deriveTimelineVM(
   plan: PreparedPlan,
-  snapshot?: { signals: readonly { kind: string; value?: unknown }[] } | null,
-  selectedMode?: string
+  snapshot?: { signals: readonly { kind: string; id?: string; issuedAt?: string; value?: unknown }[] } | null,
+  selectedMode?: string,
+  bundle?: EvidenceBundle
 ): TimelineVM | undefined {
   if (plan.intentId !== 'depart') {
     return undefined;
@@ -27,6 +29,15 @@ export function deriveTimelineVM(
   const eventTitle = plan.subjectTitle
     ? (apptTimeStr ? `${plan.subjectTitle} at ${apptTimeStr}` : plan.subjectTitle)
     : plan.headline;
+
+  // Dynamically resolve calendar record ID from signals or fallback
+  const calSig =
+    snapshot?.signals?.find(s => s.kind === 'calendar') ??
+    plan.why?.evidenceSignals?.find(s => s.kind === 'calendar');
+  const calRecId =
+    (calSig as any)?.id ||
+    (calSig?.issuedAt ? `${calSig.kind}:${calSig.issuedAt}` : undefined) ||
+    'cal-piano';
 
   // Derive timing facts from single shared timing helper
   const timing = derivePlanTimingFacts(plan, selectedMode);
@@ -43,6 +54,13 @@ export function deriveTimelineVM(
   // Active leaveAt and prepareAt
   const activeLeaveAt = timing?.leaveAt || plan.leaveAt;
   const activePrepAt = timing?.prepareAt || plan.prepareAt;
+
+  if (prepMinutes === undefined && activeLeaveAt && activePrepAt) {
+    const diff = Math.round((Date.parse(activeLeaveAt) - Date.parse(activePrepAt)) / 60000);
+    if (diff > 0) {
+      prepMinutes = diff;
+    }
+  }
 
   const prepareTimeStr = activePrepAt ? formatTime(activePrepAt, tz) : '';
   const leaveTimeStr = activeLeaveAt ? formatTime(activeLeaveAt, tz) : '';
@@ -70,13 +88,15 @@ export function deriveTimelineVM(
   }
 
   const hasUmbrella = plan.checklist?.includes('umbrella') ?? false;
+  const isLate = (timing?.marginMinutes !== undefined && timing.marginMinutes < 0);
 
   // Prep detail: dynamically formatted from actual facts used (no hardcoded 20m/5m)
+  // In late state, drop "+ 5m buffer" so it does not contradict arrival status
   const prepParts: string[] = [];
   if (hasUmbrella) {
     prepParts.push('Take umbrella');
   }
-  if (prepMinutes !== undefined && bufferMinutes !== undefined) {
+  if (prepMinutes !== undefined && bufferMinutes !== undefined && !isLate) {
     prepParts.push(`${prepMinutes}m prep + ${bufferMinutes}m buffer`);
   } else if (prepMinutes !== undefined) {
     prepParts.push(`${prepMinutes}m prep`);
@@ -84,11 +104,30 @@ export function deriveTimelineVM(
   const prepDetail = prepParts.join(' · ');
 
   const steps: TimelineStepVM[] = [];
+  const modeKey = (primaryMode || 'drive').toLowerCase();
+  const etaRecId = modeKey === 'drive' ? 'eta-drive-piano' : 'eta-bus-piano';
+  const hasOverride = bundle?.hasRecord('user_override_timing') || bundle?.hasRecord('user-override');
+  const prepRecId = hasOverride
+    ? 'user_override_timing'
+    : (bundle?.getRecord(etaRecId)?.fields.prepareTime !== undefined
+        ? etaRecId
+        : calRecId);
 
   if (prepareTimeStr) {
+    let verifiedPrepTime = prepareTimeStr;
+    if (bundle) {
+      const v = GroundedRecommendationVerifier.verifyField(
+        { recordId: prepRecId, field: 'prepareTime' },
+        prepareTimeStr,
+        bundle
+      );
+      if (!v.valid) {
+        verifiedPrepTime = 'unknown';
+      }
+    }
     steps.push({
       id: 'step-prep',
-      time: prepareTimeStr,
+      time: verifiedPrepTime,
       label: 'Get ready',
       detail: prepDetail || undefined,
       iconType: 'prep',
@@ -140,9 +179,20 @@ export function deriveTimelineVM(
   }
 
   if (apptTimeStr || plan.subjectTitle) {
+    let verifiedApptTime = apptTimeStr || '';
+    if (bundle && apptTimeStr) {
+      const v = GroundedRecommendationVerifier.verifyField(
+        { recordId: calRecId, field: 'apptTime' },
+        apptTimeStr,
+        bundle
+      );
+      if (!v.valid) {
+        verifiedApptTime = 'unknown';
+      }
+    }
     steps.push({
       id: 'step-event',
-      time: apptTimeStr || '',
+      time: verifiedApptTime,
       label: plan.subjectTitle || 'Event starts',
       detail: 'Scheduled appointment',
       isEvent: true,
@@ -150,22 +200,48 @@ export function deriveTimelineVM(
     });
   }
 
+  let displayEventTitle = eventTitle;
+  let displayEventTime = apptTimeStr || 'Scheduled time';
+  if (bundle) {
+    if (plan.subjectTitle) {
+      const v = GroundedRecommendationVerifier.verifyField(
+        { recordId: calRecId, field: 'subjectTitle' },
+        plan.subjectTitle,
+        bundle
+      );
+      if (!v.valid) {
+        displayEventTitle = 'unknown';
+      }
+    }
+    if (apptTimeStr) {
+      const v = GroundedRecommendationVerifier.verifyField(
+        { recordId: calRecId, field: 'apptTime' },
+        apptTimeStr,
+        bundle
+      );
+      if (!v.valid) {
+        displayEventTime = 'unknown';
+      }
+    }
+  }
+
   const departureNotice = leaveTimeStr
-    ? (bufferMinutes !== undefined
+    ? (bufferMinutes !== undefined && !isLate
         ? `Leave by ${leaveTimeStr} to arrive with ${bufferMinutes}m buffer`
         : `Leave by ${leaveTimeStr}`)
     : 'Scheduled departure';
 
   return {
     title: 'Journey Timeline',
-    eventTitle,
-    eventTime: apptTimeStr || 'Scheduled time',
+    eventTitle: displayEventTitle,
+    eventTime: displayEventTime,
     steps: Object.freeze(steps),
     departureNotice,
-    sourceRef: { recordId: 'calendar:2026-10-28T17:00:00.000Z', field: 'subjectTitle' },
+    sourceRef: { recordId: calRecId, field: 'subjectTitle' },
     fieldSourceRefs: {
-      eventTitle: { recordId: 'calendar:2026-10-28T17:00:00.000Z', field: 'subjectTitle' },
-      eventTime: { recordId: 'calendar:2026-10-28T17:00:00.000Z', field: 'apptTime' },
+      eventTitle: { recordId: calRecId, field: 'subjectTitle' },
+      eventTime: { recordId: calRecId, field: 'apptTime' },
+      prepareTime: { recordId: calRecId, field: 'prepareTime' },
     },
   };
 }

@@ -171,7 +171,7 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     },
   ];
 
-  const placeRecId = candidateId;
+  const placeRecId = (targetOpt as any)?.recordId || targetOpt?.id || candidateId;
   const sourceRef: SourceRef = { recordId: placeRecId, field: 'name' };
   const fieldSourceRefs: Record<string, SourceRef> = {
     name: { recordId: placeRecId, field: 'name' },
