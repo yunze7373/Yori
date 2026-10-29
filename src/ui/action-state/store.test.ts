@@ -465,6 +465,68 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       expect(res.rule).toBe('degraded_failure');
       expect(res.response).toContain("There's no active lunch recommendation to filter right now");
     });
+
+    it('reverts actionState.status to idle on undo so Home reflects recomputed pipeline plans, while maintaining plan during working status for follow-up commands', () => {
+      const d3Clock = createFixedClock('2026-10-28T19:10:00.000Z');
+      const d3Snapshots = replayScenarioTimeline(d3Scenario, d3Clock);
+      const d3Snapshot = d3Snapshots[d3Snapshots.length - 1]!;
+      const candidate: IntentCandidate = {
+        intent: 'lunch',
+        confidence: 0.95,
+        evidence: d3Snapshot.signals.filter(s => s.kind === 'mock_places'),
+      };
+      const basePlan = lunchPreparer.prepare(candidate, d3Snapshot, d3MemoryFacts)!;
+
+      const store = createActionStateStore();
+      store.setCommandContext({
+        plan: basePlan,
+        candidate,
+        snapshot: d3Snapshot,
+        memory: d3MemoryFacts,
+        sceneId: 'away-lunch',
+      });
+
+      // 1. Initial idle state
+      expect(store.getActionState().status).toBe('idle');
+
+      // 2. User filters lunch -> updated state with overridden plan
+      const filterRes = store.submitMessage('quieter + vegetarian');
+      expect(filterRes.collapsed).toBe(true);
+      expect(store.getActionState().status).toBe('updated');
+      const updatedOverridePlan = store.getActionState().plan;
+      expect(updatedOverridePlan).toBeDefined();
+
+      // View-model logic in app.ts: storePlan is rendered when updated
+      let storePlan =
+        store.getActionState().status === 'updated' ||
+        (store.getActionState().status === 'working' && store.getActionState().plan)
+          ? store.getActionState().plan
+          : undefined;
+      expect(storePlan).toBe(updatedOverridePlan);
+
+      // 3. While follow-up command is in 'working' status, storePlan maintains the updated plan
+      store.beginCommand('Follow up query', 'Working on follow up');
+      expect(store.getActionState().status).toBe('working');
+      storePlan =
+        store.getActionState().status === 'updated' ||
+        (store.getActionState().status === 'working' && store.getActionState().plan)
+          ? store.getActionState().plan
+          : undefined;
+      expect(storePlan).toBe(updatedOverridePlan);
+
+      // Settle back to updated
+      store.resolveExecutable('Done');
+
+      // 4. User performs Undo -> status reverts to 'idle', clearing override so Home reflects base/recomputed plan
+      store.undo();
+      expect(store.getActionState().status).toBe('idle');
+      storePlan =
+        store.getActionState().status === 'updated' ||
+        (store.getActionState().status === 'working' && store.getActionState().plan)
+          ? store.getActionState().plan
+          : undefined;
+      expect(storePlan).toBeUndefined(); // Home is freed to display recomputed pipeline plan
+    });
   });
 
   describe('Reduced Motion & Accessibility', () => {

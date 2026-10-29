@@ -1078,6 +1078,7 @@ export class DefaultActionStateStore implements ActionStateStore {
     const restored = this.historyStack.pop()!;
     this.actionState = {
       ...restored.actionState,
+      status: 'idle',
       plan: restored.planState ?? undefined,
       timestamp: new Date().toISOString(),
     };

@@ -2,9 +2,12 @@ import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 
 const RECORDINGS_DIR = path.resolve(process.cwd(), 'docs/evidence/v4/recordings');
 const DUMPS_DIR = path.resolve(process.cwd(), 'docs/evidence/v4/dumps');
+const shouldPersist = Boolean(process.env.V4_RECORD);
+const TEMP_RECORD_DIR = path.join(os.tmpdir(), 'yori-v4-recordings');
 
 interface StepLog {
   step: string;
@@ -41,11 +44,16 @@ function formatTime(seconds: number): string {
 
 test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Harness', () => {
   test.beforeAll(() => {
-    if (!fs.existsSync(RECORDINGS_DIR)) {
-      fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(DUMPS_DIR)) {
-      fs.mkdirSync(DUMPS_DIR, { recursive: true });
+    if (shouldPersist) {
+      if (!fs.existsSync(RECORDINGS_DIR)) {
+        fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
+      }
+      if (!fs.existsSync(DUMPS_DIR)) {
+        fs.mkdirSync(DUMPS_DIR, { recursive: true });
+      }
+      if (!fs.existsSync(TEMP_RECORD_DIR)) {
+        fs.mkdirSync(TEMP_RECORD_DIR, { recursive: true });
+      }
     }
   });
 
@@ -62,10 +70,12 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
 
     const context = await browser.newContext({
       viewport,
-      recordVideo: {
-        dir: RECORDINGS_DIR,
-        size: viewport,
-      },
+      recordVideo: shouldPersist
+        ? {
+            dir: TEMP_RECORD_DIR,
+            size: viewport,
+          }
+        : undefined,
       userAgent: isMobile
         ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
         : undefined,
@@ -309,16 +319,18 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await page.waitForTimeout(2500);
 
     // Save dumps and step log
-    fs.writeFileSync(
-      path.join(DUMPS_DIR, `rain-dumps-${vpSuffix}.json`),
-      JSON.stringify({ viewport: vpSuffix, steps, dumps }, null, 2),
-      'utf-8'
-    );
+    if (shouldPersist) {
+      fs.writeFileSync(
+        path.join(DUMPS_DIR, `rain-dumps-${vpSuffix}.json`),
+        JSON.stringify({ viewport: vpSuffix, steps, dumps }, null, 2),
+        'utf-8'
+      );
+    }
 
     // Finalize video
     await page.close();
     const video = page.video();
-    if (video) {
+    if (shouldPersist && video) {
       const dest = path.join(RECORDINGS_DIR, `v4-rain-recording-${vpSuffix}.webm`);
       await video.saveAs(dest);
     }
@@ -334,10 +346,12 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
 
     const context = await browser.newContext({
       viewport,
-      recordVideo: {
-        dir: RECORDINGS_DIR,
-        size: viewport,
-      },
+      recordVideo: shouldPersist
+        ? {
+            dir: TEMP_RECORD_DIR,
+            size: viewport,
+          }
+        : undefined,
       userAgent: isMobile
         ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
         : undefined,
@@ -532,16 +546,18 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await page.waitForTimeout(2500);
 
     // Save dumps and step log
-    fs.writeFileSync(
-      path.join(DUMPS_DIR, `lunch-dumps-${vpSuffix}.json`),
-      JSON.stringify({ viewport: vpSuffix, steps, dumps }, null, 2),
-      'utf-8'
-    );
+    if (shouldPersist) {
+      fs.writeFileSync(
+        path.join(DUMPS_DIR, `lunch-dumps-${vpSuffix}.json`),
+        JSON.stringify({ viewport: vpSuffix, steps, dumps }, null, 2),
+        'utf-8'
+      );
+    }
 
     // Finalize video
     await page.close();
     const video = page.video();
-    if (video) {
+    if (shouldPersist && video) {
       const dest = path.join(RECORDINGS_DIR, `v4-lunch-recording-${vpSuffix}.webm`);
       await video.saveAs(dest);
     }

@@ -404,7 +404,6 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       await page.locator('#conversation-send-btn').click();
 
       // If confirmation box appears, confirm it
-      const confirmBtn = page.locator('#btn-chat-confirm');
       const activeConfirmBtn = page.locator('#btn-chat-confirm:enabled');
       if (await activeConfirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
         await activeConfirmBtn.click();
@@ -507,6 +506,36 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       await expect(overlay).toHaveCount(0, { timeout: 5000 });
 
       await verifyDetailsScreen();
+    });
+
+    test(`auto-collapse maintains assistant reply visible in transcript before overlay closes (600ms pacing) (${viewport.name})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto('/?ui=v2&scene=rain');
+      await page.waitForSelector('.now-card', { timeout: 10000 });
+
+      const askBar = page.locator('#ask-bar');
+      await askBar.click();
+      const overlay = page.locator('#conversation-overlay');
+      await expect(overlay).toBeVisible();
+
+      const input = page.locator('#conversation-input');
+      await input.fill('Can I leave 15 minutes later?');
+      await page.locator('#conversation-send-btn').click();
+
+      const confirmBtn = page.locator('#btn-chat-confirm');
+      await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+      await confirmBtn.click();
+
+      // Immediately after clicking confirm, the overlay is still visible and shows the assistant's reply
+      await expect(overlay).toBeVisible();
+      const assistantBubble = overlay.locator('.chat-bubble-assistant').last();
+      await expect(assistantBubble).toBeVisible();
+      await expect(assistantBubble).toContainText('Confirmed for this time only');
+
+      // After the 600ms pacing delay, the overlay auto-collapses
+      await expect(overlay).toHaveCount(0, { timeout: 5000 });
     });
   }
 });

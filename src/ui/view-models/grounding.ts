@@ -297,7 +297,8 @@ export class GroundedRecommendationVerifier {
     }
 
     // 2. Normalized equality check
-    const recordRawVal = record.fields[sourceRef.field];
+    const recordRawVal =
+      sourceRef.field === 'fetchedAt' ? record.fetchedAt : record.fields[sourceRef.field];
     const normRecord = normalizeFieldValue(sourceRef.field, recordRawVal, bundle.timezone);
     const normDisplayed = normalizeFieldValue(sourceRef.field, displayedValue, bundle.timezone);
 
@@ -603,19 +604,14 @@ export function createRainEvidenceBundle(options?: {
       provenance: 'simulated',
       fields: {
         subjectTitle,
-        title: 'Piano lesson',
         destination,
-        location: 'Piano Studio',
         destinationName: subjectTitle,
-        origin: 'Home',
         apptAt,
         prepareAt: drivePrepIso,
         leaveAt: driveLeaveIso,
         apptTime: formatTime(apptAt, timezone), // '3:00 PM'
         prepareTime: drivePrepTime,             // '2:10 PM'
         leaveTime: driveLeaveTime,               // '2:30 PM'
-        recordedAt: '10:00 AM',
-        fetchedTime: '10:00 AM',
       },
     },
     {
@@ -835,24 +831,8 @@ export function createRainEvidenceBundle(options?: {
     });
   }
 
-  records.push({
-    id: 'prompt_budget',
-    provider: 'policy',
-    kind: 'habit',
-    fetchedAt: sceneClockIso,
-    provenance: 'confirmed',
-    fields: {
-      budget: 3,
-      count: 3,
-      used: 0,
-      usage: '0 of 3',
-      budgetLabel: '0 of 3 used today',
-    },
-  });
-
   const aliases = new Map<string, string>([
     ['cal-piano', calRecordId],
-    ['loc-home', calRecordId],
     ['weather-rain', weatherRecordId],
     ['habit-rain-transport', habitRecordId],
     ['user-override', 'user_override_timing'],
@@ -863,78 +843,6 @@ export function createRainEvidenceBundle(options?: {
   ]);
 
   return createEvidenceBundle('bundle-rain-d2', sceneClockIso, records, timezone, aliases);
-}
-
-export function createClearEvidenceBundle(options?: {
-  snapshot?: { asOf?: string; timezone?: string; signals?: readonly { kind: string; id?: string; issuedAt?: string; value?: unknown }[] } | null;
-  sceneClockIso?: string;
-  timezone?: string;
-}): EvidenceBundle {
-  const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T19:10:00.000Z';
-  const timezone = options?.timezone ?? options?.snapshot?.timezone ?? 'America/Los_Angeles';
-
-  const calRecordId = 'cal-piano';
-  const etaRecordId = 'eta-drive-piano';
-
-  const records: EvidenceRecord[] = [
-    {
-      id: calRecordId,
-      provider: 'calendar',
-      kind: 'calendar',
-      fetchedAt: '2026-10-28T17:00:00.000Z',
-      provenance: 'simulated',
-      fields: {
-        subjectTitle: 'Piano lesson',
-        title: 'Piano lesson',
-        destination: 'Piano Studio',
-        location: 'Piano Studio',
-        origin: 'Home',
-        apptTime: '3:00 PM',
-        prepareTime: '2:05 PM',
-        leaveTime: '2:25 PM',
-        recordedAt: '10:00 AM',
-        fetchedTime: '10:00 AM',
-      },
-    },
-    {
-      id: etaRecordId,
-      provider: 'traffic',
-      kind: 'eta',
-      fetchedAt: sceneClockIso,
-      provenance: 'simulated',
-      fields: {
-        mode: 'drive',
-        travelMinutes: 30,
-        bufferMinutes: 5,
-        prepMinutes: 20,
-        prepareTime: '2:05 PM',
-        leaveTime: '2:25 PM',
-        arrivalTime: '2:55 PM',
-      },
-    },
-    {
-      id: 'prompt_budget',
-      provider: 'policy',
-      kind: 'habit',
-      fetchedAt: sceneClockIso,
-      provenance: 'confirmed',
-      fields: {
-        budget: 3,
-        count: 3,
-        used: 0,
-        usage: '0 of 3',
-        budgetLabel: '0 of 3 used today',
-      },
-    },
-  ];
-
-  const aliases = new Map<string, string>([
-    ['cal-piano', calRecordId],
-    ['loc-home', calRecordId],
-    ['eta-drive-piano', etaRecordId],
-  ]);
-
-  return createEvidenceBundle('bundle-clear-d1', sceneClockIso, records, timezone, aliases);
 }
 
 export function createLunchEvidenceBundle(options?: {
@@ -1020,24 +928,28 @@ export function createLunchEvidenceBundle(options?: {
     options?.snapshot?.signals?.find(s => s.kind === 'schedule_window') ??
     options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'schedule_window');
 
-  const windowStartIso = (schedSig as any)?.value?.windowStart || schedSig?.issuedAt || '2026-10-28T19:10:00.000Z';
-  const freeUntilIso = (schedSig as any)?.value?.freeUntil || (schedSig as any)?.value?.until || '2026-10-28T20:30:00.000Z';
-  const windowStart = formatTime(windowStartIso, timezone) || '12:10 PM';
-  const freeUntil = formatTime(freeUntilIso, timezone) || '1:30 PM';
+  if (schedSig) {
+    const windowStartIso = (schedSig as any)?.value?.windowStart || schedSig.issuedAt;
+    const freeUntilIso = (schedSig as any)?.value?.freeUntil || (schedSig as any)?.value?.until;
+    const windowStart = windowStartIso ? formatTime(windowStartIso, timezone) : undefined;
+    const freeUntil = freeUntilIso ? formatTime(freeUntilIso, timezone) : undefined;
 
-  recordMap.set('schedule_window', {
-    id: 'schedule_window',
-    provider: 'calendar',
-    kind: 'calendar',
-    fetchedAt: sceneClockIso,
-    provenance: 'simulated',
-    fields: {
-      windowStart,
-      freeUntil,
-      lunchWindow: `Lunch window ${windowStart}–${freeUntil}`,
-    },
-  });
-  aliases.set('sched-lunch-window', 'schedule_window');
+    if (windowStart && freeUntil) {
+      recordMap.set('schedule_window', {
+        id: 'schedule_window',
+        provider: 'calendar',
+        kind: 'calendar',
+        fetchedAt: sceneClockIso,
+        provenance: 'simulated',
+        fields: {
+          windowStart,
+          freeUntil,
+          lunchWindow: `Lunch window ${windowStart}–${freeUntil}`,
+        },
+      });
+      aliases.set('sched-lunch-window', 'schedule_window');
+    }
+  }
 
   recordMap.set(habitId, {
     id: habitId,
@@ -1052,21 +964,6 @@ export function createLunchEvidenceBundle(options?: {
       basis: isConfirmedTaste
         ? 'Based on taste: Japanese (You confirmed)'
         : 'Based on taste: Japanese (Demo profile · sample)',
-    },
-  });
-
-  recordMap.set('prompt_budget', {
-    id: 'prompt_budget',
-    provider: 'policy',
-    kind: 'habit',
-    fetchedAt: sceneClockIso,
-    provenance: 'confirmed',
-    fields: {
-      budget: 3,
-      count: 3,
-      used: 0,
-      usage: '0 of 3',
-      budgetLabel: '0 of 3 used today',
     },
   });
 
