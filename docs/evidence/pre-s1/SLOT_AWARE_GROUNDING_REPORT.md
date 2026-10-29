@@ -24,17 +24,17 @@ Unlike token-level text scrapers, this harness is strictly **slot-aware**:
 
 | Walkthrough Scene | Viewports Audited | Domain Slots | Grounded | Ungrounded | Resolution Rate | Verdict |
 |:---|:---:|:---:|:---:|:---:|:---:|:---:|
-| **rain** | Desktop + Mobile | 238 | 238 | 0 | 100.0% | ✅ PASS |
+| **rain** | Desktop + Mobile | 242 | 242 | 0 | 100.0% | ✅ PASS |
 | **away-lunch** | Desktop + Mobile | 44 | 44 | 0 | 100.0% | ✅ PASS |
 | **fuel** | Desktop + Mobile | 38 | 38 | 0 | 100.0% | ✅ PASS |
 | **dynamic-lunch** | Desktop + Mobile | 64 | 64 | 0 | 100.0% | ✅ PASS |
-| **Total Across All Scenes** | **Both (8 Runs)** | **384** | **384** | **0** | **100.0%** | **✅ PASS** |
+| **Total Across All Scenes** | **Both (8 Runs)** | **388** | **388** | **0** | **100.0%** | **✅ PASS** |
 
 ---
 
 ## 2. Adversarial Negative Self-Test Verification
 
-To prove that the audit harness enforces genuine slot-awareness and normalized equality, 9 adversarial negative test probes were executed through the **EXACT SAME** `auditDump` function against mutated in-memory dumps:
+To prove that the audit harness enforces genuine slot-awareness and normalized equality, 10 adversarial negative test probes were executed through the **EXACT SAME** `auditDump` function against mutated in-memory dumps:
 
 | Test ID | Adversarial Probe | Description | Expected Reason | Actual Reason | Verdict |
 |:---|:---|:---|:---|:---|:---:|
@@ -47,8 +47,9 @@ To prove that the audit harness enforces genuine slot-awareness and normalized e
 | `NEG-7` | **Sample preference mislabelled as confirmed (G)** | Sample habit presented as "You confirmed" in provenance badge slot | `sample_mislabelled_as_confirmed` | `sample_mislabelled_as_confirmed` | ✅ PASS (Rejected) |
 | `NEG-8` | **Value leaked into chrome slot without allowlist (H)** | Temporal value placed in chrome slot with unallowlisted reason | `chrome_leak` | `chrome_leak` | ✅ PASS (Rejected) |
 | `NEG-9` | **Unannotated DOM text leaf rejection (I)** | Unannotated element with slotType unclassified presented to auditDump | `unclassified_slot` | `unclassified_slot` | ✅ PASS (Rejected) |
+| `NEG-10` | **Bundle-derived entity name leaked into chrome slot without allowlist (J)** | Bundle record entity name ("Bay City Sushi") leaked into non-allowlisted chrome slot | `chrome_leak` | `chrome_leak` | ✅ PASS (Rejected) |
 
-**Adversarial Self-Test Verdict**: ✅ **100% (9/9) of negative probes correctly detected and rejected**
+**Adversarial Self-Test Verdict**: ✅ **100% (10/10) of negative probes correctly detected and rejected**
 
 ---
 
@@ -116,6 +117,7 @@ Every non-domain rendered element captured during the walkthroughs was tagged wi
 | `navigate-confirm-modal` | Cancel navigation button | 4 | "Cancel" |
 | `navigate-confirm-modal` | Confirm navigation button | 4 | "Open Maps" |
 | `now-card` | Hero candidate separator | 4 | "·" |
+| `now-card` | Option late connector | 4 | "·" |
 | `now-card` | Plan updated status badge | 2 | "Updated" |
 | `now-card` | Undo action button | 2 | "Undo" |
 | `me-view-container` | Me page title | 2 | "Me & Memory" |
@@ -403,12 +405,14 @@ Below is the complete resolution ledger for all audited domain slots across all 
 | `now-card-calendar:2026-10-28T17:00:00.000Z-apptTime-10` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | "3:00 PM" | ✅ GROUNDED |
 | `now-card-calendar:2026-10-28T17:00:00.000Z-subjectTitle-11` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `calendar:2026-10-28T17:00:00.000Z` | `subjectTitle` | "Piano lesson" | ✅ GROUNDED |
 | `now-card-user_override_timing-driveLeaveTime-12` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `user_override_timing` | `driveLeaveTime` | "2:45 PM" | ✅ GROUNDED |
-| `now-card-eta-drive-piano-travelMinutes-13` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `eta-drive-piano` | `travelMinutes` | "25 min drive · late by 10m" | ✅ GROUNDED |
-| `now-card-habit-rain-transport-rankingBasis-14` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `habit-rain-transport` | `rankingBasis` | "Ranked by habit: Rain travel habit (Demo profile · sample)" | ✅ GROUNDED |
-| `now-card-user_override_timing-busLeaveTime-15` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `user_override_timing` | `busLeaveTime` | "2:30 PM" | ✅ GROUNDED |
-| `now-card-eta-bus-piano-travelMinutes-16` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `eta-bus-piano` | `travelMinutes` | "40 min bus · late by 10m" | ✅ GROUNDED |
-| `now-card-habit-rain-transport-rankingBasis-17` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `habit-rain-transport` | `rankingBasis` | "Ranked by habit: Rain travel habit (Demo profile · sample)" | ✅ GROUNDED |
-| `now-card-rain_transport_preference-habitNote-18` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `rain_transport_preference` | `habitNote` | "You usually prefer driving when it rains." | ✅ GROUNDED |
+| `now-card-eta-drive-piano-travelMinutes-13` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `eta-drive-piano` | `travelMinutes` | "25 min drive" | ✅ GROUNDED |
+| `now-card-user_override_timing-lateMinutes-14` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `user_override_timing` | `lateMinutes` | "late by 10m" | ✅ GROUNDED |
+| `now-card-habit-rain-transport-rankingBasis-15` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `habit-rain-transport` | `rankingBasis` | "Ranked by habit: Rain travel habit (Demo profile · sample)" | ✅ GROUNDED |
+| `now-card-user_override_timing-busLeaveTime-16` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `user_override_timing` | `busLeaveTime` | "2:30 PM" | ✅ GROUNDED |
+| `now-card-eta-bus-piano-travelMinutes-17` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `eta-bus-piano` | `travelMinutes` | "40 min bus" | ✅ GROUNDED |
+| `now-card-user_override_timing-lateMinutes-18` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `user_override_timing` | `lateMinutes` | "late by 10m" | ✅ GROUNDED |
+| `now-card-habit-rain-transport-rankingBasis-19` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `habit-rain-transport` | `rankingBasis` | "Ranked by habit: Rain travel habit (Demo profile · sample)" | ✅ GROUNDED |
+| `now-card-rain_transport_preference-habitNote-20` | rain | 1280x800 | After Late Shift Confirmed | `now-card` | `rain_transport_preference` | `habitNote` | "You usually prefer driving when it rains." | ✅ GROUNDED |
 | `v2-map-card-calendar:2026-10-28T17:00:00.000Z-subjectTitle-0` | rain | 390x844 | Initial Clear State | `v2-map-card` | `calendar:2026-10-28T17:00:00.000Z` | `subjectTitle` | "Piano lesson" | ✅ GROUNDED |
 | `now-card-calendar:2026-10-28T17:00:00.000Z-subjectTitle-0` | rain | 390x844 | Initial Clear State | `now-card` | `calendar:2026-10-28T17:00:00.000Z` | `subjectTitle` | "Piano lesson" | ✅ GROUNDED |
 | `now-card-calendar:2026-10-28T17:00:00.000Z-apptTime-1` | rain | 390x844 | Initial Clear State | `now-card` | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | "3:00 PM" | ✅ GROUNDED |
@@ -522,12 +526,14 @@ Below is the complete resolution ledger for all audited domain slots across all 
 | `now-card-calendar:2026-10-28T17:00:00.000Z-apptTime-10` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | "3:00 PM" | ✅ GROUNDED |
 | `now-card-calendar:2026-10-28T17:00:00.000Z-subjectTitle-11` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `calendar:2026-10-28T17:00:00.000Z` | `subjectTitle` | "Piano lesson" | ✅ GROUNDED |
 | `now-card-user_override_timing-driveLeaveTime-12` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `user_override_timing` | `driveLeaveTime` | "2:45 PM" | ✅ GROUNDED |
-| `now-card-eta-drive-piano-travelMinutes-13` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `eta-drive-piano` | `travelMinutes` | "25 min drive · late by 10m" | ✅ GROUNDED |
-| `now-card-habit-rain-transport-rankingBasis-14` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `habit-rain-transport` | `rankingBasis` | "Ranked by habit: Rain travel habit (Demo profile · sample)" | ✅ GROUNDED |
-| `now-card-user_override_timing-busLeaveTime-15` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `user_override_timing` | `busLeaveTime` | "2:30 PM" | ✅ GROUNDED |
-| `now-card-eta-bus-piano-travelMinutes-16` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `eta-bus-piano` | `travelMinutes` | "40 min bus · late by 10m" | ✅ GROUNDED |
-| `now-card-habit-rain-transport-rankingBasis-17` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `habit-rain-transport` | `rankingBasis` | "Ranked by habit: Rain travel habit (Demo profile · sample)" | ✅ GROUNDED |
-| `now-card-rain_transport_preference-habitNote-18` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `rain_transport_preference` | `habitNote` | "You usually prefer driving when it rains." | ✅ GROUNDED |
+| `now-card-eta-drive-piano-travelMinutes-13` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `eta-drive-piano` | `travelMinutes` | "25 min drive" | ✅ GROUNDED |
+| `now-card-user_override_timing-lateMinutes-14` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `user_override_timing` | `lateMinutes` | "late by 10m" | ✅ GROUNDED |
+| `now-card-habit-rain-transport-rankingBasis-15` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `habit-rain-transport` | `rankingBasis` | "Ranked by habit: Rain travel habit (Demo profile · sample)" | ✅ GROUNDED |
+| `now-card-user_override_timing-busLeaveTime-16` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `user_override_timing` | `busLeaveTime` | "2:30 PM" | ✅ GROUNDED |
+| `now-card-eta-bus-piano-travelMinutes-17` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `eta-bus-piano` | `travelMinutes` | "40 min bus" | ✅ GROUNDED |
+| `now-card-user_override_timing-lateMinutes-18` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `user_override_timing` | `lateMinutes` | "late by 10m" | ✅ GROUNDED |
+| `now-card-habit-rain-transport-rankingBasis-19` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `habit-rain-transport` | `rankingBasis` | "Ranked by habit: Rain travel habit (Demo profile · sample)" | ✅ GROUNDED |
+| `now-card-rain_transport_preference-habitNote-20` | rain | 390x844 | After Late Shift Confirmed | `now-card` | `rain_transport_preference` | `habitNote` | "You usually prefer driving when it rains." | ✅ GROUNDED |
 
 ---
 

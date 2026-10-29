@@ -490,8 +490,22 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                       const optBasisRef = opt.fieldSourceRefs?.rankingBasis
                         ? `${opt.fieldSourceRefs.rankingBasis.recordId}.${opt.fieldSourceRefs.rankingBasis.field}`
                         : 'rain_transport_preference.rankingBasis';
+                      const optLateRef = opt.fieldSourceRefs?.lateMinutes
+                        ? `${opt.fieldSourceRefs.lateMinutes.recordId}.${opt.fieldSourceRefs.lateMinutes.field}`
+                        : 'user_override_timing.lateMinutes';
                       const modeLabel = opt.mode ? opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1) : (opt.title.startsWith('Bus') ? 'Bus' : 'Drive');
                       const leaveTimeVal = opt.leaveTime || (opt.title.includes('leave ') ? opt.title.split('leave ')[1] : '');
+                      let detailHtml = '';
+                      if (opt.detail) {
+                        if (opt.detail.includes('late by')) {
+                          const splitIdx = opt.detail.indexOf(' · ');
+                          const travelPart = splitIdx >= 0 ? opt.detail.slice(0, splitIdx) : opt.detail;
+                          const latePart = splitIdx >= 0 ? opt.detail.slice(splitIdx + 3) : '';
+                          detailHtml = `<div class="v2-option-meta"><span ${optMetaRef ? `data-source-ref="${escapeHtml(optMetaRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(travelPart)}</span><span data-slot="chrome" data-slot-reason="Option late connector"> · </span><span data-source-ref="${escapeHtml(optLateRef)}" data-slot="domain">${escapeHtml(latePart)}</span></div>`;
+                        } else {
+                          detailHtml = `<div class="v2-option-meta" ${optMetaRef ? `data-source-ref="${escapeHtml(optMetaRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(opt.detail)}</div>`;
+                        }
+                      }
                       return `
                   <div class="v2-option-card ${opt.isSelected ? 'selected' : ''}">
                     <div class="v2-option-top">
@@ -500,7 +514,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                       </span>
                       ${opt.badge ? `<span class="v2-option-badge ${opt.isRecommended ? 'recommended' : ''}" data-slot="chrome" data-slot-reason="Option recommendation badge">${escapeHtml(opt.badge)}</span>` : ''}
                     </div>
-                    ${opt.detail ? `<div class="v2-option-meta" ${optMetaRef ? `data-source-ref="${escapeHtml(optMetaRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(opt.detail)}</div>` : ''}
+                    ${detailHtml}
                     ${opt.rankingBasis ? `<div class="v2-option-basis" data-source-ref="${optBasisRef}" data-slot="domain">${escapeHtml(opt.rankingBasis)}</div>` : ''}
                   </div>
                 `;

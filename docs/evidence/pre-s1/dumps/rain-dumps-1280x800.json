@@ -1,7 +1,7 @@
 {
   "scene": "rain",
   "viewport": "1280x800",
-  "recordedAt": "2026-10-29T15:55:58.004Z",
+  "recordedAt": "2026-10-29T16:19:48.917Z",
   "steps": [
     "Initial Clear State",
     "Weather Shift (Rain)",
@@ -2593,14 +2593,26 @@
       "sourceRef": "eta-drive-piano.travelMinutes",
       "recordId": "eta-drive-piano",
       "field": "travelMinutes",
-      "renderedText": "25 min drive · late by 10m",
+      "renderedText": "25 min drive",
       "component": "now-card",
       "step": "After Late Shift Confirmed",
       "scene": "rain",
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-habit-rain-transport-rankingBasis-14",
+      "slotId": "now-card-user_override_timing-lateMinutes-14",
+      "slotType": "domain",
+      "sourceRef": "user_override_timing.lateMinutes",
+      "recordId": "user_override_timing",
+      "field": "lateMinutes",
+      "renderedText": "late by 10m",
+      "component": "now-card",
+      "step": "After Late Shift Confirmed",
+      "scene": "rain",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "now-card-habit-rain-transport-rankingBasis-15",
       "slotType": "domain",
       "sourceRef": "habit-rain-transport.rankingBasis",
       "recordId": "habit-rain-transport",
@@ -2612,7 +2624,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-user_override_timing-busLeaveTime-15",
+      "slotId": "now-card-user_override_timing-busLeaveTime-16",
       "slotType": "domain",
       "sourceRef": "user_override_timing.busLeaveTime",
       "recordId": "user_override_timing",
@@ -2624,19 +2636,31 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-eta-bus-piano-travelMinutes-16",
+      "slotId": "now-card-eta-bus-piano-travelMinutes-17",
       "slotType": "domain",
       "sourceRef": "eta-bus-piano.travelMinutes",
       "recordId": "eta-bus-piano",
       "field": "travelMinutes",
-      "renderedText": "40 min bus · late by 10m",
+      "renderedText": "40 min bus",
       "component": "now-card",
       "step": "After Late Shift Confirmed",
       "scene": "rain",
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-habit-rain-transport-rankingBasis-17",
+      "slotId": "now-card-user_override_timing-lateMinutes-18",
+      "slotType": "domain",
+      "sourceRef": "user_override_timing.lateMinutes",
+      "recordId": "user_override_timing",
+      "field": "lateMinutes",
+      "renderedText": "late by 10m",
+      "component": "now-card",
+      "step": "After Late Shift Confirmed",
+      "scene": "rain",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "now-card-habit-rain-transport-rankingBasis-19",
       "slotType": "domain",
       "sourceRef": "habit-rain-transport.rankingBasis",
       "recordId": "habit-rain-transport",
@@ -2648,7 +2672,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-rain_transport_preference-habitNote-18",
+      "slotId": "now-card-rain_transport_preference-habitNote-20",
       "slotType": "domain",
       "sourceRef": "rain_transport_preference.habitNote",
       "recordId": "rain_transport_preference",
@@ -2790,7 +2814,17 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-slot-chrome-28",
+      "slotId": "now-card-slot-chrome-27",
+      "slotType": "chrome",
+      "renderedText": "·",
+      "reason": "Option late connector",
+      "component": "now-card",
+      "step": "After Late Shift Confirmed",
+      "scene": "rain",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "now-card-slot-chrome-30",
       "slotType": "chrome",
       "renderedText": "Bus · leave",
       "reason": "Option mode label",
@@ -2800,7 +2834,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-slot-chrome-30",
+      "slotId": "now-card-slot-chrome-32",
       "slotType": "chrome",
       "renderedText": "Alternative",
       "reason": "Option recommendation badge",
@@ -2812,6 +2846,16 @@
     {
       "slotId": "now-card-slot-chrome-34",
       "slotType": "chrome",
+      "renderedText": "·",
+      "reason": "Option late connector",
+      "component": "now-card",
+      "step": "After Late Shift Confirmed",
+      "scene": "rain",
+      "viewport": "1280x800"
+    },
+    {
+      "slotId": "now-card-slot-chrome-38",
+      "slotType": "chrome",
       "renderedText": "Based on your calendar, the route, and how you usually get ready.",
       "reason": "Static basis template",
       "component": "now-card",
@@ -2820,7 +2864,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-slot-chrome-35",
+      "slotId": "now-card-slot-chrome-39",
       "slotType": "chrome",
       "renderedText": "Updated",
       "reason": "Plan updated status badge",
@@ -2830,7 +2874,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-slot-chrome-36",
+      "slotId": "now-card-slot-chrome-40",
       "slotType": "chrome",
       "renderedText": "Accept",
       "reason": "Accept plan button",
@@ -2840,7 +2884,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-slot-chrome-37",
+      "slotId": "now-card-slot-chrome-41",
       "slotType": "chrome",
       "renderedText": "Undo",
       "reason": "Undo action button",
@@ -2850,7 +2894,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-slot-chrome-38",
+      "slotId": "now-card-slot-chrome-42",
       "slotType": "chrome",
       "renderedText": "Details →",
       "reason": "Trip details action button",
@@ -2860,7 +2904,7 @@
       "viewport": "1280x800"
     },
     {
-      "slotId": "now-card-slot-chrome-39",
+      "slotId": "now-card-slot-chrome-43",
       "slotType": "chrome",
       "renderedText": "Why",
       "reason": "Why provenance action button",

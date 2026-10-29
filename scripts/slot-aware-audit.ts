@@ -129,11 +129,78 @@ export const CHROME_VALUE_ALLOWLIST: ReadonlySet<string> = new Set([
   'Hero candidate separator',       // " · "
 ]);
 
-// Known entity names to check against in chrome slots
-const ENTITY_NAMES = ['Metro Gas & Go', 'Pacific Ramen Bar', 'Harbor Seafood Bistro', 'Green Garden Salad', 'Piano lesson', 'Sunset Station'];
+// ---------------------------------------------------------------------------
+// 1. Dynamic Entity Names Derivation from Scene Bundles
+// ---------------------------------------------------------------------------
+
+const bundleEntityCache = new WeakMap<EvidenceBundle, readonly string[]>();
+
+export function getBundleEntityNames(bundle: EvidenceBundle): readonly string[] {
+  const cached = bundleEntityCache.get(bundle);
+  if (cached) return cached;
+
+  const names = new Set<string>();
+  for (const rec of bundle.getAllRecords()) {
+    // Skip location origin / status records (e.g. loc-lunch-origin, loc-sf)
+    if (rec.id.startsWith('loc-') || rec.provider === 'location' || rec.provider === 'location-port') {
+      continue;
+    }
+
+    for (const key of ['name', 'subjectTitle', 'destination', 'destinationName']) {
+      const val = rec.fields[key];
+      if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if (trimmed.length >= 3) {
+          names.add(trimmed);
+          // If name has a separator like " · " (e.g. "Demo Place A · Ramen"), also add the base place name
+          if (trimmed.includes(' · ')) {
+            const base = trimmed.split(' · ')[0]?.trim();
+            if (base && base.length >= 3) {
+              names.add(base);
+            }
+          }
+        }
+      }
+    }
+    const aliases = rec.fields['aliases'];
+    if (Array.isArray(aliases)) {
+      for (const a of aliases) {
+        if (typeof a === 'string') {
+          const trimmed = a.trim();
+          if (trimmed.length >= 3) {
+            names.add(trimmed);
+          }
+        }
+      }
+    }
+  }
+
+  const result = Object.freeze(Array.from(names));
+  bundleEntityCache.set(bundle, result);
+  return result;
+}
+
+export function getSceneEntityNames(
+  scene: string,
+  bundles: ReturnType<typeof buildEvidenceBundles>
+): readonly string[] {
+  const names = new Set<string>();
+  if (scene === 'rain') {
+    for (const n of getBundleEntityNames(bundles.rainClear)) names.add(n);
+    for (const n of getBundleEntityNames(bundles.rainBaseline)) names.add(n);
+    for (const n of getBundleEntityNames(bundles.rainLateShift)) names.add(n);
+  } else if (scene === 'away-lunch') {
+    for (const n of getBundleEntityNames(bundles.awayLunch)) names.add(n);
+  } else if (scene === 'fuel') {
+    for (const n of getBundleEntityNames(bundles.fuel)) names.add(n);
+  } else if (scene === 'dynamic-lunch') {
+    for (const n of getBundleEntityNames(bundles.dynamicLunch)) names.add(n);
+  }
+  return Array.from(names);
+}
 
 // ---------------------------------------------------------------------------
-// 1. Authentic Evidence Bundle Construction
+// 2. Authentic Evidence Bundle Construction
 // ---------------------------------------------------------------------------
 
 export function buildEvidenceBundles() {
@@ -272,6 +339,8 @@ export function auditDump(
   const chromeMap = new Map<string, ChromeAccountingEntry>();
   const outOfScopeMap = new Map<string, ChromeAccountingEntry>();
 
+  const sceneEntityNames = getSceneEntityNames(dump.scene, bundles);
+
   // Check declared steps
   const expectedSteps = EXPECTED_SCENE_STEPS[dump.scene] || [];
   const missingSteps = expectedSteps.filter(s => !dump.steps.includes(s));
@@ -333,10 +402,15 @@ export function auditDump(
       const reason = slot.reason || 'Static UI chrome';
       const text = slot.renderedText.trim();
 
+      const stepBundle = resolveBundleForStep(slot.scene, slot.step, bundles);
+      const stepEntityNames = getBundleEntityNames(stepBundle);
+
       // Chrome value-leak guard: check if slot contains time, distance, or entity name without allow-list
       const hasTime = /\b0?(\d{1,2}):(\d{2})\s*(AM|PM)\b/i.test(text);
       const hasDist = /\b\d+\s*(?:m|km)\b/i.test(text);
-      const hasEntity = ENTITY_NAMES.some(name => text.includes(name));
+      const hasEntity =
+        sceneEntityNames.some(name => text.includes(name)) ||
+        stepEntityNames.some(name => text.includes(name));
 
       if ((hasTime || hasDist || hasEntity) && !CHROME_VALUE_ALLOWLIST.has(reason)) {
         domainResults.push({
@@ -660,6 +734,47 @@ export function runAdversarialSelfTests(
       passed,
       detail: passed
         ? 'auditDump correctly rejected unannotated text leaf (unclassified_slot)'
+        : `Unexpected outcome: ${JSON.stringify(ug || res.ungroundedSlots[0])}`,
+    });
+  }
+
+  // Test NEG-10 (J): Bundle-derived entity name leaked into non-allowlisted chrome slot
+  {
+    const dynamicDump =
+      baselineDumps.get('dynamic-lunch-dumps-1280x800.json') ||
+      baselineDumps.get('rain-dumps-1280x800.json')!;
+    const clone: DumpFile = JSON.parse(JSON.stringify(dynamicDump));
+    const dynamicNames = getBundleEntityNames(bundles.dynamicLunch);
+    const entityToLeak = dynamicNames.find(n => n === 'Bay City Sushi') || dynamicNames[0] || 'Sunset Fuel Station';
+    const noticeSlot = clone.slots.find(s => s.reason === 'Places disclosure notice');
+    if (noticeSlot) {
+      noticeSlot.renderedText = `${noticeSlot.renderedText} (${entityToLeak})`;
+    } else {
+      clone.slots.push({
+        slotId: 'injected-bundle-entity-leak-slot',
+        slotType: 'chrome',
+        renderedText: `Sponsored recommendation: ${entityToLeak}`,
+        reason: 'Places disclosure notice',
+        component: 'now-card',
+        step: clone.steps[0] || 'Dynamic Lunch Proactive Card',
+        scene: clone.scene,
+        viewport: '1280x800',
+      });
+    }
+    const res = auditDump(clone, bundles);
+    const ug = res.ungroundedSlots.find(
+      s => s.slot.reason === 'Places disclosure notice' && s.slot.renderedText.includes(entityToLeak)
+    );
+    const passed = Boolean(ug && ug.reason === 'chrome_leak');
+    outcomes.push({
+      testId: 'NEG-10',
+      title: 'Bundle-derived entity name leaked into chrome slot without allowlist (J)',
+      description: `Bundle record entity name ("${entityToLeak}") leaked into non-allowlisted chrome slot`,
+      expectedFailureReason: 'chrome_leak',
+      actualFailureReason: ug?.reason,
+      passed,
+      detail: passed
+        ? `auditDump correctly rejected bundle-derived entity leaked into chrome: "${entityToLeak}" (chrome_leak)`
         : `Unexpected outcome: ${JSON.stringify(ug || res.ungroundedSlots[0])}`,
     });
   }
