@@ -549,6 +549,67 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
         ).toBeGreaterThanOrEqual(10);
       }
     }
+
+    // 7. Verify map SVG text bounding box containment within SVG and non-overlap at 390x844 and 1280x800
+    for (const vp of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {
+      await page.setViewportSize(vp);
+      for (const testScene of ['rain', 'clear', 'away-lunch']) {
+        await page.selectOption('#scene-select', testScene);
+        await page.waitForTimeout(200);
+
+        const svgEl = page.locator('.v2-map-canvas svg');
+        const svgBox = await svgEl.boundingBox();
+        expect(svgBox).not.toBeNull();
+
+        const svgTexts = page.locator('.v2-map-canvas svg text');
+        const count = await svgTexts.count();
+        const textBoxes: { label: string; box: { x: number; y: number; width: number; height: number } }[] = [];
+
+        for (let i = 0; i < count; i++) {
+          const textEl = svgTexts.nth(i);
+          const label = (await textEl.textContent())?.trim() || '';
+          const box = await textEl.boundingBox();
+          expect(box, `Text "${label}" should have a bounding box`).not.toBeNull();
+          if (box && svgBox) {
+            // Assert containment within SVG boundaries (with 0.5px subpixel tolerance)
+            expect(
+              box.x,
+              `Text "${label}" left (${box.x}) should be inside SVG left (${svgBox.x}) in ${testScene} at ${vp.width}`
+            ).toBeGreaterThanOrEqual(svgBox.x - 0.5);
+            expect(
+              box.x + box.width,
+              `Text "${label}" right (${box.x + box.width}) should be inside SVG right (${svgBox.x + svgBox.width}) in ${testScene} at ${vp.width}`
+            ).toBeLessThanOrEqual(svgBox.x + svgBox.width + 0.5);
+            expect(
+              box.y,
+              `Text "${label}" top (${box.y}) should be inside SVG top (${svgBox.y}) in ${testScene} at ${vp.width}`
+            ).toBeGreaterThanOrEqual(svgBox.y - 0.5);
+            expect(
+              box.y + box.height,
+              `Text "${label}" bottom (${box.y + box.height}) should be inside SVG bottom (${svgBox.y + svgBox.height}) in ${testScene} at ${vp.width}`
+            ).toBeLessThanOrEqual(svgBox.y + svgBox.height + 0.5);
+
+            textBoxes.push({ label, box });
+          }
+        }
+
+        // Assert no overlap between any two labels
+        for (let i = 0; i < textBoxes.length; i++) {
+          for (let j = i + 1; j < textBoxes.length; j++) {
+            const item1 = textBoxes[i]!;
+            const item2 = textBoxes[j]!;
+            const b1 = item1.box;
+            const b2 = item2.box;
+            const overlapX = b1.x < b2.x + b2.width && b1.x + b1.width > b2.x;
+            const overlapY = b1.y < b2.y + b2.height && b1.y + b1.height > b2.y;
+            expect(
+              overlapX && overlapY,
+              `Labels "${item1.label}" and "${item2.label}" should not overlap in ${testScene} at ${vp.width}x${vp.height}`
+            ).toBe(false);
+          }
+        }
+      }
+    }
   });
 
   test('V3 Map Callout vs Node Label Collision: callout rect and node labels do not intersect at 390x844 and 1280x800 in Rain and Clear scenes', async ({

@@ -57,11 +57,11 @@ function renderMapSvg(map: MapVM): string {
           map.weatherCallout
             ? `
           <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 73}, ${map.weatherCallout.y - 18})">
-            <rect width="146" height="36" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
-            <text x="73" y="15" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle" font-family="var(--font-sans)">
+            <rect width="146" height="38" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
+            <text x="73" y="13" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle" font-family="var(--font-sans)">
               ${escapeHtml(map.weatherCallout.text)}
             </text>
-            <text x="73" y="28" fill="#E2EAE5" font-size="12" text-anchor="middle" font-family="var(--font-sans)">
+            <text x="73" y="29" fill="#E2EAE5" font-size="12" text-anchor="middle" font-family="var(--font-sans)">
               ${escapeHtml(map.weatherCallout.subtext || '')}
             </text>
           </g>
@@ -95,12 +95,14 @@ function renderMapSvg(map: MapVM): string {
               `;
             }
             // Candidate place marker
+            // Shorten demo place labels in schematic map (e.g. 'A · Ramen', 'C · Sushi') to prevent SVG edge clipping while cards retain full names
+            const mapPlaceLabel = m.label.replace(/^Demo Place /, '');
             return `
               <g class="v2-map-marker place ${m.isHighlight ? 'highlight' : ''}" transform="translate(${m.x}, ${m.y})">
                 <circle cx="0" cy="0" r="${m.isHighlight ? 7 : 5}" fill="${m.isHighlight ? '#2D6A4F' : '#5B6B65'}"/>
                 ${m.isHighlight ? '<circle cx="0" cy="0" r="11" stroke="#2D6A4F" stroke-width="1.5" opacity="0.5"/>' : ''}
                 <text x="0" y="${m.y < 70 ? -10 : 16}" fill="#16382F" font-size="12" font-weight="${m.isHighlight ? '700' : '500'}" text-anchor="middle" font-family="sans-serif">
-                  ${escapeHtml(m.label)}
+                  ${escapeHtml(mapPlaceLabel)}
                 </text>
               </g>
             `;

@@ -94,7 +94,7 @@ Return to the Home tab on Scene D2: the NOW card immediately recomputes its depa
 ### Part 6: Conversational Shell & Reasoning Demo (`2:18 – 2:46` · 28s)
 
 **[ON SCREEN]**:  
-Return to Today tab. Tap docked Ask Bar: full-page conversation overlay opens with title *"Ask Yori"*, status badge *"Offline demo · simulated"*, and engine status chip *"Offline fallback · deterministic"*. Type conversational query: *"Can I leave later?"* and tap send. Model interpreter executes the scripted model fixture command and status chip updates to *"Scripted model fixture · not a live model call"*. Close conversation overlay. Select **Reasoning demo** scene: show that even with external AI model turned off (`MODEL_API_KEY` unset), Yori handles competing candidates deterministically—keeping the time-critical Piano lesson as NOW and placing Lunch in AHEAD. Briefly highlight the terminal showing 454 passing unit tests, 18 golden fixtures, 53 drills, 128 Playwright e2e tests across the full suite, and `git diff --stat f43c6c1d HEAD -- src/core` completely empty.
+Return to the Home tab. Tap docked Ask Bar: full-page conversation overlay opens with title *"Ask Yori"*, status badge *"Offline demo · simulated"*, and engine status chip *"Offline fallback · deterministic"*. Type conversational query: *"Can I leave later?"* and tap send. Model interpreter executes the scripted model fixture command and status chip updates to *"Scripted model fixture · not a live model call"*. Close conversation overlay. Select **Reasoning demo** scene: show that even with external AI model turned off (`MODEL_API_KEY` unset), Yori handles competing candidates deterministically—keeping the time-critical Piano lesson as NOW and placing Lunch in AHEAD. Briefly highlight the terminal showing 454 passing unit tests, 18 golden fixtures, 53 drills, 128 Playwright e2e tests across the full suite, and `git diff --stat f43c6c1d HEAD -- src/core` completely empty.
 
 **[VOICEOVER / NARRATION]**:  
 *(2:18)* "Whenever you want to chat, the Ask Yori conversation shell opens instantly.  
@@ -126,24 +126,24 @@ Every on-screen string and step sequence quoted in this script is verified verba
 | Part 1 (Hook) | `Piano lesson at 3:00 PM` | `.now-card .now-subject` | [`v2-smoke.spec.ts:603`](../../tests/e2e/v2-smoke.spec.ts#L603) |
 | Part 1 (Hook) | `Get ready at 2:05 PM, leave by 2:25 PM` | `.now-card #now-title` | [`v2-smoke.spec.ts:604`](../../tests/e2e/v2-smoke.spec.ts#L604) |
 | Part 1 (Hook) | `SIMULATED` | `.now-card .card-badge` | [`v2-smoke.spec.ts:605`](../../tests/e2e/v2-smoke.spec.ts#L605) |
-| Part 1 (Hook) | `Spatial Context Map` (Desktop) / `Route Map` (Mobile) | `.map-header .section-label` | [`v3-tokens-motion-touch.spec.ts:493,507`](../../tests/e2e/v3-tokens-motion-touch.spec.ts#L493) |
-| Part 1 (Hook) | `Ask Yori about your day...` / `Ask Yori...` | `#ask-bar .ask-bar-text` | [`v3-tokens-motion-touch.spec.ts:470,503`](../../tests/e2e/v3-tokens-motion-touch.spec.ts#L470) |
+| Part 1 (Hook) | `Spatial Context Map` (Desktop) / `Route Map` (Mobile) | `.map-header .section-label` | [`v3-tokens-motion-touch.spec.ts:493,516`](../../tests/e2e/v3-tokens-motion-touch.spec.ts#L493) |
+| Part 1 (Hook) | `Ask Yori about your day...` / `Ask Yori...` | `#ask-bar .ask-bar-text` | [`v3-tokens-motion-touch.spec.ts:472,512`](../../tests/e2e/v3-tokens-motion-touch.spec.ts#L472) |
 | Part 1 (Hook) | `Tap to chat` | `#ask-bar .ask-bar-hint` | [`v2-smoke.spec.ts:606`](../../tests/e2e/v2-smoke.spec.ts#L606) |
-| Part 2 (D2 Rain) | `What changed: rain forecast` | `.v2-insight-title, .rain-banner` | [`v2-smoke.spec.ts:612`](../../tests/e2e/v2-smoke.spec.ts#L612) / [`v2a-interaction.spec.ts:120`](../../tests/e2e/v2a-interaction.spec.ts#L120) |
+| Part 2 (D2 Rain) | `What changed: rain forecast` | `.v2-insight-title, .rain-banner` | [`v2-smoke.spec.ts:612`](../../tests/e2e/v2-smoke.spec.ts#L612) |
 | Part 2 (D2 Rain) | `Umbrella` | `#chip-umbrella` | [`v2-smoke.spec.ts:613`](../../tests/e2e/v2-smoke.spec.ts#L613) |
-| Part 2 (D2 Rain) | `Rain forecast · simulated` / `Issued 1:35 PM` | `.v2-map-weather-callout text` | [`v2-smoke.spec.ts:614-615`](../../tests/e2e/v2-smoke.spec.ts#L614-L615) / [`v3-tokens-motion-touch.spec.ts:420`](../../tests/e2e/v3-tokens-motion-touch.spec.ts#L420) |
-| Part 2 (D2 Rain) | `Drive · leave 2:30 PM` | `.v2-option-card:first-child .v2-option-label` | [`v2-smoke.spec.ts:621`](../../tests/e2e/v2-smoke.spec.ts#L621) / [`v2a-interaction.spec.ts:40`](../../tests/e2e/v2a-interaction.spec.ts#L40) |
-| Part 2 (D2 Rain) | `Recommended` | `.v2-option-card:first-child .v2-option-badge` | [`v2-smoke.spec.ts:622`](../../tests/e2e/v2-smoke.spec.ts#L622) / [`v2a-interaction.spec.ts:41`](../../tests/e2e/v2a-interaction.spec.ts#L41) |
-| Part 2 (D2 Rain) | `25 min drive + 5m margin` | `.v2-option-card:first-child .v2-option-meta` | [`v2-smoke.spec.ts:623`](../../tests/e2e/v2-smoke.spec.ts#L623) / [`v2a-interaction.spec.ts:42`](../../tests/e2e/v2a-interaction.spec.ts#L42) |
-| Part 2 (D2 Rain) | `Ranked by habit: Rain travel habit (Demo profile · sample)` | `.v2-option-card:first-child .v2-option-basis` | [`v2-smoke.spec.ts:624-626`](../../tests/e2e/v2-smoke.spec.ts#L624-L626) / [`v2a-interaction.spec.ts:43-45`](../../tests/e2e/v2a-interaction.spec.ts#L43-L45) |
-| Part 2 (D2 Rain) | `Bus · leave 2:15 PM` | `.v2-option-card:nth-child(2) .v2-option-label` | [`v2-smoke.spec.ts:629`](../../tests/e2e/v2-smoke.spec.ts#L629) / [`v2a-interaction.spec.ts:48`](../../tests/e2e/v2a-interaction.spec.ts#L48) |
-| Part 2 (D2 Rain) | `Alternative` | `.v2-option-card:nth-child(2) .v2-option-badge` | [`v2-smoke.spec.ts:630`](../../tests/e2e/v2-smoke.spec.ts#L630) / [`v2a-interaction.spec.ts:49`](../../tests/e2e/v2a-interaction.spec.ts#L49) |
-| Part 2 (D2 Rain) | `40 min bus + 5m margin` | `.v2-option-card:nth-child(2) .v2-option-meta` | [`v2-smoke.spec.ts:631`](../../tests/e2e/v2-smoke.spec.ts#L631) / [`v2a-interaction.spec.ts:50`](../../tests/e2e/v2a-interaction.spec.ts#L50) |
+| Part 2 (D2 Rain) | `Rain forecast · simulated` / `Issued 1:35 PM` | `.v2-map-weather-callout text` | [`v2-smoke.spec.ts:614-615`](../../tests/e2e/v2-smoke.spec.ts#L614-L615) |
+| Part 2 (D2 Rain) | `Drive · leave 2:30 PM` | `.v2-option-card:first-child .v2-option-label` | [`v2-smoke.spec.ts:621`](../../tests/e2e/v2-smoke.spec.ts#L621) |
+| Part 2 (D2 Rain) | `Recommended` | `.v2-option-card:first-child .v2-option-badge` | [`v2-smoke.spec.ts:622`](../../tests/e2e/v2-smoke.spec.ts#L622) |
+| Part 2 (D2 Rain) | `25 min drive + 5m margin` | `.v2-option-card:first-child .v2-option-meta` | [`v2-smoke.spec.ts:623`](../../tests/e2e/v2-smoke.spec.ts#L623) |
+| Part 2 (D2 Rain) | `Ranked by habit: Rain travel habit (Demo profile · sample)` | `.v2-option-card:first-child .v2-option-basis` | [`v2-smoke.spec.ts:624-626`](../../tests/e2e/v2-smoke.spec.ts#L624-L626) |
+| Part 2 (D2 Rain) | `Bus · leave 2:15 PM` | `.v2-option-card:nth-child(2) .v2-option-label` | [`v2-smoke.spec.ts:629`](../../tests/e2e/v2-smoke.spec.ts#L629) |
+| Part 2 (D2 Rain) | `Alternative` | `.v2-option-card:nth-child(2) .v2-option-badge` | [`v2-smoke.spec.ts:630`](../../tests/e2e/v2-smoke.spec.ts#L630) |
+| Part 2 (D2 Rain) | `40 min bus + 5m margin` | `.v2-option-card:nth-child(2) .v2-option-meta` | [`v2-smoke.spec.ts:631`](../../tests/e2e/v2-smoke.spec.ts#L631) |
 | Part 2 (D2 Rain) | `You usually prefer driving when it rains.` | `.habit-note` | [`v2-smoke.spec.ts:632`](../../tests/e2e/v2-smoke.spec.ts#L632) |
-| Part 3 (D3 Away) | `Lunch options near you` | `.v2-candidates-hero .now-subject` | [`v2-smoke.spec.ts:638`](../../tests/e2e/v2-smoke.spec.ts#L638) / [`v2b-lunch-loop.spec.ts:65`](../../tests/e2e/v2b-lunch-loop.spec.ts#L65) |
-| Part 3 (D3 Away) | `Places matching what you like, within walking distance` | `.v2-candidates-hero #now-title` | [`v2-smoke.spec.ts:639-641`](../../tests/e2e/v2-smoke.spec.ts#L639-L641) / [`v2b-lunch-loop.spec.ts:68`](../../tests/e2e/v2b-lunch-loop.spec.ts#L68) |
-| Part 3 (D3 Away) | `Mock places for this demo; real listings come from a place provider.` | `.mock-places-notice` | [`v2-smoke.spec.ts:642-644`](../../tests/e2e/v2-smoke.spec.ts#L642-L644) / [`v2b-lunch-loop.spec.ts:75`](../../tests/e2e/v2b-lunch-loop.spec.ts#L75) |
-| Part 3 (D3 Away) | `Details →` | `.v2-view-detail-link` | [`v2-smoke.spec.ts:645`](../../tests/e2e/v2-smoke.spec.ts#L645) / [`v2b-lunch-loop.spec.ts:85`](../../tests/e2e/v2b-lunch-loop.spec.ts#L85) |
+| Part 3 (D3 Away) | `Lunch options near you` | `.v2-candidates-hero .now-subject` | [`v2-smoke.spec.ts:638`](../../tests/e2e/v2-smoke.spec.ts#L638) |
+| Part 3 (D3 Away) | `Places matching what you like, within walking distance` | `.v2-candidates-hero #now-title` | [`v2-smoke.spec.ts:639-641`](../../tests/e2e/v2-smoke.spec.ts#L639-L641) |
+| Part 3 (D3 Away) | `Mock places for this demo; real listings come from a place provider.` | `.mock-places-notice` | [`v2-smoke.spec.ts:642-644`](../../tests/e2e/v2-smoke.spec.ts#L642-L644) |
+| Part 3 (D3 Away) | `Details →` | `.v2-view-detail-link` | [`v2-smoke.spec.ts:645`](../../tests/e2e/v2-smoke.spec.ts#L645) |
 | Part 3 (D3 Away) | `Demo Place A · Ramen` / `Demo Place B · Salad` / `Demo Place C · Sushi` | `.v2-candidate-card` | [`v2-smoke.spec.ts:649-651`](../../tests/e2e/v2-smoke.spec.ts#L649-L651) |
 | Part 3 (D4 Busy) | `Nothing needs your attention right now.` | `.quiet-title` | [`v2-smoke.spec.ts:656`](../../tests/e2e/v2-smoke.spec.ts#L656) |
 | Part 4 (Why Sheet) | `Why you're seeing this` | `#why-sheet-title` | [`v2-smoke.spec.ts:663`](../../tests/e2e/v2-smoke.spec.ts#L663) |
@@ -157,10 +157,10 @@ Every on-screen string and step sequence quoted in this script is verified verba
 | Part 5 (Me Tab) | `Preparation buffer habit` | `#proposal-prep_buffer_preference .memory-key` | [`v2-smoke.spec.ts:698`](../../tests/e2e/v2-smoke.spec.ts#L698) |
 | Part 5 (Me Tab) | `Confirmed` | `.badge-confirmed` | [`v2-smoke.spec.ts:706`](../../tests/e2e/v2-smoke.spec.ts#L706) |
 | Part 5 (Recomputation) | `Get ready at 2:00 PM, leave by 2:25 PM` | `#now-title` (post-confirmation) | [`v2-smoke.spec.ts:711`](../../tests/e2e/v2-smoke.spec.ts#L711) |
-| Part 6 (Conversational) | `Ask Yori` | `#conversation-title` | [`v2-smoke.spec.ts:724`](../../tests/e2e/v2-smoke.spec.ts#L724) / [`v2a-interaction.spec.ts:60`](../../tests/e2e/v2a-interaction.spec.ts#L60) |
-| Part 6 (Conversational) | `Offline demo · simulated` | `#conversation-status-badge` | [`v2-smoke.spec.ts:725`](../../tests/e2e/v2-smoke.spec.ts#L725) / [`v3-tokens-motion-touch.spec.ts:535`](../../tests/e2e/v3-tokens-motion-touch.spec.ts#L535) |
-| Part 6 (Conversational) | `Offline fallback · deterministic` | `#engine-status-chip` | [`v2-smoke.spec.ts:726`](../../tests/e2e/v2-smoke.spec.ts#L726) / [`v3-tokens-motion-touch.spec.ts:540`](../../tests/e2e/v3-tokens-motion-touch.spec.ts#L540) |
-| Part 6 (Conversational) | `Scripted model fixture · not a live model call` | `#engine-status-chip` | [`v2-smoke.spec.ts:730-732`](../../tests/e2e/v2-smoke.spec.ts#L730-L732) / [`v3-tokens-motion-touch.spec.ts:546`](../../tests/e2e/v3-tokens-motion-touch.spec.ts#L546) |
+| Part 6 (Conversational) | `Ask Yori` | `#conversation-title` | [`v2-smoke.spec.ts:724`](../../tests/e2e/v2-smoke.spec.ts#L724) |
+| Part 6 (Conversational) | `Offline demo · simulated` | `#conversation-status-badge` | [`v2-smoke.spec.ts:725`](../../tests/e2e/v2-smoke.spec.ts#L725) |
+| Part 6 (Conversational) | `Offline fallback · deterministic` | `#engine-status-chip` | [`v2-smoke.spec.ts:726`](../../tests/e2e/v2-smoke.spec.ts#L726) |
+| Part 6 (Conversational) | `Scripted model fixture · not a live model call` | `#engine-status-chip` | [`v2-smoke.spec.ts:730-732`](../../tests/e2e/v2-smoke.spec.ts#L730-L732) |
 
 ---
 
