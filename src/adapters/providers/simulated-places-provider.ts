@@ -142,7 +142,7 @@ export class SimulatedPlacesProvider implements PlacesProvider {
     this.simulateError = shouldError;
   }
 
-  public async searchNearby(query: PlacesQuery): Promise<readonly PlaceItem[]> {
+  public searchNearbySync(query: PlacesQuery): readonly PlaceItem[] {
     if (this.simulateError) {
       throw new Error('Simulated places provider failure (network/service error)');
     }
@@ -160,6 +160,7 @@ export class SimulatedPlacesProvider implements PlacesProvider {
       const distMeters = computeHaversineDistanceMeters(query.location, t.coords);
       if (distMeters <= radius) {
         matches.push({
+          id: t.id,
           placeId: t.id,
           coords: t.coords,
           name: t.name,
@@ -179,6 +180,10 @@ export class SimulatedPlacesProvider implements PlacesProvider {
     matches.sort((a, b) => (a.straightLineDistanceMeters ?? 0) - (b.straightLineDistanceMeters ?? 0));
 
     return Object.freeze(matches);
+  }
+
+  public async searchNearby(query: PlacesQuery): Promise<readonly PlaceItem[]> {
+    return this.searchNearbySync(query);
   }
 }
 

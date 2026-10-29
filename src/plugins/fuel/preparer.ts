@@ -2,8 +2,8 @@
  * Fuel Plan Preparer (V5-FUEL / LIVING_CONTEXT_V2.md §10.3)
  *
  * Prepares fuel recommendation plans based on current location and PlacesProvider candidates.
- * Straight-line distances are computed accurately and labelled as "(straight-line)".
- * If location is unavailable/denied or no candidates exist, fails closed or returns null.
+ * Consumes PlaceItems from the PlacesProvider seam (or places_fuel signal).
+ * Invariant: Zero template imports; provider failure or empty results fails closed.
  */
 
 import type {
@@ -16,17 +16,14 @@ import type {
 } from '../../core/contracts/index.js';
 import type { LocationCoords, LocationPort } from '../../adapters/providers/location-port.js';
 import { defaultLocationPort } from '../../adapters/providers/location-port.js';
-import {
-  computeHaversineDistanceMeters,
-  formatStraightLineDistance,
-  FIXTURE_PLACE_TEMPLATES,
-  type SimulatedPlaceTemplate,
-} from '../../adapters/providers/simulated-places-provider.js';
+import type { PlaceItem, PlacesProvider } from '../../adapters/providers/places-types.js';
+import { defaultSimulatedPlacesProvider, computeHaversineDistanceMeters, formatStraightLineDistance } from '../../adapters/providers/simulated-places-provider.js';
 import type { FuelCandidateOption } from './types.js';
+import type { PlacesFuelSignalValue } from './adapter.js';
 import type { UserRequestOverride } from '../depart/request-override.js';
 
 export interface FuelPreparerOptions {
-  readonly templates?: readonly SimulatedPlaceTemplate[];
+  readonly placesProvider?: PlacesProvider;
   readonly maxRadiusMeters?: number;
   readonly locationPort?: LocationPort;
 }
@@ -35,12 +32,12 @@ export class FuelPreparer implements Preparer {
   public readonly id = 'fuel-preparer';
   public readonly targetIntent = 'fuel';
 
-  private readonly templates: readonly SimulatedPlaceTemplate[];
+  private readonly placesProvider: PlacesProvider;
   private readonly maxRadiusMeters: number;
   private readonly locationPort: LocationPort;
 
   constructor(options: FuelPreparerOptions = {}) {
-    this.templates = options.templates ?? FIXTURE_PLACE_TEMPLATES;
+    this.placesProvider = options.placesProvider ?? defaultSimulatedPlacesProvider;
     this.maxRadiusMeters = options.maxRadiusMeters ?? 10000;
     this.locationPort = options.locationPort ?? defaultLocationPort;
   }
@@ -90,34 +87,49 @@ export class FuelPreparer implements Preparer {
       return null;
     }
 
-    // 2. Search nearby gas stations within search radius
-    const options: FuelCandidateOption[] = [];
-    for (const t of this.templates) {
-      if (t.category !== 'gas_station') {
-        continue;
+    // 2. Obtain PlaceItems from snapshot places_fuel signal or query the PlacesProvider seam
+    let placeItems: readonly PlaceItem[] = [];
+    const placesSig = snapshot.signals.find(s => s.kind === 'places_fuel');
+    if (placesSig && typeof placesSig.value === 'object' && placesSig.value !== null) {
+      const pVal = placesSig.value as PlacesFuelSignalValue;
+      if (pVal.status === 'error') {
+        return null; // Provider failure -> fail closed
       }
-
-      const dist = computeHaversineDistanceMeters(currentCoords, t.coords);
-      if (dist <= this.maxRadiusMeters) {
-        options.push({
-          id: t.id,
-          name: t.name,
-          label: `${t.name} (${formatStraightLineDistance(dist)})`,
-          coords: t.coords,
+      placeItems = pVal.places ?? [];
+    } else if (this.placesProvider && this.placesProvider.searchNearbySync) {
+      try {
+        placeItems = this.placesProvider.searchNearbySync({
+          location: currentCoords,
           category: 'gas_station',
-          source: 'simulated',
-          address: t.address,
-          straightLineDistanceMeters: dist,
-          straightLineDistanceLabel: formatStraightLineDistance(dist),
-          requiresConfirmation: false,
-          brand: t.brand,
+          radiusMeters: this.maxRadiusMeters,
         });
+      } catch {
+        return null; // Provider failure -> fail closed
       }
     }
 
-    if (options.length === 0) {
-      return null;
+    if (placeItems.length === 0) {
+      return null; // Zero results -> fail closed
     }
+
+    // 3. Map PlaceItems to FuelCandidateOptions
+    const options: FuelCandidateOption[] = placeItems.map(p => {
+      const distMeters = p.straightLineDistanceMeters ?? computeHaversineDistanceMeters(currentCoords!, p.coords);
+      const distLabel = p.straightLineDistanceLabel ?? formatStraightLineDistance(distMeters);
+      return {
+        id: p.placeId,
+        name: p.name,
+        label: `${p.name} (${distLabel})`,
+        coords: p.coords,
+        category: 'gas_station',
+        source: p.source,
+        address: p.address,
+        straightLineDistanceMeters: distMeters,
+        straightLineDistanceLabel: distLabel,
+        requiresConfirmation: false,
+        brand: p.brand,
+      };
+    });
 
     // Sort by distance ascending, take top 3
     options.sort((a, b) => a.straightLineDistanceMeters - b.straightLineDistanceMeters);

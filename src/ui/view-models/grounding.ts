@@ -19,8 +19,6 @@ import type { PreparedPlan } from '../../core/contracts/index.js';
 import type { UserRequestOverride } from '../../plugins/depart/request-override.js';
 import { mockPlaceAdapter } from '../../adapters/mock/index.js';
 import {
-  FIXTURE_PLACE_TEMPLATES,
-  computeHaversineDistanceMeters,
   formatStraightLineDistance,
 } from '../../adapters/providers/simulated-places-provider.js';
 import type { PlaceItem } from '../../adapters/providers/places-types.js';
@@ -1006,37 +1004,52 @@ export function createFuelEvidenceBundle(options?: {
 }): EvidenceBundle {
   const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T19:10:00.000Z';
   const timezone = options?.timezone ?? options?.snapshot?.timezone ?? 'America/Los_Angeles';
-  const originCoords = options?.originCoords ?? { lat: 37.7749, lng: -122.4194 };
+
+  // Resolve origin coordinates strictly from options or snapshot (no literal SF fallback)
+  const locSig = options?.snapshot?.signals?.find(s => s.kind === 'location_status' || s.kind === 'location');
+  const locVal = locSig?.value as any;
+  const originCoords =
+    options?.originCoords ??
+    (typeof locVal?.lat === 'number' && typeof locVal?.lng === 'number'
+      ? { lat: locVal.lat, lng: locVal.lng }
+      : undefined);
 
   const recordMap = new Map<string, EvidenceRecord>();
   const aliases = new Map<string, string>();
 
-  // If places were explicitly provided, use them; otherwise use FIXTURE_PLACE_TEMPLATES with computed straight-line distances
-  const placesList: readonly PlaceItem[] =
-    options?.places ??
-    FIXTURE_PLACE_TEMPLATES.filter(p => p.category === 'gas_station').map(t => {
-      const dist = computeHaversineDistanceMeters(originCoords, t.coords);
-      return {
-        id: t.id,
-        placeId: t.id,
-        name: t.name,
-        coords: t.coords,
-        category: t.category,
-        address: t.address,
-        brand: t.brand,
-        distanceMeters: dist,
-        straightLineDistanceMeters: dist,
-        straightLineDistanceLabel: formatStraightLineDistance(dist),
-        source: 'simulated' as const,
-        fetchedAt: sceneClockIso,
-      };
-    });
+  // Resolve PlaceItems from options.places, snapshot places_fuel signal, or plan options
+  let placesList: readonly PlaceItem[] = options?.places ?? [];
+  if (placesList.length === 0 && options?.snapshot?.signals) {
+    const placesSig = options.snapshot.signals.find(s => s.kind === 'places_fuel');
+    if (placesSig && typeof placesSig.value === 'object' && placesSig.value !== null) {
+      const pVal = placesSig.value as any;
+      if (Array.isArray(pVal.places)) {
+        placesList = pVal.places;
+      }
+    }
+  }
+  if (placesList.length === 0 && options?.plan?.optionsOrSteps) {
+    placesList = (options.plan.optionsOrSteps as any[]).map(opt => ({
+      id: opt.id || opt.placeId,
+      placeId: opt.placeId || opt.id,
+      name: opt.name,
+      coords: opt.coords,
+      category: opt.category || 'gas_station',
+      source: opt.source || 'simulated',
+      fetchedAt: sceneClockIso,
+      address: opt.address,
+      straightLineDistanceMeters: opt.straightLineDistanceMeters,
+      straightLineDistanceLabel: opt.straightLineDistanceLabel,
+      brand: opt.brand,
+    }));
+  }
 
   for (const place of placesList) {
     const pid = place.id || place.placeId;
-    const distMeters = place.distanceMeters ?? place.straightLineDistanceMeters;
-    const distMinutes = Math.round((distMeters ?? 500) / 80);
-    const distLabel = place.straightLineDistanceLabel ?? (distMeters ? formatStraightLineDistance(distMeters) : undefined);
+    const distMeters = place.straightLineDistanceMeters ?? place.distanceMeters;
+    const distLabel =
+      place.straightLineDistanceLabel ??
+      (distMeters !== undefined ? formatStraightLineDistance(distMeters) : undefined);
 
     recordMap.set(pid, {
       id: pid,
@@ -1053,7 +1066,6 @@ export function createFuelEvidenceBundle(options?: {
         category: place.category,
         address: place.address,
         brand: place.brand,
-        distanceMinutes: distMinutes,
         distanceMeters: distMeters,
         straightLineDistance: distLabel,
         straightLineDistanceLabel: distLabel,
@@ -1063,37 +1075,45 @@ export function createFuelEvidenceBundle(options?: {
     aliases.set(place.name.toLowerCase(), pid);
   }
 
-  // Location record
-  const locRecordId = 'loc-fuel-origin';
-  recordMap.set(locRecordId, {
-    id: locRecordId,
-    provider: 'location-port',
-    kind: 'poi',
-    fetchedAt: sceneClockIso,
-    provenance: 'simulated',
-    fields: {
-      lat: originCoords.lat,
-      lng: originCoords.lng,
-      status: 'available',
-    },
-  });
+  // Location record (only when originCoords exists)
+  if (originCoords) {
+    const locRecordId = 'loc-fuel-origin';
+    recordMap.set(locRecordId, {
+      id: locRecordId,
+      provider: 'location-port',
+      kind: 'poi',
+      fetchedAt: sceneClockIso,
+      provenance: 'simulated',
+      fields: {
+        lat: originCoords.lat,
+        lng: originCoords.lng,
+        status: locVal?.status || 'available',
+      },
+    });
+  }
 
-  // Vehicle fuel signal / status
-  const fuelSig = options?.snapshot?.signals?.find(s => s.kind === 'fuel_percent' || s.kind === 'vehicle_fuel');
-  const fuelVal = fuelSig?.value as any;
-  const fuelPercent = typeof fuelVal === 'number' ? fuelVal : (fuelVal?.fuelPercent ?? 18);
-  recordMap.set('fuel_status', {
-    id: 'fuel_status',
-    provider: 'vehicle',
-    kind: 'poi',
-    fetchedAt: sceneClockIso,
-    provenance: 'simulated',
-    fields: {
-      fuelPercent,
-      needsFuel: fuelPercent <= 25,
-      status: `Fuel level ${fuelPercent}% (low)`,
-    },
-  });
+  // Vehicle fuel signal / status (only when fuel signal actually exists with a number)
+  const fuelSig = options?.snapshot?.signals?.find(
+    s => s.kind === 'fuel_percent' || s.kind === 'fuel_status' || s.kind === 'vehicle_fuel'
+  );
+  if (fuelSig && fuelSig.value !== undefined && fuelSig.value !== null) {
+    const fuelVal = fuelSig.value as any;
+    const fuelPercent = typeof fuelVal === 'number' ? fuelVal : fuelVal?.fuelPercent;
+    if (typeof fuelPercent === 'number') {
+      recordMap.set('fuel_status', {
+        id: 'fuel_status',
+        provider: 'vehicle',
+        kind: 'poi',
+        fetchedAt: sceneClockIso,
+        provenance: 'simulated',
+        fields: {
+          fuelPercent,
+          needsFuel: fuelPercent <= 25,
+          status: `Fuel level ${fuelPercent}%${fuelPercent <= 25 ? ' (low)' : ''}`,
+        },
+      });
+    }
+  }
 
   return createEvidenceBundle('bundle-fuel-v5', sceneClockIso, [...recordMap.values()], timezone, aliases);
 }

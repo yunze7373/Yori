@@ -4,6 +4,19 @@ import path from 'path';
 import fs from 'fs';
 
 const EVIDENCE_DIR = path.resolve(process.cwd(), 'docs/evidence/v5-fuel');
+const shouldRecord = Boolean(process.env.V5_RECORD);
+
+async function maybeScreenshot(page: Page, filename: string) {
+  if (shouldRecord) {
+    if (!fs.existsSync(EVIDENCE_DIR)) {
+      fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
+    }
+    await page.screenshot({
+      path: path.join(EVIDENCE_DIR, filename),
+      fullPage: false,
+    });
+  }
+}
 
 async function checkAxe(page: Page) {
   const axeResults = await new AxeBuilder({ page })
@@ -87,10 +100,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await checkAxe(page);
 
     // Capture visual screenshot of fuel card
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, `v5-fuel-card-${vpSuffix}.png`),
-      fullPage: false,
-    });
+    await maybeScreenshot(page, `v5-fuel-card-${vpSuffix}.png`);
 
     // 3. Navigate Handoff Verification
     // Enable test intercept to avoid navigating away
@@ -119,10 +129,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await checkAxe(page);
 
     // Capture visual screenshot of navigate confirmation modal
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, `v5-fuel-navigate-modal-${vpSuffix}.png`),
-      fullPage: false,
-    });
+    await maybeScreenshot(page, `v5-fuel-navigate-modal-${vpSuffix}.png`);
 
     // Click Open Maps button (intercepted)
     const confirmBtn = page.locator('#btn-confirm-navigate');
@@ -173,10 +180,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await checkAxe(page);
 
     // Capture visual screenshot of unavailable state
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, `v5-fuel-unavailable-${vpSuffix}.png`),
-      fullPage: false,
-    });
+    await maybeScreenshot(page, `v5-fuel-unavailable-${vpSuffix}.png`);
 
     // Restore location port
     await page.evaluate(() => {
@@ -221,5 +225,150 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     if (await undoBtn.isVisible()) {
       await undoBtn.click();
     }
+  });
+
+  test('V5-FUEL: Location change to LA dynamically updates candidates, map label, and verified URL (AC-212-1, Finding 2)', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+
+    const sceneSelect = page.locator('#scene-select');
+    await sceneSelect.selectOption('fuel');
+
+    // Switch location to Los Angeles: lat: 34.0522, lng: -118.2437
+    await page.evaluate(() => {
+      (window as any).__YORI_SET_LOCATION__('available', { lat: 34.0522, lng: -118.2437 });
+    });
+
+    // Verify candidate cards show LA stations (not SF)
+    const candidateList = page.locator('.v2-candidate-list');
+    await expect(candidateList).toBeVisible();
+
+    const topCard = page.locator('.v2-candidate-card').first();
+    await expect(topCard).toBeVisible();
+    await expect(topCard).toContainText('Fuel');
+    await expect(topCard).toContainText('straight-line');
+
+    // Verify map label derives from the top candidate (not literal SF 'Metro Gas & Go')
+    const mapCard = page.locator('.v2-map-card');
+    await expect(mapCard).toBeVisible();
+    const topCardName = await topCard.locator('.v2-candidate-name').innerText();
+    await expect(mapCard).toContainText(topCardName.trim());
+
+    // Enable navigation intercept
+    await page.evaluate(() => {
+      (window as any).__YORI_TEST_INTERCEPT_NAV__ = true;
+    });
+
+    // Click Directions on the LA card
+    const directionsBtn = topCard.locator('.v2-directions-btn');
+    await directionsBtn.click();
+
+    // Verify navigate modal appears with LA coordinates in destination URL
+    const modal = page.locator('#navigate-confirm-modal');
+    await expect(modal).toBeVisible();
+    const urlCode = page.locator('#navigate-verified-url');
+    const urlText = await urlCode.innerText();
+
+    // Must pin LA coordinates and fuel-la-* place id
+    expect(urlText).toMatch(/destination=34\.05/);
+    expect(urlText).toContain('destination_place_id=fuel-la-');
+
+    // Confirm navigation
+    const confirmBtn = page.locator('#btn-confirm-navigate');
+    await confirmBtn.click();
+    await expect(modal).not.toBeVisible();
+
+    // Reset location back to SF default
+    await page.evaluate(() => {
+      (window as any).__YORI_SET_LOCATION__('available', { lat: 37.7749, lng: -122.4194 });
+    });
+  });
+
+  test('V5-FUEL: Out-of-session candidate yields no URL and logs failure (G2, Finding 2)', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+
+    const sceneSelect = page.locator('#scene-select');
+    await sceneSelect.selectOption('fuel');
+
+    // Session is SF. A candidate from Seattle (fuel-sea-1) submitted against this session must fail closed
+    const result = await page.evaluate(() => {
+      const bundle = (window as any).__YORI_GET_CURRENT_EVIDENCE_BUNDLE__();
+      const buildNavUrl = (window as any).__YORI_BUILD_NAV_URL__;
+      const logger = (window as any).__YORI_DECISION_LOGGER__;
+      const initialLogCount = logger ? logger.getEntries().length : 0;
+
+      const url = buildNavUrl(
+        {
+          id: 'fuel-sea-1',
+          name: 'Emerald City Gas',
+          coords: { lat: 47.607, lng: -122.331 },
+          sourceRef: { recordId: 'fuel-sea-1', field: 'name' },
+        },
+        bundle,
+        { platform: 'desktop' }
+      );
+
+      const latestEntry = logger ? logger.getLatest() : undefined;
+      const newLogCount = logger ? logger.getEntries().length : 0;
+
+      return {
+        url,
+        logged: newLogCount > initialLogCount,
+        latestEntry,
+      };
+    });
+
+    // Fail closed: No URL built (returns undefined/null)
+    expect(result.url).toBeFalsy();
+    // Decision log captures failure
+    expect(result.logged).toBe(true);
+    expect(result.latestEntry?.validationResult?.valid).toBe(false);
+    expect(result.latestEntry?.validationResult?.reason).toBe('candidate_outside_bundle');
+  });
+
+  test('V5-FUEL: Provider error and empty results degrade prominently on quiet card (AC-212-2, Finding 1 & 2)', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+
+    const sceneSelect = page.locator('#scene-select');
+    await sceneSelect.selectOption('fuel');
+
+    // 1. Simulate provider error
+    await page.evaluate(() => {
+      (window as any).__YORI_SET_PLACES_ERROR__(true);
+    });
+
+    const quietCard = page.locator('.quiet-card');
+    await expect(quietCard).toBeVisible();
+    await expect(quietCard).toContainText('Fuel Station Lookup Failed');
+    await expect(quietCard).toContainText('Unable to load nearby gas stations from places provider');
+    await expect(quietCard).toContainText('Places provider error · fails closed');
+    await expect(page.locator('.v2-candidate-card')).toHaveCount(0);
+    await checkAxe(page);
+
+    // 2. Simulate empty results (query location far from any station, e.g. North Pole / middle of ocean)
+    await page.evaluate(() => {
+      (window as any).__YORI_SET_PLACES_ERROR__(false);
+      (window as any).__YORI_SET_LOCATION__('available', { lat: 0, lng: 0 });
+    });
+
+    await expect(quietCard).toBeVisible();
+    await expect(quietCard).toContainText('No Gas Stations Nearby');
+    await expect(quietCard).toContainText('No fuel stations found within search radius');
+    await expect(quietCard).toContainText('Zero gas stations returned by provider · fails closed');
+    await expect(page.locator('.v2-candidate-card')).toHaveCount(0);
+    await checkAxe(page);
+
+    // Restore location and provider to healthy SF state
+    await page.evaluate(() => {
+      (window as any).__YORI_SET_LOCATION__('available', { lat: 37.7749, lng: -122.4194 });
+    });
   });
 });

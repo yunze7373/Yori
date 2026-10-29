@@ -26,6 +26,7 @@ import { deriveOptionCardVMs } from './option-card-vm.js';
 import { deriveMapVM } from './map-vm.js';
 import { getLocalIllustration } from './photo-vm.js';
 import { classifyFactSource } from './provenance.js';
+import { formatStraightLineDistance } from '../../adapters/providers/simulated-places-provider.js';
 import {
   GroundedRecommendationVerifier,
   createRainEvidenceBundle,
@@ -105,6 +106,42 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           title: 'Location Unavailable',
           headline: 'Cannot find nearby gas stations without location access',
           basis: 'Location permission or fixture coordinates required · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+        };
+      }
+
+      const placesSig = snapshot.signals.find(s => s.kind === 'places_fuel');
+      const placesVal = placesSig?.value as any;
+      if (placesVal?.status === 'error') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Fuel Station Lookup Failed',
+          headline: 'Unable to load nearby gas stations from places provider',
+          basis: 'Places provider error · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+        };
+      }
+
+      if (placesVal?.status === 'empty' || (Array.isArray(placesVal?.places) && placesVal.places.length === 0)) {
+        return {
+          layoutKind: 'quiet',
+          title: 'No Gas Stations Nearby',
+          headline: 'No fuel stations found within search radius',
+          basis: 'Zero gas stations returned by provider · fails closed',
           isRain: false,
           options: [],
           isAccepted: false,
@@ -381,23 +418,26 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           const name = opt.name || opt.label;
           const straightLineDist =
             opt.straightLineDistanceLabel ||
-            (opt.straightLineDistanceMeters
-              ? `${opt.straightLineDistanceMeters} m (straight-line)`
-              : 'nearby');
+            (opt.straightLineDistanceMeters !== undefined
+              ? formatStraightLineDistance(opt.straightLineDistanceMeters)
+              : undefined);
+          if (!straightLineDist) {
+            continue;
+          }
           const photo = getLocalIllustration('fuel', name);
           const basis = opt.brand ? `Simulated fixture · ${opt.brand}` : 'Simulated fixture';
 
-          const recId = opt.recordId || opt.id;
+          const recId = opt.recordId || opt.id || opt.placeId;
           const sourceRef: SourceRef = { recordId: recId, field: 'name' };
           const fieldSourceRefs: Record<string, SourceRef> = {
             name: { recordId: recId, field: 'name' },
+            distanceText: { recordId: recId, field: 'straightLineDistanceLabel' },
           };
 
           const card: CandidateCardVM = {
-            id: opt.id || `fuel-cand-${i}`,
+            id: opt.id || opt.placeId || `fuel-cand-${i}`,
             name,
             cuisine: 'Gas Station',
-            distanceMinutes: Math.round((opt.straightLineDistanceMeters ?? 500) / 80),
             distanceText: straightLineDist,
             basis,
             photo,
@@ -418,13 +458,40 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       }
     }
 
+    let headline = plan.headline;
+    const topOption = plan.optionsOrSteps?.[0] as any;
+    if (bundle && topOption) {
+      const topRecId = topOption.recordId || topOption.id || topOption.placeId;
+      const vHead = GroundedRecommendationVerifier.verifyField(
+        { recordId: topRecId, field: 'name' },
+        topOption.name,
+        bundle
+      );
+      if (!vHead.valid) {
+        headline = 'Nearby Fuel: unknown';
+      }
+    }
+
     const map = deriveMapVM(plan, spatialEvidence, 'compact', { snapshot, evidenceBundle: bundle });
+    const spatialName = (spatialEvidence?.placeOrRoute as any)?.name;
+    if (bundle && map && spatialName && topOption) {
+      const topRecId = topOption.recordId || topOption.id || topOption.placeId;
+      const vMap = GroundedRecommendationVerifier.verifyField(
+        { recordId: topRecId, field: 'name' },
+        spatialName,
+        bundle
+      );
+      if (!vMap.valid) {
+        (map as any).destinationName = 'unknown';
+        (map as any).title = 'unknown';
+      }
+    }
 
     return {
       layoutKind: 'candidates',
       planId: plan.id,
       title: 'Low Fuel Warning',
-      headline: plan.headline,
+      headline,
       basis: 'Nearby gas stations · straight-line distances · simulated',
       isRain: false,
       map,

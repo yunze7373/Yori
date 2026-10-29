@@ -6,11 +6,13 @@ import { describe, it, expect } from 'vitest';
 import { fuelPlugin } from './index.js';
 import { fuelDetector } from './detector.js';
 import { FuelPreparer } from './preparer.js';
+import { FuelPlacesAdapter } from './adapter.js';
 import {
   createSimulatedSignal,
   type ContextSnapshot,
 } from '../../core/contracts/index.js';
 import { FixtureLocationPort } from '../../adapters/providers/location-port.js';
+import { SimulatedPlacesProvider } from '../../adapters/providers/simulated-places-provider.js';
 import { staticPluginRegistry } from '../registry.js';
 import { computeSceneState } from '../../ui/living-context/app.js';
 
@@ -191,6 +193,81 @@ describe('V5-FUEL: Fuel Plugin & Extensibility (AC-EXT-1)', () => {
     const portPreparer = new FuelPreparer({ locationPort: port });
     const plan = portPreparer.prepare(candidate, snapshot, []);
     expect(plan).toBeNull();
+  });
+
+  it('fuelPreparer: fails closed when PlacesProvider throws error (AC-212-2)', () => {
+    const errorProvider = new SimulatedPlacesProvider({ simulateError: true });
+    const preparer = new FuelPreparer({ placesProvider: errorProvider });
+    const candidate = { intent: 'fuel', confidence: 1.0, evidence: [] };
+    const locSignal = createSimulatedSignal({
+      kind: 'location_status',
+      value: { lat: 37.7749, lng: -122.4194 },
+      issuedAt: '2026-10-28T20:35:00.000Z',
+      validFor: 3600000,
+      confidence: 0.9,
+      consentScope: 'device_only',
+    });
+    const plan = preparer.prepare(
+      candidate,
+      {
+        id: 'snap-err',
+        asOf: '2026-10-28T20:35:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [locSignal],
+      },
+      []
+    );
+    expect(plan).toBeNull();
+  });
+
+  it('fuelPreparer: fails closed when PlacesProvider returns empty results (AC-212-2)', () => {
+    const emptyProvider = new SimulatedPlacesProvider({ templates: [] });
+    const preparer = new FuelPreparer({ placesProvider: emptyProvider });
+    const candidate = { intent: 'fuel', confidence: 1.0, evidence: [] };
+    const locSignal = createSimulatedSignal({
+      kind: 'location_status',
+      value: { lat: 37.7749, lng: -122.4194 },
+      issuedAt: '2026-10-28T20:35:00.000Z',
+      validFor: 3600000,
+      confidence: 0.9,
+      consentScope: 'device_only',
+    });
+    const plan = preparer.prepare(
+      candidate,
+      {
+        id: 'snap-empty-places',
+        asOf: '2026-10-28T20:35:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [locSignal],
+      },
+      []
+    );
+    expect(plan).toBeNull();
+  });
+
+  it('FuelPlacesAdapter: emits places_fuel signal from PlacesProvider', () => {
+    const adapter = new FuelPlacesAdapter();
+    const locSignal = createSimulatedSignal({
+      kind: 'location_status',
+      value: { lat: 37.7749, lng: -122.4194 },
+      issuedAt: '2026-10-28T20:35:00.000Z',
+      validFor: 3600000,
+      confidence: 0.9,
+      consentScope: 'device_only',
+    });
+    const signals = adapter.signals({
+      id: 'snap-adapter',
+      asOf: '2026-10-28T20:35:00.000Z',
+      timezone: 'America/Los_Angeles',
+      signals: [locSignal],
+    });
+    expect(signals).toHaveLength(1);
+    const sig = signals[0];
+    expect(sig).toBeDefined();
+    expect(sig!.kind).toBe('places_fuel');
+    const val = sig!.value as any;
+    expect(val.status).toBe('ok');
+    expect(val.places.length).toBeGreaterThan(0);
   });
 
   it('computes fuel scene state with low fuel plan in living context', () => {

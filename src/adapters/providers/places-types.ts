@@ -33,4 +33,5 @@ export interface PlacesProvider {
   readonly id: string;
   readonly name: string;
   searchNearby(query: PlacesQuery): Promise<readonly PlaceItem[]>;
+  searchNearbySync?(query: PlacesQuery): readonly PlaceItem[];
 }

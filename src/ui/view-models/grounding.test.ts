@@ -19,6 +19,9 @@ import { deriveTimelineVM } from './timeline-vm.js';
 import { deriveMapVM } from './map-vm.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
+import { createSimulatedSignal } from '../../core/contracts/index.js';
+import type { PlaceItem } from '../../adapters/providers/places-types.js';
+import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
 
 describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', () => {
   beforeEach(() => {
@@ -1031,9 +1034,49 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
   });
 
   describe('Part 5: Fuel Evidence Bundle Suite (V5-FUEL)', () => {
-    it('creates a grounded fuel evidence bundle with fixture stations, origin location, and fuel status', () => {
+    const sfPlaces: PlaceItem[] = [
+      {
+        id: 'fuel-sf-1',
+        placeId: 'fuel-sf-1',
+        name: 'Metro Gas & Go',
+        coords: { lat: 37.7755, lng: -122.418 },
+        category: 'gas_station',
+        address: '850 Market St, San Francisco, CA',
+        brand: 'Metro Gas',
+        straightLineDistanceMeters: 140,
+        straightLineDistanceLabel: '140 m (straight-line)',
+        source: 'simulated',
+        fetchedAt: '2026-10-28T19:10:00.000Z',
+      },
+      {
+        id: 'fuel-sf-2',
+        placeId: 'fuel-sf-2',
+        name: 'Sunset Fuel Station',
+        coords: { lat: 37.773, lng: -122.421 },
+        category: 'gas_station',
+        address: '420 9th St, San Francisco, CA',
+        brand: 'Sunset Petroleum',
+        straightLineDistanceMeters: 254,
+        straightLineDistanceLabel: '254 m (straight-line)',
+        source: 'simulated',
+        fetchedAt: '2026-10-28T19:10:00.000Z',
+      },
+    ];
+
+    it('creates a grounded fuel evidence bundle from session PlacesProvider results (G1)', () => {
       const bundle = createFuelEvidenceBundle({
         originCoords: { lat: 37.7749, lng: -122.4194 },
+        places: sfPlaces,
+        snapshot: {
+          asOf: '2026-10-28T19:10:00.000Z',
+          timezone: 'America/Los_Angeles',
+          signals: [
+            {
+              kind: 'fuel_percent',
+              value: { fuelPercent: 18, needsFuel: true },
+            },
+          ],
+        },
       });
 
       expect(bundle.id).toBe('bundle-fuel-v5');
@@ -1044,30 +1087,199 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(fuelRec?.fields.fuelPercent).toBe(18);
       expect(fuelRec?.fields.needsFuel).toBe(true);
 
-      // Gas stations from fixture
+      // Gas stations from session places only
       const metroGas = bundle.getRecord('fuel-sf-1');
       expect(metroGas).toBeDefined();
       expect(metroGas?.fields.name).toBe('Metro Gas & Go');
       expect(metroGas?.fields.straight_line).toBe(true);
-      expect(metroGas?.fields.straightLineDistance).toMatch(/\d+ m \(straight-line\)/);
+      expect(metroGas?.fields.straightLineDistanceLabel).toBe('140 m (straight-line)');
       expect(metroGas?.provenance).toBe('simulated');
 
-      // Verifies candidate card against bundle
+      // Seattle station is NOT in the SF session bundle
+      expect(bundle.getRecord('fuel-sea-1')).toBeUndefined();
+
+      // Verifies clean candidate card against bundle
       const candidate = {
         id: 'fuel-sf-1',
         name: 'Metro Gas & Go',
         coords: { lat: 37.7755, lng: -122.418 },
+        distanceText: '140 m (straight-line)',
         sourceRef: { recordId: 'fuel-sf-1', field: 'name' },
+        fieldSourceRefs: {
+          name: { recordId: 'fuel-sf-1', field: 'name' },
+          distanceText: { recordId: 'fuel-sf-1', field: 'straightLineDistanceLabel' },
+        },
       };
 
       const result = GroundedRecommendationVerifier.verifyCandidateCard(candidate, bundle);
       expect(result.valid).toBe(true);
 
-      // Verifies navigation URL builder produces valid URL
-      const navUrl = buildNavigateUrl(candidate, bundle, { platform: 'desktop' });
-      expect(navUrl).toBe(
-        'https://www.google.com/maps/dir/?api=1&destination=37.7755%2C-122.418&travelmode=driving'
+      // Out-of-session candidate (e.g. Seattle station) fails verifier and builds NO URL
+      const outOfSessionCand = {
+        id: 'fuel-sea-1',
+        name: 'Emerald City Gas',
+        coords: { lat: 47.607, lng: -122.331 },
+        sourceRef: { recordId: 'fuel-sea-1', field: 'name' },
+      };
+      const seaNavUrl = buildGroundedNavigateUrl(outOfSessionCand, bundle);
+      expect(seaNavUrl).toBeUndefined();
+    });
+
+    it('verifies changing fixture location to LA returns LA bundle records and verified LA navigate URL (AC-212-1)', () => {
+      const laPlaces: PlaceItem[] = [
+        {
+          id: 'fuel-la-1',
+          placeId: 'fuel-la-1',
+          name: 'Pacific Coast Petrol',
+          coords: { lat: 34.053, lng: -118.242 },
+          category: 'gas_station',
+          address: '200 N Main St, Los Angeles, CA',
+          brand: 'Pacific Coast',
+          straightLineDistanceMeters: 120,
+          straightLineDistanceLabel: '120 m (straight-line)',
+          source: 'simulated',
+          fetchedAt: '2026-10-28T19:10:00.000Z',
+        },
+      ];
+
+      const laBundle = createFuelEvidenceBundle({
+        originCoords: { lat: 34.0522, lng: -118.2437 },
+        places: laPlaces,
+        snapshot: {
+          asOf: '2026-10-28T19:10:00.000Z',
+          timezone: 'America/Los_Angeles',
+          signals: [{ kind: 'fuel_percent', value: { fuelPercent: 15, needsFuel: true } }],
+        },
+      });
+
+      expect(laBundle.hasRecord('fuel-la-1')).toBe(true);
+      expect(laBundle.getRecord('fuel-sf-1')).toBeUndefined();
+
+      const laCand = {
+        id: 'fuel-la-1',
+        name: 'Pacific Coast Petrol',
+        coords: { lat: 34.053, lng: -118.242 },
+        distanceText: '120 m (straight-line)',
+        sourceRef: { recordId: 'fuel-la-1', field: 'name' },
+        fieldSourceRefs: {
+          name: { recordId: 'fuel-la-1', field: 'name' },
+          distanceText: { recordId: 'fuel-la-1', field: 'straightLineDistanceLabel' },
+        },
+      };
+
+      const laNavUrl = buildGroundedNavigateUrl(laCand, laBundle, { platform: 'desktop' });
+      expect(laNavUrl).toBe(
+        'https://www.google.com/maps/dir/?api=1&destination=34.053%2C-118.242&travelmode=driving&destination_place_id=fuel-la-1'
       );
+    });
+
+    it('verifies tampered distance on fuel candidate card is withheld by GroundedRecommendationVerifier (G1, G2)', () => {
+      const bundle = createFuelEvidenceBundle({
+        originCoords: { lat: 37.7749, lng: -122.4194 },
+        places: sfPlaces,
+      });
+
+      const tamperedCandidate = {
+        id: 'fuel-sf-1',
+        name: 'Metro Gas & Go',
+        coords: { lat: 37.7755, lng: -122.418 },
+        distanceText: '10 m (straight-line)', // Tampered! Expected '140 m (straight-line)'
+        sourceRef: { recordId: 'fuel-sf-1', field: 'name' },
+        fieldSourceRefs: {
+          name: { recordId: 'fuel-sf-1', field: 'name' },
+          distanceText: { recordId: 'fuel-sf-1', field: 'straightLineDistanceLabel' },
+        },
+      };
+
+      const res = GroundedRecommendationVerifier.verifyCandidateCard(tamperedCandidate, bundle);
+      expect(res.valid).toBe(false);
+      expect(res.reason).toBe('tampered_value');
+    });
+
+    it('verifies provider failure and empty results yield explicit quiet states in buildHomeComposition (AC-212-2)', () => {
+      // 1. Provider failure -> Fuel Station Lookup Failed
+      const errorSnapshot = {
+        id: 'snap-err-comp',
+        asOf: '2026-10-28T19:10:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [
+          createSimulatedSignal({
+            kind: 'fuel_percent',
+            value: { fuelPercent: 18, needsFuel: true },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1,
+            consentScope: 'device_only',
+          }),
+          createSimulatedSignal({
+            kind: 'location_status',
+            value: { status: 'available', lat: 37.7749, lng: -122.4194 },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1,
+            consentScope: 'device_only',
+          }),
+          createSimulatedSignal({
+            kind: 'places_fuel',
+            value: { status: 'error', error: 'Places service unavailable', places: [] },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1,
+            consentScope: 'device_only',
+          }),
+        ],
+      };
+
+      const errComp = buildHomeComposition({
+        plan: null,
+        spatialEvidence: null,
+        snapshot: errorSnapshot,
+      });
+      expect(errComp.layoutKind).toBe('quiet');
+      expect(errComp.title).toBe('Fuel Station Lookup Failed');
+      expect(errComp.headline).toBe('Unable to load nearby gas stations from places provider');
+
+      // 2. Provider empty -> No Gas Stations Nearby
+      const emptySnapshot = {
+        id: 'snap-empty-comp',
+        asOf: '2026-10-28T19:10:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [
+          createSimulatedSignal({
+            kind: 'fuel_percent',
+            value: { fuelPercent: 18, needsFuel: true },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1,
+            consentScope: 'device_only',
+          }),
+          createSimulatedSignal({
+            kind: 'location_status',
+            value: { status: 'available', lat: 37.7749, lng: -122.4194 },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1,
+            consentScope: 'device_only',
+          }),
+          createSimulatedSignal({
+            kind: 'places_fuel',
+            value: { status: 'empty', places: [] },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1,
+            consentScope: 'device_only',
+          }),
+        ],
+      };
+
+      const emptyComp = buildHomeComposition({
+        plan: null,
+        spatialEvidence: null,
+        snapshot: emptySnapshot,
+      });
+      expect(emptyComp.layoutKind).toBe('quiet');
+      expect(emptyComp.title).toBe('No Gas Stations Nearby');
+      expect(emptyComp.headline).toBe('No fuel stations found within search radius');
     });
   });
 });

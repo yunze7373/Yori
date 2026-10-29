@@ -17,6 +17,9 @@ import type {
   WorkingSubstate,
 } from './types.js';
 import type { PreparedPlan, IntentCandidate, ContextSnapshot } from '../../core/contracts/index.js';
+import { createSimulatedSignal } from '../../core/contracts/index.js';
+import type { PlaceItem } from '../../adapters/providers/places-types.js';
+import { mockFuelAdapter } from '../../plugins/fuel/adapter.js';
 import {
   type CommandInterpreter,
   type SituationAttribution,
@@ -1121,15 +1124,36 @@ export class DefaultActionStateStore implements ActionStateStore {
         evidence: [],
       };
 
-      const fallbackSnapshot: ContextSnapshot = {
-        id: 'snap-fuel-store',
-        asOf: now,
-        timezone: 'America/Los_Angeles',
-        signals: [],
-      };
+      let places: readonly PlaceItem[] = [];
+      try {
+        const provider = mockFuelAdapter.getProvider();
+        places = provider.searchNearbySync
+          ? provider.searchNearbySync({ location: locStatus.coords, category: 'gas_station', radiusMeters: 10000 })
+          : [];
+      } catch {
+        places = [];
+      }
 
-      const effectiveSnapshot = ctx?.snapshot ?? fallbackSnapshot;
-      createFuelEvidenceBundle({ snapshot: effectiveSnapshot, originCoords: locStatus.coords });
+      const placesSig = createSimulatedSignal({
+        kind: 'places_fuel',
+        value: {
+          status: places.length > 0 ? 'ok' : 'empty',
+          places,
+          originCoords: locStatus.coords,
+        },
+        issuedAt: now,
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+
+      const effectiveSnapshot: ContextSnapshot = {
+        id: ctx?.snapshot?.id ?? 'snap-fuel-store',
+        asOf: ctx?.snapshot?.asOf ?? now,
+        timezone: ctx?.snapshot?.timezone ?? 'America/Los_Angeles',
+        signals: [...(ctx?.snapshot?.signals ?? []).filter(s => s.kind !== 'places_fuel'), placesSig],
+      };
+      createFuelEvidenceBundle({ snapshot: effectiveSnapshot, places, originCoords: locStatus.coords });
 
       const newPlan = fuelPreparer.prepareWithRequest(
         fuelCandidate,

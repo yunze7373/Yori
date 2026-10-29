@@ -111,7 +111,7 @@ export interface CandidateCardVM {
   readonly id: string;
   readonly name: string;
   readonly cuisine: string;
-  readonly distanceMinutes: number;
+  readonly distanceMinutes?: number;
   readonly distanceText: string;
   readonly basis: string;
   readonly photo: PhotoVM;

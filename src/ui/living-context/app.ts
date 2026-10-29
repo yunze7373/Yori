@@ -81,9 +81,13 @@ import {
   deriveRestaurantDetailVM,
   createLunchEvidenceBundle,
   createFuelEvidenceBundle,
+  type EvidenceBundle,
 } from '../view-models/index.js';
 import { defaultLocationPort } from '../../adapters/providers/location-port.js';
+import type { PlaceItem } from '../../adapters/providers/places-types.js';
+import { mockFuelAdapter } from '../../plugins/fuel/adapter.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
+import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import { renderV2Home } from './v2-home-view.js';
 import {
   renderTripDetail,
@@ -165,6 +169,7 @@ export function computeSceneState(
   snapshotTimezone: string;
   snapshot: ContextSnapshot;
   combinedMemory: readonly MemoryFact[];
+  evidenceBundle?: EvidenceBundle;
 } {
   const plugins = staticPluginRegistry.getAll();
   const effectiveStorage = storage ?? new YoriStorage(new WebStorageDriver());
@@ -560,6 +565,28 @@ export function computeSceneState(
       const locPortStatus = defaultLocationPort.getLocation();
       const isLocationAvailable = locPortStatus.status === 'available' && locPortStatus.coords;
 
+      let places: readonly PlaceItem[] = [];
+      let placesStatus: 'ok' | 'empty' | 'error' = 'ok';
+      let placesError: string | undefined;
+
+      if (isLocationAvailable && locPortStatus.coords) {
+        try {
+          const provider = mockFuelAdapter.getProvider();
+          places = provider.searchNearbySync
+            ? provider.searchNearbySync({
+                location: locPortStatus.coords,
+                category: 'gas_station',
+                radiusMeters: 10000,
+              })
+            : [];
+          placesStatus = places.length > 0 ? 'ok' : 'empty';
+        } catch (err: unknown) {
+          placesStatus = 'error';
+          placesError = err instanceof Error ? err.message : 'Places provider failure';
+          places = [];
+        }
+      }
+
       const fuelSig = createSimulatedSignal({
         kind: 'fuel_percent',
         value: { fuelPercent: 18, needsFuel: true },
@@ -595,11 +622,25 @@ export function computeSceneState(
         consentScope: 'device_only',
       });
 
+      const placesSig = createSimulatedSignal({
+        kind: 'places_fuel',
+        value: {
+          status: placesStatus,
+          places,
+          error: placesError,
+          originCoords: locPortStatus.coords,
+        },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+
       const snapshot: ContextSnapshot = freezeSnapshot({
         id: 'snapshot-fuel-d5',
         asOf: '2026-10-28T19:10:00.000Z',
         timezone: 'America/Los_Angeles',
-        signals: [fuelSig, locSig, schedSig],
+        signals: [fuelSig, locSig, schedSig, placesSig],
       });
 
       const result = runPipeline({
@@ -611,12 +652,24 @@ export function computeSceneState(
         suppressions: storedSuppressions,
       });
 
-      const mapEvidence: SpatialMapEvidence | null = isLocationAvailable
-        ? {
-            placeOrRoute: { name: 'Metro Gas & Go', destination: '850 Market St, San Francisco, CA' },
-            spatialEvidence: locSig,
-          }
-        : null;
+      const topCandidate = result.livingContext.now?.optionsOrSteps?.[0] as any;
+      const mapEvidence: SpatialMapEvidence | null =
+        isLocationAvailable && topCandidate
+          ? {
+              placeOrRoute: {
+                name: topCandidate.name,
+                destination: topCandidate.address || `${topCandidate.coords?.lat}, ${topCandidate.coords?.lng}`,
+              },
+              spatialEvidence: locSig,
+            }
+          : null;
+
+      const fuelBundle = createFuelEvidenceBundle({
+        plan: result.livingContext.now ?? undefined,
+        places,
+        snapshot,
+        originCoords: locPortStatus.coords,
+      });
 
       return {
         pipelineResult: result,
@@ -627,6 +680,7 @@ export function computeSceneState(
         snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
         snapshot,
         combinedMemory: storedConfirmedFacts,
+        evidenceBundle: fuelBundle,
       };
     }
   }
@@ -671,6 +725,8 @@ export function renderApp(
   const actionStore: ActionStateStore = createActionStateStore();
   let conversationCleanup: (() => void) | null = null;
 
+  let currentEvidenceBundle: EvidenceBundle | undefined = undefined;
+
   if (typeof window !== 'undefined') {
     (window as any).__YORI_SET_LOCATION__ = (
       status: 'available' | 'unavailable' | 'denied',
@@ -679,6 +735,16 @@ export function renderApp(
       defaultLocationPort.setLocation(status, coords);
       update();
     };
+    (window as any).__YORI_SET_PLACES_ERROR__ = (shouldError: boolean) => {
+      const provider = mockFuelAdapter.getProvider();
+      if ('setSimulateError' in provider && typeof (provider as any).setSimulateError === 'function') {
+        (provider as any).setSimulateError(shouldError);
+      }
+      update();
+    };
+    (window as any).__YORI_DECISION_LOGGER__ = globalDecisionLogger;
+    (window as any).__YORI_BUILD_NAV_URL__ = buildGroundedNavigateUrl;
+    (window as any).__YORI_GET_CURRENT_EVIDENCE_BUNDLE__ = () => currentEvidenceBundle;
     (window as any).__YORI_ACTION_STORE__ = actionStore;
   }
 
@@ -776,11 +842,14 @@ export function renderApp(
       snapshotTimezone,
       snapshot,
       combinedMemory,
+      evidenceBundle,
     } = computeSceneState(
       currentScene,
       sharedStorage,
       weatherStatus.enabled ? liveWeatherSignal : null
     );
+
+    currentEvidenceBundle = evidenceBundle;
 
     // Ensure initial storage envelope exists if clean
     let storedEnvelope = null;
@@ -945,6 +1014,7 @@ export function renderApp(
           userConfirmedKeys,
           snapshot,
           canUndo: actionStore.canUndo(),
+          evidenceBundle,
         });
         v2BodyHtml = renderV2Home(v2Composition);
       }
@@ -1681,9 +1751,10 @@ export function renderApp(
           if (!candidate) return;
 
           const bundle =
-            nowPlan?.intentId === 'fuel'
+            evidenceBundle ??
+            (nowPlan?.intentId === 'fuel'
               ? createFuelEvidenceBundle({ plan: nowPlan ?? undefined, snapshot })
-              : createLunchEvidenceBundle({ plan: nowPlan ?? undefined, snapshot });
+              : createLunchEvidenceBundle({ plan: nowPlan ?? undefined, snapshot }));
 
           const navUrl = buildGroundedNavigateUrl(
             {
