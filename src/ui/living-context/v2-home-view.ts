@@ -58,10 +58,10 @@ function renderMapSvg(map: MapVM): string {
             ? `
           <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 73}, ${map.weatherCallout.y - 18})">
             <rect width="146" height="38" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
-            <text x="73" y="13" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle" font-family="var(--font-sans)">
+            <text x="73" y="13" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutText" data-slot="domain">
               ${escapeHtml(map.weatherCallout.text)}
             </text>
-            <text x="73" y="29" fill="#E2EAE5" font-size="12" text-anchor="middle" font-family="var(--font-sans)">
+            <text x="73" y="29" fill="#E2EAE5" font-size="12" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutSubtext" data-slot="domain">
               ${escapeHtml(map.weatherCallout.subtext || '')}
             </text>
           </g>
@@ -122,11 +122,15 @@ export function renderMapCard(map: MapVM): string {
   return `
     <section class="card v2-map-card ${map.sizeHint}" aria-label="${escapeHtml(map.label)}">
       <div class="map-header">
-        <span class="section-label"><span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span></span>
-        <span class="card-badge">${escapeHtml(map.simulatedBadge)}</span>
+        <span class="section-label" data-slot="chrome" data-slot-reason="Map section heading"><span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span></span>
+        <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated map badge">${escapeHtml(map.simulatedBadge)}</span>
       </div>
       ${renderMapSvg(map)}
-      <div class="map-place-info">
+      <div class="map-place-info" ${
+        map.fieldSourceRefs?.destinationName
+          ? `data-source-ref="${escapeHtml(map.fieldSourceRefs.destinationName.recordId)}.${escapeHtml(map.fieldSourceRefs.destinationName.field)}" data-slot="domain"`
+          : `data-slot="chrome" data-slot-reason="Map schematic destination label"`
+      }>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
           <circle cx="12" cy="10" r="3"></circle>
@@ -142,14 +146,14 @@ function renderActionRow(vm: HomeCompositionVM): string {
   if (vm.isAccepted) {
     return `
       <div class="action-row" aria-label="Plan Actions">
-        <span class="badge-accepted">${escapeHtml(STRINGS.actions.accepted)}</span>
-        <button type="button" class="btn btn-outline" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}">
+        <span class="badge-accepted" data-slot="chrome" data-slot-reason="Plan accepted status badge">${escapeHtml(STRINGS.actions.accepted)}</span>
+        <button type="button" class="btn btn-outline" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Undo action button">
           ${escapeHtml(STRINGS.actions.undo)}
         </button>
-        <button type="button" class="btn btn-outline v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}">
+        <button type="button" class="btn btn-outline v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Trip details action button">
           Details →
         </button>
-        <button type="button" class="btn btn-outline" id="btn-why" data-plan-id="${escapeHtml(planId)}">
+        <button type="button" class="btn btn-outline" id="btn-why" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Why provenance action button">
           ${escapeHtml(STRINGS.actions.why)}
         </button>
       </div>
@@ -158,17 +162,17 @@ function renderActionRow(vm: HomeCompositionVM): string {
   if (vm.canUndo) {
     return `
       <div class="action-row" aria-label="Plan Actions">
-        <span class="badge-accepted">Updated</span>
-        <button type="button" class="btn btn-primary" id="btn-accept" data-plan-id="${escapeHtml(planId)}">
+        <span class="badge-accepted" data-slot="chrome" data-slot-reason="Plan updated status badge">Updated</span>
+        <button type="button" class="btn btn-primary" id="btn-accept" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Accept plan button">
           ${escapeHtml(STRINGS.actions.accept)}
         </button>
-        <button type="button" class="btn btn-outline" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}">
+        <button type="button" class="btn btn-outline" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Undo action button">
           ${escapeHtml(STRINGS.actions.undo)}
         </button>
-        <button type="button" class="btn btn-outline v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}">
+        <button type="button" class="btn btn-outline v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Trip details action button">
           Details →
         </button>
-        <button type="button" class="btn btn-outline" id="btn-why" data-plan-id="${escapeHtml(planId)}">
+        <button type="button" class="btn btn-outline" id="btn-why" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Why provenance action button">
           ${escapeHtml(STRINGS.actions.why)}
         </button>
       </div>
@@ -176,19 +180,19 @@ function renderActionRow(vm: HomeCompositionVM): string {
   }
   return `
     <div class="action-row" aria-label="Plan Actions">
-      <button type="button" class="btn btn-primary" id="btn-accept" data-plan-id="${escapeHtml(planId)}">
+      <button type="button" class="btn btn-primary" id="btn-accept" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Accept plan button">
         ${escapeHtml(STRINGS.actions.accept)}
       </button>
-      <button type="button" class="btn btn-outline" id="btn-adjust" data-plan-id="${escapeHtml(planId)}">
+      <button type="button" class="btn btn-outline" id="btn-adjust" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Adjust plan button">
         ${escapeHtml(STRINGS.actions.adjust)}
       </button>
-      <button type="button" class="btn btn-outline v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}">
+      <button type="button" class="btn btn-outline v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Trip details action button">
         Details →
       </button>
-      <button type="button" class="btn btn-outline" id="btn-dismiss" data-plan-id="${escapeHtml(planId)}">
+      <button type="button" class="btn btn-outline" id="btn-dismiss" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Dismiss plan button">
         ${escapeHtml(STRINGS.actions.dismiss)}
       </button>
-      <button type="button" class="btn btn-outline" id="btn-why" data-plan-id="${escapeHtml(planId)}">
+      <button type="button" class="btn btn-outline" id="btn-why" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Why provenance action button">
         ${escapeHtml(STRINGS.actions.why)}
       </button>
     </div>
@@ -342,13 +346,13 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               </svg>
             </div>
             <div class="v2-insight-body">
-              <h2 class="v2-insight-title">${escapeHtml(vm.rainBanner)}</h2>
-              <p class="v2-insight-desc">${escapeHtml(vm.rainInsightDesc || "I've prepared an updated departure schedule.")}</p>
+              <h2 class="v2-insight-title" data-source-ref="weather-rain.rainBanner" data-slot="domain">${escapeHtml(vm.rainBanner)}</h2>
+              <p class="v2-insight-desc" data-slot="chrome" data-slot-reason="Insight alert description">${escapeHtml(vm.rainInsightDesc || "I've prepared an updated departure schedule.")}</p>
               ${
                 vm.umbrellaChip
                   ? `
                 <div class="checklist-container" aria-label="Recommended Checklist">
-                  <span class="checklist-chip" id="chip-umbrella">
+                  <span class="checklist-chip" id="chip-umbrella" data-slot="chrome" data-slot-reason="Checklist chip">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7"></path>
                     </svg>
@@ -370,15 +374,15 @@ export function renderV2Home(vm: HomeCompositionVM): string {
 
           <section class="card now-card v2-journey-card" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}">
             <div class="v2-card-header">
-              <span class="section-label">${escapeHtml(STRINGS.sections.now)}</span>
-              <span class="card-badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
-              <h2 class="now-subject">${escapeHtml(vm.title)}</h2>
-              <div class="now-title" id="now-title">${escapeHtml(vm.headline)}</div>
+              <span class="section-label" data-slot="chrome" data-slot-reason="Section header label">${escapeHtml(STRINGS.sections.now)}</span>
+              <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+              <h2 class="now-subject" data-slot="summary" data-slot-reason="Appointment subject heading">${escapeHtml(vm.title)}</h2>
+              <div class="now-title" id="now-title" data-slot="summary" data-slot-reason="Departure compound schedule">${escapeHtml(vm.headline)}</div>
               ${
                 vm.umbrellaChip
                   ? `
                 <div class="checklist-container" aria-label="Recommended Checklist">
-                  <span class="checklist-chip" id="chip-umbrella">
+                  <span class="checklist-chip" id="chip-umbrella" data-slot="chrome" data-slot-reason="Checklist chip">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                       <path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7"></path>
                     </svg>
@@ -398,16 +402,29 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 <div class="v2-timeline-track"></div>
                 ${vm.timeline.steps
                   .map(
-                    step => `
+                    step => {
+                      const stepTimeRef = step.sourceRef ? `${step.sourceRef.recordId}.${step.sourceRef.field}` : '';
+                      const stepDetailRef = step.fieldSourceRefs?.travelMinutes
+                        ? `${step.fieldSourceRefs.travelMinutes.recordId}.${step.fieldSourceRefs.travelMinutes.field}`
+                        : step.fieldSourceRefs?.bufferMinutes
+                          ? `${step.fieldSourceRefs.bufferMinutes.recordId}.${step.fieldSourceRefs.bufferMinutes.field}`
+                          : step.fieldSourceRefs?.prepDetail
+                            ? `${step.fieldSourceRefs.prepDetail.recordId}.${step.fieldSourceRefs.prepDetail.field}`
+                            : '';
+                      const stepLabelRef = step.fieldSourceRefs?.subjectTitle
+                        ? `${step.fieldSourceRefs.subjectTitle.recordId}.${step.fieldSourceRefs.subjectTitle.field}`
+                        : '';
+                      return `
                   <div class="v2-timeline-step ${step.isPrimary ? 'primary' : ''} ${step.isEvent ? 'event' : ''}">
-                    <span class="v2-step-time">${escapeHtml(step.time)}</span>
+                    <span class="v2-step-time" ${stepTimeRef ? `data-source-ref="${stepTimeRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Timeline step time"`}>${escapeHtml(step.time)}</span>
                     <span class="v2-step-node" aria-hidden="true"></span>
                     <div class="v2-step-content">
-                      <strong class="v2-step-label">${escapeHtml(step.label)}</strong>
-                      ${step.detail ? `<span class="v2-step-detail">${escapeHtml(step.detail)}</span>` : ''}
+                      <strong class="v2-step-label" ${stepLabelRef ? `data-source-ref="${stepLabelRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Static timeline step label"`}>${escapeHtml(step.label)}</strong>
+                      ${step.detail ? `<span class="v2-step-detail" ${stepDetailRef ? `data-source-ref="${stepDetailRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Timeline step detail"`}>${escapeHtml(step.detail)}</span>` : ''}
                     </div>
                   </div>
-                `
+                `;
+                    }
                   )
                   .join('')}
               </div>
@@ -422,16 +439,29 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               <div class="v2-options-grid" aria-label="Travel Options">
                 ${vm.options
                   .map(
-                    opt => `
+                    opt => {
+                      const optTitleRef = opt.fieldSourceRefs?.leaveTime
+                        ? `${opt.fieldSourceRefs.leaveTime.recordId}.${opt.fieldSourceRefs.leaveTime.field}`
+                        : opt.sourceRef
+                          ? `${opt.sourceRef.recordId}.${opt.sourceRef.field}`
+                          : '';
+                      const optMetaRef = opt.fieldSourceRefs?.travelMinutes
+                        ? `${opt.fieldSourceRefs.travelMinutes.recordId}.${opt.fieldSourceRefs.travelMinutes.field}`
+                        : '';
+                      const optBasisRef = opt.fieldSourceRefs?.rankingBasis
+                        ? `${opt.fieldSourceRefs.rankingBasis.recordId}.${opt.fieldSourceRefs.rankingBasis.field}`
+                        : 'rain_transport_preference.rankingBasis';
+                      return `
                   <div class="v2-option-card ${opt.isSelected ? 'selected' : ''}">
                     <div class="v2-option-top">
-                      <span class="v2-option-label">${escapeHtml(opt.title)}</span>
-                      ${opt.badge ? `<span class="v2-option-badge ${opt.isRecommended ? 'recommended' : ''}">${escapeHtml(opt.badge)}</span>` : ''}
+                      <span class="v2-option-label" ${optTitleRef ? `data-source-ref="${optTitleRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option title"`}>${escapeHtml(opt.title)}</span>
+                      ${opt.badge ? `<span class="v2-option-badge ${opt.isRecommended ? 'recommended' : ''}" data-slot="chrome" data-slot-reason="Option recommendation badge">${escapeHtml(opt.badge)}</span>` : ''}
                     </div>
-                    ${opt.detail ? `<div class="v2-option-meta">${escapeHtml(opt.detail)}</div>` : ''}
-                    ${opt.rankingBasis ? `<div class="v2-option-basis">${escapeHtml(opt.rankingBasis)}</div>` : ''}
+                    ${opt.detail ? `<div class="v2-option-meta" ${optMetaRef ? `data-source-ref="${optMetaRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(opt.detail)}</div>` : ''}
+                    ${opt.rankingBasis ? `<div class="v2-option-basis" data-source-ref="${optBasisRef}" data-slot="domain">${escapeHtml(opt.rankingBasis)}</div>` : ''}
                   </div>
-                `
+                `;
+                    }
                   )
                   .join('')}
               </div>
@@ -439,10 +469,10 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 : ''
             }
 
-            ${vm.habitNote ? `<div class="habit-note">${escapeHtml(vm.habitNote)}</div>` : ''}
+            ${vm.habitNote ? `<div class="habit-note" data-source-ref="rain_transport_preference.habitNote" data-slot="domain">${escapeHtml(vm.habitNote)}</div>` : ''}
 
             <div class="now-basis">
-              <p>${escapeHtml(vm.basis)}</p>
+              <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
             </div>
 
             ${renderActionRow(vm)}
@@ -459,11 +489,11 @@ export function renderV2Home(vm: HomeCompositionVM): string {
     <div class="v2-home-container candidates">
       <section class="card now-card v2-candidates-hero" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}">
         <div class="v2-card-header">
-          <span class="section-label">${escapeHtml(STRINGS.sections.now)}</span>
-          <span class="card-badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
-          <h2 class="now-subject">${escapeHtml(vm.title)}</h2>
-          <div class="now-title" id="now-title">${escapeHtml(vm.headline)}</div>
-          <div class="mock-places-notice">${escapeHtml(
+          <span class="section-label" data-slot="chrome" data-slot-reason="Section header label">${escapeHtml(STRINGS.sections.now)}</span>
+          <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+          <h2 class="now-subject" data-slot="chrome" data-slot-reason="Candidates hero title">${escapeHtml(vm.title)}</h2>
+          <div class="now-title" id="now-title" data-slot="chrome" data-slot-reason="Candidates hero headline">${escapeHtml(vm.headline)}</div>
+          <div class="mock-places-notice" data-slot="chrome" data-slot-reason="Places disclosure notice">${escapeHtml(
             vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
               ? STRINGS.fuel.mockPlacesNotice
               : STRINGS.lunch.mockPlacesNotice
@@ -471,11 +501,11 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           ${
             vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') || Boolean(vm.locationLabel)
               ? `
-            <div class="v2-active-location-bar" role="region" aria-label="Active Location">
+            <div class="v2-active-location-bar" role="region" aria-label="Active Location" data-slot="chrome" data-slot-reason="Location status bar">
               <span class="v2-location-badge">📍 Location: ${escapeHtml(
                 vm.locationLabel || 'Selected City (simulated)'
               )}</span>
-              <button type="button" class="btn btn-outline btn-sm v2-change-loc-btn" id="btn-change-location" aria-expanded="false" aria-controls="v2-manual-location-section">
+              <button type="button" class="btn btn-outline btn-sm v2-change-loc-btn" id="btn-change-location" aria-expanded="false" aria-controls="v2-manual-location-section" data-slot="chrome" data-slot-reason="Change location button">
                 Change Location
               </button>
             </div>
@@ -517,28 +547,34 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               >
                 <div class="v2-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
                   ${c.photo.svgMarkup}
-                  <span class="v2-illustration-badge">${escapeHtml(c.photo.simulatedBadge)}</span>
+                  <span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Simulated illustration badge">${escapeHtml(c.photo.simulatedBadge)}</span>
                 </div>
                 <div class="v2-candidate-info">
-                  <h3 class="v2-candidate-name">${escapeHtml(c.name)}</h3>
+                  <h3 class="v2-candidate-name" data-source-ref="${c.fieldSourceRefs?.name ? `${c.fieldSourceRefs.name.recordId}.${c.fieldSourceRefs.name.field}` : `${c.id}.name`}" data-slot="domain">${escapeHtml(c.name)}</h3>
                   <div class="v2-candidate-tags">
-                    <span class="v2-cuisine-chip">${escapeHtml(c.cuisine)}</span>
-                    <span class="v2-distance-chip">${escapeHtml(c.distanceText)}</span>
-                    ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip">Quiet</span>` : ''}
-                    ${c.vegetarian ? `<span class="v2-veg-chip">Vegetarian</span>` : ''}
+                    <span class="v2-cuisine-chip" data-source-ref="${c.fieldSourceRefs?.cuisine ? `${c.fieldSourceRefs.cuisine.recordId}.${c.fieldSourceRefs.cuisine.field}` : (c.fieldSourceRefs?.category ? `${c.fieldSourceRefs.category.recordId}.${c.fieldSourceRefs.category.field}` : `${c.id}.cuisine`)}" data-slot="domain">${escapeHtml(c.cuisine)}</span>
+                    <span class="v2-distance-chip" data-source-ref="${c.fieldSourceRefs?.distanceText ? `${c.fieldSourceRefs.distanceText.recordId}.${c.fieldSourceRefs.distanceText.field}` : `${c.id}.distanceText`}" data-slot="domain">${escapeHtml(c.distanceText)}</span>
+                    ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Filter tag">Quiet</span>` : ''}
+                    ${c.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Filter tag">Vegetarian</span>` : ''}
                   </div>
-                  <div class="v2-candidate-basis">${escapeHtml(c.basis)}</div>
+                  <div class="v2-candidate-basis" ${
+                    c.fieldSourceRefs?.basis
+                      ? `data-source-ref="${escapeHtml(c.fieldSourceRefs.basis.recordId)}.${escapeHtml(c.fieldSourceRefs.basis.field)}" data-slot="domain"`
+                      : `data-slot="chrome" data-slot-reason="Recommendation ranking basis label"`
+                  }>${escapeHtml(c.basis)}</div>
                   <div class="v2-candidate-footer">
                     <button
                       type="button"
                       class="btn btn-outline v2-directions-btn"
                       id="btn-navigate-${c.id}"
                       data-candidate-id="${c.id}"
+                      data-slot="chrome"
+                      data-slot-reason="Navigation trigger button"
                       aria-label="Directions to ${escapeHtml(c.name)}"
                     >
                       Directions →
                     </button>
-                    <span class="v2-view-detail-link">Details →</span>
+                    <span class="v2-view-detail-link" data-slot="chrome" data-slot-reason="View details button">Details →</span>
                   </div>
                 </div>
               </div>
@@ -551,7 +587,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
         }
 
         <div class="now-basis">
-          <p>${escapeHtml(vm.basis)}</p>
+          <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
         </div>
 
         ${renderActionRow(vm)}

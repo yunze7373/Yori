@@ -22,6 +22,7 @@ export interface TimelineStepVM {
   readonly isEvent?: boolean;
   readonly iconType: 'prep' | 'leave' | 'arrive' | 'event';
   readonly sourceRef?: SourceRef;
+  readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
 }
 
 export interface TimelineVM {

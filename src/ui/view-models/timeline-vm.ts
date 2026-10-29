@@ -149,6 +149,11 @@ export function deriveTimelineVM(
       label: 'Get ready',
       detail: prepDetail || undefined,
       iconType: 'prep',
+      sourceRef: { recordId: prepRecId, field: prepField },
+      fieldSourceRefs: {
+        prepareTime: { recordId: prepRecId, field: prepField },
+        prepDetail: { recordId: 'prep_duration_minutes', field: 'prepText' },
+      },
     });
   }
 
@@ -197,6 +202,11 @@ export function deriveTimelineVM(
       detail: leaveDetail,
       isPrimary: true,
       iconType: 'leave',
+      sourceRef: { recordId: leaveRecId, field: leaveField },
+      fieldSourceRefs: {
+        leaveTime: { recordId: leaveRecId, field: leaveField },
+        travelMinutes: { recordId: etaRecId, field: 'travelMinutes' },
+      },
     });
   }
 
@@ -244,6 +254,11 @@ export function deriveTimelineVM(
       label: 'Arrive at destination',
       detail: arriveDetail,
       iconType: 'arrive',
+      sourceRef: { recordId: arriveRecId, field: arriveField },
+      fieldSourceRefs: {
+        arrivalTime: { recordId: arriveRecId, field: arriveField },
+        bufferMinutes: { recordId: etaRecId, field: 'bufferMinutes' },
+      },
     });
   }
 
@@ -266,6 +281,11 @@ export function deriveTimelineVM(
       detail: 'Scheduled appointment',
       isEvent: true,
       iconType: 'event',
+      sourceRef: { recordId: calRecId, field: 'apptTime' },
+      fieldSourceRefs: {
+        apptTime: { recordId: calRecId, field: 'apptTime' },
+        subjectTitle: { recordId: calRecId, field: 'subjectTitle' },
+      },
     });
   }
 

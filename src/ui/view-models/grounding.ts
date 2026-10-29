@@ -14,6 +14,7 @@
  */
 
 import { formatTime } from '../living-context/presentation.js';
+import { STRINGS } from '../living-context/strings.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import type { PreparedPlan, MemoryFact } from '../../core/contracts/index.js';
 import type { UserRequestOverride } from '../../plugins/depart/request-override.js';
@@ -124,8 +125,8 @@ export function normalizeFieldValue(
           return formatTime(trimmed, timezone);
         }
       }
-      // If it's already a 12-hour time string like "2:30 PM" or "02:30 PM"
-      const match = trimmed.match(/^0?(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      // If it contains a 12-hour time string like "2:30 PM", "Drive · leave 2:30 PM", or "Recorded at 10:00 AM"
+      const match = trimmed.match(/\b0?(\d{1,2}):(\d{2})\s*(AM|PM)\b/i);
       if (match) {
         const hour = parseInt(match[1]!, 10);
         const minute = match[2];
@@ -145,6 +146,16 @@ export function normalizeFieldValue(
     }
     if (val instanceof Date) {
       return formatTime(val.toISOString(), timezone);
+    }
+  }
+
+  // 2b. Prep text normalization (e.g. "Take umbrella · 20m prep + 5m buffer" -> "20m prep + 5m buffer")
+  if (fieldLower === 'preptext') {
+    if (typeof val === 'string') {
+      const match = val.match(/\b\d+m\s+prep\s*\+\s*\d+m\s+buffer\b/i);
+      if (match) {
+        return match[0].toLowerCase();
+      }
     }
   }
 
@@ -183,18 +194,29 @@ export function normalizeFieldValue(
   if (
     fieldLower === 'name' ||
     fieldLower === 'destination' ||
+    fieldLower === 'destinationname' ||
     fieldLower === 'subjecttitle' ||
     fieldLower === 'area'
   ) {
     return typeof val === 'string' ? val.trim() : String(val).trim();
   }
 
-  // 5. Mode and cuisine normalization (case-insensitive canonical)
-  if (fieldLower === 'mode' || fieldLower === 'cuisine') {
+  // 5. Mode, cuisine and category normalization (case-insensitive canonical)
+  if (fieldLower === 'mode' || fieldLower === 'cuisine' || fieldLower === 'category') {
     return typeof val === 'string' ? val.trim().toLowerCase() : String(val).trim().toLowerCase();
   }
 
-  // 6. General string / number normalization
+  // 6. Provenance normalization
+  if (fieldLower === 'provenance') {
+    const s = String(val).trim().toLowerCase();
+    if (s === 'confirmed' || s === 'you confirmed') return 'confirmed';
+    if (s.includes('sample')) return 'sample';
+    if (s.includes('simulated')) return 'simulated';
+    if (s === 'live') return 'live';
+    return s;
+  }
+
+  // 7. General string / number normalization
   if (typeof val === 'number') {
     return val;
   }
@@ -304,11 +326,28 @@ export class GroundedRecommendationVerifier {
 
     // 2. Normalized equality check
     const recordRawVal =
-      sourceRef.field === 'fetchedAt' ? record.fetchedAt : record.fields[sourceRef.field];
+      sourceRef.field === 'fetchedAt'
+        ? record.fetchedAt
+        : sourceRef.field === 'provenance'
+          ? (record.fields.provenance ?? record.provenance)
+          : record.fields[sourceRef.field];
     const normRecord = normalizeFieldValue(sourceRef.field, recordRawVal, bundle.timezone);
     const normDisplayed = normalizeFieldValue(sourceRef.field, displayedValue, bundle.timezone);
 
     if (normRecord === undefined || normDisplayed === undefined || normRecord !== normDisplayed) {
+      if (
+        (sourceRef.field === 'provenance' || sourceRef.field === 'basis') &&
+        record.provenance === 'sample' &&
+        normDisplayed === 'confirmed'
+      ) {
+        return this.fail(
+          'sample_mislabelled_as_confirmed',
+          record.id,
+          sourceRef.field,
+          `Record '${record.id}' is sample preference but labelled as confirmed`,
+          bundle
+        );
+      }
       return this.fail(
         'tampered_value',
         record.id,
@@ -647,6 +686,8 @@ export function createRainEvidenceBundle(options?: {
         apptTime: formatTime(apptAt, timezone), // '3:00 PM'
         prepareTime: drivePrepTime,             // '2:10 PM'
         leaveTime: driveLeaveTime,               // '2:30 PM'
+        issuedTime: formatTime(calFetchedAt, timezone),
+        provenance: 'simulated',
       },
     },
     {
@@ -677,6 +718,8 @@ export function createRainEvidenceBundle(options?: {
       fields: {
         driveMinutes,
         busMinutes,
+        issuedTime: formatTime(travelFetchedAt, timezone),
+        provenance: 'simulated',
       },
     },
     {
@@ -769,6 +812,17 @@ export function createRainEvidenceBundle(options?: {
             ? `Buffer: ${fact.value ?? bufferMinutes} min (${provLabel})`
             : fact.key === 'prep_duration_minutes'
               ? `Prep: ${fact.value ?? prepMinutes} min (${provLabel})`
+              : undefined,
+        provenance: provStr,
+        habitNote: fact.key === 'rain_transport_preference'
+          ? (fact.value === 'bus_first' ? STRINGS.habit.rainTransit : STRINGS.habit.rainDrive)
+          : undefined,
+        description: fact.key === 'rain_transport_preference'
+          ? (fact.value === 'bus_first' ? STRINGS.memory.rainTransitValue : STRINGS.memory.rainDriveValue)
+          : fact.key === 'prep_buffer_minutes'
+            ? `${fact.value ?? bufferMinutes} min`
+            : fact.key === 'prep_duration_minutes'
+              ? `${fact.value ?? prepMinutes} min`
               : undefined,
       },
     });
@@ -878,6 +932,7 @@ export function createRainEvidenceBundle(options?: {
   const aliases = new Map<string, string>([
     ['cal-piano', calRecordId],
     ['weather-rain', weatherRecordId],
+    ['travel-rain', travelRecordId],
     ['habit-rain-transport', habitRecordId],
     ['user-override', 'user_override_timing'],
     [`${travelRecordId}:drive`, 'eta-drive-piano'],
@@ -910,15 +965,20 @@ export function createLunchEvidenceBundle(options?: {
 
   // Load POI records from the scene adapter's getEvidenceRecords()
   const evidenceRecords = mockPlaceAdapter.getEvidenceRecords(sceneClockIso);
-  for (const rec of evidenceRecords) {
+  for (let idx = 0; idx < evidenceRecords.length; idx++) {
+    const rec = evidenceRecords[idx]!;
     recordMap.set(rec.id, {
       id: rec.id,
       provider: rec.provider,
       kind: rec.kind,
       fetchedAt: rec.fetchedAt,
       provenance: rec.provenance,
-      fields: rec.fields,
+      fields: {
+        ...rec.fields,
+        provenance: rec.provenance,
+      },
     });
+    aliases.set(`candidate-${idx}`, rec.id);
   }
 
   // Real signal ID from snapshot or default
@@ -969,6 +1029,18 @@ export function createLunchEvidenceBundle(options?: {
     },
   });
 
+  recordMap.set('loc-lunch-origin', {
+    id: 'loc-lunch-origin',
+    provider: 'location',
+    kind: 'poi',
+    fetchedAt: sceneClockIso,
+    provenance: 'simulated',
+    fields: {
+      name: 'Lunch locations near you',
+      area: 'Downtown',
+    },
+  });
+
   const schedSig =
     options?.snapshot?.signals?.find(s => s.kind === 'schedule_window') ??
     options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'schedule_window');
@@ -997,7 +1069,7 @@ export function createLunchEvidenceBundle(options?: {
   }
 
   // Habit / taste preference record(s) dynamically built from MemoryPort / combinedMemory facts passed in
-  const memoryFacts = options?.memory;
+  const memoryFacts = options?.memory ?? (options as any)?.memoryFacts;
   if (Array.isArray(memoryFacts) && memoryFacts.length > 0) {
     const tasteFacts = memoryFacts.filter(
       f =>
@@ -1023,6 +1095,8 @@ export function createLunchEvidenceBundle(options?: {
           key: fact.key,
           value: valStr,
           cuisine: cuisineStr,
+          provenance: provStr,
+          description: fact.key === 'taste_preference' && valStr === 'ramen_or_salad' ? 'You like ramen or salad' : cuisineStr,
           basis: `Based on taste: ${cuisineStr} (${provLabel})`,
         },
       });
@@ -1056,6 +1130,8 @@ export function createLunchEvidenceBundle(options?: {
         key: habitId,
         value: 'japanese',
         cuisine: 'Japanese',
+        provenance: provStr,
+        description: 'Japanese',
         basis: `Based on taste: Japanese (${provLabel})`,
       },
     });
@@ -1119,15 +1195,19 @@ export function createFuelEvidenceBundle(options?: {
         lat: place.coords.lat,
         lng: place.coords.lng,
         category: place.category,
+        cuisine: 'Gas Station',
         address: place.address,
         brand: place.brand,
         distanceMeters: distMeters,
         straightLineDistance: distLabel,
         straightLineDistanceLabel: distLabel,
+        basis: place.brand ? `Simulated fixture · ${place.brand}` : 'Simulated fixture',
+        provenance: 'simulated',
         straight_line: true,
       },
     });
     aliases.set(place.name.toLowerCase(), pid);
+    aliases.set(`candidate-${recordMap.size - 1}`, pid);
   }
 
   // Location record (only when originCoords exists)
@@ -1240,10 +1320,12 @@ export function createLunchPlacesEvidenceBundle(options?: {
         distanceMeters: distMeters,
         straightLineDistance: distLabel,
         straightLineDistanceLabel: distLabel,
+        provenance: 'simulated',
         straight_line: true,
       },
     });
     aliases.set(place.name.toLowerCase(), pid);
+    aliases.set(`candidate-${recordMap.size - 1}`, pid);
   }
 
   // Location record (only when originCoords exists)
@@ -1289,7 +1371,7 @@ export function createLunchPlacesEvidenceBundle(options?: {
   }
 
   // Habit / taste preference record(s) dynamically built from MemoryPort / combinedMemory facts passed in
-  const memoryFacts = options?.memory;
+  const memoryFacts = options?.memory ?? (options as any)?.memoryFacts;
   if (Array.isArray(memoryFacts) && memoryFacts.length > 0) {
     const tasteFacts = memoryFacts.filter(
       f =>
@@ -1315,6 +1397,8 @@ export function createLunchPlacesEvidenceBundle(options?: {
           key: fact.key,
           value: valStr,
           cuisine: cuisineStr,
+          description: fact.key === 'taste_preference' && valStr === 'ramen_or_salad' ? 'You like ramen or salad' : cuisineStr,
+          provenance: provStr,
           basis: `Based on taste: ${cuisineStr} (${provLabel})`,
         },
       });

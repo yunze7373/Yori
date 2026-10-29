@@ -512,6 +512,17 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
               fieldSourceRefs.distanceText = { recordId: recId, field: 'distanceText' };
             }
           }
+          if (
+            habitRec &&
+            bundle &&
+            bundle.hasRecord(habitRec.id) &&
+            (habitRec.fields.cuisine === cuisine || habitRec.fields.value === opt.cuisine)
+          ) {
+            fieldSourceRefs.basis = {
+              recordId: habitRec.id,
+              field: 'basis',
+            };
+          }
 
           const card: CandidateCardVM = {
             id: opt.id || `candidate-${i}`,
@@ -609,7 +620,9 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           const sourceRef: SourceRef = { recordId: recId, field: 'name' };
           const fieldSourceRefs: Record<string, SourceRef> = {
             name: { recordId: recId, field: 'name' },
+            cuisine: { recordId: recId, field: 'cuisine' },
             distanceText: { recordId: recId, field: 'straightLineDistanceLabel' },
+            basis: { recordId: recId, field: 'basis' },
           };
 
           const card: CandidateCardVM = {

@@ -320,6 +320,40 @@ export function deriveMapVM(
     };
   }
 
+  // Fuel map
+  if (plan?.intentId === 'fuel') {
+    const topOption = plan.optionsOrSteps?.[0] as any;
+    const recId = topOption?.id || topOption?.placeId || 'fuel-sf-1';
+    const destName = String(topOption?.name || 'Fuel Station');
+    return {
+      id: `map-fuel-${plan.id}`,
+      label: 'Spatial Context Map',
+      simulatedBadge: 'Schematic · simulated',
+      sizeHint: 'compact',
+      destinationName: destName,
+      markers: Object.freeze([
+        { id: 'm-orig', x: 50, y: 100, label: 'Current Location', type: 'origin' },
+        { id: 'm-dest', x: 250, y: 50, label: destName, type: 'destination', isHighlight: true },
+      ]),
+      polylines: Object.freeze([
+        {
+          id: 'poly-fuel',
+          points: '50,100 150,100 250,50',
+          mode: 'travel',
+          label: 'Route',
+          strokeColor: '#2D6A4F',
+          strokeWidth: 3,
+          strokeDasharray: '6 3',
+        },
+      ]),
+      ariaDescription: `Schematic simulated map showing destination ${destName}`,
+      sourceRef: { recordId: recId, field: 'name' },
+      fieldSourceRefs: {
+        destinationName: { recordId: recId, field: 'name' },
+      },
+    };
+  }
+
   // Generic fallback if spatial evidence exists
   if (spatialEvidence) {
     const destName = String((spatialEvidence.placeOrRoute as Record<string, string>)?.name || 'Destination');
