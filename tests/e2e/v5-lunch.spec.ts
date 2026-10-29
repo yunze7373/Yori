@@ -118,6 +118,26 @@ test.describe('V5-LUNCH: PlacesProvider Seam, Dynamic Recommendations, Grounding
       expect(cardText).toContain('(straight-line)');
     }
 
+    // Assert bundle provenance equals rendered label (sample persona yields 'sample' and 'Demo profile · sample')
+    const bundleProbe = await page.evaluate(() => {
+      const bundle = (window as any).__YORI_GET_CURRENT_EVIDENCE_BUNDLE__();
+      const habitRec =
+        bundle?.getRecord('taste_preference') ||
+        bundle?.getRecord('favorite_cuisine') ||
+        bundle?.getRecord('taste_preference_lunch_cuisine');
+      return {
+        hasBundle: Boolean(bundle),
+        habitProvenance: habitRec?.provenance,
+        habitBasis: habitRec?.fields?.basis,
+      };
+    });
+    expect(bundleProbe.hasBundle).toBe(true);
+    expect(bundleProbe.habitProvenance).toBe('sample');
+    expect(bundleProbe.habitBasis).toContain('Demo profile · sample');
+
+    await expect(topCard).toContainText('Demo profile · sample');
+    await expect(topCard).not.toContainText('You confirmed');
+
     // Touch targets check: Directions button >= 44px
     const directionsBtn = topCard.locator('.v2-directions-btn');
     await expect(directionsBtn).toBeVisible();
@@ -201,6 +221,8 @@ test.describe('V5-LUNCH: PlacesProvider Seam, Dynamic Recommendations, Grounding
     const whySheet = page.locator('#why-sheet-backdrop');
     await expect(whySheet).toBeVisible();
     await expect(whySheet).toContainText('Why');
+    await expect(whySheet).toContainText('Demo profile · sample');
+    await expect(whySheet).not.toContainText('You confirmed');
 
     // Close Why Sheet
     const closeWhyBtn = page.locator('#btn-close-why');

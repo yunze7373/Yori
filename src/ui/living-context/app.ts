@@ -232,6 +232,8 @@ export function computeSceneState(
     }
   }
 
+  const storedUserConfirmedKeys = new Set(activeConfirmedFacts.map(f => f.key));
+
   switch (scene) {
     case 'clear': {
       const clock = createFixedClock(D1_INITIAL_CLOCK);
@@ -462,7 +464,7 @@ export function computeSceneState(
         places,
         snapshot,
         originCoords: locPortStatus.coords,
-        userConfirmedKeys: new Set(combinedMemory.filter(f => f.status === 'confirmed').map(f => f.key)),
+        userConfirmedKeys: storedUserConfirmedKeys,
         memory: combinedMemory,
       });
 
@@ -1914,7 +1916,7 @@ export function renderApp(
             (nowPlan?.intentId === 'fuel'
               ? createFuelEvidenceBundle({ snapshot: effectiveSnapshot })
               : effectiveSnapshot?.signals?.some(s => s.kind === 'places_lunch')
-                ? createLunchPlacesEvidenceBundle({ snapshot: effectiveSnapshot, memory: nowPlan?.why?.memoryFactsUsed })
+                ? createLunchPlacesEvidenceBundle({ snapshot: effectiveSnapshot, userConfirmedKeys, memory: combinedMemory })
                 : createLunchEvidenceBundle({ plan: nowPlan ?? undefined, snapshot: effectiveSnapshot }));
 
           const navPlatform =

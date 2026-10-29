@@ -23,6 +23,7 @@ import type { PreparedPlan } from '../../core/contracts/index.js';
 import { createSimulatedSignal } from '../../core/contracts/index.js';
 import type { PlaceItem } from '../../adapters/providers/places-types.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
+import { d3MemoryFacts } from '../../../tests/fixtures/index.js';
 
 describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', () => {
   beforeEach(() => {
@@ -1578,6 +1579,35 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(bundleWithoutMemory.hasRecord('taste_preference_lunch_cuisine')).toBe(false);
       expect(bundleWithoutMemory.hasRecord('loc-downtown')).toBe(false);
       expect(bundleWithoutMemory.hasRecord('loc-lunch-origin')).toBe(true);
+    });
+
+    it('d3 persona facts plus empty stored confirmations yields habit records with provenance sample and Demo profile · sample basis; after confirmation yields confirmed and You confirmed', () => {
+      // d3 persona facts carrying status 'confirmed' with provenance source 'user_confirmed'
+      const emptyStoredConfirmations = new Set<string>();
+
+      const sampleBundle = createLunchPlacesEvidenceBundle({
+        snapshot: sfSnapshot,
+        memory: d3MemoryFacts,
+        userConfirmedKeys: emptyStoredConfirmations,
+      });
+
+      expect(sampleBundle.hasRecord('taste_preference')).toBe(true);
+      const sampleHabit = sampleBundle.getRecord('taste_preference')!;
+      expect(sampleHabit.provenance).toBe('sample');
+      expect(sampleHabit.fields.basis).toContain('Demo profile · sample');
+
+      // After user confirms taste_preference (stored confirmation present)
+      const storedConfirmationsWithTaste = new Set<string>(['taste_preference', 'favorite_cuisine']);
+      const confirmedBundle = createLunchPlacesEvidenceBundle({
+        snapshot: sfSnapshot,
+        memory: d3MemoryFacts,
+        userConfirmedKeys: storedConfirmationsWithTaste,
+      });
+
+      expect(confirmedBundle.hasRecord('taste_preference')).toBe(true);
+      const confirmedHabit = confirmedBundle.getRecord('taste_preference')!;
+      expect(confirmedHabit.provenance).toBe('confirmed');
+      expect(confirmedHabit.fields.basis).toContain('You confirmed');
     });
   });
 });

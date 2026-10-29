@@ -76,7 +76,6 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
           timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
           userConfirmedKeys,
-          memory: plan?.why?.memoryFactsUsed,
         })
       : plan?.intentId === 'depart'
         ? createRainEvidenceBundle({
