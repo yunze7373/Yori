@@ -14,7 +14,7 @@
     {
       "id": "INBOX_CHECK_SUBMIT_R2_A",
       "title": "📬 INBOX checkpoint: scan for owner instructions before gated operations",
-      "type": "meta",
+      "type": "checkpoint",
       "priority": "critical",
       "status": "pending",
       "auto_trigger": true,
@@ -45,16 +45,18 @@
       ],
       "phase_plan_ref": "SUBMIT-R2",
       "files": [
-        "src/adapters/model/decision-log.ts",
-        "vite.config.ts"
+        "src/ui/living-context/app.ts",
+        "vite.config.ts",
+        "src/adapters/model/decision-log.ts"
       ],
       "checks": [
-        "Remove dead url.searchParams.get('test') read in decision-log.ts",
-        "Ensure TEST_BUILD switch in vite.config.ts requires strict value '1' or 'true'",
-        "npm run build && npm run verify:production returns 0 forbidden hits",
-        "npm run typecheck && npm test pass clean",
+        "Remove the surviving dead url.searchParams.get('test') read in src/ui/living-context/app.ts (isDev/isTest computed before the testHooksEnabled AND); the decision-log.ts read is already guard-eliminated and is not the target",
+        "Shipping dist contains no get(\"test\") read; the TEST_BUILD/VITE_TEST_BUILD switch accepts exactly '1' (no other truthy values)",
+        "npm run verify:production returns 0 forbidden hits; production-gating.spec.ts passes; typecheck plus unit green",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id HYGIENE-PRE-R1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
-      ]
+      ],
+      "test_tier": "focused",
+      "terminal_rule": "If the owner declines this hygiene slice, it is SKIPPED (terminal) and does not block the dependent gate."
     },
     {
       "id": "HYGIENE-PRE-V1",
@@ -88,7 +90,9 @@
         "Refresh point-in-time test counts and commit ranges in VIDEO_SCRIPT.md and PROJECT_DESCRIPTION.md from CLOSEOUT_PRE_S1 run",
         "All cited assertions pass against current build",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id HYGIENE-PRE-V1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
-      ]
+      ],
+      "test_tier": "docs + cited specs (v2-smoke, fallback-walkthrough, v2a-interaction, v5-fuel)",
+      "terminal_rule": "If the owner declines this hygiene slice, it is SKIPPED (terminal) and does not block the dependent gate."
     },
     {
       "id": "GATE-S1",
@@ -148,12 +152,14 @@
       "phase_plan_ref": "SUBMIT-R2",
       "files": [
         "src/adapters/model/server-proxy.ts",
-        "src/adapters/model/live-verification.test.ts"
+        "scripts/live-verify-spark.ts"
       ],
       "checks": [
-        "Small live verification of at most 10 recorded prompts, server-side only, max_tokens capped, producing fact-check pass-rate report",
-        "Confirm deterministic fallback on any error or rate limit",
-        "Zero src/core diff vs f43c6c1d maintained",
+        "Cross-plan precondition: YORI_V2 slice G3-PARITY approved (approving review id recorded in this task's evidence) BEFORE any live call runs; without it this slice does not start, regardless of GATE-S1",
+        "Cross-plan precondition 2: YORI_PRE_S1 slices PRE-S1-A (memory evidence) and PRE-S1-B (slot-aware audit) approved (approving review ids recorded in this task's evidence) before any live call runs",
+        "Live run record: at most 10 calls, server-side only, max_tokens cap evidenced; fact-check pass-rate report written (accepted/discarded with reasons) (AC-202-1)",
+        "D1-D6 golden outputs remain byte-identical with live mode on and off; git diff f43c6c1d -- src/core empty; no secret in repo or logs (AC-202-2)",
+        "Live verification lives OUTSIDE the default suites: scripts/live-verify-*.ts (or tests/live/ with its own npm script), gated by an explicit env flag plus the call cap, excluded from npm test, golden, drills and CI; a check proves the default suites make zero live calls",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id S1-LIVE --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
       ]
     },
@@ -215,12 +221,12 @@
       "phase_plan_ref": "SUBMIT-R2",
       "files": [
         "src/adapters/xmemo/server-proxy.ts",
-        "src/adapters/xmemo/live-verification.test.ts"
+        "scripts/live-verify-xmemo.ts"
       ],
       "checks": [
-        "Probe real MCP endpoints on owner account with bounded read/write and verify UNVERIFIED_XMEMO_MCP_MAPPING resolution",
-        "Confirm fallback to local storage on network disconnect or token expiry",
-        "Zero src/core diff vs f43c6c1d maintained",
+        "Probe record: mapping confirmed or corrected with real-server evidence; the single labelled test fact is verified present, then deleted or its retention explicitly recorded (AC-203-1)",
+        "Only confirmed-status writes attempted; local fallback journeys unchanged; git diff f43c6c1d -- src/core empty (AC-203-2)",
+        "Live verification lives OUTSIDE the default suites (scripts/live-verify-*.ts or tests/live/, explicit env flag + bounded read/write), excluded from npm test, golden, drills and CI; a check proves the default suites make zero live calls",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id S2-LIVE --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
       ]
     },
@@ -285,7 +291,8 @@
         "src/adapters/providers/weather-adapter.ts"
       ],
       "checks": [
-        "Verify live weather calls to Open-Meteo API with fixed demo coordinates; confirm fail-closed fallback to recorded fixture on timeout",
+        "Recording build shows real-labelled weather for the configured demo city; no geolocation API reference exists anywhere in the path (AC-204-2)",
+        "Kill-switch drill: flag off restores the deterministic recorded path byte-identically; git diff f43c6c1d -- src/core empty (AC-204-1)",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id S3-LIVE --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
       ]
     },
@@ -331,8 +338,9 @@
       "agent": "agent-orchestrator",
       "estimated_hours": 1,
       "dependencies": [
-        "INBOX_CHECK_SUBMIT_R2_A",
-        "GATE-V0"
+        "GATE-V0",
+        "HYGIENE-PRE-R1",
+        "INBOX_CHECK_SUBMIT_R2_A"
       ],
       "owner_gate": "Owner confirms LICENSE holder, creates remote git repository, pushes main, and verifies public accessibility. Latest safe date 2026-11-03. Unmet gate blocks submission.",
       "goal_ids": [
@@ -351,8 +359,8 @@
         "README.md"
       ],
       "checks": [
-        "Public remote repository URL confirmed accessible by anonymous clone",
-        "LICENSE contains verified owner name / copyright holder",
+        "LICENSE holder text matches the owner's confirmation verbatim; secret scan clean over repo and history before any push",
+        "Public URL recorded in the submission package once the owner creates it; nothing was published by an agent",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-R1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
       ]
     },
@@ -366,7 +374,8 @@
       "agent": "agent-orchestrator",
       "estimated_hours": 2,
       "dependencies": [
-        "GATE-R1"
+        "GATE-R1",
+        "HYGIENE-PRE-V1"
       ],
       "owner_gate": "Owner records 3-minute video following VIDEO_SCRIPT.md and uploads to YouTube/Loom. Latest safe date 2026-11-03. Unmet gate submits without video.",
       "goal_ids": [
@@ -512,5 +521,18 @@
         ]
       }
     }
+  ],
+  "success_criteria": [
+    "Every live/paid/publish step is behind an explicit OWNER_GATE task and no slice runs without its gate",
+    "Public claims match the SUBMISSION_READINESS.md status classes exactly (nothing OFF or LIVE-UNVERIFIED described as live)",
+    "AC-EXT-1 core diff vs f43c6c1d empty; deterministic zero-credential demo verified first and never cut"
+  ],
+  "changes_vs_yori_submit": [
+    "RESTORED (were silently dropped in R2 rev1): approved YORI_SUBMIT checks for GATE-R1 (history secret scan, nothing-published-by-agent), S1-LIVE (G3-PARITY + PRE-S1-A/B preconditions, fact-check record, D1-D6 byte-identity), S2-LIVE (labelled test-fact cleanup, confirmed-only writes), S3-LIVE (no-geolocation check, kill-switch drill), and the plan-level success_criteria - carried verbatim with plan-ref updated to R2",
+    "HYGIENE-PRE-R1 retargeted from decision-log.ts to src/ui/living-context/app.ts (the surviving dead get('test') read) + vite.config.ts, with dist/switch/production-gating checks and test_tier focused",
+    "Hygiene slices wired: GATE-R1 depends on HYGIENE-PRE-R1, GATE-V1 on HYGIENE-PRE-V1; owner-declined hygiene is SKIPPED (terminal) and never blocks",
+    "Live verification moved out of src/ into opt-in scripts/live-verify-*.ts (env flag + call cap), excluded from npm test/golden/drills/CI",
+    "INBOX_CHECK_SUBMIT_R2_A type meta -> checkpoint; SUBMISSION_READINESS.md production-gating wording corrected to 'inert in the shipping build regardless of ?test=1'",
+    "No other intentional change vs approved YORI_SUBMIT; owner gates, ordering, and readiness classes unchanged"
   ]
 }
