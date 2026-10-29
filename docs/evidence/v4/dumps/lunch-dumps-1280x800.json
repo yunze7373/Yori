@@ -1,0 +1,139 @@
+{
+  "viewport": "1280x800",
+  "steps": [
+    {
+      "step": "Proactive Lunch Card",
+      "timeSec": 1,
+      "timeFormatted": "0:01",
+      "action": "Select Away Lunch (D3) scene",
+      "state": "Candidates hero: \"Lunch options near you\" with taste-curated recommendations",
+      "honestDisclosure": "Prominent mock disclosure: \"Mock places for this demo; real listings come from a place provider.\""
+    },
+    {
+      "step": "Candidates & Detail View",
+      "timeSec": 2,
+      "timeFormatted": "0:01",
+      "action": "Inspect candidate cards with local artwork, open Place A details view",
+      "state": "Place A details view shows artwork, attribute chips (Quiet, Japanese, 5m), in-app Directions",
+      "honestDisclosure": "Truthful venue names: Demo Place A/B/C; mock disclosure in detail view"
+    },
+    {
+      "step": "Ask Yori: Preference Re-rank",
+      "timeSec": 3,
+      "timeFormatted": "0:03",
+      "action": "Submit conversational query \"quieter + vegetarian\"",
+      "state": "Scripted model interpreter parses dietary preference and updates ranking weights",
+      "honestDisclosure": "Engine status honesty: \"Offline fallback · deterministic\""
+    },
+    {
+      "step": "Re-ranked Candidates",
+      "timeSec": 4,
+      "timeFormatted": "0:04",
+      "action": "Conversation collapses back to Home with re-ranked list",
+      "state": "Demo Place B · Salad moves to #1 position and is highlighted as selected",
+      "honestDisclosure": "Why button cites: \"Because you asked: quieter + vegetarian · this time only\""
+    },
+    {
+      "step": "Selected Candidate on Home",
+      "timeSec": 5,
+      "timeFormatted": "0:05",
+      "action": "Open Place B details view from selected home position",
+      "state": "Place B verified as selected on Home with Vegetarian / Quiet badges",
+      "honestDisclosure": "Grounded attributes verified against mock place provider"
+    },
+    {
+      "step": "Quiet State & Sovereignty",
+      "timeSec": 7,
+      "timeFormatted": "0:07",
+      "action": "Switch to Busy Lunch (D4), verify quiet state; inspect Me tab",
+      "state": "Quiet state respects focus; Me tab displays proactive budget and storage controls",
+      "honestDisclosure": "INV-107 confirm-only memory; X1 unauthorized remote sync off; storage sovereign"
+    }
+  ],
+  "dumps": [
+    {
+      "step": "Proactive Lunch Card",
+      "scene": "away-lunch",
+      "timestamp": "0:01",
+      "text": "Demo · simulated context\nV2 PREVIEW\nHome\nPlans\nFor You\nMe\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nNOW · YOUR NEXT MOMENT SIMULATED\nLunch options near you\nPlaces matching what you like, within walking distance\nMock places for this demo; real listings come from a place provider.\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\n\nBased on your location, schedule window, and what you usually like.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nNEARBY PLACES MAP\nSchematic · simulated\nYou\nA · Ramen\nB · Salad\nC · Sushi\n Lunch locations near you\nAsk Yori about your day...\nTap to chat",
+      "components": {
+        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nLunch options near you\nPlaces matching what you like, within walking distance\nMock places for this demo; real listings come from a place provider.\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\n\nBased on your location, schedule window, and what you usually like.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
+        "candidateList": "Illustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →",
+        "mapCard": "NEARBY PLACES MAP\nSchematic · simulated\nYou\nA · Ramen\nB · Salad\nC · Sushi\n Lunch locations near you",
+        "restaurantDetail": "",
+        "conversation": "",
+        "mePage": ""
+      }
+    },
+    {
+      "step": "Candidates & Detail View",
+      "scene": "away-lunch",
+      "timestamp": "0:01",
+      "text": "Demo · simulated context\nV2 PREVIEW\nHome\nPlans\nFor You\nMe\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nBack\nSIMULATED\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nLunch window 12:10 PM–1:30 PM\nLively\nDemonstration place · simulated context\nBased on taste: Japanese (Demo profile · sample)\nSave\nDirections\nNEARBY PLACES MAP\nSchematic · simulated\nYou\nA · Ramen\nB · Salad\nC · Sushi\n Lunch locations near you",
+      "components": {
+        "nowCard": "",
+        "candidateList": "",
+        "mapCard": "NEARBY PLACES MAP\nSchematic · simulated\nYou\nA · Ramen\nB · Salad\nC · Sushi\n Lunch locations near you",
+        "restaurantDetail": "",
+        "conversation": "",
+        "mePage": ""
+      }
+    },
+    {
+      "step": "Ask Yori: Preference Re-rank",
+      "scene": "away-lunch",
+      "timestamp": "0:03",
+      "text": "Demo · simulated context\nV2 PREVIEW\nHome\nPlans\nFor You\nMe\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nNOW · YOUR NEXT MOMENT SIMULATED\nLunch options near you\nPlaces matching what you like, within walking distance\nMock places for this demo; real listings come from a place provider.\nIllustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →\n\nBased on your location, schedule window, and what you usually like.\n\nUpdated\nAccept\nUndo\nDetails →\nWhy\nNEARBY PLACES MAP\nSchematic · simulated\nYou\nB · Salad\nC · Sushi\nA · Ramen\n Lunch locations near you\nAsk Yori about your day...\nTap to chat",
+      "components": {
+        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nLunch options near you\nPlaces matching what you like, within walking distance\nMock places for this demo; real listings come from a place provider.\nIllustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →\n\nBased on your location, schedule window, and what you usually like.\n\nUpdated\nAccept\nUndo\nDetails →\nWhy",
+        "candidateList": "Illustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →",
+        "mapCard": "NEARBY PLACES MAP\nSchematic · simulated\nYou\nB · Salad\nC · Sushi\nA · Ramen\n Lunch locations near you",
+        "restaurantDetail": "",
+        "conversation": "",
+        "mePage": ""
+      }
+    },
+    {
+      "step": "Re-ranked Candidates",
+      "scene": "away-lunch",
+      "timestamp": "0:04",
+      "text": "Demo · simulated context\nV2 PREVIEW\nHome\nPlans\nFor You\nMe\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nNOW · YOUR NEXT MOMENT SIMULATED\nLunch options near you\nPlaces matching what you like, within walking distance\nMock places for this demo; real listings come from a place provider.\nIllustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →\n\nBased on your location, schedule window, and what you usually like.\n\nUpdated\nAccept\nUndo\nDetails →\nWhy\nNEARBY PLACES MAP\nSchematic · simulated\nYou\nB · Salad\nC · Sushi\nA · Ramen\n Lunch locations near you\nAsk Yori about your day...\nTap to chat",
+      "components": {
+        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nLunch options near you\nPlaces matching what you like, within walking distance\nMock places for this demo; real listings come from a place provider.\nIllustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →\n\nBased on your location, schedule window, and what you usually like.\n\nUpdated\nAccept\nUndo\nDetails →\nWhy",
+        "candidateList": "Illustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →",
+        "mapCard": "NEARBY PLACES MAP\nSchematic · simulated\nYou\nB · Salad\nC · Sushi\nA · Ramen\n Lunch locations near you",
+        "restaurantDetail": "",
+        "conversation": "",
+        "mePage": ""
+      }
+    },
+    {
+      "step": "Selected Candidate on Home",
+      "scene": "away-lunch",
+      "timestamp": "0:05",
+      "text": "Demo · simulated context\nV2 PREVIEW\nHome\nPlans\nFor You\nMe\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nNOW · YOUR NEXT MOMENT SIMULATED\nLunch options near you\nPlaces matching what you like, within walking distance\nMock places for this demo; real listings come from a place provider.\nIllustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →\n\nBased on your location, schedule window, and what you usually like.\n\nUpdated\nAccept\nUndo\nDetails →\nWhy\nNEARBY PLACES MAP\nSchematic · simulated\nYou\nB · Salad\nC · Sushi\nA · Ramen\n Lunch locations near you\nAsk Yori about your day...\nTap to chat",
+      "components": {
+        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nLunch options near you\nPlaces matching what you like, within walking distance\nMock places for this demo; real listings come from a place provider.\nIllustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →\n\nBased on your location, schedule window, and what you usually like.\n\nUpdated\nAccept\nUndo\nDetails →\nWhy",
+        "candidateList": "Illustration · simulated\nDemo Place B · Salad\nSalad\n7m away\nQuiet\nVegetarian\nBased on taste: Salad (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place C · Sushi\nJapanese\n10m away\nQuiet\nBased on taste: Japanese (Demo profile · sample)\nDetails →\nIllustration · simulated\nDemo Place A · Ramen\nJapanese\n5m away\nBased on taste: Japanese (Demo profile · sample)\nDetails →",
+        "mapCard": "NEARBY PLACES MAP\nSchematic · simulated\nYou\nB · Salad\nC · Sushi\nA · Ramen\n Lunch locations near you",
+        "restaurantDetail": "",
+        "conversation": "",
+        "mePage": ""
+      }
+    },
+    {
+      "step": "Quiet State & Sovereignty",
+      "scene": "away-lunch",
+      "timestamp": "0:07",
+      "text": "Demo · simulated context\nV2 PREVIEW\nHome\nPlans\nFor You\nMe\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nMe & Memory\n\nManage your confirmed preferences, proposals, and privacy controls.\n\nTODAY'S PROACTIVE PROMPTS\n0 of 3 used today\n\nYour Living Context refreshes smoothly whenever you check in. To protect your peace of mind, proactive suggestions are kept to a calm daily limit.\n\nCONFIRMED PREFERENCES\n\nNo confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.\n\nPENDING PROPOSALS\n0 Pending\n\nProposals created from your actions, waiting for your explicit confirmation.\n\nNo pending proposals.\n\nREJECTED PROPOSALS\n\nDeclined proposals retained for audit. These are never applied.\n\nNo rejected proposals.\n\nDATA CONTROLS & STORAGE\nExport Raw Data\nReset Storage",
+      "components": {
+        "nowCard": "",
+        "candidateList": "",
+        "mapCard": "",
+        "restaurantDetail": "",
+        "conversation": "",
+        "mePage": ""
+      }
+    }
+  ]
+}
