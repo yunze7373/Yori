@@ -1,0 +1,516 @@
+{
+  "schema_version": "1.0.0",
+  "plan": {
+    "id": "yori_submit_r2",
+    "phase": "SUBMIT-R2",
+    "title": "Submission execution plan (Revision 2): owner gates S1, X1, W1, V0, R1, V1, F1, candidate pre-gate hygiene, and final submission closeout",
+    "source": "PHASE_R_PRE_S1_001 Phase R planning (docs/architecture/SUBMISSION_READINESS.md); planning only, no coding dispatch or live action authorized",
+    "created_at": "2026-10-30",
+    "status": "pending",
+    "description": "PRE-S1 engineering is complete and verified on clean checkout (commit 9007ccc, decision c4a415ab). This plan governs the remaining submission tracks: owner gates (S1, X1, W1, V0, R1, V1, F1, P-LOC, P-BILL, P-HTTPS), candidate non-live pre-gate hygiene slices from BACKLOG (production gating hygiene before GATE-R1, recording hygiene before GATE-V1), and the final submission status audit. Zero non-gated live engineering remains.",
+    "course_correction_summary": "previous_phase: PRE-S1 closeout approved (c4a415ab @ 9007ccc) | core_delivery: PRE-S1 verified green across 540 unit, 18 golden (0 diff vs f43c6c1d), 56 drills, 192 e2e with 0 axe violations, 42 manifest files OK | deviation: none | INBOX_backlog: 0 P0, 0 P1 | next_phase_focus: owner gates and optional pre-gate hygiene"
+  },
+  "tasks": [
+    {
+      "id": "INBOX_CHECK_SUBMIT_R2_A",
+      "title": "📬 INBOX checkpoint: scan for owner instructions before gated operations",
+      "type": "meta",
+      "priority": "critical",
+      "status": "pending",
+      "auto_trigger": true,
+      "dependencies": [],
+      "goal": "Scan .progress/INBOX.md for owner directives before executing any gated task."
+    },
+    {
+      "id": "HYGIENE-PRE-R1",
+      "slice": "hygiene",
+      "title": "Candidate pre-gate production build hygiene (PRE-S1-C P3 backlog items)",
+      "priority": "P2",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "principal-software-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 1,
+      "dependencies": [
+        "INBOX_CHECK_SUBMIT_R2_A"
+      ],
+      "goal_ids": [
+        "G-201"
+      ],
+      "acceptance_ids": [
+        "AC-201-3"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "src/adapters/model/decision-log.ts",
+        "vite.config.ts"
+      ],
+      "checks": [
+        "Remove dead url.searchParams.get('test') read in decision-log.ts",
+        "Ensure TEST_BUILD switch in vite.config.ts requires strict value '1' or 'true'",
+        "npm run build && npm run verify:production returns 0 forbidden hits",
+        "npm run typecheck && npm test pass clean",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id HYGIENE-PRE-R1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "HYGIENE-PRE-V1",
+      "slice": "hygiene",
+      "title": "Candidate pre-gate recording sync hygiene (PRE-S1-D P3 backlog items)",
+      "priority": "P2",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "principal-software-engineer",
+      "pipeline": "documentation",
+      "estimated_hours": 1,
+      "dependencies": [
+        "INBOX_CHECK_SUBMIT_R2_A"
+      ],
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "docs/submission/VIDEO_SCRIPT.md",
+        "docs/submission/PROJECT_DESCRIPTION.md"
+      ],
+      "checks": [
+        "Update VIDEO_SCRIPT.md V5 scene dropdown text to real UI string 'Fuel (Low Fuel Warning)' and add note that URL forcing requires dev server :5173 or test preview :4173",
+        "Refresh point-in-time test counts and commit ranges in VIDEO_SCRIPT.md and PROJECT_DESCRIPTION.md from CLOSEOUT_PRE_S1 run",
+        "All cited assertions pass against current build",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id HYGIENE-PRE-V1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-S1",
+      "slice": "gate",
+      "title": "OWNER GATE: MODEL_API_KEY in .env.local + billed live-call approval",
+      "priority": "P0",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "INBOX_CHECK_SUBMIT_R2_A"
+      ],
+      "owner_gate": "Owner configures MODEL_API_KEY in .env.local and explicitly approves a small billed budget. Latest safe date 2026-10-31. Unmet gate marks S1-LIVE skipped; demo stays deterministic.",
+      "goal_ids": [
+        "G-202"
+      ],
+      "acceptance_ids": [
+        "AC-202-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-102"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "src/adapters/model/server-proxy.ts"
+      ],
+      "checks": [
+        "Diagnostics reports enabled via MODEL_API_KEY without the value appearing in any log, file, or test output",
+        "If unmet by 2026-10-31, record gate-unmet and mark S1-LIVE cut; deterministic path remains active",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-S1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "S1-LIVE",
+      "slice": "live",
+      "title": "Bounded Muse Spark live verification (behind GATE-S1)",
+      "priority": "P1",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": [
+        "GATE-S1"
+      ],
+      "goal_ids": [
+        "G-202"
+      ],
+      "acceptance_ids": [
+        "AC-202-1",
+        "AC-202-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-102"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "src/adapters/model/server-proxy.ts",
+        "src/adapters/model/live-verification.test.ts"
+      ],
+      "checks": [
+        "Small live verification of at most 10 recorded prompts, server-side only, max_tokens capped, producing fact-check pass-rate report",
+        "Confirm deterministic fallback on any error or rate limit",
+        "Zero src/core diff vs f43c6c1d maintained",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S1-LIVE --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-X1",
+      "slice": "gate",
+      "title": "OWNER GATE: XMemo dynamic registration + one consent click",
+      "priority": "P1",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "INBOX_CHECK_SUBMIT_R2_A"
+      ],
+      "owner_gate": "Owner completes dynamic client registration and consent click on their own XMemo account. Latest safe date 2026-10-31. Unmet gate marks S2-LIVE skipped; demo uses local storage memory.",
+      "goal_ids": [
+        "G-203"
+      ],
+      "acceptance_ids": [
+        "AC-203-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-103"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "src/adapters/xmemo/server-proxy.ts"
+      ],
+      "checks": [
+        "OAuth handshake verified without committing client secrets or tokens",
+        "If unmet by 2026-10-31, record gate-unmet and mark S2-LIVE cut; local memory remains the active truth",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-X1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "S2-LIVE",
+      "slice": "live",
+      "title": "XMemo live mapping verification (behind GATE-X1)",
+      "priority": "P1",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": [
+        "GATE-X1"
+      ],
+      "goal_ids": [
+        "G-203"
+      ],
+      "acceptance_ids": [
+        "AC-203-1",
+        "AC-203-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-103"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "src/adapters/xmemo/server-proxy.ts",
+        "src/adapters/xmemo/live-verification.test.ts"
+      ],
+      "checks": [
+        "Probe real MCP endpoints on owner account with bounded read/write and verify UNVERIFIED_XMEMO_MCP_MAPPING resolution",
+        "Confirm fallback to local storage on network disconnect or token expiry",
+        "Zero src/core diff vs f43c6c1d maintained",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S2-LIVE --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-W1",
+      "slice": "gate",
+      "title": "OWNER GATE: Open-Meteo non-commercial qualification decision",
+      "priority": "P1",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "INBOX_CHECK_SUBMIT_R2_A"
+      ],
+      "owner_gate": "Owner confirms non-commercial qualification (<10k calls/day tier) for live weather enablement. Latest safe date 2026-11-02. Unmet gate marks S3-LIVE skipped; demo uses recorded weather fixtures.",
+      "goal_ids": [
+        "G-204"
+      ],
+      "acceptance_ids": [
+        "AC-204-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "src/adapters/mock/index.ts",
+        "src/adapters/providers/weather-adapter.ts"
+      ],
+      "checks": [
+        "Owner decision documented; if unmet by 2026-11-02, record gate-unmet and keep WEATHER_LIVE_ENABLED=false",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-W1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "S3-LIVE",
+      "slice": "live",
+      "title": "Live weather enablement for recordings (behind GATE-W1)",
+      "priority": "P2",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 1,
+      "dependencies": [
+        "GATE-W1"
+      ],
+      "goal_ids": [
+        "G-204"
+      ],
+      "acceptance_ids": [
+        "AC-204-1",
+        "AC-204-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "src/adapters/mock/index.ts",
+        "src/adapters/providers/weather-adapter.ts"
+      ],
+      "checks": [
+        "Verify live weather calls to Open-Meteo API with fixed demo coordinates; confirm fail-closed fallback to recorded fixture on timeout",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S3-LIVE --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-V0",
+      "slice": "gate",
+      "title": "OWNER GATE: visual evidence access option",
+      "priority": "P2",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "INBOX_CHECK_SUBMIT_R2_A"
+      ],
+      "owner_gate": "Owner chooses coordinator visual inspection mechanism. Latest safe date 2026-11-02.",
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "src/ui/living-context/app.ts",
+        "docs/evidence"
+      ],
+      "checks": [
+        "Visual inspection mechanism confirmed or skipped without blocking submission track",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-V0 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-R1",
+      "slice": "gate",
+      "title": "OWNER GATE: LICENSE holder confirmation, remote creation, public visibility",
+      "priority": "P0",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 1,
+      "dependencies": [
+        "INBOX_CHECK_SUBMIT_R2_A",
+        "GATE-V0"
+      ],
+      "owner_gate": "Owner confirms LICENSE holder, creates remote git repository, pushes main, and verifies public accessibility. Latest safe date 2026-11-03. Unmet gate blocks submission.",
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "src/ui/living-context/strings.ts",
+        "LICENSE",
+        "README.md"
+      ],
+      "checks": [
+        "Public remote repository URL confirmed accessible by anonymous clone",
+        "LICENSE contains verified owner name / copyright holder",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-R1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-V1",
+      "slice": "gate",
+      "title": "OWNER GATE: record and upload the 3-minute video",
+      "priority": "P0",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 2,
+      "dependencies": [
+        "GATE-R1"
+      ],
+      "owner_gate": "Owner records 3-minute video following VIDEO_SCRIPT.md and uploads to YouTube/Loom. Latest safe date 2026-11-03. Unmet gate submits without video.",
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "docs/submission/VIDEO_SCRIPT.md"
+      ],
+      "checks": [
+        "Public or unlisted video URL available and playing correctly",
+        "Video duration <= 3:20 (exact 3:00 base + max 20s V5 optional extension)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-V1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-F1",
+      "slice": "gate",
+      "title": "OWNER GATE: final hackathon submission (2026-11-05 11:00 JST hard deadline)",
+      "priority": "P0",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 1,
+      "dependencies": [
+        "GATE-V1"
+      ],
+      "owner_gate": "Owner submits official hackathon form with repository URL, video URL, and project description before 2026-11-05 11:00 JST.",
+      "goal_ids": [
+        "G-205"
+      ],
+      "acceptance_ids": [
+        "AC-205-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "docs/submission/PROJECT_DESCRIPTION.md",
+        "docs/submission/SUBMISSION_CHECKLIST.md"
+      ],
+      "checks": [
+        "Hackathon submission receipt or confirmation screenshot recorded",
+        "Submitted before hard deadline 2026-11-05 11:00 JST",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-F1 --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "CLOSEOUT_SUBMIT",
+      "slice": "closeout",
+      "title": "Submission-readiness closeout: status truth audit",
+      "priority": "P0",
+      "type": "test",
+      "status": "pending",
+      "agent": "quality-assurance-lead",
+      "pipeline": "release_readiness",
+      "estimated_hours": 1,
+      "dependencies": [
+        "GATE-F1",
+        "S1-LIVE",
+        "S2-LIVE",
+        "S3-LIVE"
+      ],
+      "goal_ids": [
+        "G-201",
+        "G-202",
+        "G-203",
+        "G-204",
+        "G-205",
+        "G-101",
+        "G-102",
+        "G-103",
+        "G-104",
+        "G-105",
+        "G-106",
+        "G-107",
+        "G-211",
+        "G-212",
+        "G-213"
+      ],
+      "acceptance_ids": [
+        "AC-201-3",
+        "AC-202-2",
+        "AC-203-2",
+        "AC-204-2",
+        "AC-205-2",
+        "AC-101-2",
+        "AC-102-1",
+        "AC-103-1",
+        "AC-104-2",
+        "AC-105-1",
+        "AC-106-2",
+        "AC-EXT-1",
+        "AC-211-2",
+        "AC-212-2",
+        "AC-213-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101",
+        "ADR-102"
+      ],
+      "phase_plan_ref": "SUBMIT-R2",
+      "files": [
+        "docs/submission/PROJECT_DESCRIPTION.md",
+        "docs/architecture/SUBMISSION_READINESS.md"
+      ],
+      "checks": [
+        "Status audit verifies all gate terminal states recorded honestly",
+        "Zero src/core diff vs f43c6c1d verified",
+        "All 5 evidence manifests verify byte-identical",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id CLOSEOUT_SUBMIT --plan-ref docs/architecture/YORI_SUBMIT_R2.plan.json"
+      ]
+    },
+    {
+      "id": "PHASE_R_SUBMIT_002",
+      "title": "🔥 Phase R planning + generate next phase plan",
+      "type": "meta",
+      "priority": "critical",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": [
+        "CLOSEOUT_SUBMIT"
+      ],
+      "goal": "Post-submission archive and transition to maintenance.",
+      "phase_r_trigger": {
+        "auto_execute": true,
+        "tasks": [
+          "⚠️ Re-read .progress/AI_INSTRUCTIONS.md (ensure rules are not lost after model switch)",
+          "📬 R1: Read INBOX.md (scan mode command section first, then task section)",
+          "💤 R1.5: Convergence gate (no real pending → standby)",
+          "🎯 R2: Read docs/architecture/goals.yaml and PHASE_PLAN.md, execute target alignment assessment; 运行 phase_r_alignment_check.py 验证架构对齐 (alignment anchor check)",
+          "📊 R3: Phase review: git diff confirm delivery + archive completed tasks + Git Commit",
+          "🗺️ R5: Intelligent planning: post-submission archive and release documentation",
+          "Update PROGRESS_STATUS.json + TODOS.md",
+          "⏸️ R6: Enter standby and wait for owner steering"
+        ]
+      }
+    }
+  ]
+}
