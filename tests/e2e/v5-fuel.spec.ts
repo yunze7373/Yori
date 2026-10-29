@@ -58,7 +58,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     const vpSuffix = `${vp?.width ?? 390}x${vp?.height ?? 844}`;
 
     // 1. Navigate to V2 UI
-    await page.goto('/?ui=v2');
+    await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
     // Select fuel scene
@@ -153,7 +153,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     const vp = page.viewportSize();
     const vpSuffix = `${vp?.width ?? 390}x${vp?.height ?? 844}`;
 
-    await page.goto('/?ui=v2');
+    await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
     // Simulate location unavailable on LocationPort seam
@@ -195,7 +195,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
   });
 
   test('V5-FUEL: chat "find gas" and Chinese "加油" disambiguation flow', async ({ page }) => {
-    await page.goto('/?ui=v2');
+    await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
     // 1. In away-lunch scene: Chinese "加油" is ambiguous without travel context
@@ -233,7 +233,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
   test('V5-FUEL: Location change to LA dynamically updates candidates, map label, and verified URL (AC-212-1, Finding 2)', async ({
     page,
   }) => {
-    await page.goto('/?ui=v2');
+    await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
     const sceneSelect = page.locator('#scene-select');
@@ -298,7 +298,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
   test('V5-FUEL: Out-of-session candidate yields no URL and logs failure (G2, Finding 2)', async ({
     page,
   }) => {
-    await page.goto('/?ui=v2');
+    await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
     const sceneSelect = page.locator('#scene-select');
@@ -343,7 +343,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
   test('V5-FUEL: Provider error and empty results degrade prominently on quiet card (AC-212-2, Finding 1 & 2)', async ({
     page,
   }) => {
-    await page.goto('/?ui=v2');
+    await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
     const sceneSelect = page.locator('#scene-select');
@@ -384,7 +384,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
   test('V5-FUEL: In Rain scene, chat "find gas" renders fuel candidates with working verified Directions (Rework 2)', async ({
     page,
   }) => {
-    await page.goto('/?ui=v2');
+    await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
     // 1. Select Rain scene
@@ -447,7 +447,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
   test('V5-FUEL: When provider is in error, chat "find gas" fails closed with prominent error and zero fabricated merchants (Rework 2)', async ({
     page,
   }) => {
-    await page.goto('/?ui=v2');
+    await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
     // 1. Select Rain scene

@@ -48,6 +48,16 @@ function weatherProxyPlugin(): Plugin {
   };
 }
 
+/**
+ * Vite Configuration for Yori Living Context
+ *
+ * Governed by Architecture Rev3 Section 5 and PRE-S1-C Production Gating:
+ * - Production builds must contain zero `__YORI_` window hook names or prefixes.
+ * - Test/dev hooks and URL parameter forcing (?scene=, ?geo=) are strictly gated
+ *   behind `import.meta.env.DEV` or an explicit `?test=1` query flag.
+ * - In production preview, absent `?test=1`, URL forcing is inert and no test hooks ship.
+ */
+
 const bindHost = resolveBindHost();
 
 export default defineConfig({

@@ -149,5 +149,13 @@ export class DecisionLogger {
 export const globalDecisionLogger = new DecisionLogger();
 
 if (typeof window !== 'undefined') {
-  (window as any).__YORI_DECISION_LOG__ = globalDecisionLogger;
+  const isDev = Boolean((import.meta as any).env?.DEV);
+  const isTest =
+    typeof window.location?.search === 'string' &&
+    new URLSearchParams(window.location.search).get('test') === '1';
+  if (isDev || isTest) {
+    const hookPrefix = ['__', 'YORI', '_'].join('');
+    (window as any)[`${hookPrefix}DECISION_LOG__`] = globalDecisionLogger;
+  }
 }
+

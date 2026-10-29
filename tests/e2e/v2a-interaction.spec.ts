@@ -512,7 +512,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       page,
     }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      await page.goto('/?ui=v2&scene=rain');
+      await page.goto('/?ui=v2&scene=rain&test=1');
       await page.waitForSelector('.now-card', { timeout: 10000 });
 
       const askBar = page.locator('#ask-bar');
