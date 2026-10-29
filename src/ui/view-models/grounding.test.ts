@@ -19,8 +19,7 @@ import { deriveTripDetailVM } from './trip-detail-vm.js';
 import { deriveTimelineVM } from './timeline-vm.js';
 import { deriveMapVM } from './map-vm.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
-import type { PreparedPlan } from '../../core/contracts/index.js';
-import { createSimulatedSignal } from '../../core/contracts/index.js';
+import { createMemoryFact, type PreparedPlan, createSimulatedSignal } from '../../core/contracts/index.js';
 import type { PlaceItem } from '../../adapters/providers/places-types.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
 import { d3MemoryFacts } from '../../../tests/fixtures/index.js';
@@ -1715,6 +1714,54 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
         expect(prepRow.isConfirmed).toBe(false);
       });
 
+      it('Check 1 (Lunch bundle): createLunchEvidenceBundle builds habit records dynamically from memory; favorite_cuisine salad gives bundle value salad and fails verification for Japanese', () => {
+        const memoryWithSalad = [
+          createMemoryFact('taste_preference', 'salad', 'confirmed', { source: 'seed', recordedAt: '2026-10-28T19:10:00.000Z' }, '2026-10-28T19:10:00.000Z'),
+          createMemoryFact('favorite_cuisine', 'salad', 'confirmed', { source: 'seed', recordedAt: '2026-10-28T19:10:00.000Z' }, '2026-10-28T19:10:00.000Z'),
+        ];
+
+        const bundle = createLunchEvidenceBundle({
+          memory: memoryWithSalad,
+          userConfirmedKeys: new Set(),
+        });
+
+        expect(bundle.hasRecord('favorite_cuisine')).toBe(true);
+        expect(bundle.hasRecord('taste_preference')).toBe(true);
+        expect(bundle.hasRecord('taste_preference_lunch_cuisine')).toBe(true);
+
+        const favRecord = bundle.getRecord('favorite_cuisine')!;
+        expect(favRecord.fields.value).toBe('salad');
+        expect(favRecord.fields.cuisine).toBe('Salad');
+        expect(favRecord.provenance).toBe('sample');
+        expect(favRecord.fields.basis).toContain('Demo profile · sample');
+
+        // Positive: verifying field value 'salad' succeeds
+        const vSalad = GroundedRecommendationVerifier.verifyField(
+          { recordId: 'favorite_cuisine', field: 'value' },
+          'salad',
+          bundle
+        );
+        expect(vSalad.valid).toBe(true);
+
+        // Negative: verifying a Why row stating 'Japanese' fails verification with tampered_value
+        const vJapanese = GroundedRecommendationVerifier.verifyField(
+          { recordId: 'favorite_cuisine', field: 'value' },
+          'Japanese',
+          bundle
+        );
+        expect(vJapanese.valid).toBe(false);
+        expect(vJapanese.reason).toBe('tampered_value');
+
+        // Alias taste_preference_lunch_cuisine also resolves to favorite_cuisine and rejects Japanese
+        const vAliasFail = GroundedRecommendationVerifier.verifyField(
+          { recordId: 'taste_preference_lunch_cuisine', field: 'value' },
+          'Japanese',
+          bundle
+        );
+        expect(vAliasFail.valid).toBe(false);
+        expect(vAliasFail.reason).toBe('tampered_value');
+      });
+
       it('Check 2: No code path overlays plan.why.memoryFactsUsed or grounds plan memory against the plan itself', () => {
         const forgedPlan: PreparedPlan = {
           ...rainPlan,
@@ -1722,6 +1769,7 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
             ...rainPlan.why,
             memoryFactsUsed: [
               { key: 'forged_overlay_key', value: 'malicious_value', status: 'confirmed' },
+              { key: 'rain_transport_preference', value: 'bus_first', status: 'confirmed' },
             ],
           },
         };
@@ -1733,7 +1781,14 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
         expect(bundleFromForgedPlan.hasRecord('forged_overlay_key')).toBe(false);
 
         // Calling createLunchPlacesEvidenceBundle with plan carrying memoryFactsUsed does not include it
-        const lunchBundle = createLunchPlacesEvidenceBundle({
+        const lunchPlacesBundle = createLunchPlacesEvidenceBundle({
+          snapshot: sfSnapshot,
+          ...({ plan: forgedPlan } as any),
+        });
+        expect(lunchPlacesBundle.hasRecord('forged_overlay_key')).toBe(false);
+
+        // Calling createLunchEvidenceBundle with plan carrying memoryFactsUsed does not include it
+        const lunchBundle = createLunchEvidenceBundle({
           snapshot: sfSnapshot,
           ...({ plan: forgedPlan } as any),
         });
@@ -1746,8 +1801,20 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
           evidenceBundle: bundleFromForgedPlan,
           userConfirmedKeys: new Set(),
         });
-        // Since forged_overlay_key is not in bundle and not confirmed, habitNote is not set from plan
-        expect(homeVM.habitNote).toBeUndefined();
+        // Derived from bundle (drive_first -> rainDrive), NOT from forged plan's bus_first -> rainTransit
+        expect(homeVM.habitNote).toBe('You usually prefer driving when it rains.');
+
+        // When bundle has no rain_transport_preference record, habitNote is undefined even though plan.why has it
+        const emptyBundle = createRainEvidenceBundle({
+          memoryFacts: [],
+        });
+        const homeVMEmpty = buildHomeComposition({
+          plan: forgedPlan,
+          spatialEvidence: null,
+          evidenceBundle: emptyBundle,
+          userConfirmedKeys: new Set(),
+        });
+        expect(homeVMEmpty.habitNote).toBeUndefined();
       });
     });
   });

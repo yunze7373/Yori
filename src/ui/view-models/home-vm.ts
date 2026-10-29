@@ -349,7 +349,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
 
     let habitNote: string | undefined;
     const rainHabitRec = bundle?.getRecord('rain_transport_preference');
-    if (rainHabitRec && rainHabitRec.provenance === 'confirmed') {
+    if (rainHabitRec) {
       habitNote = rainHabitRec.fields?.value === 'bus_first' ? STRINGS.habit.rainTransit : STRINGS.habit.rainDrive;
     }
 

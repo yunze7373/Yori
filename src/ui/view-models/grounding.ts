@@ -996,25 +996,71 @@ export function createLunchEvidenceBundle(options?: {
     }
   }
 
-  const isConfirmed = options?.userConfirmedKeys
-    ? options.userConfirmedKeys.has(habitId) || options.userConfirmedKeys.has('taste_preference') || options.userConfirmedKeys.has('favorite_cuisine')
-    : (options?.isConfirmedTaste ?? false);
+  // Habit / taste preference record(s) dynamically built from MemoryPort / combinedMemory facts passed in
+  const memoryFacts = options?.memory;
+  if (Array.isArray(memoryFacts) && memoryFacts.length > 0) {
+    const tasteFacts = memoryFacts.filter(
+      f =>
+        f.key.toLowerCase().includes('taste') ||
+        f.key.toLowerCase().includes('cuisine') ||
+        f.key.toLowerCase().includes('food')
+    );
+    for (const fact of tasteFacts) {
+      const valStr = typeof fact.value === 'string' ? fact.value : String(fact.value ?? '');
+      const cuisineStr = valStr ? valStr.charAt(0).toUpperCase() + valStr.slice(1) : '';
+      const factKind = classifyFactSource(fact, options?.userConfirmedKeys, memoryFacts);
+      const isConfirmed = factKind === 'user_confirmed';
+      const provStr: EvidenceProvenance = isConfirmed ? 'confirmed' : 'sample';
+      const provLabel = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
 
-  recordMap.set(habitId, {
-    id: habitId,
-    provider: 'memory',
-    kind: 'habit',
-    fetchedAt: sceneClockIso,
-    provenance: isConfirmed ? 'confirmed' : 'sample',
-    fields: {
-      key: 'taste_preference_lunch_cuisine',
-      value: 'japanese',
-      cuisine: 'Japanese',
-      basis: isConfirmed
-        ? 'Based on taste: Japanese (You confirmed)'
-        : 'Based on taste: Japanese (Demo profile · sample)',
-    },
-  });
+      recordMap.set(fact.key, {
+        id: fact.key,
+        provider: 'memory',
+        kind: 'habit',
+        fetchedAt: sceneClockIso,
+        provenance: provStr,
+        fields: {
+          key: fact.key,
+          value: valStr,
+          cuisine: cuisineStr,
+          basis: `Based on taste: ${cuisineStr} (${provLabel})`,
+        },
+      });
+      aliases.set(`habit-${fact.key}`, fact.key);
+      aliases.set(fact.key, fact.key);
+    }
+    // Alias taste_preference_lunch_cuisine and habit-taste-cuisine to favorite_cuisine or primary taste fact
+    const primaryTaste =
+      tasteFacts.find(f => f.key === 'favorite_cuisine') ||
+      tasteFacts.find(f => f.key === 'taste_preference') ||
+      tasteFacts[0];
+    if (primaryTaste) {
+      aliases.set(habitId, primaryTaste.key);
+      aliases.set('habit-taste-cuisine', primaryTaste.key);
+    }
+  } else {
+    // Fallback when no memory facts provided (e.g. tests without memory)
+    const isConfirmed = options?.userConfirmedKeys
+      ? options.userConfirmedKeys.has(habitId) || options.userConfirmedKeys.has('taste_preference') || options.userConfirmedKeys.has('favorite_cuisine')
+      : (options?.isConfirmedTaste ?? false);
+    const provStr: EvidenceProvenance = isConfirmed ? 'confirmed' : 'sample';
+    const provLabel = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+
+    recordMap.set(habitId, {
+      id: habitId,
+      provider: 'memory',
+      kind: 'habit',
+      fetchedAt: sceneClockIso,
+      provenance: provStr,
+      fields: {
+        key: habitId,
+        value: 'japanese',
+        cuisine: 'Japanese',
+        basis: `Based on taste: Japanese (${provLabel})`,
+      },
+    });
+    aliases.set('habit-taste-cuisine', habitId);
+  }
 
   return createEvidenceBundle('bundle-lunch-d3', sceneClockIso, [...recordMap.values()], timezone, aliases);
 }
