@@ -297,6 +297,8 @@ goals:
       modules:
         - path: "src/ui/living-context"
           required: true
+        - path: "docs/submission"
+          required: true
     owner_agent: "principal-architect"
 
   - id: G-211
