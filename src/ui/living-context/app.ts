@@ -463,6 +463,7 @@ export function computeSceneState(
         snapshot,
         originCoords: locPortStatus.coords,
         userConfirmedKeys: new Set(combinedMemory.filter(f => f.status === 'confirmed').map(f => f.key)),
+        memory: combinedMemory,
       });
 
       return {
@@ -1913,7 +1914,7 @@ export function renderApp(
             (nowPlan?.intentId === 'fuel'
               ? createFuelEvidenceBundle({ snapshot: effectiveSnapshot })
               : effectiveSnapshot?.signals?.some(s => s.kind === 'places_lunch')
-                ? createLunchPlacesEvidenceBundle({ snapshot: effectiveSnapshot })
+                ? createLunchPlacesEvidenceBundle({ snapshot: effectiveSnapshot, memory: nowPlan?.why?.memoryFactsUsed })
                 : createLunchEvidenceBundle({ plan: nowPlan ?? undefined, snapshot: effectiveSnapshot }));
 
           const navPlatform =

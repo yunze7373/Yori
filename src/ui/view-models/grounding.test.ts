@@ -1431,19 +1431,20 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(ramenRec.fields.vegetarian).toBe(true);
       expect(ramenRec.fields.straightLineDistanceLabel).toBe('250 m (straight-line)');
       expect(ramenRec.fields.straight_line).toBe(true);
+      expect(ramenRec.fields.distanceMinutes).toBeUndefined();
+      expect(ramenRec.fields.distanceText).toBeUndefined();
 
       const candidate = {
         id: 'lunch-sf-1',
         name: 'Pacific Ramen Bar',
         cuisine: 'japanese',
-        distanceMinutes: 4,
-        distanceText: '4m away',
+        distanceText: '250 m (straight-line)',
         coords: { lat: 37.7765, lng: -122.4172 },
         sourceRef: { recordId: 'lunch-sf-1', field: 'name' },
         fieldSourceRefs: {
           name: { recordId: 'lunch-sf-1', field: 'name' },
           cuisine: { recordId: 'lunch-sf-1', field: 'cuisine' },
-          distanceMinutes: { recordId: 'lunch-sf-1', field: 'distanceMinutes' },
+          distanceText: { recordId: 'lunch-sf-1', field: 'straightLineDistanceLabel' },
         },
       };
 
@@ -1503,15 +1504,18 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(navUrl).toBeUndefined();
     });
 
-    it('detects tampered distance minutes and fails closed', () => {
+    it('detects tampered straightLineDistanceLabel and fails closed', () => {
       const bundle = createLunchPlacesEvidenceBundle({ snapshot: sfSnapshot });
 
       const tamperedCandidate = {
         id: 'lunch-sf-1',
         name: 'Pacific Ramen Bar',
         cuisine: 'japanese',
-        distanceMinutes: 99, // Bundle has 4
+        distanceText: '10 m (straight-line)', // Bundle has '250 m (straight-line)'
         sourceRef: { recordId: 'lunch-sf-1', field: 'name' },
+        fieldSourceRefs: {
+          distanceText: { recordId: 'lunch-sf-1', field: 'straightLineDistanceLabel' },
+        },
       };
 
       const result = GroundedRecommendationVerifier.verifyCandidateCard(tamperedCandidate, bundle);
@@ -1520,6 +1524,60 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
 
       const navUrl = buildGroundedNavigateUrl(tamperedCandidate, bundle);
       expect(navUrl).toBeUndefined();
+    });
+
+    it('builds dynamic habit record from memory: salad memory yields salad habit, and Japanese Why row fails verification', () => {
+      const memoryWithSalad = [
+        {
+          key: 'taste_preference_lunch_cuisine',
+          value: 'salad',
+          status: 'confirmed' as const,
+          source: 'user_explicit' as const,
+          confidence: 1,
+          updatedAt: '2026-10-28T19:10:00.000Z',
+          provenance: { source: 'user_confirmed' },
+        },
+      ];
+      const userConfirmedKeys = new Set(['taste_preference_lunch_cuisine']);
+
+      const bundle = createLunchPlacesEvidenceBundle({
+        snapshot: sfSnapshot,
+        memory: memoryWithSalad,
+        userConfirmedKeys,
+      });
+
+      expect(bundle.hasRecord('taste_preference_lunch_cuisine')).toBe(true);
+      const habitRec = bundle.getRecord('taste_preference_lunch_cuisine')!;
+      expect(habitRec.fields.value).toBe('salad');
+      expect(habitRec.fields.cuisine).toBe('Salad');
+      expect(habitRec.provenance).toBe('confirmed');
+
+      // Verifying a Why row stating 'salad' succeeds
+      const validWhyRow = GroundedRecommendationVerifier.verifyField(
+        { recordId: 'taste_preference_lunch_cuisine', field: 'value' },
+        'salad',
+        bundle
+      );
+      expect(validWhyRow.valid).toBe(true);
+
+      // Verifying a Why row stating 'Japanese' fails verification (tampered_value)
+      const invalidWhyRow = GroundedRecommendationVerifier.verifyField(
+        { recordId: 'taste_preference_lunch_cuisine', field: 'value' },
+        'Japanese',
+        bundle
+      );
+      expect(invalidWhyRow.valid).toBe(false);
+      expect(invalidWhyRow.reason).toBe('tampered_value');
+    });
+
+    it('omits habit record when no taste fact exists and does not contain loc-downtown', () => {
+      const bundleWithoutMemory = createLunchPlacesEvidenceBundle({
+        snapshot: sfSnapshot,
+      });
+
+      expect(bundleWithoutMemory.hasRecord('taste_preference_lunch_cuisine')).toBe(false);
+      expect(bundleWithoutMemory.hasRecord('loc-downtown')).toBe(false);
+      expect(bundleWithoutMemory.hasRecord('loc-lunch-origin')).toBe(true);
     });
   });
 });

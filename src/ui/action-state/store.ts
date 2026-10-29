@@ -1135,6 +1135,7 @@ export class DefaultActionStateStore implements ActionStateStore {
           snapshot: ctx.snapshot,
           originCoords: locStatus.coords,
           userConfirmedKeys: ctx.userConfirmedKeys,
+          memory: ctx.memory,
         });
         this.activeEvidenceBundle = lunchBundle;
         this.activeSnapshot = ctx.snapshot;

@@ -76,6 +76,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
           timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
           userConfirmedKeys,
+          memory: plan?.why?.memoryFactsUsed,
         })
       : plan?.intentId === 'depart'
         ? createRainEvidenceBundle({
@@ -457,6 +458,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
 
   // 3. Lunch / Candidates Layout
   if (plan.intentId === 'lunch') {
+    const isDynamicLunch = Boolean(snapshot?.signals?.some(s => s.kind === 'places_lunch'));
     const candidateCards: CandidateCardVM[] = [];
     if (plan.optionsOrSteps) {
       for (let i = 0; i < plan.optionsOrSteps.length; i++) {
@@ -477,8 +479,15 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           const opt = raw as PlanOption;
           const name = opt.name || opt.label;
           const cuisine = opt.cuisine ? opt.cuisine.charAt(0).toUpperCase() + opt.cuisine.slice(1) : 'Dining';
-          const distMins = opt.distanceMinutes;
-          const distText = typeof distMins === 'number' ? `${distMins}m away` : '';
+          const distMins = isDynamicLunch ? undefined : opt.distanceMinutes;
+          const straightLineDist =
+            (opt as any).straightLineDistanceLabel ||
+            (typeof (opt as any).straightLineDistanceMeters === 'number'
+              ? formatStraightLineDistance((opt as any).straightLineDistanceMeters)
+              : undefined);
+          const distText = isDynamicLunch
+            ? (straightLineDist ?? '')
+            : (typeof distMins === 'number' ? `${distMins}m away` : '');
           const photo = getLocalIllustration(opt.cuisine || 'dining', name);
 
           // Check if taste preference or cuisine fact is confirmed by the user
@@ -497,16 +506,22 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
             name: { recordId: recId, field: 'name' },
             cuisine: { recordId: recId, field: 'cuisine' },
           };
-          if (typeof distMins === 'number') {
-            fieldSourceRefs.distanceMinutes = { recordId: recId, field: 'distanceMinutes' };
-            fieldSourceRefs.distanceText = { recordId: recId, field: 'distanceText' };
+          if (isDynamicLunch) {
+            if (straightLineDist) {
+              fieldSourceRefs.distanceText = { recordId: recId, field: 'straightLineDistanceLabel' };
+            }
+          } else {
+            if (typeof distMins === 'number') {
+              fieldSourceRefs.distanceMinutes = { recordId: recId, field: 'distanceMinutes' };
+              fieldSourceRefs.distanceText = { recordId: recId, field: 'distanceText' };
+            }
           }
 
           const card: CandidateCardVM = {
             id: opt.id || `candidate-${i}`,
             name,
             cuisine,
-            distanceMinutes: distMins ?? 0,
+            distanceMinutes: isDynamicLunch ? undefined : (distMins ?? 0),
             distanceText: distText,
             basis,
             photo,
@@ -532,7 +547,6 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
 
     const map = deriveMapVM(plan, spatialEvidence, 'compact', { snapshot, evidenceBundle: bundle });
 
-    const isDynamicLunch = snapshot?.signals?.some(s => s.kind === 'places_lunch');
     let locationLabel: string | undefined;
     if (isDynamicLunch) {
       const locSig = snapshot?.signals?.find(s => s.kind === 'location_status' || s.kind === 'location');
@@ -558,7 +572,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       layoutKind: 'candidates',
       planId: plan.id,
       title: STRINGS.lunch.title,
-      headline: STRINGS.lunch.primaryLine,
+      headline: isDynamicLunch ? 'Nearby places (straight-line distances)' : STRINGS.lunch.primaryLine,
       basis: STRINGS.lunch.basisLine,
       isRain: false,
       map,

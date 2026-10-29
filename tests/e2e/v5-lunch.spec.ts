@@ -87,6 +87,7 @@ test.describe('V5-LUNCH: PlacesProvider Seam, Dynamic Recommendations, Grounding
     const nowCard = page.locator('.now-card');
     await expect(nowCard).toBeVisible();
     await expect(nowCard).toContainText('Lunch options near you');
+    await expect(nowCard).toContainText('Nearby places (straight-line distances)');
     await expect(nowCard).toContainText('SIMULATED');
 
     // Location bar displays current simulated city
@@ -103,7 +104,19 @@ test.describe('V5-LUNCH: PlacesProvider Seam, Dynamic Recommendations, Grounding
     const topCard = candidateCards.first();
     await expect(topCard).toContainText('Pacific Ramen Bar');
     await expect(topCard).toContainText('Japanese');
-    await expect(topCard).toContainText('away');
+
+    // Dynamic lunch card shows straight-line distance, never invented walking ETAs or 'away'
+    const topDistanceChip = topCard.locator('.v2-distance-chip');
+    await expect(topDistanceChip).toBeVisible();
+    await expect(topDistanceChip).toHaveText(/^[0-9]+(\.[0-9]+)?\s*(m|km)\s*\(straight-line\)$/);
+    await expect(topDistanceChip).toContainText('(straight-line)');
+
+    // Invariant: no 'Nm away' token appears on ANY dynamic lunch card
+    const cardTexts = await candidateCards.allInnerTexts();
+    for (const cardText of cardTexts) {
+      expect(cardText).not.toMatch(/\b\d+m away\b/);
+      expect(cardText).toContain('(straight-line)');
+    }
 
     // Touch targets check: Directions button >= 44px
     const directionsBtn = topCard.locator('.v2-directions-btn');

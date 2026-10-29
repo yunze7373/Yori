@@ -17,6 +17,7 @@ import type {
   MemoryCitation,
 } from '../../core/contracts/index.js';
 import { mockPlaceAdapter, type MockPlaceItem } from '../../adapters/mock/index.js';
+import { formatStraightLineDistance } from '../../adapters/providers/simulated-places-provider.js';
 import type { UserRequestOverride } from '../depart/request-override.js';
 
 export interface RankedPlaceOption {
@@ -24,11 +25,14 @@ export interface RankedPlaceOption {
   readonly label: string;
   readonly name: string;
   readonly cuisine: string;
-  readonly distanceMinutes: number;
+  readonly distanceMinutes?: number;
   readonly requiresConfirmation: boolean;
   readonly noiseLevel?: string;
   readonly vegetarian?: boolean;
   readonly recordId?: string;
+  readonly coords?: { readonly lat: number; readonly lng: number };
+  readonly straightLineDistanceMeters?: number;
+  readonly straightLineDistanceLabel?: string;
 }
 
 export class LunchPreparer implements Preparer {
@@ -100,21 +104,20 @@ export class LunchPreparer implements Preparer {
         return null;
       }
       availablePlaces = val.places.map((p: any) => {
-        const distM = p.straightLineDistanceMeters ?? p.distanceMeters ?? 500;
-        const distMins =
-          typeof p.distanceMinutes === 'number'
-            ? p.distanceMinutes
-            : Math.max(1, Math.round(distM / 80));
+        const distM = p.straightLineDistanceMeters ?? p.distanceMeters;
+        const distLabel =
+          p.straightLineDistanceLabel ??
+          (typeof distM === 'number' ? formatStraightLineDistance(distM) : undefined);
         return {
           id: p.id || p.placeId,
           name: p.name,
           cuisine: p.cuisine || 'dining',
-          distanceMinutes: distMins,
+          distanceMinutes: undefined,
           noiseLevel: p.noiseLevel,
           vegetarian: p.vegetarian,
           coords: p.coords,
           straightLineDistanceMeters: distM,
-          straightLineDistanceLabel: p.straightLineDistanceLabel,
+          straightLineDistanceLabel: distLabel,
         };
       });
     } else if (placesSignal?.value && Array.isArray(placesSignal.value)) {
@@ -170,7 +173,11 @@ export class LunchPreparer implements Preparer {
           filterScore += 100;
         }
         if (filters.includes('nearer')) {
-          filterScore += Math.max(0, 30 - item.place.distanceMinutes) * 2;
+          if (typeof item.place.distanceMinutes === 'number') {
+            filterScore += Math.max(0, 30 - item.place.distanceMinutes) * 2;
+          } else if (typeof (item.place as any).straightLineDistanceMeters === 'number') {
+            filterScore += Math.max(0, 3000 - (item.place as any).straightLineDistanceMeters) / 100;
+          }
         }
       }
       return {
@@ -184,8 +191,14 @@ export class LunchPreparer implements Preparer {
       if (b.totalScore !== a.totalScore) {
         return b.totalScore - a.totalScore;
       }
-      if (a.place.distanceMinutes !== b.place.distanceMinutes) {
-        return a.place.distanceMinutes - b.place.distanceMinutes;
+      const distA =
+        (a.place as any).straightLineDistanceMeters ??
+        (typeof a.place.distanceMinutes === 'number' ? a.place.distanceMinutes * 80 : 0);
+      const distB =
+        (b.place as any).straightLineDistanceMeters ??
+        (typeof b.place.distanceMinutes === 'number' ? b.place.distanceMinutes * 80 : 0);
+      if (distA !== distB) {
+        return distA - distB;
       }
       return a.place.name.localeCompare(b.place.name);
     });
@@ -200,17 +213,25 @@ export class LunchPreparer implements Preparer {
       const tagsSuffix = extraTags.length > 0 ? ` · ${extraTags.join(' · ')}` : '';
       const matchedAdapterPlace = mockPlaceAdapter.getPlaces().find(ap => ap.name === p.name);
       const placeId = p.id || matchedAdapterPlace?.id;
+      const pAny = p as any;
+
+      const distLabel =
+        pAny.straightLineDistanceLabel ??
+        (typeof p.distanceMinutes === 'number' ? `${p.distanceMinutes}m away` : '');
+      const label = distLabel
+        ? `${p.name} (${p.cuisine}) · ${distLabel}${tagsSuffix}`
+        : `${p.name} (${p.cuisine})${tagsSuffix}`;
 
       return Object.freeze({
         id: `opt-${idx + 1}-${p.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
         recordId: placeId,
-        label: `${p.name} (${p.cuisine}) · ${p.distanceMinutes}m away${tagsSuffix}`,
+        label,
         name: p.name,
         cuisine: p.cuisine,
         distanceMinutes: p.distanceMinutes,
-        coords: (p as any).coords,
-        straightLineDistanceMeters: (p as any).straightLineDistanceMeters,
-        straightLineDistanceLabel: (p as any).straightLineDistanceLabel,
+        coords: pAny.coords,
+        straightLineDistanceMeters: pAny.straightLineDistanceMeters,
+        straightLineDistanceLabel: pAny.straightLineDistanceLabel,
         requiresConfirmation: false,
         noiseLevel: p.noiseLevel,
         vegetarian: p.vegetarian,

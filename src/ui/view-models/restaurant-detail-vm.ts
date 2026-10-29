@@ -15,6 +15,7 @@ import { formatTime } from '../living-context/presentation.js';
 import { getLocalIllustration } from './photo-vm.js';
 import { classifyFactSource } from './provenance.js';
 import { deriveMapVM } from './map-vm.js';
+import { formatStraightLineDistance } from '../../adapters/providers/simulated-places-provider.js';
 import {
   GroundedRecommendationVerifier,
   buildNavigateUrl,
@@ -74,11 +75,17 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
   const cuisine = targetOpt?.cuisine
     ? targetOpt.cuisine.charAt(0).toUpperCase() + targetOpt.cuisine.slice(1)
     : 'Dining';
+  const isDynamicLunch = Boolean(snapshot?.signals?.some(s => s.kind === 'places_lunch'));
+  const straightLineDist =
+    (targetOpt as any)?.straightLineDistanceLabel ||
+    (typeof (targetOpt as any)?.straightLineDistanceMeters === 'number'
+      ? formatStraightLineDistance((targetOpt as any).straightLineDistanceMeters)
+      : undefined);
   const distanceMinutes =
-    typeof targetOpt?.distanceMinutes === 'number' && Number.isFinite(targetOpt.distanceMinutes)
+    !isDynamicLunch && typeof targetOpt?.distanceMinutes === 'number' && Number.isFinite(targetOpt.distanceMinutes)
       ? targetOpt.distanceMinutes
       : undefined;
-  const distanceText = distanceMinutes !== undefined ? `${distanceMinutes}m away` : undefined;
+  const distanceText = isDynamicLunch ? straightLineDist : (distanceMinutes !== undefined ? `${distanceMinutes}m away` : undefined);
 
   // Local labelled SVG illustration
   const photo = getLocalIllustration(targetOpt?.cuisine || 'dining', name);
@@ -177,8 +184,15 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     name: { recordId: placeRecId, field: 'name' },
     cuisine: { recordId: placeRecId, field: 'cuisine' },
   };
-  if (distanceMinutes !== undefined) {
-    fieldSourceRefs.distanceMinutes = { recordId: placeRecId, field: 'distanceMinutes' };
+  if (isDynamicLunch) {
+    if (straightLineDist !== undefined) {
+      fieldSourceRefs.distanceText = { recordId: placeRecId, field: 'straightLineDistanceLabel' };
+    }
+  } else {
+    if (distanceMinutes !== undefined) {
+      fieldSourceRefs.distanceMinutes = { recordId: placeRecId, field: 'distanceMinutes' };
+      fieldSourceRefs.distanceText = { recordId: placeRecId, field: 'distanceText' };
+    }
   }
 
   let verifiedName = name;
@@ -200,7 +214,12 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     if (!verification.valid) {
       if (verification.reason === 'tampered_value') {
         if (verification.field === 'name') verifiedName = 'unknown';
-        if (verification.field === 'distanceMinutes' && distanceText !== undefined) {
+        if (
+          (verification.field === 'distanceMinutes' ||
+            verification.field === 'distanceText' ||
+            verification.field === 'straightLineDistanceLabel') &&
+          distanceText !== undefined
+        ) {
           verifiedDistanceText = 'unknown';
         }
       } else {

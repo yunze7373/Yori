@@ -241,6 +241,7 @@ export function deriveMapVM(
 
   // Lunch / candidate places map
   if (plan?.intentId === 'lunch') {
+    const isDynamicLunch = Boolean(options?.snapshot?.signals?.some(s => s.kind === 'places_lunch'));
     const area =
       typeof (spatialEvidence?.placeOrRoute as any)?.area === 'string'
         ? (spatialEvidence?.placeOrRoute as any).area
@@ -270,8 +271,12 @@ export function deriveMapVM(
       plan.optionsOrSteps.slice(0, 3).forEach((rawOpt, idx) => {
         const coords = placeCoordinates[idx] || { x: 180 + idx * 30, y: 60 };
         const name = typeof rawOpt === 'string' ? rawOpt : (rawOpt as PlanOption).name || rawOpt.label;
-        const dist = typeof rawOpt !== 'string' ? (rawOpt as PlanOption).distanceMinutes : undefined;
-        const distText = typeof dist === 'number' ? `${dist}m away` : '';
+        const optAny = typeof rawOpt !== 'string' ? (rawOpt as any) : undefined;
+        const straightLineDist = optAny?.straightLineDistanceLabel;
+        const dist = isDynamicLunch ? undefined : (typeof rawOpt !== 'string' ? (rawOpt as PlanOption).distanceMinutes : undefined);
+        const distText = isDynamicLunch
+          ? (straightLineDist || '')
+          : (typeof dist === 'number' ? `${dist}m away` : '');
 
         markers.push({
           id: `marker-place-${idx}`,
@@ -302,14 +307,16 @@ export function deriveMapVM(
       simulatedBadge: 'Schematic · simulated',
       sizeHint: 'compact',
       destinationName: 'Lunch locations near you',
-      destinationArea: area,
+      destinationArea: isDynamicLunch ? undefined : area,
       markers: Object.freeze(markers),
       polylines: Object.freeze(polylines),
       ariaDescription: 'Schematic simulated map displaying lunch candidate locations relative to your current location',
-      sourceRef: { recordId: 'loc-downtown', field: 'name' },
-      fieldSourceRefs: {
-        destinationArea: { recordId: 'loc-downtown', field: 'area' },
-      },
+      sourceRef: { recordId: isDynamicLunch ? 'loc-lunch-origin' : 'loc-downtown', field: 'name' },
+      fieldSourceRefs: isDynamicLunch
+        ? {}
+        : {
+            destinationArea: { recordId: 'loc-downtown', field: 'area' },
+          },
     };
   }
 

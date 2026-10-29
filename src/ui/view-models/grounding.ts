@@ -15,13 +15,14 @@
 
 import { formatTime } from '../living-context/presentation.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
-import type { PreparedPlan } from '../../core/contracts/index.js';
+import type { PreparedPlan, MemoryFact } from '../../core/contracts/index.js';
 import type { UserRequestOverride } from '../../plugins/depart/request-override.js';
 import { mockPlaceAdapter } from '../../adapters/mock/index.js';
 import {
   formatStraightLineDistance,
 } from '../../adapters/providers/simulated-places-provider.js';
 import type { PlaceItem } from '../../adapters/providers/places-types.js';
+import { classifyFactSource, type FactLike } from './provenance.js';
 
 export type EvidenceKind = 'poi' | 'route' | 'eta' | 'weather' | 'habit' | 'calendar';
 
@@ -1110,11 +1111,10 @@ export function createLunchPlacesEvidenceBundle(options?: {
   originCoords?: { lat: number; lng: number };
   userConfirmedKeys?: ReadonlySet<string>;
   isConfirmedTaste?: boolean;
+  memory?: readonly (MemoryFact | FactLike)[];
 }): EvidenceBundle {
   const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T19:10:00.000Z';
   const timezone = options?.timezone ?? options?.snapshot?.timezone ?? 'America/Los_Angeles';
-  const isConfirmedTaste =
-    options?.isConfirmedTaste ?? options?.userConfirmedKeys?.has('taste_preference_lunch_cuisine') ?? false;
 
   const locSig = options?.snapshot?.signals?.find(s => s.kind === 'location_status' || s.kind === 'location');
   const locVal = locSig?.value as any;
@@ -1141,14 +1141,10 @@ export function createLunchPlacesEvidenceBundle(options?: {
 
   for (const place of placesList) {
     const pid = place.id || place.placeId;
-    const distMeters = place.straightLineDistanceMeters ?? place.distanceMeters ?? 500;
+    const distMeters = place.straightLineDistanceMeters ?? place.distanceMeters;
     const distLabel =
       place.straightLineDistanceLabel ??
       (distMeters !== undefined ? formatStraightLineDistance(distMeters) : undefined);
-    const distMins =
-      typeof (place as any).distanceMinutes === 'number'
-        ? (place as any).distanceMinutes
-        : Math.max(1, Math.round(distMeters / 80));
     const cuisine = place.cuisine
       ? place.cuisine.charAt(0).toUpperCase() + place.cuisine.slice(1)
       : 'Dining';
@@ -1171,8 +1167,6 @@ export function createLunchPlacesEvidenceBundle(options?: {
         cuisine,
         noiseLevel: place.noiseLevel,
         vegetarian: place.vegetarian,
-        distanceMinutes: distMins,
-        distanceText: `${distMins}m away`,
         distanceMeters: distMeters,
         straightLineDistance: distLabel,
         straightLineDistanceLabel: distLabel,
@@ -1196,17 +1190,6 @@ export function createLunchPlacesEvidenceBundle(options?: {
         lng: originCoords.lng,
         status: locVal?.status || 'available',
         name: 'Selected City (simulated)',
-      },
-    });
-    recordMap.set('loc-downtown', {
-      id: 'loc-downtown',
-      provider: 'location',
-      kind: 'poi',
-      fetchedAt: sceneClockIso,
-      provenance: 'simulated',
-      fields: {
-        name: 'Downtown Dining District',
-        area: 'Downtown',
       },
     });
   }
@@ -1235,24 +1218,41 @@ export function createLunchPlacesEvidenceBundle(options?: {
     }
   }
 
-  // Habit / taste preference record
-  const habitId = 'taste_preference_lunch_cuisine';
-  recordMap.set(habitId, {
-    id: habitId,
-    provider: 'memory',
-    kind: 'habit',
-    fetchedAt: sceneClockIso,
-    provenance: isConfirmedTaste ? 'confirmed' : 'sample',
-    fields: {
-      key: 'taste_preference_lunch_cuisine',
-      value: 'japanese',
-      cuisine: 'Japanese',
-      basis: isConfirmedTaste
-        ? 'Based on taste: Japanese (You confirmed)'
-        : 'Based on taste: Japanese (Demo profile · sample)',
-    },
-  });
-  aliases.set('habit-taste-cuisine', habitId);
+  // Habit / taste preference record(s) dynamically built from MemoryPort / combinedMemory facts passed in
+  const memoryFacts = options?.memory;
+  if (Array.isArray(memoryFacts) && memoryFacts.length > 0) {
+    const tasteFacts = memoryFacts.filter(
+      f =>
+        f.key.toLowerCase().includes('taste') ||
+        f.key.toLowerCase().includes('cuisine') ||
+        f.key.toLowerCase().includes('food')
+    );
+    for (const fact of tasteFacts) {
+      const valStr = typeof fact.value === 'string' ? fact.value : String(fact.value ?? '');
+      const cuisineStr = valStr ? valStr.charAt(0).toUpperCase() + valStr.slice(1) : '';
+      const factKind = classifyFactSource(fact, options?.userConfirmedKeys, memoryFacts);
+      const isConfirmed = factKind === 'user_confirmed';
+      const provStr = isConfirmed ? 'confirmed' : 'sample';
+      const provLabel = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+
+      recordMap.set(fact.key, {
+        id: fact.key,
+        provider: 'memory',
+        kind: 'habit',
+        fetchedAt: sceneClockIso,
+        provenance: provStr,
+        fields: {
+          key: fact.key,
+          value: valStr,
+          cuisine: cuisineStr,
+          basis: `Based on taste: ${cuisineStr} (${provLabel})`,
+        },
+      });
+      aliases.set(`habit-${fact.key}`, fact.key);
+      aliases.set('taste_preference_lunch_cuisine', fact.key);
+      aliases.set('habit-taste-cuisine', fact.key);
+    }
+  }
 
   return createEvidenceBundle('bundle-lunch-places', sceneClockIso, [...recordMap.values()], timezone, aliases);
 }
