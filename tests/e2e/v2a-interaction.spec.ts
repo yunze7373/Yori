@@ -423,5 +423,82 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       await expect(secondCard.locator('.v2-option-badge')).toHaveText('Alternative');
       await expect(secondCard.locator('.v2-option-label')).toContainText('Drive · leave 2:30 PM');
     });
+
+    test(`V2a Rain Details Why rows render 5 min / 20 min and zero unknown text across default, leave-later, and bus states (${viewport.name})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto('/?ui=v2');
+      await page.waitForSelector('.app-layout');
+
+      const sceneSelect = page.locator('#scene-select');
+      await sceneSelect.selectOption('rain');
+
+      // Helper to verify Details screen Why rows and zero 'unknown' text
+      const verifyDetailsScreen = async () => {
+        const detailsBtn = page.locator('#btn-view-trip-details');
+        await expect(detailsBtn).toBeVisible();
+        await detailsBtn.click();
+
+        const tripDetail = page.locator('.v2-trip-detail');
+        await expect(tripDetail).toBeVisible();
+
+        const whyCard = tripDetail.locator('.v2-why-plan-card');
+        await expect(whyCard).toBeVisible();
+
+        // Assert Why rows show 5 min and 20 min
+        await expect(whyCard).toContainText('5 min');
+        await expect(whyCard).toContainText('20 min');
+
+        // Assert entire page contains zero 'unknown' text
+        const pageText = await page.innerText('body');
+        expect(pageText).not.toContain('unknown');
+
+        // Return to home
+        const backBtn = page.locator('#trip-detail-back-btn');
+        await expect(backBtn).toBeVisible();
+        await backBtn.click();
+        await expect(tripDetail).toHaveCount(0);
+      };
+
+      // 1. Initial / default Rain state
+      await verifyDetailsScreen();
+
+      // 2. After leave-later confirm
+      const askBar = page.locator('#ask-bar');
+      await askBar.click();
+      const overlay = page.locator('#conversation-overlay');
+      await expect(overlay).toBeVisible();
+
+      const input = page.locator('#conversation-input');
+      await input.fill('Can I leave 15 minutes later?');
+      await page.locator('#conversation-send-btn').click();
+
+      const confirmBtn = page.locator('#btn-chat-confirm');
+      await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+      await confirmBtn.click();
+      await expect(overlay).toHaveCount(0, { timeout: 5000 });
+
+      await verifyDetailsScreen();
+
+      // 3. After "Take the bus"
+      await askBar.click();
+      await expect(overlay).toBeVisible();
+      await input.fill('Take the bus');
+      await page.locator('#conversation-send-btn').click();
+
+      if (await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await confirmBtn.click();
+      }
+      if (await overlay.isVisible().catch(() => false)) {
+        const closeBtn = page.locator('#conversation-close-btn');
+        if (await closeBtn.isVisible().catch(() => false)) {
+          await closeBtn.click();
+        }
+      }
+      await expect(overlay).toHaveCount(0, { timeout: 5000 });
+
+      await verifyDetailsScreen();
+    });
   }
 });

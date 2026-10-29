@@ -68,6 +68,7 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
       snapshot: snapshot ? { timezone: snapshot.timezone, signals: snapshot.signals as any } : undefined,
       timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
       isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
+      userConfirmedKeys,
     });
 
   const tz = plan.timezone ?? snapshot?.timezone;

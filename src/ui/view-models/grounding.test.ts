@@ -764,6 +764,78 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(latest.validationResult.reason).toBe('tampered_value');
     });
 
+    it('trip detail why rows verify prep_buffer_minutes (5 min) and prep_duration_minutes (20 min) truthfully from bundle', () => {
+      const planWithAllFacts: PreparedPlan = {
+        ...rainPlan,
+        why: {
+          ...rainPlan.why,
+          memoryFactsUsed: [
+            { key: 'prep_buffer_minutes', value: 5, status: 'confirmed' },
+            { key: 'prep_duration_minutes', value: 20, status: 'confirmed' },
+            { key: 'rain_transport_preference', value: 'drive_first', status: 'confirmed' },
+          ],
+        },
+      };
+
+      const bundle = createRainEvidenceBundle({ plan: planWithAllFacts });
+      const detail = deriveTripDetailVM({
+        plan: planWithAllFacts,
+        spatialEvidence: null,
+        evidenceBundle: bundle,
+      });
+
+      const bufferRow = detail.whyHabits.find(h => h.label.includes('Buffer before leaving'))!;
+      expect(bufferRow).toBeDefined();
+      expect(bufferRow.value).toBe('5 min');
+
+      const prepRow = detail.whyHabits.find(h => h.label.includes('Time to get ready'))!;
+      expect(prepRow).toBeDefined();
+      expect(prepRow.value).toBe('20 min');
+
+      const habitRow = detail.whyHabits.find(h => h.label.includes('Rain travel habit'))!;
+      expect(habitRow).toBeDefined();
+      expect(habitRow.value).toBe('Prefers driving when it rains');
+
+      // No row shows "unknown"
+      for (const h of detail.whyHabits) {
+        expect(h.value).not.toBe('unknown');
+      }
+    });
+
+    it('Surface Check-1 Tamper Negatives: trip detail why row value becomes "unknown" when habit fact is absent from evidence bundle', () => {
+      const planWithAllFacts: PreparedPlan = {
+        ...rainPlan,
+        why: {
+          ...rainPlan.why,
+          memoryFactsUsed: [
+            { key: 'prep_buffer_minutes', value: 5, status: 'confirmed' },
+            { key: 'prep_duration_minutes', value: 20, status: 'confirmed' },
+            { key: 'rain_transport_preference', value: 'drive_first', status: 'confirmed' },
+          ],
+        },
+      };
+
+      // Bundle created with only rain_transport_preference; prep_buffer_minutes and prep_duration_minutes omitted
+      const bundleMissingFacts = createRainEvidenceBundle({
+        memoryFacts: [{ key: 'rain_transport_preference', value: 'drive_first', status: 'confirmed' }],
+      });
+
+      const detail = deriveTripDetailVM({
+        plan: planWithAllFacts,
+        spatialEvidence: null,
+        evidenceBundle: bundleMissingFacts,
+      });
+
+      const bufferRow = detail.whyHabits.find(h => h.label.includes('Buffer before leaving'))!;
+      expect(bufferRow.value).toBe('unknown'); // Fails closed because absent from bundle!
+
+      const prepRow = detail.whyHabits.find(h => h.label.includes('Time to get ready'))!;
+      expect(prepRow.value).toBe('unknown'); // Fails closed because absent from bundle!
+
+      const habitRow = detail.whyHabits.find(h => h.label.includes('Rain travel habit'))!;
+      expect(habitRow.value).toBe('Prefers driving when it rains'); // Present in bundle
+    });
+
     it('Surface Check-1 Tamper Negatives: trip detail why row value becomes "unknown" when habit value is tampered', () => {
       const bundle = createRainEvidenceBundle();
       const tamperedPlan: PreparedPlan = {

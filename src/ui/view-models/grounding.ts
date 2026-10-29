@@ -502,6 +502,7 @@ export function createRainEvidenceBundle(options?: {
   sceneClockIso?: string;
   timezone?: string;
   isConfirmedHabit?: boolean;
+  userConfirmedKeys?: ReadonlySet<string>;
   memoryFacts?: readonly { key: string; value?: unknown; status?: string }[];
 }): EvidenceBundle {
   const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T20:35:00.000Z';
@@ -682,25 +683,51 @@ export function createRainEvidenceBundle(options?: {
         polylineId: 'poly-bus',
       },
     },
-    {
-      id: habitRecordId,
+  ];
+
+  // Add one habit record per memory fact used (from default facts, options.memoryFacts, or plan facts)
+  const defaultMemoryFacts: readonly { key: string; value?: unknown; status?: string }[] = [
+    { key: 'rain_transport_preference', value: 'drive_first', status: isConfirmedHabit ? 'confirmed' : 'pending' },
+    { key: 'prep_buffer_minutes', value: bufferMinutes, status: 'pending' },
+    { key: 'prep_duration_minutes', value: prepMinutes, status: 'pending' },
+  ];
+
+  const factMap = new Map<string, { key: string; value?: unknown; status?: string }>();
+  if (options?.memoryFacts) {
+    for (const f of options.memoryFacts) factMap.set(f.key, f);
+  } else {
+    for (const f of defaultMemoryFacts) factMap.set(f.key, f);
+    if (options?.plan?.why?.memoryFactsUsed) {
+      for (const f of options.plan.why.memoryFactsUsed) factMap.set(f.key, f);
+    }
+  }
+
+  for (const fact of factMap.values()) {
+    const isConfirmed = options?.userConfirmedKeys
+      ? options.userConfirmedKeys.has(fact.key)
+      : (fact.key === 'rain_transport_preference' ? isConfirmedHabit : fact.status === 'confirmed');
+
+    records.push({
+      id: fact.key,
       provider: 'memory',
       kind: 'habit',
       fetchedAt: sceneClockIso,
-      provenance: isConfirmedHabit ? 'confirmed' : 'sample',
+      provenance: isConfirmed ? 'confirmed' : 'sample',
       fields: {
-        key: 'rain_transport_preference',
-        value: 'drive_first',
-        rankingBasis: isConfirmedHabit
-          ? 'Ranked by habit: Rain travel habit (You confirmed)'
-          : 'Ranked by habit: Rain travel habit (Demo profile · sample)',
-        bufferMinutes,
-        prepMinutes,
+        key: fact.key,
+        value: fact.value,
+        bufferMinutes: fact.key === 'prep_buffer_minutes' ? fact.value : bufferMinutes,
+        prepMinutes: fact.key === 'prep_duration_minutes' ? fact.value : prepMinutes,
         prepText: `${prepMinutes}m prep + ${bufferMinutes}m buffer`,
         bufferText: `${bufferMinutes}m buffer`,
+        rankingBasis: fact.key === 'rain_transport_preference'
+          ? (isConfirmed
+              ? 'Ranked by habit: Rain travel habit (You confirmed)'
+              : 'Ranked by habit: Rain travel habit (Demo profile · sample)')
+          : undefined,
       },
-    },
-  ];
+    });
+  }
 
   // User request override: recompute expected timing from base eta + request delta
   // Governed by Living Context §2.3 and G12 Check 1 (Zero Circular Evidence)
