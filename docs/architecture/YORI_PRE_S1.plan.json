@@ -1,0 +1,189 @@
+{
+  "schema_version": "1.0.0",
+  "plan": {
+    "id": "yori_pre_s1_001",
+    "phase": "PRE-S1",
+    "title": "PRE-S1 hardening (non-live): memory evidence, slot-aware audit, hook gating, 3:00 storyboard sync",
+    "source": "ARCH-PRE-S1-001 (coordinator decision msg_0f9a35db723a4804); plan-only amendment, no live calls of any kind",
+    "created_at": "2026-10-29",
+    "status": "pending",
+    "description": "Four ordered slices (A memory-evidence, B slot-aware audit, C DEV/test hook gating, D demo-script-sync) plus closeout. Exactly one slice at a time, each released only after the prior slice's Reviewer approval. S1-LIVE (YORI_SUBMIT) gains PRE-S1-A and PRE-S1-B approval as an added precondition.",
+    "course_correction_summary": "previous_phase: V4/V5-FUEL/V5-GEO/V5-LUNCH/G3-PARITY approved at HEAD ff5e7f7 | core_delivery: pre-S1 hardening plan | deviation: none | INBOX_backlog: 0 P0, 0 P1 | next_phase_focus: PRE-S1-A memory evidence"
+  },
+  "tasks": [
+    {
+      "id": "PRE-S1-A",
+      "slice": "A",
+      "title": "Memory evidence: bundles grounded only in MemoryPort facts and stored user_confirmed keys",
+      "priority": "P0",
+      "goal": "Rain and lunch EvidenceBundles build memory/habit records ONLY from MemoryPort facts plus stored user_confirmed keys (via classifyFactSource; status alone is never sufficient). Remove the plan.why.memoryFactsUsed overlay and any fallback that grounds plan memory against itself (the rain bundle since G12 and the lunch fallbacks). Add the server/client knownFactKeys and confirmedFactKeys parity test, including a sample-vs-confirmed negative test.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 5,
+      "dependencies": [],
+      "test_tier": "focused+e2e",
+      "out_of_scope": "No live MemoryPort/XMemo calls; no core (src/core) changes; no change to the verifier's fail-closed semantics",
+      "goal_ids": ["G-105", "G-202"],
+      "acceptance_ids": ["AC-105-3", "AC-202-1"],
+      "arch_contract_refs": ["ADR-102", "ADR-103"],
+      "phase_plan_ref": "PH-002",
+      "files": ["src/ui/view-models/grounding.ts", "src/ui/living-context/presentation.ts", "src/adapters/model/reasoning.ts"],
+      "checks": [
+        "Bundle construction test: a habit/memory record appears only when its key is in stored user_confirmed keys via MemoryPort; a record whose status merely reads confirmed without the stored key is rejected (sample-vs-confirmed negative test)",
+        "No code path remains that overlays plan.why.memoryFactsUsed or grounds plan memory against the plan itself (static search plus review evidence); server/client parity suite rejects the same malicious outputs on both sides",
+        "Affected e2e (rain and lunch Why flows) green; golden: report the real total (18), add-only",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id PRE-S1-A --plan-ref docs/architecture/YORI_PRE_S1.plan.json"
+      ]
+    },
+    {
+      "id": "PRE-S1-B",
+      "slice": "B",
+      "title": "Slot-aware grounding audit over the scripted walkthroughs",
+      "priority": "P0",
+      "goal": "Capture each rendered VM field's sourceRef during the scripted rain and lunch walkthroughs (and the fuel/lunch V5 scenes) and verify per slot: the rendered slot resolves to its OWN record field. A real value in the wrong slot must fail. Output to a NEW docs/evidence/pre-s1/ (report plus MANIFEST written last); docs/evidence/v4 stays frozen.",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 4,
+      "dependencies": ["PRE-S1-A"],
+      "test_tier": "audit",
+      "out_of_scope": "No changes to docs/evidence/v4 (MANIFEST 11/11 unchanged); no UI behaviour changes beyond audit instrumentation",
+      "goal_ids": ["G-102", "G-103", "G-212"],
+      "acceptance_ids": ["AC-102-1", "AC-103-1", "AC-212-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": ["src/ui/view-models/grounding.ts", "src/plugins/fuel/preparer.ts", "tests/golden"],
+      "checks": [
+        "Audit report covers every rendered slot in the rain, lunch, and fuel/lunch V5 walkthroughs with per-slot (not per-card) resolution; pass bar 0 mismatches",
+        "Negative self-test: swapping two real values between slots makes the audit fail, proving slot-awareness is real",
+        "docs/evidence/pre-s1/MANIFEST written last and verifies; docs/evidence/v4 MANIFEST still 11/11 byte-identical",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id PRE-S1-B --plan-ref docs/architecture/YORI_PRE_S1.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_PRES1_A",
+      "title": "📬 INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["PRE-S1-B"],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "PRE-S1-C",
+      "slice": "C",
+      "title": "Gate DEV/test hooks out of production builds (must land before GATE-R1)",
+      "priority": "P0",
+      "goal": "All __YORI_* window hooks and ?geo=/?scene= URL forcing are available only under import.meta.env.DEV or an explicit ?test=1 flag. Production builds contain none of them; the e2e suites switch to the test flag. This slice must land before the SUBMIT plan's GATE-R1 (public repo) can be considered safe.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "code_quality",
+      "estimated_hours": 3,
+      "dependencies": ["PRE-S1-B", "INBOX_CHECK_PRES1_A"],
+      "test_tier": "build+static",
+      "out_of_scope": "No behaviour change in DEV or under ?test=1; no repo publication (GATE-R1 stays an owner gate)",
+      "goal_ids": ["G-201"],
+      "acceptance_ids": ["AC-201-3"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": ["src/ui/living-context/app.ts", "vite.config.ts", "src/adapters/model/decision-log.ts"],
+      "checks": [
+        "Production-build absence test: the built bundle contains no __YORI_ hook names and ?geo=/?scene= forcing is inert without DEV or ?test=1 (AC-201-3 spirit: no hidden control surface ships)",
+        "Full e2e suites pass after switching to ?test=1; DEV-mode behaviour unchanged",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id PRE-S1-C --plan-ref docs/architecture/YORI_PRE_S1.plan.json"
+      ]
+    },
+    {
+      "id": "PRE-S1-D",
+      "slice": "D",
+      "title": "Demo-script-sync: exact 3:00 storyboard from the approved V4 loops (docs only)",
+      "priority": "P1",
+      "goal": "Author an exact 3:00 storyboard in docs/submission/ built from the approved V4 owner loops (rain and lunch), plus an optional at-most-20s clearly labelled V5 segment (simulated/manual location, straight-line distances). Every quoted on-screen string is cited to an e2e assert. No recording, no upload; the video itself stays owner gate V1 in the SUBMIT plan.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": ["PRE-S1-C"],
+      "test_tier": "docs",
+      "out_of_scope": "No recording, upload, or publication; no UI changes; no claim that any live integration is on",
+      "goal_ids": ["G-205"],
+      "acceptance_ids": ["AC-205-2"],
+      "arch_contract_refs": ["ADR-104"],
+      "phase_plan_ref": "PH-002",
+      "files": ["src/ui/living-context/strings.ts", "docs/submission/VIDEO_SCRIPT.md", "docs/submission/PROJECT_DESCRIPTION.md"],
+      "checks": [
+        "Storyboard timings sum to 3:00 (plus the optional labelled V5 segment at most 20 s); each quoted string maps to a named e2e assertion that passes against the current build",
+        "Script states live/off status exactly as SUBMISSION_READINESS.md classifies it; nothing OFF or LIVE-UNVERIFIED is described as live",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id PRE-S1-D --plan-ref docs/architecture/YORI_PRE_S1.plan.json"
+      ]
+    },
+    {
+      "id": "CLOSEOUT_PRE_S1",
+      "slice": "closeout",
+      "title": "PRE-S1 closeout on a clean checkout (full verification matrix)",
+      "priority": "P0",
+      "goal": "Clean-checkout full run: build, typecheck, unit, golden (real total reported, D1-D6 add-only), drills, FULL Playwright plus axe, AC-EXT-1 zero src/core diff vs f43c6c1d, and verification of all evidence manifests (v4 11, v5-fuel 6, v5-geo 8, v5-lunch 8, pre-s1).",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 4,
+      "dependencies": ["PRE-S1-D"],
+      "test_tier": "full",
+      "out_of_scope": "No new features; failures route back to the owning slice, not fixed inside closeout",
+      "goal_ids": ["G-101", "G-102", "G-103", "G-104", "G-105", "G-106", "G-107", "G-201", "G-202", "G-203", "G-204", "G-205", "G-211", "G-212", "G-213"],
+      "acceptance_ids": ["AC-101-2", "AC-102-1", "AC-103-1", "AC-104-2", "AC-105-1", "AC-106-2", "AC-EXT-1", "AC-201-3", "AC-202-2", "AC-203-2", "AC-204-2", "AC-205-2", "AC-211-2", "AC-212-2", "AC-213-2"],
+      "arch_contract_refs": ["ADR-101", "ADR-102"],
+      "phase_plan_ref": "PH-002",
+      "files": ["src/ui/view-models/grounding.ts", "src/adapters/providers", "tests/golden"],
+      "checks": [
+        "Full matrix green from a clean checkout with zero credentials: build, typecheck, unit, golden (real total, add-only), drills, full Playwright + axe 0 violations",
+        "git diff f43c6c1d -- src/core empty; all evidence manifests verify with their recorded counts (v4 11, v5-fuel 6, v5-geo 8, v5-lunch 8, pre-s1 present)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id CLOSEOUT_PRE_S1 --plan-ref docs/architecture/YORI_PRE_S1.plan.json"
+      ]
+    },
+    {
+      "id": "PHASE_R_PRE_S1_001",
+      "title": "🔥 Phase R planning + generate next phase plan",
+      "type": "meta",
+      "priority": "critical",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["CLOSEOUT_PRE_S1"],
+      "goal": "PRE-S1 closed -> Phase R -> assess against the submission timeline (internal 2026-11-04, external 2026-11-05 11:00 JST) -> draft any next plan and submit for Reviewer plan review AND owner confirmation. Owner gates (S1, X1, W1, V0, R1, V1, F1, P-LOC, P-BILL, P-HTTPS) remain exactly as gated in YORI_SUBMIT.",
+      "phase_r_trigger": {
+        "auto_execute": true,
+        "tasks": [
+          "⚠️ Re-read .progress/AI_INSTRUCTIONS.md (ensure rules are not lost after model switch)",
+          "📬 R1: Read INBOX.md (scan mode command section first, then task section)",
+          "💤 R1.5: Convergence gate (no real pending → standby)",
+          "🎯 R2: Read docs/architecture/goals.yaml and PHASE_PLAN.md, execute target alignment assessment; 运行 phase_r_alignment_check.py 验证架构对齐锚点 (alignment anchor check)",
+          "📊 R3: Phase review: git diff confirm delivery + archive completed tasks + Git Commit",
+          "🗺️ R5: Intelligent planning: draft the next phase plan and submit it for Reviewer plan review AND owner confirmation (guarded autonomy); PH-003 requires the privacy-review gate and must not auto-start",
+          "Update PROGRESS_STATUS.json + TODOS.md",
+          "⏸️ R6: Execute NOTHING from the next plan before the Reviewer + owner gate passes; enter standby and wait for the gate result"
+        ]
+      }
+    }
+  ],
+  "success_criteria": [
+    "PRE-S1-A and PRE-S1-B approved (review ids recorded) before S1-LIVE can start, alongside the G3-PARITY precondition",
+    "Production build ships zero DEV/test hooks; v4 evidence frozen and untouched",
+    "AC-EXT-1 zero src/core diff; golden reported at its real total (18), add-only; no live call of any kind in any slice"
+  ]
+}

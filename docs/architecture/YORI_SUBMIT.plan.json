@@ -108,6 +108,7 @@
       ],
       "checks": [
         "Cross-plan precondition: YORI_V2 slice G3-PARITY approved (approving review id recorded in this task's evidence) BEFORE any live call runs; without it this slice does not start, regardless of GATE-S1",
+        "Cross-plan precondition 2: YORI_PRE_S1 slices PRE-S1-A (memory evidence) and PRE-S1-B (slot-aware audit) approved (approving review ids recorded in this task's evidence) before any live call runs",
         "Live run record: at most 10 calls, server-side only, max_tokens cap evidenced; fact-check pass-rate report written (accepted/discarded with reasons) (AC-202-1)",
         "D1-D6 golden outputs remain byte-identical with live mode on and off; git diff f43c6c1d -- src/core empty; no secret in repo or logs (AC-202-2)",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id S1-LIVE --plan-ref docs/architecture/YORI_SUBMIT.plan.json"
