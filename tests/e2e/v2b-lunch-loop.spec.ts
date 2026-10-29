@@ -72,6 +72,11 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     const overlay = page.locator('#conversation-overlay');
     await expect(overlay).toBeVisible();
 
+    // Scene-aware greeting for lunch scene
+    await expect(page.locator('#conversation-transcript')).toContainText(
+      "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer'"
+    );
+
     // Truthful engine status: offline fallback initially before model call runs
     const engineStatusChip = page.locator('#engine-status-chip');
     await expect(engineStatusChip).toBeVisible();
@@ -222,6 +227,11 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
 
     const overlay = page.locator('#conversation-overlay');
     await expect(overlay).toBeVisible();
+
+    // Scene-aware greeting for lunch scene
+    await expect(page.locator('#conversation-transcript')).toContainText(
+      "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer'"
+    );
 
     const pinBtn = page.locator('#conversation-pin-btn');
     await pinBtn.click();

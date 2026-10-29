@@ -170,6 +170,29 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       expect(store.getInteractionState()).toBe('HOME');
     });
 
+    it('opens conversation with scene-aware welcome text for lunch scene', () => {
+      const store = createActionStateStore();
+      store.setCommandContext({ sceneId: 'away-lunch', plan: null });
+      store.openConversation();
+      expect(store.getTranscript()[0]?.text).toContain('I can help with lunch recommendations');
+      expect(store.getTranscript()[0]?.text).toContain('quieter');
+      expect(store.getTranscript()[0]?.text).toContain('vegetarian');
+      expect(store.getTranscript()[0]?.text).toContain('closer');
+    });
+
+    it('resets transcript when switching scenes', () => {
+      const store = createActionStateStore();
+      store.setCommandContext({ sceneId: 'rain', plan: null });
+      store.openConversation();
+      expect(store.getTranscript()[0]?.text).toContain('departure plan');
+      store.closeConversation();
+
+      // Switch to lunch
+      store.setCommandContext({ sceneId: 'away-lunch', plan: null });
+      store.openConversation();
+      expect(store.getTranscript()[0]?.text).toContain('lunch recommendations');
+    });
+
     it('handles Esc key: closes conversation when open, ignores in HOME', () => {
       const store = createActionStateStore();
       expect(store.handleEsc()).toBe(false);

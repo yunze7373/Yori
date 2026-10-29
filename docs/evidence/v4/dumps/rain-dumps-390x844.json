@@ -4,79 +4,79 @@
     {
       "step": "Initial Clear State",
       "timeSec": 1,
-      "timeFormatted": "0:01",
+      "timeFormatted": "0:00",
       "action": "Load /?ui=v2 on Clear scene (D1)",
-      "state": "Piano lesson at 3:00 PM; leave by 2:25 PM",
+      "state": "Piano lesson at 3:00 PM; leave by 2:25 PM · Drive · 30 min",
       "honestDisclosure": "Header: \"Demo · simulated context\", Card badge: \"SIMULATED\""
     },
     {
       "step": "Change (Weather Shift)",
-      "timeSec": 2,
-      "timeFormatted": "0:01",
+      "timeSec": 3,
+      "timeFormatted": "0:03",
       "action": "Switch scenario picker to Rain Re-Plan (D2)",
       "state": "Alert banner displays \"What changed: rain forecast\", umbrella chip visible",
       "honestDisclosure": "Weather callout: \"Rain forecast · simulated\", \"Issued 1:35 PM\""
     },
     {
-      "step": "Route & Transit Ranking",
-      "timeSec": 2,
-      "timeFormatted": "0:02",
-      "action": "Inspect Route Map and deterministic transit option cards",
-      "state": "Drive ranked first (2:30 PM), Bus second (2:15 PM) based on rainy habit",
-      "honestDisclosure": "Habit basis cites sample demo profile; Map labelled schematic simulated"
+      "step": "Route Options (Drive vs Bus)",
+      "timeSec": 6,
+      "timeFormatted": "0:05",
+      "action": "Compare primary Drive recommendation against alternative Bus option",
+      "state": "Drive (25m drive + 5m margin, leave 2:30 PM) vs Bus (40m bus + 5m margin, leave 2:15 PM)",
+      "honestDisclosure": "Basis: \"Ranked by habit: Rain travel habit (Demo profile · sample)\""
     },
     {
-      "step": "Why Provenance Review",
-      "timeSec": 3,
-      "timeFormatted": "0:03",
-      "action": "Click \"Why\" button on NOW card to inspect derivation evidence",
-      "state": "Why sheet details weather signals (Issued 1:35 PM) and sample profile habit",
+      "step": "Map & Why Provenance",
+      "timeSec": 8,
+      "timeFormatted": "0:08",
+      "action": "Open \"Why you're seeing this\" provenance sheet",
+      "state": "Why sheet details weather signals (Recorded at 1:35 PM) and sample profile habit",
       "honestDisclosure": "Memory section titled \"Memory & Habits\", labelled \"Demo profile · sample preference\""
     },
     {
       "step": "Ask Yori: Leave Later Query",
-      "timeSec": 5,
-      "timeFormatted": "0:05",
+      "timeSec": 14,
+      "timeFormatted": "0:14",
       "action": "Submit conversational query \"Can I leave 15 minutes later?\"",
       "state": "Conversation shell evaluates deterministic late shift against 3:00 PM appointment",
       "honestDisclosure": "Engine status honesty: \"Offline fallback · deterministic\" -> \"Scripted model fixture · not a live model call\""
     },
     {
       "step": "Compare Late Arrival",
-      "timeSec": 6,
-      "timeFormatted": "0:05",
+      "timeSec": 17,
+      "timeFormatted": "0:16",
       "action": "Review late arrival comparison in conversation transcript",
-      "state": "Arrive 3:10 PM (10 min after appointment) clearly highlighted as late",
+      "state": "Shifted departure (leave 2:45 PM) and late arrival warning clearly highlighted",
       "honestDisclosure": "Explicit choice: single-trip override confirmation box"
     },
     {
       "step": "Confirm Shift",
-      "timeSec": 6,
-      "timeFormatted": "0:05",
+      "timeSec": 19,
+      "timeFormatted": "0:19",
       "action": "Click \"Confirm late shift\" in conversation shell",
-      "state": "Shift confirmed for this time only",
+      "state": "Shift confirmed for this time only: updated schedule confirmed",
       "honestDisclosure": "Local action state: override committed"
     },
     {
       "step": "Collapse to Updated Home",
-      "timeSec": 7,
-      "timeFormatted": "0:06",
+      "timeSec": 22,
+      "timeFormatted": "0:21",
       "action": "Conversation auto-collapses to refreshed Living Context",
       "state": "NOW card shows leave 2:45 PM / prep 2:25 PM; option cards updated to 2",
       "honestDisclosure": "Why button provenance: \"Because you asked: leave 15 min later · this time only\""
     },
     {
       "step": "Undo Override",
-      "timeSec": 7,
-      "timeFormatted": "0:07",
+      "timeSec": 24,
+      "timeFormatted": "0:24",
       "action": "Click \"Undo\" button to safely revert override",
       "state": "Schedule reverts immediately to original 2:30 PM departure",
       "honestDisclosure": "Non-destructive rollback of local session override"
     },
     {
       "step": "Confirm-Only Memory & Sovereignty",
-      "timeSec": 11,
-      "timeFormatted": "0:11",
+      "timeSec": 32,
+      "timeFormatted": "0:32",
       "action": "Adjust prep/buffer, view pending proposal under For You / Me, confirm proposal",
       "state": "Home schedule recomputed to 2:00 PM / 2:25 PM; Me shows Confirmed preference",
       "honestDisclosure": "INV-107 confirm-only memory; X1 unauthorized remote sync off; storage sovereign"
@@ -86,7 +86,7 @@
     {
       "step": "Initial Clear State",
       "scene": "rain",
-      "timestamp": "0:01",
+      "timestamp": "0:00",
       "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood morning.\n\nI've been looking ahead for you.\n\nROUTE MAP\nSchematic · simulated\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:05 PM, leave by 2:25 PM\n2:05 PM\nGet ready\n20m prep + 5m buffer\n2:25 PM\nLeave\nDrive · 30 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe",
       "components": {
         "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:05 PM, leave by 2:25 PM\n2:05 PM\nGet ready\n20m prep + 5m buffer\n2:25 PM\nLeave\nDrive · 30 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
@@ -100,35 +100,35 @@
     {
       "step": "Change (Weather Shift)",
       "scene": "rain",
-      "timestamp": "0:01",
-      "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe",
-      "components": {
-        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
-        "optionsGrid": "Drive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)",
-        "mapCard": "ROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson",
-        "whySheet": "",
-        "conversation": "",
-        "mePage": ""
-      }
-    },
-    {
-      "step": "Route & Transit Ranking",
-      "scene": "rain",
-      "timestamp": "0:02",
-      "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe",
-      "components": {
-        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
-        "optionsGrid": "Drive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)",
-        "mapCard": "ROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson",
-        "whySheet": "",
-        "conversation": "",
-        "mePage": ""
-      }
-    },
-    {
-      "step": "Why Provenance Review",
-      "scene": "rain",
       "timestamp": "0:03",
+      "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe",
+      "components": {
+        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
+        "optionsGrid": "Drive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)",
+        "mapCard": "ROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson",
+        "whySheet": "",
+        "conversation": "",
+        "mePage": ""
+      }
+    },
+    {
+      "step": "Route Options (Drive vs Bus)",
+      "scene": "rain",
+      "timestamp": "0:05",
+      "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe",
+      "components": {
+        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
+        "optionsGrid": "Drive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)",
+        "mapCard": "ROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson",
+        "whySheet": "",
+        "conversation": "",
+        "mePage": ""
+      }
+    },
+    {
+      "step": "Map & Why Provenance",
+      "scene": "rain",
+      "timestamp": "0:08",
       "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe\nWhy you're seeing this\n×\nEVIDENCE & SIGNALS\nCalendar event\nScheduled event on your calendar\nRecorded at 10:00 AM\nSIMULATED\nTransit & route travel estimate\nTravel time estimate\nRecorded at 1:35 PM\nSIMULATED\nWeather forecast\nForecast conditions\nRecorded at 1:35 PM\nSIMULATED\nMEMORY & HABITS\nBuffer before leaving\n5 min\nDemo profile · sample preference\nTime to get ready\n20 min\nDemo profile · sample preference\nRain travel habit\nPrefers driving when it rains\nDemo profile · sample preference\nHOW THIS WAS DERIVED\n\nPiano lesson is scheduled at 3:00 PM. Based on the route estimate (simulated) and sample preparation habits from the demo profile, we scheduled preparation to start at 2:10 PM and departure by 2:30 PM.\n\nClose",
       "components": {
         "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
@@ -142,7 +142,7 @@
     {
       "step": "Ask Yori: Leave Later Query",
       "scene": "rain",
-      "timestamp": "0:05",
+      "timestamp": "0:14",
       "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe\nAsk Yori\nOffline demo · simulated\nScripted model fixture · not a live model call\nPin\n\nI can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.\n\nCan I leave 15 minutes later?\n\nLeaving 15 minutes later moves your departure to Rain re-plan for Piano lesson: prepare 2:25 PM, leave 2:45 PM (umbrella recommended). You will arrive late for Piano lesson. Would you like to confirm this plan for this time only?\n\nConfirm change for this time only:\nConfirm for this time only\nCancel\nDecision Log\nExport Log\nAsk Yori a question or issue a command",
       "components": {
         "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
@@ -156,7 +156,7 @@
     {
       "step": "Compare Late Arrival",
       "scene": "rain",
-      "timestamp": "0:05",
+      "timestamp": "0:16",
       "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe\nAsk Yori\nOffline demo · simulated\nScripted model fixture · not a live model call\nPin\n\nI can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.\n\nCan I leave 15 minutes later?\n\nLeaving 15 minutes later moves your departure to Rain re-plan for Piano lesson: prepare 2:25 PM, leave 2:45 PM (umbrella recommended). You will arrive late for Piano lesson. Would you like to confirm this plan for this time only?\n\nConfirm change for this time only:\nConfirm for this time only\nCancel\nDecision Log\nExport Log\nAsk Yori a question or issue a command",
       "components": {
         "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
@@ -170,21 +170,21 @@
     {
       "step": "Confirm Shift",
       "scene": "rain",
-      "timestamp": "0:05",
-      "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:25 PM, leave by 2:45 PM\nUmbrella\n2:25 PM\nGet ready\nTake umbrella · 20m prep\n2:45 PM\nLeave\nDrive · 25 min\n3:10 PM\nArrive at destination\nLate by 10m\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:45 PM\nRecommended\n25 min drive · late by 10m\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:30 PM\nAlternative\n40 min bus · late by 10m\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nUpdated\nAccept\nUndo\nDetails →\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe",
+      "timestamp": "0:19",
+      "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe\nAsk Yori\nOffline demo · simulated\nScripted model fixture · not a live model call\nPin\n\nI can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.\n\nCan I leave 15 minutes later?\n\nLeaving 15 minutes later moves your departure to Rain re-plan for Piano lesson: prepare 2:25 PM, leave 2:45 PM (umbrella recommended). You will arrive late for Piano lesson. Would you like to confirm this plan for this time only?\n\nConfirm change for this time only:\nConfirm for this time only\nCancel\n\nLooks good\n\nConfirmed for this time only. Your departure plan is updated.\n\nDecision Log\nExport Log\nAsk Yori a question or issue a command",
       "components": {
-        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:25 PM, leave by 2:45 PM\nUmbrella\n2:25 PM\nGet ready\nTake umbrella · 20m prep\n2:45 PM\nLeave\nDrive · 25 min\n3:10 PM\nArrive at destination\nLate by 10m\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:45 PM\nRecommended\n25 min drive · late by 10m\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:30 PM\nAlternative\n40 min bus · late by 10m\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nUpdated\nAccept\nUndo\nDetails →\nWhy",
-        "optionsGrid": "Drive · leave 2:45 PM\nRecommended\n25 min drive · late by 10m\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:30 PM\nAlternative\n40 min bus · late by 10m\nRanked by habit: Rain travel habit (Demo profile · sample)",
+        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
+        "optionsGrid": "Drive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)",
         "mapCard": "ROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson",
         "whySheet": "",
-        "conversation": "",
+        "conversation": "Ask Yori\nOffline demo · simulated\nScripted model fixture · not a live model call\nPin\n\nI can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.\n\nCan I leave 15 minutes later?\n\nLeaving 15 minutes later moves your departure to Rain re-plan for Piano lesson: prepare 2:25 PM, leave 2:45 PM (umbrella recommended). You will arrive late for Piano lesson. Would you like to confirm this plan for this time only?\n\nConfirm change for this time only:\nConfirm for this time only\nCancel\n\nLooks good\n\nConfirmed for this time only. Your departure plan is updated.\n\nDecision Log\nExport Log\nAsk Yori a question or issue a command",
         "mePage": ""
       }
     },
     {
       "step": "Collapse to Updated Home",
       "scene": "rain",
-      "timestamp": "0:06",
+      "timestamp": "0:21",
       "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:25 PM, leave by 2:45 PM\nUmbrella\n2:25 PM\nGet ready\nTake umbrella · 20m prep\n2:45 PM\nLeave\nDrive · 25 min\n3:10 PM\nArrive at destination\nLate by 10m\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:45 PM\nRecommended\n25 min drive · late by 10m\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:30 PM\nAlternative\n40 min bus · late by 10m\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nUpdated\nAccept\nUndo\nDetails →\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe",
       "components": {
         "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:25 PM, leave by 2:45 PM\nUmbrella\n2:25 PM\nGet ready\nTake umbrella · 20m prep\n2:45 PM\nLeave\nDrive · 25 min\n3:10 PM\nArrive at destination\nLate by 10m\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:45 PM\nRecommended\n25 min drive · late by 10m\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:30 PM\nAlternative\n40 min bus · late by 10m\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nUpdated\nAccept\nUndo\nDetails →\nWhy",
@@ -198,7 +198,7 @@
     {
       "step": "Undo Override",
       "scene": "rain",
-      "timestamp": "0:07",
+      "timestamp": "0:24",
       "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe",
       "components": {
         "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:10 PM, leave by 2:30 PM\nUmbrella\n2:10 PM\nGet ready\nTake umbrella · 20m prep + 5m buffer\n2:30 PM\nLeave\nDrive · 25 min\n2:55 PM\nArrive at destination\nOn time · 5m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:30 PM\nRecommended\n25 min drive + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:15 PM\nAlternative\n40 min bus + 5m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
@@ -212,15 +212,15 @@
     {
       "step": "Confirm-Only Memory & Sovereignty",
       "scene": "rain",
-      "timestamp": "0:11",
-      "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nWhat changed: rain forecast\n\nRain in the forecast for your travel window · simulated (issued 1:35 PM). I've prepared an updated departure schedule.\n\nUmbrella\nROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson\nNOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:00 PM, leave by 2:25 PM\nUmbrella\n2:00 PM\nGet ready\nTake umbrella · 25m prep + 10m buffer\n2:25 PM\nLeave\nDrive · 25 min\n2:50 PM\nArrive at destination\nOn time · 10m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:25 PM\nRecommended\n25 min drive + 10m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:10 PM\nAlternative\n40 min bus + 10m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy\nAsk Yori...\nTap to chat\nHome\nPlans\nFor You\nMe",
+      "timestamp": "0:32",
+      "text": "Demo · simulated context\nV2 PREVIEW\nDemo Scene:\nClear\nRain\nAway lunch\nBusy lunch\nMissing weather\nStorage error\nReasoning demo\nReplay: Before You Ask\nGood afternoon.\n\nI've been looking ahead for you.\n\nMe & Memory\n\nManage your confirmed preferences, proposals, and privacy controls.\n\nPreference confirmed: prep buffer preference\nTODAY'S PROACTIVE PROMPTS\n0 of 3 used today\n\nYour Living Context refreshes smoothly whenever you check in. To protect your peace of mind, proactive suggestions are kept to a calm daily limit.\n\nCONFIRMED PREFERENCES\nPreparation buffer habit\nGet ready 25 min · Leave a 10 min buffer\nSource: you confirmed · Updated 1:35 PM\nConfirmed\nPENDING PROPOSALS\n0 Pending\n\nProposals created from your actions, waiting for your explicit confirmation.\n\nNo pending proposals.\n\nREJECTED PROPOSALS\n\nDeclined proposals retained for audit. These are never applied.\n\nNo rejected proposals.\n\nDATA CONTROLS & STORAGE\nExport Raw Data\nReset Storage\nHome\nPlans\nFor You\nMe",
       "components": {
-        "nowCard": "NOW · YOUR NEXT MOMENT SIMULATED\nPiano lesson at 3:00 PM\nGet ready at 2:00 PM, leave by 2:25 PM\nUmbrella\n2:00 PM\nGet ready\nTake umbrella · 25m prep + 10m buffer\n2:25 PM\nLeave\nDrive · 25 min\n2:50 PM\nArrive at destination\nOn time · 10m buffer\n3:00 PM\nPiano lesson\nScheduled appointment\nDrive · leave 2:25 PM\nRecommended\n25 min drive + 10m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:10 PM\nAlternative\n40 min bus + 10m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nYou usually prefer driving when it rains.\n\nBased on your calendar, the route, and how you usually get ready.\n\nAccept\nAdjust\nDetails →\nDismiss\nWhy",
-        "optionsGrid": "Drive · leave 2:25 PM\nRecommended\n25 min drive + 10m margin\nRanked by habit: Rain travel habit (Demo profile · sample)\nBus · leave 2:10 PM\nAlternative\n40 min bus + 10m margin\nRanked by habit: Rain travel habit (Demo profile · sample)",
-        "mapCard": "ROUTE MAP\nSchematic · simulated\nRain forecast · simulated\nIssued 1:35 PM\nHome\nPiano lesson\n Piano lesson",
+        "nowCard": "",
+        "optionsGrid": "",
+        "mapCard": "",
         "whySheet": "",
         "conversation": "",
-        "mePage": ""
+        "mePage": "Me & Memory\n\nManage your confirmed preferences, proposals, and privacy controls.\n\nPreference confirmed: prep buffer preference\nTODAY'S PROACTIVE PROMPTS\n0 of 3 used today\n\nYour Living Context refreshes smoothly whenever you check in. To protect your peace of mind, proactive suggestions are kept to a calm daily limit.\n\nCONFIRMED PREFERENCES\nPreparation buffer habit\nGet ready 25 min · Leave a 10 min buffer\nSource: you confirmed · Updated 1:35 PM\nConfirmed\nPENDING PROPOSALS\n0 Pending\n\nProposals created from your actions, waiting for your explicit confirmation.\n\nNo pending proposals.\n\nREJECTED PROPOSALS\n\nDeclined proposals retained for audit. These are never applied.\n\nNo rejected proposals.\n\nDATA CONTROLS & STORAGE\nExport Raw Data\nReset Storage"
       }
     }
   ]

@@ -61,6 +61,9 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     const overlay = page.locator('#conversation-overlay');
     await expect(overlay).toBeVisible();
     await expect(page.locator('#conversation-status-badge')).toContainText('Offline demo · simulated');
+    await expect(page.locator('#conversation-transcript')).toContainText(
+      "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?'"
+    );
 
     // 3. Type "Can I leave 15 minutes later?" and submit
     const input = page.locator('#conversation-input');
@@ -193,6 +196,9 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     const overlay = page.locator('#conversation-overlay');
     await expect(overlay).toBeVisible();
     await expect(page.locator('#conversation-status-badge')).toContainText('Offline demo · simulated');
+    await expect(page.locator('#conversation-transcript')).toContainText(
+      "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?'"
+    );
     const statusChip = page.locator('#engine-status-chip');
     await expect(statusChip).toBeVisible();
     await expect(statusChip).toContainText('Offline fallback · deterministic');
@@ -399,8 +405,9 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
 
       // If confirmation box appears, confirm it
       const confirmBtn = page.locator('#btn-chat-confirm');
-      if (await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await confirmBtn.click();
+      const activeConfirmBtn = page.locator('#btn-chat-confirm:enabled');
+      if (await activeConfirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await activeConfirmBtn.click();
       }
 
       // If overlay is still open, wait or close it
@@ -487,8 +494,9 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       await input.fill('Take the bus');
       await page.locator('#conversation-send-btn').click();
 
-      if (await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
-        await confirmBtn.click();
+      const activeConfirmBtn = page.locator('#btn-chat-confirm:enabled');
+      if (await activeConfirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await activeConfirmBtn.click();
       }
       if (await overlay.isVisible().catch(() => false)) {
         const closeBtn = page.locator('#conversation-close-btn');

@@ -718,7 +718,8 @@ export function renderApp(
 
     const living = pipelineResult.livingContext;
     const baseNowPlan = reasoningState && reasoningState.scene === currentScene ? reasoningState.now : living.now;
-    const storePlan = actionStore.getActionState().plan;
+    const actionState = actionStore.getActionState();
+    const storePlan = actionState.status === 'updated' ? actionState.plan : undefined;
     const nowPlan = storePlan ?? baseNowPlan;
     const aheadPlans = reasoningState && reasoningState.scene === currentScene ? reasoningState.ahead : living.ahead;
     const notices = pipelineResult.notices;

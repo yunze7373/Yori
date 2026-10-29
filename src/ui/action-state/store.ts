@@ -128,13 +128,14 @@ export class DefaultActionStateStore implements ActionStateStore {
   }
 
   public setCommandContext(ctx: ActionCommandContext): void {
-    // Carry-over (b): If scene changed, clear any stale pending confirmation
+    // Carry-over (b): If scene changed, clear any stale pending confirmation and reset transcript
     if (
       this.commandContext &&
       ctx.sceneId &&
       this.commandContext.sceneId &&
       ctx.sceneId !== this.commandContext.sceneId
     ) {
+      this.transcriptList = [];
       if (this.actionState.status === 'needs-confirmation') {
         this.actionState = {
           status: 'idle',
@@ -165,10 +166,17 @@ export class DefaultActionStateStore implements ActionStateStore {
   public openConversation(): void {
     this.interactionState = 'CONVERSATION';
     if (this.transcriptList.length === 0) {
+      const isLunch =
+        this.commandContext?.sceneId === 'away-lunch' ||
+        this.commandContext?.sceneId === 'busy-lunch' ||
+        this.commandContext?.plan?.intentId === 'lunch';
+      const welcomeText = isLunch
+        ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Why this restaurant?', 'Looks good' to confirm, or 'Undo' to restore."
+        : "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
       this.transcriptList.push({
         id: `msg-${Date.now()}-welcome`,
         sender: 'assistant',
-        text: "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.",
+        text: welcomeText,
         timestamp: new Date().toISOString(),
       });
     }
@@ -1036,9 +1044,14 @@ export class DefaultActionStateStore implements ActionStateStore {
 
     // 7. UNSUPPORTED (Honest capability answers)
     this.beginCommand(trimmed);
-    const responseText =
-      cmd.honestAnswer ??
-      "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
+    const isLunch =
+      this.commandContext?.sceneId === 'away-lunch' ||
+      this.commandContext?.sceneId === 'busy-lunch' ||
+      this.commandContext?.plan?.intentId === 'lunch';
+    const fallbackText = isLunch
+      ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Why this restaurant?', 'Looks good' to confirm, or 'Undo' to restore."
+      : "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
+    const responseText = cmd.honestAnswer ?? fallbackText;
 
     this.transcriptList.push({
       id: `msg-${Date.now()}-a`,

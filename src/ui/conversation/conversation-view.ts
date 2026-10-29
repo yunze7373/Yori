@@ -278,7 +278,7 @@ export function attachConversationEvents(
         updateDecisionLogDrawer();
         transcriptEl.scrollTop = transcriptEl.scrollHeight;
         if (res.collapsed) {
-          safeClose('auto_collapse');
+          setTimeout(() => safeClose('auto_collapse'), 600);
         }
       });
     }
@@ -322,7 +322,7 @@ export function attachConversationEvents(
         transcriptEl.scrollTop = transcriptEl.scrollHeight;
         wireTranscriptButtons();
         if (res.collapsed) {
-          safeClose('auto_collapse');
+          setTimeout(() => safeClose('auto_collapse'), 600);
         }
       });
     });
@@ -427,7 +427,7 @@ export function attachConversationEvents(
       }
 
       if (result.collapsed) {
-        safeClose('auto_collapse');
+        setTimeout(() => safeClose('auto_collapse'), 600);
       } else {
         input.focus();
       }

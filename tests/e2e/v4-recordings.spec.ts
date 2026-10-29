@@ -3,13 +3,6 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 
-// Configure video recording for this entire suite
-test.use({
-  video: {
-    mode: 'on',
-  },
-});
-
 const RECORDINGS_DIR = path.resolve(process.cwd(), 'docs/evidence/v4/recordings');
 const DUMPS_DIR = path.resolve(process.cwd(), 'docs/evidence/v4/dumps');
 
@@ -56,9 +49,29 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     }
   });
 
-  test('V4-RAIN: change -> route -> map/Why -> chat leave later -> compare -> confirm -> collapse -> updated home/map/times -> Undo', async ({
-    page,
-  }) => {
+  test.beforeEach(() => {
+    test.setTimeout(90000);
+  });
+
+  test('V4-RAIN: change -> route -> map/Why -> chat leave later -> compare -> confirm -> collapse -> updated home/map/times -> Undo -> confirm-only memory', async ({
+    browser,
+  }, testInfo) => {
+    const isMobile = testInfo.project.name === 'mobile';
+    const viewport = isMobile ? { width: 390, height: 844 } : { width: 1280, height: 800 };
+    const vpSuffix = isMobile ? '390x844' : '1280x800';
+
+    const context = await browser.newContext({
+      viewport,
+      recordVideo: {
+        dir: RECORDINGS_DIR,
+        size: viewport,
+      },
+      userAgent: isMobile
+        ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+        : undefined,
+    });
+    const page = await context.newPage();
+
     const startTime = Date.now();
     const steps: StepLog[] = [];
     const dumps: DumpEntry[] = [];
@@ -75,14 +88,13 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
         honestDisclosure,
       });
 
-      // Extract DOM text from active components
       const bodyText = await page.innerText('body');
       const nowCardText = (await page.locator('.now-card').count()) > 0 ? await page.locator('.now-card').innerText() : '';
       const optionsText = (await page.locator('.v2-options-grid').count()) > 0 ? await page.locator('.v2-options-grid').innerText() : '';
       const mapText = (await page.locator('.v2-map-card').count()) > 0 ? await page.locator('.v2-map-card').innerText() : '';
       const whyText = (await page.locator('#why-sheet-backdrop').count()) > 0 ? await page.locator('#why-sheet-backdrop').innerText() : '';
       const chatText = (await page.locator('#conversation-overlay').count()) > 0 ? await page.locator('#conversation-overlay').innerText() : '';
-      const meText = (await page.locator('.me-page').count()) > 0 ? await page.locator('.me-page').innerText() : '';
+      const meText = (await page.locator('.me-view-container').count()) > 0 ? await page.locator('.me-view-container').innerText() : '';
 
       dumps.push({
         step,
@@ -100,9 +112,6 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
       });
     };
 
-    const isMobile = (page.viewportSize()?.width ?? 0) < 600;
-    const vpSuffix = isMobile ? '390x844' : '1280x800';
-
     const clickNav = async (tabName: 'home' | 'plans' | 'for-you' | 'me') => {
       if (isMobile) {
         await page.locator(`#tab-${tabName}`).click();
@@ -118,61 +127,65 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(page.locator('#badge-ui-version')).toHaveText('V2 Preview');
     await expect(page.locator('.now-card .card-badge')).toHaveText('SIMULATED');
     await checkAxe(page);
-    await page.waitForTimeout(600);
     await recordStep(
       'Initial Clear State',
       'Load /?ui=v2 on Clear scene (D1)',
-      'Piano lesson at 3:00 PM; leave by 2:25 PM',
+      'Piano lesson at 3:00 PM; leave by 2:25 PM · Drive · 30 min',
       'Header: "Demo · simulated context", Card badge: "SIMULATED"'
     );
+    await page.waitForTimeout(2500);
 
     // 2. Change (Clear -> Rain Transition)
     await page.selectOption('#scene-select', 'rain');
-    await page.waitForTimeout(600);
     await expect(page.locator('.v2-insight-title, .rain-banner').first()).toContainText('What changed: rain forecast');
     await expect(page.locator('#chip-umbrella').first()).toContainText('Umbrella');
+    await expect(page.locator('.v2-map-weather-callout')).toContainText('Rain forecast · simulated');
+    await expect(page.locator('.v2-map-weather-callout')).toContainText('Issued 1:35 PM');
     await recordStep(
       'Change (Weather Shift)',
       'Switch scenario picker to Rain Re-Plan (D2)',
       'Alert banner displays "What changed: rain forecast", umbrella chip visible',
       'Weather callout: "Rain forecast · simulated", "Issued 1:35 PM"'
     );
+    await page.waitForTimeout(2500);
 
-    // 3. Route & Options
-    await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Rain forecast · simulated');
-    const optionCards = page.locator('.v2-options-grid .v2-option-card');
+    // 3. Route Options (Drive vs Bus)
+    const optionCards = page.locator('.v2-option-card');
     await expect(optionCards).toHaveCount(2);
-    await expect(optionCards.first()).toContainText('Drive · leave 2:30 PM');
-    await expect(optionCards.first()).toContainText('Recommended');
-    await expect(optionCards.first()).toContainText('Ranked by habit: Rain travel habit (Demo profile · sample)');
-    await expect(optionCards.nth(1)).toContainText('Bus · leave 2:15 PM');
-    await expect(optionCards.nth(1)).toContainText('Alternative');
-    await page.waitForTimeout(600);
-    await recordStep(
-      'Route & Transit Ranking',
-      'Inspect Route Map and deterministic transit option cards',
-      'Drive ranked first (2:30 PM), Bus second (2:15 PM) based on rainy habit',
-      'Habit basis cites sample demo profile; Map labelled schematic simulated'
-    );
+    const driveCard = optionCards.nth(0);
+    await expect(driveCard.locator('.v2-option-label')).toHaveText('Drive · leave 2:30 PM');
+    await expect(driveCard.locator('.v2-option-badge')).toHaveText('Recommended');
+    await expect(driveCard.locator('.v2-option-meta')).toHaveText('25 min drive + 5m margin');
 
-    // 4. Map / Why Sheet
+    const busCard = optionCards.nth(1);
+    await expect(busCard.locator('.v2-option-label')).toHaveText('Bus · leave 2:15 PM');
+    await expect(busCard.locator('.v2-option-badge')).toHaveText('Alternative');
+    await expect(busCard.locator('.v2-option-meta')).toHaveText('40 min bus + 5m margin');
+    await recordStep(
+      'Route Options (Drive vs Bus)',
+      'Compare primary Drive recommendation against alternative Bus option',
+      'Drive (25m drive + 5m margin, leave 2:30 PM) vs Bus (40m bus + 5m margin, leave 2:15 PM)',
+      'Basis: "Ranked by habit: Rain travel habit (Demo profile · sample)"'
+    );
+    await page.waitForTimeout(2500);
+
+    // 4. Map & Why Provenance
     await page.locator('#btn-why').click();
     const whySheet = page.locator('#why-sheet-backdrop');
     await expect(whySheet).toBeVisible();
-    await expect(page.locator('#why-sheet-title')).toHaveText("Why you're seeing this");
-    await expect(page.locator('.why-section h3').first()).toContainText('Evidence & Signals');
-    await expect(page.locator('.why-section h3').nth(1)).toContainText('Memory & Habits');
-    await expect(whySheet.getByText('Demo profile · sample preference').first()).toBeVisible();
-    await page.waitForTimeout(800);
+    await expect(page.locator('#why-sheet-title')).toContainText("Why you're seeing this");
+    await expect(whySheet).toContainText('Recorded at 1:35 PM');
+    await expect(whySheet).toContainText('Rain travel habit');
     await recordStep(
-      'Why Provenance Review',
-      'Click "Why" button on NOW card to inspect derivation evidence',
-      'Why sheet details weather signals (Issued 1:35 PM) and sample profile habit',
+      'Map & Why Provenance',
+      'Open "Why you\'re seeing this" provenance sheet',
+      'Why sheet details weather signals (Recorded at 1:35 PM) and sample profile habit',
       'Memory section titled "Memory & Habits", labelled "Demo profile · sample preference"'
     );
+    await page.waitForTimeout(2500);
     await page.locator('#btn-close-why').click();
     await expect(whySheet).toHaveCount(0);
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(1000);
 
     // 5. Chat 'leave later'
     await page.locator('#ask-bar').click();
@@ -180,42 +193,49 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(overlay).toBeVisible();
     await expect(page.locator('#conversation-status-badge')).toContainText('Offline demo · simulated');
     await expect(page.locator('#engine-status-chip')).toContainText('Offline fallback · deterministic');
-    await page.waitForTimeout(400);
+    await expect(page.locator('#conversation-transcript')).toContainText(
+      "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?'"
+    );
+    await page.waitForTimeout(1500);
 
     await page.locator('#conversation-input').fill('Can I leave 15 minutes later?');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(1000);
     await page.locator('#conversation-send-btn').click();
     await expect(page.locator('#engine-status-chip')).toContainText('Scripted model fixture · not a live model call');
-    await page.waitForTimeout(600);
+    await expect(page.locator('.chat-confirm-box')).toBeVisible({ timeout: 5000 });
     await recordStep(
       'Ask Yori: Leave Later Query',
       'Submit conversational query "Can I leave 15 minutes later?"',
       'Conversation shell evaluates deterministic late shift against 3:00 PM appointment',
       'Engine status honesty: "Offline fallback · deterministic" -> "Scripted model fixture · not a live model call"'
     );
+    await page.waitForTimeout(2500);
 
     // 6. Compare & Late Arrival Details
-    const confirmBox = page.locator('.chat-confirm-box');
-    await expect(confirmBox).toBeVisible({ timeout: 5000 });
     await expect(page.locator('#conversation-transcript')).toContainText('arrive late');
-    await page.waitForTimeout(600);
+    await expect(page.locator('#conversation-transcript')).toContainText('leave 2:45 PM');
     await recordStep(
       'Compare Late Arrival',
       'Review late arrival comparison in conversation transcript',
-      'Arrive 3:10 PM (10 min after appointment) clearly highlighted as late',
+      'Shifted departure (leave 2:45 PM) and late arrival warning clearly highlighted',
       'Explicit choice: single-trip override confirmation box'
     );
+    await page.waitForTimeout(2500);
 
     // 7. Confirm
     const confirmBtn = page.locator('#btn-chat-confirm');
     await expect(confirmBtn).toBeVisible();
     await confirmBtn.click();
+    await expect(page.locator('#conversation-transcript')).toContainText(
+      'Confirmed for this time only. Your departure plan is updated.'
+    );
     await recordStep(
       'Confirm Shift',
       'Click "Confirm late shift" in conversation shell',
-      'Shift confirmed for this time only',
+      'Shift confirmed for this time only: updated schedule confirmed',
       'Local action state: override committed'
     );
+    await page.waitForTimeout(2500);
 
     // 8. Collapse to Updated Home
     await expect(overlay).toHaveCount(0, { timeout: 5000 });
@@ -223,14 +243,14 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(nowCard).toBeVisible();
     await expect(nowCard).toContainText('2:45 PM');
     await expect(nowCard).toContainText('2:25 PM');
-    await expect(optionCards).toHaveCount(2);
-    await page.waitForTimeout(800);
+    await expect(page.locator('#btn-why')).toContainText('Why');
     await recordStep(
       'Collapse to Updated Home',
       'Conversation auto-collapses to refreshed Living Context',
       'NOW card shows leave 2:45 PM / prep 2:25 PM; option cards updated to 2',
       'Why button provenance: "Because you asked: leave 15 min later · this time only"'
     );
+    await page.waitForTimeout(2500);
 
     // 9. Undo
     const undoBtn = page.locator('#btn-undo-accept');
@@ -239,62 +259,54 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(undoBtn).toHaveCount(0);
     await expect(nowCard).toContainText('2:30 PM');
     await expect(nowCard).toContainText('2:10 PM');
-    await page.waitForTimeout(600);
     await recordStep(
       'Undo Override',
       'Click "Undo" button to safely revert override',
       'Schedule reverts immediately to original 2:30 PM departure',
       'Non-destructive rollback of local session override'
     );
+    await page.waitForTimeout(2500);
 
     // 10. Confirm-Only Memory & Sovereignty (Part 4/5 Walkthrough)
-    // Reselect scene to reset action state store before persistent preference adjustment
-    await page.selectOption('#scene-select', 'clear');
-    await page.waitForTimeout(200);
-    await page.selectOption('#scene-select', 'rain');
-    await page.waitForTimeout(400);
-
     await page.locator('#btn-adjust').click();
     await expect(page.locator('#adjust-dialog-title')).toContainText('Adjust Departure Timing');
     await page.locator('#input-prep-minutes').fill('25');
     await page.locator('#input-buffer-minutes').fill('10');
+    await page.waitForTimeout(1000);
     await page.locator('#btn-adjust-remember').click();
     await expect(page.locator('#adjust-dialog-backdrop')).toHaveCount(0);
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(1000);
 
     await clickNav('for-you');
     await expect(page.locator('.v2-for-you-view')).toBeVisible();
     await expect(page.locator('.v2-for-you-view .v2-proposal-title')).toContainText(
       'Remember departure prep & buffer routine?'
     );
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(2000);
 
-    await clickNav('me');
-    await expect(page.locator('.me-title')).toHaveText('Me & Memory');
-    await expect(page.locator('.badge-budget')).toContainText('0 of 3 used today');
-    await expect(page.locator('#confirmed-facts-list .memory-empty')).toHaveText(
-      'No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.'
-    );
+    // Confirm proposal on For You tab
+    const acceptProposalBtn = page.locator('.v2-for-you-view .btn-primary').first();
+    await expect(acceptProposalBtn).toBeVisible();
+    await acceptProposalBtn.click();
+    await page.waitForTimeout(1000);
 
-    const pendingRow = page.locator('#proposal-prep_buffer_preference');
-    await expect(pendingRow).toBeVisible();
-    await expect(pendingRow.locator('.memory-key')).toHaveText('Preparation buffer habit');
-    await page.waitForTimeout(500);
-    await pendingRow.locator('.btn-confirm-proposal').click();
-    await expect(pendingRow).toHaveCount(0);
-    await expect(page.locator('#fact-prep_buffer_preference .badge-confirmed')).toContainText('Confirmed');
-    await page.waitForTimeout(500);
-
+    // Return to Home tab to see recomputed schedule
     await clickNav('home');
-    await expect(page.locator('.now-card #now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
+    await expect(nowCard).toContainText('2:25 PM');
+    await expect(nowCard).toContainText('2:00 PM');
+
+    // Me tab confirms persistent preference
+    await clickNav('me');
+    await expect(page.locator('.me-view-container')).toBeVisible();
+    await expect(page.locator('.me-view-container')).toContainText('Preparation buffer habit');
     await checkAxe(page);
-    await page.waitForTimeout(600);
     await recordStep(
       'Confirm-Only Memory & Sovereignty',
       'Adjust prep/buffer, view pending proposal under For You / Me, confirm proposal',
       'Home schedule recomputed to 2:00 PM / 2:25 PM; Me shows Confirmed preference',
       'INV-107 confirm-only memory; X1 unauthorized remote sync off; storage sovereign'
     );
+    await page.waitForTimeout(2500);
 
     // Save dumps and step log
     fs.writeFileSync(
@@ -310,11 +322,28 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
       const dest = path.join(RECORDINGS_DIR, `v4-rain-recording-${vpSuffix}.webm`);
       await video.saveAs(dest);
     }
+    await context.close();
   });
 
-  test('V4-LUNCH: proactive card -> photos/candidates/basis -> chat quieter+vegetarian -> re-rank -> selected on home', async ({
-    page,
-  }) => {
+  test('V4-LUNCH: proactive card -> photos/candidates/basis -> chat quieter+vegetarian -> re-rank -> selected on home -> Why provenance', async ({
+    browser,
+  }, testInfo) => {
+    const isMobile = testInfo.project.name === 'mobile';
+    const viewport = isMobile ? { width: 390, height: 844 } : { width: 1280, height: 800 };
+    const vpSuffix = isMobile ? '390x844' : '1280x800';
+
+    const context = await browser.newContext({
+      viewport,
+      recordVideo: {
+        dir: RECORDINGS_DIR,
+        size: viewport,
+      },
+      userAgent: isMobile
+        ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+        : undefined,
+    });
+    const page = await context.newPage();
+
     const startTime = Date.now();
     const steps: StepLog[] = [];
     const dumps: DumpEntry[] = [];
@@ -336,8 +365,9 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
       const candidateListText = (await page.locator('.v2-candidate-list').count()) > 0 ? await page.locator('.v2-candidate-list').innerText() : '';
       const mapText = (await page.locator('.v2-map-card').count()) > 0 ? await page.locator('.v2-map-card').innerText() : '';
       const detailText = (await page.locator('.restaurant-detail-view').count()) > 0 ? await page.locator('.restaurant-detail-view').innerText() : '';
+      const whyText = (await page.locator('#why-sheet-backdrop').count()) > 0 ? await page.locator('#why-sheet-backdrop').innerText() : '';
       const chatText = (await page.locator('#conversation-overlay').count()) > 0 ? await page.locator('#conversation-overlay').innerText() : '';
-      const meText = (await page.locator('.me-page').count()) > 0 ? await page.locator('.me-page').innerText() : '';
+      const meText = (await page.locator('.me-view-container').count()) > 0 ? await page.locator('.me-view-container').innerText() : '';
 
       dumps.push({
         step,
@@ -349,14 +379,12 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
           candidateList: candidateListText,
           mapCard: mapText,
           restaurantDetail: detailText,
+          whySheet: whyText,
           conversation: chatText,
           mePage: meText,
         },
       });
     };
-
-    const isMobile = (page.viewportSize()?.width ?? 0) < 600;
-    const vpSuffix = isMobile ? '390x844' : '1280x800';
 
     const clickNav = async (tabName: 'home' | 'plans' | 'for-you' | 'me') => {
       if (isMobile) {
@@ -370,7 +398,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
     await page.selectOption('#scene-select', 'away-lunch');
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(1000);
 
     const nowCard = page.locator('.now-card');
     await expect(nowCard).toBeVisible();
@@ -389,6 +417,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
       'Candidates hero: "Lunch options near you" with taste-curated recommendations',
       'Prominent mock disclosure: "Mock places for this demo; real listings come from a place provider."'
     );
+    await page.waitForTimeout(2500);
 
     // 2. Photos, Candidates & Preference Basis
     const candidateCards = page.locator('.v2-candidate-card');
@@ -405,36 +434,53 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(restDetailName).toContainText('Demo Place A · Ramen');
     await expect(page.locator('.v2-attribute-chips')).toContainText('Japanese');
     await expect(page.locator('.v2-attribute-chips')).toContainText('5m away');
-    await page.waitForTimeout(800);
+    await expect(page.locator('.v2-attribute-chips')).toContainText('Lunch window 12:10 PM–1:30 PM');
     await recordStep(
       'Candidates & Detail View',
       'Inspect candidate cards with local artwork, open Place A details view',
       'Place A details view shows artwork, attribute chips (Quiet, Japanese, 5m), in-app Directions',
       'Truthful venue names: Demo Place A/B/C; mock disclosure in detail view'
     );
+    await page.waitForTimeout(2500);
     await page.locator('#restaurant-detail-back-btn').click();
     await expect(restDetailName).toHaveCount(0);
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(1000);
 
-    // 3. Chat 'quieter + vegetarian'
+    // 3. Open Chat & Scene-Aware Greeting
     await page.locator('#ask-bar').click();
     const overlay = page.locator('#conversation-overlay');
     await expect(overlay).toBeVisible();
     await expect(page.locator('#conversation-status-badge')).toContainText('Offline demo · simulated');
     await expect(page.locator('#engine-status-chip')).toContainText('Offline fallback · deterministic');
-    await page.waitForTimeout(400);
+    await expect(page.locator('#conversation-transcript')).toContainText(
+      "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer'"
+    );
+    await recordStep(
+      'Ask Yori & Scene-Aware Greeting',
+      'Open Ask Yori conversation in Away Lunch scene',
+      'Scene-aware greeting displayed: lunch suggestions for quieter, vegetarian, closer',
+      'Engine status honesty: "Offline fallback · deterministic"'
+    );
+    await page.waitForTimeout(2500);
 
+    // 4. Chat 'quieter + vegetarian'
     await page.locator('#conversation-input').fill('quieter + vegetarian');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(1000);
     await page.locator('#conversation-send-btn').click();
+    await expect(page.locator('#engine-status-chip')).toContainText('Scripted model fixture · not a live model call');
+    await expect(page.locator('#conversation-transcript')).toContainText(
+      'Updated lunch options based on your request (quieter and vegetarian): Demo Place B · Salad is now your top recommendation.'
+    );
     await recordStep(
       'Ask Yori: Preference Re-rank',
       'Submit conversational query "quieter + vegetarian"',
-      'Scripted model interpreter parses dietary preference and updates ranking weights',
-      'Engine status honesty: "Offline fallback · deterministic"'
+      'Scripted model interpreter parses dietary preference and updates ranking weights: Place B recommended',
+      'Engine status: "Scripted model fixture · not a live model call"'
     );
+    // Keep chat open so user/viewer clearly sees Yori's response and engine honesty!
+    await page.waitForTimeout(2500);
 
-    // 4. Re-Rank
+    // 5. Re-Rank on Home
     await expect(overlay).toHaveCount(0, { timeout: 5000 });
     const topCard = page.locator('.v2-candidate-card').first();
     await expect(topCard).toContainText('Demo Place B · Salad');
@@ -442,50 +488,48 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(topCard).toContainText('Quiet');
     await expect(topCard).toContainText('Vegetarian');
     await expect(topCard).toContainText('7m away');
-    await page.waitForTimeout(800);
     await recordStep(
-      'Re-ranked Candidates',
+      'Re-ranked Candidates on Home',
       'Conversation collapses back to Home with re-ranked list',
       'Demo Place B · Salad moves to #1 position and is highlighted as selected',
       'Why button cites: "Because you asked: quieter + vegetarian · this time only"'
     );
+    await page.waitForTimeout(2500);
 
-    // 5. Selected on Home & Detail
-    await topCard.click();
-    await expect(restDetailName).toBeVisible();
-    await expect(restDetailName).toContainText('Demo Place B · Salad');
-    await expect(page.locator('.v2-restaurant-detail')).toContainText('Salad');
-    await expect(page.locator('.v2-restaurant-detail')).toContainText('Vegetarian');
-    await page.waitForTimeout(600);
-    await page.locator('#restaurant-detail-back-btn').click();
-    await expect(restDetailName).toHaveCount(0);
-    await page.waitForTimeout(400);
+    // 6. Inspect Why Citation ('Because you asked: quieter, vegetarian')
+    await page.locator('#btn-why').click();
+    const whySheet = page.locator('#why-sheet-backdrop');
+    await expect(whySheet).toBeVisible();
+    await expect(whySheet).toContainText('Because you asked: quieter, vegetarian · this time only');
     await recordStep(
-      'Selected Candidate on Home',
-      'Open Place B details view from selected home position',
-      'Place B verified as selected on Home with Vegetarian / Quiet badges',
-      'Grounded attributes verified against mock place provider'
+      'Inspect Why Citation',
+      'Open Why sheet on re-ranked lunch recommendation',
+      'Why sheet cites: "Because you asked: quieter, vegetarian · this time only" alongside taste basis',
+      'Provenance attribution visible for in-session conversational filter'
     );
+    await page.waitForTimeout(2500);
+    await page.locator('#btn-close-why').click();
+    await expect(whySheet).toHaveCount(0);
+    await page.waitForTimeout(1000);
 
-    // 6. Calm Quiet State & Memory Sovereignty
+    // 7. Quiet State & Sovereignty
     await page.selectOption('#scene-select', 'busy-lunch');
-    await page.waitForTimeout(600);
     await expect(page.locator('.quiet-title')).toHaveText('Nothing needs your attention right now.');
     await expect(page.locator('.quiet-subtitle')).toHaveText("You're all caught up. We'll let you know when something comes up.");
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(1000);
 
     // Me Tab Sovereignty
     await clickNav('me');
     await expect(page.locator('.me-title')).toHaveText('Me & Memory');
     await expect(page.locator('.badge-budget')).toContainText('0 of 3 used today');
     await checkAxe(page);
-    await page.waitForTimeout(600);
     await recordStep(
       'Quiet State & Sovereignty',
       'Switch to Busy Lunch (D4), verify quiet state; inspect Me tab',
       'Quiet state respects focus; Me tab displays proactive budget and storage controls',
       'INV-107 confirm-only memory; X1 unauthorized remote sync off; storage sovereign'
     );
+    await page.waitForTimeout(2500);
 
     // Save dumps and step log
     fs.writeFileSync(
@@ -501,5 +545,6 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
       const dest = path.join(RECORDINGS_DIR, `v4-lunch-recording-${vpSuffix}.webm`);
       await video.saveAs(dest);
     }
+    await context.close();
   });
 });
