@@ -106,21 +106,39 @@ export function deriveTimelineVM(
   const steps: TimelineStepVM[] = [];
   const modeKey = (primaryMode || 'drive').toLowerCase();
   const etaRecId = modeKey === 'drive' ? 'eta-drive-piano' : 'eta-bus-piano';
-  const hasOverride = bundle?.hasRecord('user_override_timing') || bundle?.hasRecord('user-override');
+  const hasOverride =
+    bundle?.hasRecord('user_override_timing') ||
+    bundle?.hasRecord('user-override') ||
+    plan.why?.evidenceSignals?.some(s => s.kind === 'user_request');
+
   const prepRecId = hasOverride
     ? 'user_override_timing'
     : (bundle?.getRecord(etaRecId)?.fields.prepareTime !== undefined
         ? etaRecId
         : calRecId);
+  const prepField = hasOverride ? `${modeKey}PrepareTime` : 'prepareTime';
+
+  const leaveRecId = hasOverride ? 'user_override_timing' : etaRecId;
+  const leaveField = hasOverride ? `${modeKey}LeaveTime` : 'leaveTime';
+
+  const arriveRecId = hasOverride ? 'user_override_timing' : etaRecId;
+  const arriveField = hasOverride ? `${modeKey}ArrivalTime` : 'arrivalTime';
 
   if (prepareTimeStr) {
     let verifiedPrepTime = prepareTimeStr;
     if (bundle) {
-      const v = GroundedRecommendationVerifier.verifyField(
-        { recordId: prepRecId, field: 'prepareTime' },
+      let v = GroundedRecommendationVerifier.verifyField(
+        { recordId: prepRecId, field: prepField },
         prepareTimeStr,
         bundle
       );
+      if (!v.valid && hasOverride) {
+        v = GroundedRecommendationVerifier.verifyField(
+          { recordId: prepRecId, field: 'prepareTime' },
+          prepareTimeStr,
+          bundle
+        );
+      }
       if (!v.valid) {
         verifiedPrepTime = 'unknown';
       }
@@ -134,15 +152,47 @@ export function deriveTimelineVM(
     });
   }
 
+  let verifiedLeaveTime = leaveTimeStr;
+  let verifiedTravelMins = travelDurationMinutes;
+
   if (leaveTimeStr) {
+    if (bundle) {
+      let v = GroundedRecommendationVerifier.verifyField(
+        { recordId: leaveRecId, field: leaveField },
+        leaveTimeStr,
+        bundle
+      );
+      if (!v.valid && hasOverride) {
+        v = GroundedRecommendationVerifier.verifyField(
+          { recordId: leaveRecId, field: 'leaveTime' },
+          leaveTimeStr,
+          bundle
+        );
+      }
+      if (!v.valid) {
+        verifiedLeaveTime = 'unknown';
+      }
+
+      if (travelDurationMinutes !== undefined) {
+        const vTravel = GroundedRecommendationVerifier.verifyField(
+          { recordId: etaRecId, field: 'travelMinutes' },
+          travelDurationMinutes,
+          bundle
+        );
+        if (!vTravel.valid) {
+          verifiedTravelMins = undefined;
+        }
+      }
+    }
+
     const leaveDetail =
-      travelDurationMinutes !== undefined
-        ? `${primaryMode} · ${travelDurationMinutes} min`
-        : primaryMode;
+      verifiedTravelMins !== undefined
+        ? `${primaryMode} · ${verifiedTravelMins} min`
+        : (bundle && travelDurationMinutes !== undefined ? `${primaryMode} · unknown min` : primaryMode);
 
     steps.push({
       id: 'step-leave',
-      time: leaveTimeStr,
+      time: verifiedLeaveTime,
       label: 'Leave',
       detail: leaveDetail,
       isPrimary: true,
@@ -151,6 +201,25 @@ export function deriveTimelineVM(
   }
 
   if (arriveTimeStr) {
+    let verifiedArriveTime = arriveTimeStr;
+    if (bundle) {
+      let v = GroundedRecommendationVerifier.verifyField(
+        { recordId: arriveRecId, field: arriveField },
+        arriveTimeStr,
+        bundle
+      );
+      if (!v.valid && hasOverride) {
+        v = GroundedRecommendationVerifier.verifyField(
+          { recordId: arriveRecId, field: 'arrivalTime' },
+          arriveTimeStr,
+          bundle
+        );
+      }
+      if (!v.valid) {
+        verifiedArriveTime = 'unknown';
+      }
+    }
+
     let arriveDetail = 'On time';
     const arrivalIso = timing?.arrivalAt ?? (activeLeaveAt && travelDurationMinutes !== undefined
       ? new Date(Date.parse(activeLeaveAt) + travelDurationMinutes * 60 * 1000).toISOString()
@@ -171,7 +240,7 @@ export function deriveTimelineVM(
 
     steps.push({
       id: 'step-arrive',
-      time: arriveTimeStr,
+      time: verifiedArriveTime,
       label: 'Arrive at destination',
       detail: arriveDetail,
       iconType: 'arrive',
@@ -225,10 +294,10 @@ export function deriveTimelineVM(
     }
   }
 
-  const departureNotice = leaveTimeStr
+  const departureNotice = verifiedLeaveTime
     ? (bufferMinutes !== undefined && !isLate
-        ? `Leave by ${leaveTimeStr} to arrive with ${bufferMinutes}m buffer`
-        : `Leave by ${leaveTimeStr}`)
+        ? `Leave by ${verifiedLeaveTime} to arrive with ${bufferMinutes}m buffer`
+        : `Leave by ${verifiedLeaveTime}`)
     : 'Scheduled departure';
 
   return {
@@ -241,7 +310,10 @@ export function deriveTimelineVM(
     fieldSourceRefs: {
       eventTitle: { recordId: calRecId, field: 'subjectTitle' },
       eventTime: { recordId: calRecId, field: 'apptTime' },
-      prepareTime: { recordId: calRecId, field: 'prepareTime' },
+      prepareTime: { recordId: prepRecId, field: prepField },
+      leaveTime: { recordId: leaveRecId, field: leaveField },
+      arrivalTime: { recordId: arriveRecId, field: arriveField },
+      travelMinutes: { recordId: etaRecId, field: 'travelMinutes' },
     },
   };
 }

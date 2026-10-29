@@ -365,4 +365,63 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     expect(text).not.toMatch(/confirmed\s+rain_transport/i);
     expect(text).not.toContain('derived from your schedule and travel estimate fixtures');
   });
+
+  for (const viewport of [
+    { name: 'mobile (390x844)', width: 390, height: 844 },
+    { name: 'desktop (1280x800)', width: 1280, height: 800 },
+  ]) {
+    test(`V2a Rain -> "Take the bus" switches primary route to bus and renders 2 option cards with bus Recommended (${viewport.name})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto('/?ui=v2');
+      await page.waitForSelector('.app-layout');
+
+      const sceneSelect = page.locator('#scene-select');
+      await sceneSelect.selectOption('rain');
+
+      // Initial state: 2 option cards (Drive Recommended, Bus Alternative)
+      const optionCards = page.locator('.v2-option-card');
+      await expect(optionCards).toHaveCount(2);
+      await expect(optionCards.first().locator('.v2-option-badge')).toHaveText('Recommended');
+      await expect(optionCards.first().locator('.v2-option-label')).toContainText('Drive');
+
+      // Open conversation
+      const askBar = page.locator('#ask-bar');
+      await askBar.click();
+      const overlay = page.locator('#conversation-overlay');
+      await expect(overlay).toBeVisible();
+
+      // Submit "Take the bus"
+      const input = page.locator('#conversation-input');
+      await input.fill('Take the bus');
+      await page.locator('#conversation-send-btn').click();
+
+      // If confirmation box appears, confirm it
+      const confirmBtn = page.locator('#btn-chat-confirm');
+      if (await confirmBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await confirmBtn.click();
+      }
+
+      // If overlay is still open, wait or close it
+      if (await overlay.isVisible().catch(() => false)) {
+        const closeBtn = page.locator('#conversation-close-btn');
+        if (await closeBtn.isVisible().catch(() => false)) {
+          await closeBtn.click();
+        }
+      }
+      await expect(overlay).toHaveCount(0, { timeout: 5000 });
+
+      // In updated state: both cards render (toHaveCount(2)), with Bus first (Recommended) and Drive second (Alternative)
+      await expect(optionCards).toHaveCount(2);
+
+      const firstCard = optionCards.first();
+      await expect(firstCard.locator('.v2-option-badge')).toHaveText('Recommended');
+      await expect(firstCard.locator('.v2-option-label')).toContainText('Bus · leave 2:15 PM');
+
+      const secondCard = optionCards.nth(1);
+      await expect(secondCard.locator('.v2-option-badge')).toHaveText('Alternative');
+      await expect(secondCard.locator('.v2-option-label')).toContainText('Drive · leave 2:30 PM');
+    });
+  }
 });

@@ -64,6 +64,8 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
   const bundle =
     evidenceBundle ??
     createRainEvidenceBundle({
+      plan,
+      snapshot: snapshot ? { timezone: snapshot.timezone, signals: snapshot.signals as any } : undefined,
       timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
       isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
     });
@@ -251,13 +253,17 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     for (const fact of plan.why.memoryFactsUsed) {
       const label = humanizeMemoryKey(fact.key);
       let value = humanizeMemoryValue(fact.key, fact.value);
-      if (bundle && bundle.hasRecord(fact.key)) {
-        const vHabit = GroundedRecommendationVerifier.verifyField(
-          { recordId: fact.key, field: 'value' },
-          fact.value,
-          bundle
-        );
-        if (!vHabit.valid) {
+      if (bundle) {
+        if (bundle.hasRecord(fact.key)) {
+          const vHabit = GroundedRecommendationVerifier.verifyField(
+            { recordId: fact.key, field: 'value' },
+            fact.value,
+            bundle
+          );
+          if (!vHabit.valid) {
+            value = 'unknown';
+          }
+        } else {
           value = 'unknown';
         }
       }

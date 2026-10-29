@@ -272,7 +272,12 @@ export class DepartPreparer implements Preparer {
         source: 'simulated',
         issuedAt: override.provenance.at,
         description: overrideDesc,
-      });
+        value: {
+          kind: override.kind,
+          deltaMinutes: override.deltaMinutes,
+          mode: override.mode,
+        },
+      } as any);
     }
 
     if (hasPrecipitationRisk && hasMultiModal) {

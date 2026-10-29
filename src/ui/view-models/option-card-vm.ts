@@ -62,9 +62,36 @@ export function deriveOptionCardVMs(
     if (mode || typeof opt.travelMinutes === 'number') {
       const modeCap = mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : 'Option';
       const leaveTime = formatTime(opt.leaveAt, tz);
-      const title = leaveTime ? `${modeCap} · leave ${leaveTime}` : modeCap;
       const travelMins = opt.travelMinutes;
       const isFirst = i === 0;
+
+      const modeKey = (mode || (isFirst ? 'drive' : 'bus')).toLowerCase();
+      const recId = modeKey === 'drive' ? 'eta-drive-piano' : 'eta-bus-piano';
+      const hasOverride =
+        bundle?.hasRecord('user_override_timing') ||
+        plan.why?.evidenceSignals?.some(s => s.kind === 'user_request');
+      const leaveRecId = hasOverride ? 'user_override_timing' : recId;
+      const leaveField = hasOverride ? `${modeKey}LeaveTime` : 'leaveTime';
+
+      let displayLeaveTime = leaveTime;
+      if (bundle && leaveTime) {
+        let vLeave = GroundedRecommendationVerifier.verifyField(
+          { recordId: leaveRecId, field: leaveField },
+          leaveTime,
+          bundle
+        );
+        if (!vLeave.valid && hasOverride) {
+          vLeave = GroundedRecommendationVerifier.verifyField(
+            { recordId: leaveRecId, field: 'leaveTime' },
+            leaveTime,
+            bundle
+          );
+        }
+        if (!vLeave.valid) {
+          displayLeaveTime = 'unknown';
+        }
+      }
+      const title = displayLeaveTime ? `${modeCap} · leave ${displayLeaveTime}` : modeCap;
 
       // Ranking explanation with provenance (demo profile vs user confirmed)
       let rankingBasis: string | undefined;
@@ -92,14 +119,14 @@ export function deriveOptionCardVMs(
         detail = parts.join(' · ');
       }
 
-      const modeKey = (mode || (isFirst ? 'drive' : 'bus')).toLowerCase();
-      const recId = modeKey === 'drive' ? 'eta-drive-piano' : 'eta-bus-piano';
       const sourceRef: SourceRef = { recordId: recId, field: 'mode' };
       const fieldSourceRefs: Record<string, SourceRef> = {
         mode: { recordId: recId, field: 'mode' },
         travelMinutes: { recordId: recId, field: 'travelMinutes' },
-        badge: { recordId: recId, field: 'badge' },
       };
+      if (leaveTime) {
+        fieldSourceRefs.leaveTime = { recordId: leaveRecId, field: leaveField };
+      }
       if (bufferMinutes !== undefined) {
         fieldSourceRefs.bufferMinutes = { recordId: recId, field: 'bufferMinutes' };
       }
@@ -113,7 +140,7 @@ export function deriveOptionCardVMs(
         title,
         mode,
         travelMinutes: travelMins,
-        leaveTime,
+        leaveTime: displayLeaveTime,
         bufferMinutes,
         badge: isFirst ? 'Recommended' : 'Alternative',
         detail: detail || undefined,

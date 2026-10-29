@@ -70,6 +70,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     (plan?.intentId === 'depart'
       ? createRainEvidenceBundle({
           plan,
+          snapshot,
           sceneClockIso: snapshot?.asOf ?? '2026-10-28T20:35:00.000Z',
           timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
           isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
@@ -77,6 +78,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       : plan?.intentId === 'lunch'
         ? createLunchEvidenceBundle({
             plan,
+            snapshot,
             sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
             timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
             isConfirmedTaste: userConfirmedKeys?.has('taste_preference_lunch_cuisine'),

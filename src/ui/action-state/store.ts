@@ -445,12 +445,17 @@ export class DefaultActionStateStore implements ActionStateStore {
       ctx?.evidenceBundle ??
       (ctx?.plan?.intentId === 'depart' || ctx?.sceneId === 'rain'
         ? createRainEvidenceBundle({
+            plan: ctx?.plan ?? undefined,
+            snapshot: ctx?.snapshot,
+            override: this.currentOverride,
             sceneClockIso: ctx?.snapshot?.asOf,
             timezone: ctx?.plan?.timezone ?? ctx?.snapshot?.timezone,
             isConfirmedHabit: ctx?.userConfirmedKeys?.has('rain_transport_preference'),
           })
         : ctx?.plan?.intentId === 'lunch' || ctx?.sceneId === 'away-lunch'
           ? createLunchEvidenceBundle({
+              plan: ctx?.plan ?? undefined,
+              snapshot: ctx?.snapshot,
               sceneClockIso: ctx?.snapshot?.asOf,
               timezone: ctx?.plan?.timezone ?? ctx?.snapshot?.timezone,
               isConfirmedTaste: ctx?.userConfirmedKeys?.has('taste_preference_lunch_cuisine'),

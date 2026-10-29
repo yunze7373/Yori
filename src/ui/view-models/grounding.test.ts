@@ -144,7 +144,8 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(driveCard.fieldSourceRefs).toBeDefined();
       expect(driveCard.fieldSourceRefs!.mode).toEqual({ recordId: 'eta-drive-piano', field: 'mode' });
       expect(driveCard.fieldSourceRefs!.travelMinutes).toEqual({ recordId: 'eta-drive-piano', field: 'travelMinutes' });
-      expect(driveCard.fieldSourceRefs!.badge).toEqual({ recordId: 'eta-drive-piano', field: 'badge' });
+      expect(driveCard.fieldSourceRefs!.leaveTime).toEqual({ recordId: 'eta-drive-piano', field: 'leaveTime' });
+      expect(driveCard.fieldSourceRefs!.badge).toBeUndefined();
 
       // Verifier passes on clean card
       const driveVerify = GroundedRecommendationVerifier.verifyOptionCard(driveCard, bundle);
@@ -564,7 +565,6 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
     });
 
     it('Post-leave-later-confirm state: derives arrive status truthfully as "Late by 10m" for 3:10 PM arrival vs 3:00 PM lesson', () => {
-      const bundle = createRainEvidenceBundle();
       // Leave 15 min later: leave 2:45 PM, prep 2:25 PM, arrival 3:10 PM
       const latePlan: PreparedPlan = {
         ...rainPlan,
@@ -582,8 +582,23 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
             requiresConfirmation: true,
           },
         ],
+        why: {
+          ...rainPlan.why,
+          evidenceSignals: [
+            ...rainPlan.why.evidenceSignals,
+            {
+              kind: 'user_request',
+              source: 'simulated',
+              issuedAt: '2026-10-28T20:35:00.000Z',
+              description: 'Because you asked: leave 15 min later · this time only',
+              value: { kind: 'leave_later', deltaMinutes: 15 },
+            } as any,
+          ],
+        },
         requiresConfirmation: true,
       };
+
+      const bundle = createRainEvidenceBundle({ plan: latePlan });
 
       const timeline = deriveTimelineVM(latePlan, null, undefined, bundle);
       expect(timeline).toBeDefined();
@@ -773,6 +788,172 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
 
       const habitItem = detail.whyHabits.find(h => h.label.includes('Rain travel habit'))!;
       expect(habitItem.value).toBe('unknown'); // Fails closed!
+    });
+
+    it('Check-1 Tamper Negatives: user_request plan whose leaveAt differs from base+shift fails with tampered_value', () => {
+      const legitOverridePlan: PreparedPlan = {
+        ...rainPlan,
+        leaveAt: '2026-10-28T21:45:00.000Z', // 2:45 PM
+        prepareAt: '2026-10-28T21:25:00.000Z', // 2:25 PM
+        why: {
+          ...rainPlan.why,
+          evidenceSignals: [
+            ...rainPlan.why.evidenceSignals,
+            {
+              kind: 'user_request',
+              source: 'simulated',
+              issuedAt: '2026-10-28T20:35:00.000Z',
+              description: 'Because you asked: leave 15 min later · this time only',
+              value: { kind: 'leave_later', deltaMinutes: 15 },
+            } as any,
+          ],
+        },
+      };
+
+      const bundle = createRainEvidenceBundle({ plan: legitOverridePlan });
+
+      // Reviewer probe: verifyField on user_override_timing with tampered 4:00 PM leave
+      const verifyRes = GroundedRecommendationVerifier.verifyField(
+        { recordId: 'user_override_timing', field: 'leaveTime' },
+        '4:00 PM',
+        bundle
+      );
+      expect(verifyRes.valid).toBe(false);
+      expect(verifyRes.reason).toBe('tampered_value');
+
+      // Tampered plan with 4:00 PM leave renders "unknown" in timeline and NOW headline
+      const tamperedShiftPlan: PreparedPlan = {
+        ...legitOverridePlan,
+        leaveAt: '2026-10-28T23:00:00.000Z', // 4:00 PM (tampered! expected 2:45 PM)
+        headline: 'Get ready at 2:25 PM, leave by 4:00 PM',
+      };
+
+      const timeline = deriveTimelineVM(tamperedShiftPlan, null, undefined, bundle);
+      const leaveStep = timeline!.steps.find(s => s.id === 'step-leave')!;
+      expect(leaveStep.time).toBe('unknown'); // Fails closed!
+
+      const home = buildHomeComposition({
+        plan: tamperedShiftPlan,
+        spatialEvidence: null,
+        evidenceBundle: bundle,
+      });
+      expect(home.headline).toBe('unknown'); // Fails closed!
+
+      const latest = globalDecisionLogger.getLatest()!;
+      expect(latest.validationResult.valid).toBe(false);
+      expect(latest.validationResult.reason).toBe('tampered_value');
+    });
+
+    it('Check-1 Tamper Negatives: timeline step-leave and step-arrive render "unknown" on tampered values', () => {
+      const bundle = createRainEvidenceBundle();
+
+      // Tamper leave time on rainPlan and its option
+      const tamperedLeavePlan: PreparedPlan = {
+        ...rainPlan,
+        leaveAt: '2026-10-28T23:30:00.000Z', // 4:30 PM (expected 2:30 PM)
+        optionsOrSteps: [
+          {
+            ...(rainPlan.optionsOrSteps![0] as any),
+            leaveAt: '2026-10-28T23:30:00.000Z',
+          },
+        ],
+      };
+
+      const timeline = deriveTimelineVM(tamperedLeavePlan, null, undefined, bundle);
+      const leaveStep = timeline!.steps.find(s => s.id === 'step-leave')!;
+      expect(leaveStep.time).toBe('unknown'); // Fails closed!
+      const arriveStep = timeline!.steps.find(s => s.id === 'step-arrive')!;
+      expect(arriveStep.time).toBe('unknown'); // Fails closed!
+    });
+
+    it('Check-1 Tamper Negatives: option-card leaveTime renders "unknown" and card is withheld when leaveTime is tampered', () => {
+      const bundle = createRainEvidenceBundle();
+
+      const tamperedCardPlan: PreparedPlan = {
+        ...rainPlan,
+        optionsOrSteps: [
+          {
+            id: 'opt-drive',
+            label: 'Drive · leave 4:15 PM',
+            mode: 'drive',
+            travelMinutes: 25,
+            leaveAt: '2026-10-28T23:15:00.000Z', // 4:15 PM (expected 2:30 PM)
+            requiresConfirmation: false,
+          },
+          {
+            id: 'opt-bus',
+            label: 'Bus · leave 2:15 PM',
+            mode: 'bus',
+            travelMinutes: 40,
+            leaveAt: '2026-10-28T21:15:00.000Z', // 2:15 PM (legitimate)
+            requiresConfirmation: false,
+          },
+        ],
+      };
+
+      const cards = deriveOptionCardVMs(tamperedCardPlan, new Set(), bundle);
+      // Tampered drive card is withheld; clean bus card remains
+      expect(cards).toHaveLength(1);
+      expect(cards[0]!.mode).toBe('bus');
+      expect(cards[0]!.leaveTime).toBe('2:15 PM');
+    });
+
+    it('"Take the bus" command: verifies both bus (Recommended) and drive (Alternative) cards without badge in fieldSourceRefs', () => {
+      const busOverridePlan: PreparedPlan = {
+        ...rainPlan,
+        optionsOrSteps: [
+          {
+            id: 'opt-bus',
+            label: 'Bus · leave 2:15 PM',
+            mode: 'bus',
+            travelMinutes: 40,
+            leaveAt: '2026-10-28T21:15:00.000Z',
+            requiresConfirmation: false,
+          },
+          {
+            id: 'opt-drive',
+            label: 'Drive · leave 2:30 PM',
+            mode: 'drive',
+            travelMinutes: 25,
+            leaveAt: '2026-10-28T21:30:00.000Z',
+            requiresConfirmation: false,
+          },
+        ],
+        why: {
+          ...rainPlan.why,
+          evidenceSignals: [
+            ...rainPlan.why.evidenceSignals,
+            {
+              kind: 'user_request',
+              source: 'simulated',
+              issuedAt: '2026-10-28T20:35:00.000Z',
+              description: 'Because you asked: switch to bus · this time only',
+              value: { kind: 'route_preference', mode: 'bus' },
+            } as any,
+          ],
+        },
+      };
+
+      const bundle = createRainEvidenceBundle({ plan: busOverridePlan });
+      const cards = deriveOptionCardVMs(busOverridePlan, new Set(), bundle);
+
+      expect(cards).toHaveLength(2);
+      expect(cards[0]!.mode).toBe('bus');
+      expect(cards[0]!.badge).toBe('Recommended');
+      expect(cards[0]!.leaveTime).toBe('2:15 PM');
+      expect(cards[0]!.fieldSourceRefs!.badge).toBeUndefined();
+
+      expect(cards[1]!.mode).toBe('drive');
+      expect(cards[1]!.badge).toBe('Alternative');
+      expect(cards[1]!.leaveTime).toBe('2:30 PM');
+      expect(cards[1]!.fieldSourceRefs!.badge).toBeUndefined();
+
+      // Reviewer unit probe: verifyOptionCard passes for both cards
+      const busVerify = GroundedRecommendationVerifier.verifyOptionCard(cards[0]!, bundle);
+      expect(busVerify.valid).toBe(true);
+
+      const driveVerify = GroundedRecommendationVerifier.verifyOptionCard(cards[1]!, bundle);
+      expect(driveVerify.valid).toBe(true);
     });
   });
 });

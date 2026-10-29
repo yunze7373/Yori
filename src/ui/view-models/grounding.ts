@@ -16,6 +16,7 @@
 import { formatTime } from '../living-context/presentation.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
+import type { UserRequestOverride } from '../../plugins/depart/request-override.js';
 import { mockPlaceAdapter } from '../../adapters/mock/index.js';
 
 export type EvidenceKind = 'poi' | 'route' | 'eta' | 'weather' | 'habit' | 'calendar';
@@ -497,6 +498,7 @@ export function buildNavigateUrl(
 export function createRainEvidenceBundle(options?: {
   plan?: PreparedPlan;
   snapshot?: { asOf?: string; timezone?: string; signals?: readonly { kind: string; id?: string; issuedAt?: string; value?: unknown }[] } | null;
+  override?: UserRequestOverride | null;
   sceneClockIso?: string;
   timezone?: string;
   isConfirmedHabit?: boolean;
@@ -506,17 +508,17 @@ export function createRainEvidenceBundle(options?: {
   const timezone = options?.timezone ?? options?.snapshot?.timezone ?? options?.plan?.timezone ?? 'America/Los_Angeles';
   const isConfirmedHabit = options?.isConfirmedHabit ?? false;
 
-  // Extract source inputs from snapshot or plan signals, fallback to fixture defaults
+  // Extract source inputs from snapshot or plan signals, fallback to fixture defaults (never plan values)
   const calSig =
     options?.snapshot?.signals?.find(s => s.kind === 'calendar') ??
     options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'calendar');
   const calVal = ((calSig as any)?.value as Record<string, unknown>) ?? {};
   const apptAt = typeof calVal.startTime === 'string'
     ? calVal.startTime
-    : (options?.plan?.apptAt ?? '2026-10-28T22:00:00.000Z');
+    : '2026-10-28T22:00:00.000Z';
   const subjectTitle = typeof calVal.title === 'string'
     ? calVal.title
-    : (options?.plan?.subjectTitle ?? 'Piano Studio (Rain Route)');
+    : 'Piano Studio (Rain Route)';
   const destination = typeof calVal.location === 'string'
     ? calVal.location
     : '123 Harmony Way';
@@ -541,7 +543,12 @@ export function createRainEvidenceBundle(options?: {
     options?.snapshot?.signals?.find(s => s.kind === 'travel_estimate') ??
     options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'travel_estimate');
   const travelVal = ((travelSig as any)?.value as Record<string, unknown>) ?? {};
-  const driveMinutes = typeof travelVal.driveMinutes === 'number' ? travelVal.driveMinutes : 25;
+  const driveMinutes =
+    typeof travelVal.driveMinutes === 'number'
+      ? travelVal.driveMinutes
+      : typeof travelVal.travelMinutes === 'number'
+        ? travelVal.travelMinutes
+        : 25;
   const busMinutes = typeof travelVal.busMinutes === 'number' ? travelVal.busMinutes : 40;
   const travelRecordId =
     (travelSig as any)?.id ||
@@ -695,26 +702,102 @@ export function createRainEvidenceBundle(options?: {
     },
   ];
 
-  // If user requested an override (e.g. leave-later shift), record session override in bundle
-  const userReqSig = options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'user_request');
-  if (userReqSig && options?.plan) {
+  // User request override: recompute expected timing from base eta + request delta
+  // Governed by Living Context §2.3 and G12 Check 1 (Zero Circular Evidence)
+  const userReqSig =
+    options?.snapshot?.signals?.find(s => s.kind === 'user_request') ??
+    options?.plan?.why?.evidenceSignals?.find(s => s.kind === 'user_request');
+  const overrideObj = options?.override;
+  const hasUserRequest = Boolean(overrideObj || userReqSig);
+
+  if (hasUserRequest) {
     const overrideRecordId = 'user_override_timing';
-    const overridePrepIso = options.plan.prepareAt;
-    const overrideLeaveIso = options.plan.leaveAt;
-    const overridePrepTime = overridePrepIso ? formatTime(overridePrepIso, timezone) : undefined;
-    const overrideLeaveTime = overrideLeaveIso ? formatTime(overrideLeaveIso, timezone) : undefined;
+    const reqIssuedAt = overrideObj?.provenance?.at || userReqSig?.issuedAt || sceneClockIso;
+
+    let deltaMinutes = 0;
+    let preferredMode: 'drive' | 'bus' = 'drive';
+
+    if (overrideObj) {
+      if (overrideObj.kind === 'leave_later') {
+        deltaMinutes = overrideObj.deltaMinutes ?? 15;
+      } else if (overrideObj.kind === 'route_preference') {
+        preferredMode = overrideObj.mode ?? 'bus';
+      }
+    } else if (userReqSig) {
+      const sigVal = (userReqSig as any).value as Record<string, unknown> | undefined;
+      if (sigVal && typeof sigVal.deltaMinutes === 'number') {
+        deltaMinutes = sigVal.deltaMinutes;
+      } else if ((userReqSig as any).description) {
+        const matchDelta = String((userReqSig as any).description).match(/leave\s+(\d+)\s*min/i);
+        if (matchDelta) {
+          deltaMinutes = parseInt(matchDelta[1]!, 10);
+        }
+      }
+
+      if (sigVal && typeof sigVal.mode === 'string' && (sigVal.mode === 'drive' || sigVal.mode === 'bus')) {
+        preferredMode = sigVal.mode;
+      } else if ((userReqSig as any).description) {
+        const desc = String((userReqSig as any).description);
+        if (/switch to bus|take the bus/i.test(desc)) {
+          preferredMode = 'bus';
+        } else if (/switch to drive|take driving|take the car/i.test(desc)) {
+          preferredMode = 'drive';
+        }
+      }
+    }
+
+    const shiftDriveLeaveMs = driveLeaveMs + deltaMinutes * 60000;
+    const shiftDrivePrepMs = drivePrepMs + deltaMinutes * 60000;
+    const shiftDriveArriveMs = shiftDriveLeaveMs + driveMinutes * 60000;
+
+    const shiftBusLeaveMs = busLeaveMs + deltaMinutes * 60000;
+    const shiftBusPrepMs = busPrepMs + deltaMinutes * 60000;
+    const shiftBusArriveMs = shiftBusLeaveMs + busMinutes * 60000;
+
+    const primaryLeaveMs = preferredMode === 'bus' ? shiftBusLeaveMs : shiftDriveLeaveMs;
+    const primaryPrepMs = preferredMode === 'bus' ? shiftBusPrepMs : shiftDrivePrepMs;
+    const primaryArriveMs = preferredMode === 'bus' ? shiftBusArriveMs : shiftDriveArriveMs;
+
+    const driveLeaveTimeStr = formatTime(new Date(shiftDriveLeaveMs).toISOString(), timezone);
+    const drivePrepTimeStr = formatTime(new Date(shiftDrivePrepMs).toISOString(), timezone);
+    const driveArriveTimeStr = formatTime(new Date(shiftDriveArriveMs).toISOString(), timezone);
+
+    const busLeaveTimeStr = formatTime(new Date(shiftBusLeaveMs).toISOString(), timezone);
+    const busPrepTimeStr = formatTime(new Date(shiftBusPrepMs).toISOString(), timezone);
+    const busArriveTimeStr = formatTime(new Date(shiftBusArriveMs).toISOString(), timezone);
+
+    const primaryLeaveTimeStr = formatTime(new Date(primaryLeaveMs).toISOString(), timezone);
+    const primaryPrepTimeStr = formatTime(new Date(primaryPrepMs).toISOString(), timezone);
+    const primaryArriveTimeStr = formatTime(new Date(primaryArriveMs).toISOString(), timezone);
+
+    const marginMinutes = Math.round((apptMs - primaryArriveMs) / 60000);
+    const isLate = marginMinutes < 0;
 
     records.push({
       id: overrideRecordId,
       provider: 'user_request',
       kind: 'habit',
-      fetchedAt: userReqSig.issuedAt || sceneClockIso,
+      fetchedAt: reqIssuedAt,
       provenance: 'session',
       fields: {
-        prepareAt: overridePrepIso,
-        prepareTime: overridePrepTime,
-        leaveAt: overrideLeaveIso,
-        leaveTime: overrideLeaveTime,
+        deltaMinutes,
+        mode: preferredMode,
+        prepareAt: new Date(primaryPrepMs).toISOString(),
+        prepareTime: primaryPrepTimeStr,
+        leaveAt: new Date(primaryLeaveMs).toISOString(),
+        leaveTime: primaryLeaveTimeStr,
+        arriveAt: new Date(primaryArriveMs).toISOString(),
+        arrivalTime: primaryArriveTimeStr,
+        marginMinutes,
+        isLate,
+        driveLeaveTime: driveLeaveTimeStr,
+        drivePrepareTime: drivePrepTimeStr,
+        driveArrivalTime: driveArriveTimeStr,
+        driveTravelMinutes: driveMinutes,
+        busLeaveTime: busLeaveTimeStr,
+        busPrepareTime: busPrepTimeStr,
+        busArrivalTime: busArriveTimeStr,
+        busTravelMinutes: busMinutes,
       },
     });
   }
