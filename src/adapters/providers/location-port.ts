@@ -11,7 +11,7 @@
  * If location is unavailable or denied, returns explicit status without fabricating coordinates.
  */
 
-export type LocationStatusKind = 'available' | 'unavailable' | 'denied';
+export type LocationStatusKind = 'available' | 'unavailable' | 'denied' | 'prompt';
 
 export interface LocationCoords {
   readonly lat: number;
@@ -21,8 +21,11 @@ export interface LocationCoords {
 export interface LocationStatus {
   readonly status: LocationStatusKind;
   readonly coords?: LocationCoords;
-  readonly source: 'fixture' | 'manual';
+  readonly accuracy?: number;
+  readonly source: 'fixture' | 'manual' | 'geolocation';
   readonly updatedAt: string;
+  readonly notice?: string;
+  readonly isStale?: boolean;
 }
 
 export interface LocationPort {
@@ -60,16 +63,30 @@ export class FixtureLocationPort implements LocationPort {
   }
 
   public setLocation(status: LocationStatusKind, coords?: LocationCoords): void {
+    if (status === 'available' && !coords) {
+      this.currentStatus = {
+        status: 'unavailable',
+        coords: undefined,
+        source: 'manual',
+        updatedAt: new Date().toISOString(),
+        notice: 'Coordinates required for available status',
+      };
+      return;
+    }
+
     this.currentStatus = {
       status,
-      coords: status === 'available' ? (coords ?? DEFAULT_DEMO_COORDS) : undefined,
+      coords: status === 'available' ? coords : undefined,
       source: 'manual',
       updatedAt: new Date().toISOString(),
     };
   }
 }
 
+import { defaultGeolocationAdapter } from './geolocation-adapter.js';
+
 /**
  * Singleton shared location port for the application runtime.
+ * Backed by GeolocationAdapter (V5-GEO).
  */
-export const defaultLocationPort = new FixtureLocationPort();
+export const defaultLocationPort = defaultGeolocationAdapter;

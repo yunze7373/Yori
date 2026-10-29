@@ -13,6 +13,7 @@ export * from './real-signal.js';
 export * from './mock-weather-adapter.js';
 export * from './open-meteo-adapter.js';
 export * from './location-port.js';
+export * from './geolocation-adapter.js';
 export * from './places-types.js';
 export * from './simulated-places-provider.js';
 export * from './overpass-places-adapter.js';

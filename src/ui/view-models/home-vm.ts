@@ -98,8 +98,46 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     if (snapshot?.signals?.some(s => s.kind === 'fuel_percent' || s.kind === 'fuel_status')) {
       const locSig = snapshot.signals.find(s => s.kind === 'location_status');
       const locVal = locSig?.value as any;
-      const isUnavailable = locVal?.status === 'unavailable' || locVal?.status === 'denied';
-      if (isUnavailable) {
+
+      if (locVal?.status === 'prompt') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Location Needed',
+          headline: 'Location permission needed to find nearby gas stations',
+          basis: 'Grant location access or enter coordinates manually · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+          locationState: 'prompt',
+          locationNotice: locVal?.notice || 'Location permission needed to find nearby gas stations',
+        };
+      }
+
+      if (locVal?.status === 'denied') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Location Denied',
+          headline: 'Location access denied by user',
+          basis: 'Location permission was denied · enter coordinates manually or enable permission',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+          locationState: 'denied',
+          locationNotice: locVal?.notice || 'Location access denied by user',
+        };
+      }
+
+      if (locVal?.status === 'unavailable') {
         return {
           layoutKind: 'quiet',
           title: 'Location Unavailable',
@@ -113,6 +151,8 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           aheadItems: compileAheadItems(aheadPlans),
           proposals: compileProposals(proposals),
           evidenceBundle: bundle,
+          locationState: 'unavailable',
+          locationNotice: locVal?.notice || 'Cannot find nearby gas stations without location access',
         };
       }
 

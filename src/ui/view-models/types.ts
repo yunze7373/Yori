@@ -159,6 +159,10 @@ export interface HomeCompositionVM {
   readonly canUndo?: boolean;
   readonly actions: readonly PlanAction[];
 
+  // Geolocation & Manual Location State (V5-GEO)
+  readonly locationState?: 'prompt' | 'denied' | 'unavailable';
+  readonly locationNotice?: string;
+
   // Collapse empty blocks (only populated if non-empty)
   readonly aheadItems: readonly AheadItemVM[];
   readonly proposals: readonly ProposalItemVM[];

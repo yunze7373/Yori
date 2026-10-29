@@ -691,6 +691,26 @@ export function renderApp(
     originatingElementId?: string;
   } | null = null;
 
+  if (typeof window !== 'undefined' && window.location?.search) {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const urlScene = params.get('scene') as DemoSceneId | null;
+      if (urlScene) {
+        currentScene = urlScene;
+      }
+      const geoConsent = params.get('geo_consent') || params.get('geo');
+      if (geoConsent === 'prompt') {
+        defaultLocationPort.setLocation('prompt');
+      } else if (geoConsent === 'denied') {
+        defaultLocationPort.setLocation('denied');
+      } else if (geoConsent === 'unavailable') {
+        defaultLocationPort.setLocation('unavailable');
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   if (typeof window !== 'undefined') {
     window.addEventListener('popstate', () => {
       if (activeDetail) {
@@ -723,7 +743,7 @@ export function renderApp(
 
   if (typeof window !== 'undefined' && isDevOrTest) {
     (window as any).__YORI_SET_LOCATION__ = (
-      status: 'available' | 'unavailable' | 'denied',
+      status: 'available' | 'unavailable' | 'denied' | 'prompt',
       coords?: { lat: number; lng: number }
     ) => {
       defaultLocationPort.setLocation(status, coords);
@@ -2294,6 +2314,93 @@ export function renderApp(
           }
         } catch {
           // ignore error
+        }
+      });
+    }
+
+    // -------------------------------------------------------------
+    // V5-GEO: GEOLOCATION & MANUAL LOCATION EVENT BINDINGS
+    // -------------------------------------------------------------
+    const reqLocBtn = root.querySelector('#btn-request-location');
+    if (reqLocBtn) {
+      reqLocBtn.addEventListener('click', async () => {
+        if (
+          'requestCurrentPosition' in defaultLocationPort &&
+          typeof (defaultLocationPort as any).requestCurrentPosition === 'function'
+        ) {
+          await (defaultLocationPort as any).requestCurrentPosition();
+        } else if (
+          'grantConsent' in defaultLocationPort &&
+          typeof (defaultLocationPort as any).grantConsent === 'function'
+        ) {
+          (defaultLocationPort as any).grantConsent();
+        }
+        update();
+      });
+    }
+
+    const denyLocBtn = root.querySelector('#btn-deny-location');
+    if (denyLocBtn) {
+      denyLocBtn.addEventListener('click', () => {
+        if ('denyConsent' in defaultLocationPort && typeof (defaultLocationPort as any).denyConsent === 'function') {
+          (defaultLocationPort as any).denyConsent();
+        } else {
+          defaultLocationPort.setLocation('denied');
+        }
+        update();
+      });
+    }
+
+    const manualToggleBtn = root.querySelector('#btn-manual-location-toggle');
+    if (manualToggleBtn) {
+      manualToggleBtn.addEventListener('click', () => {
+        const section = root.querySelector('#v2-manual-location-section');
+        if (section) {
+          const isHidden = (section as HTMLElement).style.display === 'none';
+          (section as HTMLElement).style.display = isHidden ? 'flex' : 'none';
+          manualToggleBtn.setAttribute('aria-expanded', String(isHidden));
+        }
+      });
+    }
+
+    const changeLocBtn = root.querySelector('#btn-change-location');
+    if (changeLocBtn) {
+      changeLocBtn.addEventListener('click', () => {
+        const section = root.querySelector('#v2-manual-location-section');
+        if (section) {
+          const isHidden = (section as HTMLElement).style.display === 'none';
+          (section as HTMLElement).style.display = isHidden ? 'flex' : 'none';
+          changeLocBtn.setAttribute('aria-expanded', String(isHidden));
+        }
+      });
+    }
+
+    const sfBtn = root.querySelector('#btn-city-sf');
+    if (sfBtn) {
+      sfBtn.addEventListener('click', () => {
+        defaultLocationPort.setLocation('available', { lat: 37.7749, lng: -122.4194 });
+        update();
+      });
+    }
+
+    const laBtn = root.querySelector('#btn-city-la');
+    if (laBtn) {
+      laBtn.addEventListener('click', () => {
+        defaultLocationPort.setLocation('available', { lat: 34.0522, lng: -118.2437 });
+        update();
+      });
+    }
+
+    const applyCoordsBtn = root.querySelector('#btn-apply-manual-coords');
+    if (applyCoordsBtn) {
+      applyCoordsBtn.addEventListener('click', () => {
+        const latInput = root.querySelector('#input-manual-lat') as HTMLInputElement | null;
+        const lngInput = root.querySelector('#input-manual-lng') as HTMLInputElement | null;
+        const lat = latInput ? parseFloat(latInput.value) : NaN;
+        const lng = lngInput ? parseFloat(lngInput.value) : NaN;
+        if (!isNaN(lat) && !isNaN(lng)) {
+          defaultLocationPort.setLocation('available', { lat, lng });
+          update();
         }
       });
     }

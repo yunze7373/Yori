@@ -195,6 +195,110 @@ function renderActionRow(vm: HomeCompositionVM): string {
   `;
 }
 
+export function renderLocationControls(vm: HomeCompositionVM): string {
+  const isPrompt = vm.locationState === 'prompt';
+  const isDenied = vm.locationState === 'denied';
+  const isUnavailable = vm.locationState === 'unavailable';
+
+  return `
+    <div class="v2-location-controls" role="region" aria-label="Location Controls">
+      ${
+        isPrompt
+          ? `
+        <div class="v2-location-notice-banner prompt" role="status">
+          <div class="v2-location-notice-title">Location Permission Needed</div>
+          <div class="v2-location-notice-desc">Grant permission to discover nearby fuel stations or select a location manually.</div>
+        </div>
+        <div class="v2-location-action-row">
+          <button type="button" class="btn btn-primary v2-location-btn" id="btn-request-location" aria-label="Use My Location">
+            Use My Location
+          </button>
+          <button type="button" class="btn btn-outline v2-location-btn" id="btn-deny-location" aria-label="Deny Location Access">
+            Deny
+          </button>
+        </div>
+      `
+          : isDenied
+          ? `
+        <div class="v2-location-notice-banner denied" role="status">
+          <div class="v2-location-notice-title">Location Access Denied</div>
+          <div class="v2-location-notice-desc">Location access was denied. You can select a city or enter coordinates manually below.</div>
+        </div>
+        <div class="v2-location-action-row">
+          <button type="button" class="btn btn-outline v2-location-btn" id="btn-request-location" aria-label="Retry Location Access">
+            Try Again
+          </button>
+        </div>
+      `
+          : isUnavailable
+          ? `
+        <div class="v2-location-notice-banner unavailable" role="status">
+          <div class="v2-location-notice-title">Location Unavailable</div>
+          <div class="v2-location-notice-desc">Unable to acquire current position. Please select a city or enter coordinates manually.</div>
+        </div>
+      `
+          : ''
+      }
+
+      <div class="v2-manual-location-container">
+        <button
+          type="button"
+          class="btn btn-outline v2-manual-toggle-btn"
+          id="btn-manual-location-toggle"
+          aria-expanded="true"
+          aria-controls="v2-manual-location-section"
+        >
+          Enter Location Manually
+        </button>
+
+        <div class="v2-manual-location-section" id="v2-manual-location-section">
+          <div class="v2-city-chips-label">Demo City Presets:</div>
+          <div class="v2-city-chips-group" role="group" aria-label="Demo City Presets">
+            <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-sf" data-lat="37.7749" data-lng="-122.4194">
+              San Francisco
+            </button>
+            <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-la" data-lat="34.0522" data-lng="-118.2437">
+              Los Angeles
+            </button>
+          </div>
+
+          <form class="v2-coords-form" id="v2-coords-form" onsubmit="return false;">
+            <div class="v2-coords-inputs">
+              <div class="v2-input-field">
+                <label for="input-manual-lat" class="v2-input-label">Latitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  id="input-manual-lat"
+                  class="v2-coords-input"
+                  placeholder="37.7749"
+                  value="37.7749"
+                  aria-label="Manual Latitude"
+                />
+              </div>
+              <div class="v2-input-field">
+                <label for="input-manual-lng" class="v2-input-label">Longitude</label>
+                <input
+                  type="number"
+                  step="any"
+                  id="input-manual-lng"
+                  class="v2-coords-input"
+                  placeholder="-122.4194"
+                  value="-122.4194"
+                  aria-label="Manual Longitude"
+                />
+              </div>
+            </div>
+            <button type="button" class="btn btn-primary v2-coords-apply-btn" id="btn-apply-manual-coords">
+              Set Coordinates
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 export function renderV2Home(vm: HomeCompositionVM): string {
   // 1. Quiet State
   if (vm.layoutKind === 'quiet') {
@@ -211,6 +315,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           <h2 class="quiet-title">${escapeHtml(vm.title)}</h2>
           <p class="quiet-subtitle">${escapeHtml(vm.headline)}</p>
           ${vm.basis ? `<p class="quiet-basis">${escapeHtml(vm.basis)}</p>` : ''}
+          ${vm.locationState ? renderLocationControls(vm) : ''}
         </section>
       </div>
     `;
@@ -360,6 +465,29 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               ? STRINGS.fuel.mockPlacesNotice
               : STRINGS.lunch.mockPlacesNotice
           )}</div>
+          ${
+            vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
+              ? `
+            <div class="v2-active-location-bar" role="region" aria-label="Active Location">
+              <span class="v2-location-badge">📍 Location: Selected City (simulated)</span>
+              <button type="button" class="btn btn-outline btn-sm v2-change-loc-btn" id="btn-change-location" aria-expanded="false" aria-controls="v2-manual-location-section">
+                Change Location
+              </button>
+            </div>
+            <div class="v2-manual-location-section" id="v2-manual-location-section" style="display: none; margin-bottom: var(--space-4);">
+              <div class="v2-city-chips-label">Demo City Presets:</div>
+              <div class="v2-city-chips-group" role="group" aria-label="Demo City Presets">
+                <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-sf" data-lat="37.7749" data-lng="-122.4194">
+                  San Francisco
+                </button>
+                <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-la" data-lat="34.0522" data-lng="-118.2437">
+                  Los Angeles
+                </button>
+              </div>
+            </div>
+          `
+              : ''
+          }
         </div>
 
         <!-- Candidate Cards with Local Labelled SVG Illustrations -->
