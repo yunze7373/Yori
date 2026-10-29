@@ -116,13 +116,16 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await expect(modal).toBeVisible();
     await expect(modal.locator('#nav-modal-title')).toContainText('Start Navigation');
     await expect(modal).toContainText('Verified handoff');
-    await expect(modal).toContainText('Open driving directions to Metro Gas & Go in Google Maps?');
+    const isIos = await page.evaluate(() => /iPhone|iPad|iPod/i.test(navigator.userAgent));
+    const expectedApp = isIos ? 'Apple Maps' : 'Google Maps';
+    await expect(modal).toContainText(`Open driving directions to Metro Gas & Go in ${expectedApp}?`);
 
     // URL preview matches exact pinned coordinates and encoding
     const urlCode = page.locator('#navigate-verified-url');
     await expect(urlCode).toBeVisible();
-    const expectedUrl =
-      'https://www.google.com/maps/dir/?api=1&destination=37.7755%2C-122.418&travelmode=driving&destination_place_id=fuel-sf-1';
+    const expectedUrl = isIos
+      ? 'https://maps.apple.com/?daddr=37.7755,-122.418&dirflg=d&q=Metro%20Gas%20%26%20Go'
+      : 'https://www.google.com/maps/dir/?api=1&destination=37.7755%2C-122.418&travelmode=driving&destination_place_id=fuel-sf-1';
     await expect(urlCode).toHaveText(expectedUrl);
 
     // Accessibility of modal
@@ -271,9 +274,15 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     const urlCode = page.locator('#navigate-verified-url');
     const urlText = await urlCode.innerText();
 
-    // Must pin LA coordinates and fuel-la-* place id
-    expect(urlText).toMatch(/destination=34\.05/);
-    expect(urlText).toContain('destination_place_id=fuel-la-');
+    // Must pin LA coordinates
+    const isIos = await page.evaluate(() => /iPhone|iPad|iPod/i.test(navigator.userAgent));
+    if (isIos) {
+      expect(urlText).toContain('daddr=34.05');
+      expect(urlText).toContain('maps.apple.com');
+    } else {
+      expect(urlText).toMatch(/destination=34\.05/);
+      expect(urlText).toContain('destination_place_id=fuel-la-');
+    }
 
     // Confirm navigation
     const confirmBtn = page.locator('#btn-confirm-navigate');
@@ -369,6 +378,107 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     // Restore location and provider to healthy SF state
     await page.evaluate(() => {
       (window as any).__YORI_SET_LOCATION__('available', { lat: 37.7749, lng: -122.4194 });
+    });
+  });
+
+  test('V5-FUEL: In Rain scene, chat "find gas" renders fuel candidates with working verified Directions (Rework 2)', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+
+    // 1. Select Rain scene
+    const sceneSelect = page.locator('#scene-select');
+    await sceneSelect.selectOption('rain');
+
+    // Verify initial Rain scene hero card is present
+    await expect(page.locator('.now-card')).toContainText('Piano');
+
+    // 2. Open ask drawer and submit "find gas"
+    const askButton = page.locator('#ask-bar');
+    await askButton.click();
+    const askInput = page.locator('#conversation-input');
+    await expect(askInput).toBeVisible();
+
+    await askInput.fill('find gas');
+    await page.keyboard.press('Enter');
+
+    // 3. Conversation collapses to home and 3 fuel candidate cards render
+    const candidateCards = page.locator('.v2-candidate-card');
+    await expect(candidateCards).toHaveCount(3);
+    const topCard = candidateCards.first();
+    await expect(topCard).toContainText('Metro Gas & Go');
+    await expect(topCard).toContainText('Gas Station');
+    await expect(topCard).toContainText('straight-line');
+
+    // Enable navigation intercept
+    await page.evaluate(() => {
+      (window as any).__YORI_TEST_INTERCEPT_NAV__ = true;
+    });
+
+    // 4. Click Directions on the top candidate card
+    const directionsBtn = topCard.locator('.v2-directions-btn');
+    await expect(directionsBtn).toBeVisible();
+    await directionsBtn.click();
+
+    // 5. Navigate modal appears with verified provider coordinates
+    const modal = page.locator('#navigate-confirm-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal.locator('#nav-modal-title')).toContainText('Start Navigation');
+
+    const urlCode = page.locator('#navigate-verified-url');
+    await expect(urlCode).toBeVisible();
+    const urlText = await urlCode.innerText();
+    const isIos = await page.evaluate(() => /iPhone|iPad|iPod/i.test(navigator.userAgent));
+    if (isIos) {
+      expect(urlText).toContain('daddr=37.7755,-122.418');
+      expect(urlText).toContain('maps.apple.com');
+    } else {
+      expect(urlText).toContain('destination=37.7755%2C-122.418');
+      expect(urlText).toContain('destination_place_id=fuel-sf-1');
+    }
+
+    // Close modal
+    const cancelBtn = page.locator('#btn-cancel-navigate');
+    await cancelBtn.click();
+    await expect(modal).not.toBeVisible();
+  });
+
+  test('V5-FUEL: When provider is in error, chat "find gas" fails closed with prominent error and zero fabricated merchants (Rework 2)', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+
+    // 1. Select Rain scene
+    const sceneSelect = page.locator('#scene-select');
+    await sceneSelect.selectOption('rain');
+
+    // 2. Set places provider into error state
+    await page.evaluate(() => {
+      (window as any).__YORI_SET_PLACES_ERROR__(true);
+    });
+
+    // 3. Open ask drawer and submit "find gas"
+    const askButton = page.locator('#ask-bar');
+    await askButton.click();
+    const askInput = page.locator('#conversation-input');
+    await expect(askInput).toBeVisible();
+
+    await askInput.fill('find gas');
+    await page.keyboard.press('Enter');
+
+    // 4. Conversation transcript shows prominent error message (fails closed)
+    const transcript = page.locator('.conversation-transcript');
+    await expect(transcript).toBeVisible();
+    await expect(transcript).toContainText('Unable to search for gas stations: places provider failure. Fails closed.');
+
+    // 5. Invariant: zero merchant cards are fabricated or displayed
+    await expect(page.locator('.v2-candidate-card')).toHaveCount(0);
+
+    // Restore provider error state
+    await page.evaluate(() => {
+      (window as any).__YORI_SET_PLACES_ERROR__(false);
     });
   });
 });

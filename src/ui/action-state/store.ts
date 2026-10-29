@@ -72,6 +72,8 @@ export class DefaultActionStateStore implements ActionStateStore {
   private interpreter: CommandInterpreter;
   private currentSituationAttribution?: SituationAttribution;
   private pendingFuelDisambiguation = false;
+  private activeEvidenceBundle?: any = undefined;
+  private activeSnapshot?: ContextSnapshot = undefined;
 
   constructor(options: ActionStateStoreOptions = {}) {
     this.actionState = {
@@ -115,10 +117,20 @@ export class DefaultActionStateStore implements ActionStateStore {
     return this.currentOverride;
   }
 
+  public getActiveEvidenceBundle(): any {
+    return this.activeEvidenceBundle;
+  }
+
+  public getActiveSnapshot(): ContextSnapshot | undefined {
+    return this.activeSnapshot;
+  }
+
   public clearOverride(): void {
     this.currentOverride = null;
     this.pendingOverride = null;
     this.currentSituationAttribution = undefined;
+    this.activeEvidenceBundle = undefined;
+    this.activeSnapshot = undefined;
   }
 
   public getEngineStatus(): EngineStatus {
@@ -408,6 +420,8 @@ export class DefaultActionStateStore implements ActionStateStore {
       status: 'idle',
       timestamp: new Date().toISOString(),
     };
+    this.activeEvidenceBundle = undefined;
+    this.activeSnapshot = undefined;
     this.notify();
     return true;
   }
@@ -1125,20 +1139,40 @@ export class DefaultActionStateStore implements ActionStateStore {
       };
 
       let places: readonly PlaceItem[] = [];
+      let placesStatus: 'ok' | 'empty' | 'error' = 'ok';
+      let placesError: string | undefined;
+
       try {
         const provider = mockFuelAdapter.getProvider();
         places = provider.searchNearbySync
           ? provider.searchNearbySync({ location: locStatus.coords, category: 'gas_station', radiusMeters: 10000 })
           : [];
-      } catch {
+        placesStatus = places.length > 0 ? 'ok' : 'empty';
+      } catch (err: unknown) {
+        placesStatus = 'error';
+        placesError = err instanceof Error ? err.message : 'Places provider failure';
         places = [];
+      }
+
+      if (placesStatus === 'error') {
+        const errorMsg = 'Unable to search for gas stations: places provider failure. Fails closed.';
+        this.resolveDegraded(errorMsg);
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: errorMsg,
+          timestamp: new Date().toISOString(),
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
       }
 
       const placesSig = createSimulatedSignal({
         kind: 'places_fuel',
         value: {
-          status: places.length > 0 ? 'ok' : 'empty',
+          status: placesStatus,
           places,
+          error: placesError,
           originCoords: locStatus.coords,
         },
         issuedAt: now,
@@ -1153,7 +1187,10 @@ export class DefaultActionStateStore implements ActionStateStore {
         timezone: ctx?.snapshot?.timezone ?? 'America/Los_Angeles',
         signals: [...(ctx?.snapshot?.signals ?? []).filter(s => s.kind !== 'places_fuel'), placesSig],
       };
-      createFuelEvidenceBundle({ snapshot: effectiveSnapshot, places, originCoords: locStatus.coords });
+
+      const fuelBundle = createFuelEvidenceBundle({ snapshot: effectiveSnapshot, places, originCoords: locStatus.coords });
+      this.activeEvidenceBundle = fuelBundle;
+      this.activeSnapshot = effectiveSnapshot;
 
       const newPlan = fuelPreparer.prepareWithRequest(
         fuelCandidate,
@@ -1186,6 +1223,8 @@ export class DefaultActionStateStore implements ActionStateStore {
         },
         override: this.currentOverride,
         timestamp: now,
+        evidenceBundle: fuelBundle,
+        snapshot: effectiveSnapshot,
       });
 
       this.currentOverride = override;
@@ -1264,6 +1303,8 @@ export class DefaultActionStateStore implements ActionStateStore {
       timestamp: new Date().toISOString(),
     };
     this.currentOverride = restored.override ?? null;
+    this.activeEvidenceBundle = restored.evidenceBundle;
+    this.activeSnapshot = restored.snapshot ?? undefined;
     this.notify();
     return restored;
   }

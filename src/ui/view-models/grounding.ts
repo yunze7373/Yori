@@ -995,7 +995,6 @@ export function createLunchEvidenceBundle(options?: {
 }
 
 export function createFuelEvidenceBundle(options?: {
-  plan?: PreparedPlan;
   places?: readonly PlaceItem[];
   snapshot?: { asOf?: string; timezone?: string; signals?: readonly { kind: string; id?: string; issuedAt?: string; value?: unknown }[] } | null;
   sceneClockIso?: string;
@@ -1017,7 +1016,7 @@ export function createFuelEvidenceBundle(options?: {
   const recordMap = new Map<string, EvidenceRecord>();
   const aliases = new Map<string, string>();
 
-  // Resolve PlaceItems from options.places, snapshot places_fuel signal, or plan options
+  // Resolve PlaceItems strictly from options.places or snapshot places_fuel signal (never self-ground from plan)
   let placesList: readonly PlaceItem[] = options?.places ?? [];
   if (placesList.length === 0 && options?.snapshot?.signals) {
     const placesSig = options.snapshot.signals.find(s => s.kind === 'places_fuel');
@@ -1027,21 +1026,6 @@ export function createFuelEvidenceBundle(options?: {
         placesList = pVal.places;
       }
     }
-  }
-  if (placesList.length === 0 && options?.plan?.optionsOrSteps) {
-    placesList = (options.plan.optionsOrSteps as any[]).map(opt => ({
-      id: opt.id || opt.placeId,
-      placeId: opt.placeId || opt.id,
-      name: opt.name,
-      coords: opt.coords,
-      category: opt.category || 'gas_station',
-      source: opt.source || 'simulated',
-      fetchedAt: sceneClockIso,
-      address: opt.address,
-      straightLineDistanceMeters: opt.straightLineDistanceMeters,
-      straightLineDistanceLabel: opt.straightLineDistanceLabel,
-      brand: opt.brand,
-    }));
   }
 
   for (const place of placesList) {

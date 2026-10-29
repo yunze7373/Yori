@@ -85,6 +85,8 @@ export interface ActionHistorySnapshot {
   actionState: ActionStateRecord;
   override?: UserRequestOverride | null;
   timestamp: string;
+  evidenceBundle?: any;
+  snapshot?: ContextSnapshot | null;
 }
 
 export interface ActionStoreSnapshot {
@@ -112,6 +114,8 @@ export interface ActionStateStore {
   isReducedMotion(): boolean;
   getCurrentOverride(): UserRequestOverride | null;
   clearOverride(): void;
+  getActiveEvidenceBundle(): any;
+  getActiveSnapshot(): ContextSnapshot | undefined;
 
   getEngineStatus(): EngineStatus;
   getEngineStatusLabel(): string;

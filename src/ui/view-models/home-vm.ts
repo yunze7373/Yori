@@ -87,7 +87,6 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           })
         : plan?.intentId === 'fuel'
           ? createFuelEvidenceBundle({
-              plan,
               snapshot,
               sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
               timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
@@ -468,7 +467,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
         bundle
       );
       if (!vHead.valid) {
-        headline = 'Nearby Fuel: unknown';
+        headline = 'unknown';
       }
     }
 

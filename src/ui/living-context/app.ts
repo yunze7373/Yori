@@ -84,7 +84,6 @@ import {
   type EvidenceBundle,
 } from '../view-models/index.js';
 import { defaultLocationPort } from '../../adapters/providers/location-port.js';
-import type { PlaceItem } from '../../adapters/providers/places-types.js';
 import { mockFuelAdapter } from '../../plugins/fuel/adapter.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
@@ -565,37 +564,6 @@ export function computeSceneState(
       const locPortStatus = defaultLocationPort.getLocation();
       const isLocationAvailable = locPortStatus.status === 'available' && locPortStatus.coords;
 
-      let places: readonly PlaceItem[] = [];
-      let placesStatus: 'ok' | 'empty' | 'error' = 'ok';
-      let placesError: string | undefined;
-
-      if (isLocationAvailable && locPortStatus.coords) {
-        try {
-          const provider = mockFuelAdapter.getProvider();
-          places = provider.searchNearbySync
-            ? provider.searchNearbySync({
-                location: locPortStatus.coords,
-                category: 'gas_station',
-                radiusMeters: 10000,
-              })
-            : [];
-          placesStatus = places.length > 0 ? 'ok' : 'empty';
-        } catch (err: unknown) {
-          placesStatus = 'error';
-          placesError = err instanceof Error ? err.message : 'Places provider failure';
-          places = [];
-        }
-      }
-
-      const fuelSig = createSimulatedSignal({
-        kind: 'fuel_percent',
-        value: { fuelPercent: 18, needsFuel: true },
-        issuedAt: '2026-10-28T19:10:00.000Z',
-        validFor: 3600000,
-        confidence: 1.0,
-        consentScope: 'device_only',
-      });
-
       const locSig = createSimulatedSignal({
         kind: 'location_status',
         value: {
@@ -610,25 +578,44 @@ export function computeSceneState(
         consentScope: 'device_only',
       });
 
-      const schedSig = createSimulatedSignal({
-        kind: 'schedule_window',
-        value: {
-          freeUntil: '2026-10-28T22:00:00.000Z',
-          nextEvent: 'Evening commute',
-        },
+      const tempSnapshot: ContextSnapshot = {
+        id: 'snapshot-fuel-temp',
+        asOf: '2026-10-28T19:10:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [locSig],
+      };
+
+      const placesSignals = isLocationAvailable ? mockFuelAdapter.signals(tempSnapshot) : [];
+      const placesSig =
+        placesSignals[0] ??
+        createSimulatedSignal({
+          kind: 'places_fuel',
+          value: {
+            status: isLocationAvailable ? 'empty' : 'error',
+            places: [],
+            originCoords: locPortStatus.coords,
+          },
+          issuedAt: '2026-10-28T19:10:00.000Z',
+          validFor: 3600000,
+          confidence: 1.0,
+          consentScope: 'device_only',
+        });
+      const places = (placesSig.value as any).places ?? [];
+
+      const fuelSig = createSimulatedSignal({
+        kind: 'fuel_percent',
+        value: { fuelPercent: 18, needsFuel: true },
         issuedAt: '2026-10-28T19:10:00.000Z',
         validFor: 3600000,
         confidence: 1.0,
         consentScope: 'device_only',
       });
 
-      const placesSig = createSimulatedSignal({
-        kind: 'places_fuel',
+      const schedSig = createSimulatedSignal({
+        kind: 'schedule_window',
         value: {
-          status: placesStatus,
-          places,
-          error: placesError,
-          originCoords: locPortStatus.coords,
+          freeUntil: '2026-10-28T22:00:00.000Z',
+          nextEvent: 'Evening commute',
         },
         issuedAt: '2026-10-28T19:10:00.000Z',
         validFor: 3600000,
@@ -665,7 +652,6 @@ export function computeSceneState(
           : null;
 
       const fuelBundle = createFuelEvidenceBundle({
-        plan: result.livingContext.now ?? undefined,
         places,
         snapshot,
         originCoords: locPortStatus.coords,
@@ -727,7 +713,15 @@ export function renderApp(
 
   let currentEvidenceBundle: EvidenceBundle | undefined = undefined;
 
-  if (typeof window !== 'undefined') {
+  const isDevOrTest =
+    Boolean((import.meta as any).env?.DEV) ||
+    (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') ||
+    (typeof window !== 'undefined' &&
+      (Boolean((window as any).__YORI_TEST_INTERCEPT_NAV__) ||
+        Boolean(window.location?.search?.includes('ui=')) ||
+        Boolean(window.location?.search?.includes('test'))));
+
+  if (typeof window !== 'undefined' && isDevOrTest) {
     (window as any).__YORI_SET_LOCATION__ = (
       status: 'available' | 'unavailable' | 'denied',
       coords?: { lat: number; lng: number }
@@ -882,6 +876,13 @@ export function renderApp(
         ? actionState.plan
         : undefined;
     const nowPlan = storePlan ?? baseNowPlan;
+
+    const effectiveEvidenceBundle =
+      (nowPlan?.intentId === 'fuel' ? actionStore.getActiveEvidenceBundle() : undefined) ?? evidenceBundle;
+    const effectiveSnapshot =
+      (nowPlan?.intentId === 'fuel' ? actionStore.getActiveSnapshot() : undefined) ?? snapshot;
+
+    currentEvidenceBundle = effectiveEvidenceBundle;
     const aheadPlans = reasoningState && reasoningState.scene === currentScene ? reasoningState.ahead : living.ahead;
     const notices = pipelineResult.notices;
     const acceptedPlanIds: readonly string[] = storedEnvelope?.payload.acceptedPlanIds ?? [];
@@ -1012,9 +1013,9 @@ export function renderApp(
           proposals: living.forYou.map(f => ({ key: f.key, value: f.value })),
           acceptedPlanIds,
           userConfirmedKeys,
-          snapshot,
+          snapshot: effectiveSnapshot,
           canUndo: actionStore.canUndo(),
-          evidenceBundle,
+          evidenceBundle: effectiveEvidenceBundle,
         });
         v2BodyHtml = renderV2Home(v2Composition);
       }
@@ -1751,10 +1752,17 @@ export function renderApp(
           if (!candidate) return;
 
           const bundle =
-            evidenceBundle ??
+            effectiveEvidenceBundle ??
             (nowPlan?.intentId === 'fuel'
-              ? createFuelEvidenceBundle({ plan: nowPlan ?? undefined, snapshot })
-              : createLunchEvidenceBundle({ plan: nowPlan ?? undefined, snapshot }));
+              ? createFuelEvidenceBundle({ snapshot: effectiveSnapshot })
+              : createLunchEvidenceBundle({ plan: nowPlan ?? undefined, snapshot: effectiveSnapshot }));
+
+          const navPlatform =
+            typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent || '')
+              ? 'ios'
+              : typeof navigator !== 'undefined' && /Android/.test(navigator.userAgent || '')
+              ? 'android'
+              : 'desktop';
 
           const navUrl = buildGroundedNavigateUrl(
             {
@@ -1764,12 +1772,13 @@ export function renderApp(
               sourceRef: { recordId: candidate.id, field: 'name' },
             },
             bundle,
-            { platform: 'desktop' }
+            { platform: navPlatform }
           );
 
           if (navUrl) {
             root.querySelector('#navigate-confirm-backdrop')?.remove();
 
+            const mapsAppName = navPlatform === 'ios' ? 'Apple Maps' : 'Google Maps';
             const modalEl = document.createElement('div');
             modalEl.className = 'v2-navigate-modal-backdrop';
             modalEl.id = 'navigate-confirm-backdrop';
@@ -1780,7 +1789,7 @@ export function renderApp(
                   <span class="v2-illustration-badge">Verified handoff</span>
                 </div>
                 <p class="v2-modal-body">
-                  Open driving directions to <strong>${escapeHtml(candidate.name || candidate.label)}</strong> in Google Maps?
+                  Open driving directions to <strong>${escapeHtml(candidate.name || candidate.label)}</strong> in ${mapsAppName}?
                 </p>
                 <div class="v2-modal-url-preview">
                   <span class="v2-url-label">Verified Destination URL:</span>

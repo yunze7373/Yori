@@ -150,11 +150,16 @@ export class FuelPreparer implements Preparer {
 
     const derivation = `Found nearby fuel: ${topCandidates.map(c => `${c.name} (${c.straightLineDistanceLabel})`).join(', ')}; ranked by straight-line distance; simulated data.`;
 
+    const distClean = topStation.straightLineDistanceLabel
+      ? topStation.straightLineDistanceLabel.replace(' (straight-line)', ' straight-line')
+      : undefined;
+    const headline = distClean ? `${topStation.name} · ${distClean}` : topStation.name;
+
     const plan: PreparedPlan = {
       id: `fuel-plan-${nowIso}`,
       intentId: 'fuel',
       subjectTitle: 'Nearby Gas Stations',
-      headline: `Nearby Fuel: ${topStation.name} (${topStation.straightLineDistanceLabel}) · simulated`,
+      headline,
       createdAt: nowIso,
       timezone,
       optionsOrSteps: topCandidates,

@@ -120,9 +120,8 @@ describe('V5-FUEL: Fuel Plugin & Extensibility (AC-EXT-1)', () => {
     expect(plan).not.toBeNull();
     expect(plan?.intentId).toBe('fuel');
     expect(plan?.subjectTitle).toBe('Nearby Gas Stations');
-    expect(plan?.headline).toContain('Nearby Fuel: Metro Gas & Go');
-    expect(plan?.headline).toContain('(straight-line)');
-    expect(plan?.headline).toContain('simulated');
+    expect(plan?.headline).toContain('Metro Gas & Go');
+    expect(plan?.headline).toContain('straight-line');
 
     expect(plan?.optionsOrSteps.length).toBeGreaterThanOrEqual(2);
     const topOption = plan!.optionsOrSteps[0] as any;

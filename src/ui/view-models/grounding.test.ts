@@ -1281,5 +1281,86 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(emptyComp.title).toBe('No Gas Stations Nearby');
       expect(emptyComp.headline).toBe('No fuel stations found within search radius');
     });
+
+    it('fuel plan with invented station fails closed: card withheld, URL undefined, candidate_outside_bundle logged', () => {
+      globalDecisionLogger.clear();
+
+      const inventedPlan: PreparedPlan = {
+        id: 'plan-fuel-hallucinated',
+        intentId: 'fuel',
+        headline: 'Find gas nearby',
+        timezone: 'America/Los_Angeles',
+        optionsOrSteps: [
+          {
+            id: 'fuel-x-invented',
+            name: 'Blue Fern Gas',
+            straightLineDistanceMeters: 150,
+            straightLineDistanceLabel: '150 m (straight-line)',
+            requiresConfirmation: false,
+          } as any,
+        ],
+        requiresConfirmation: false,
+        why: {
+          derivation: 'Invented fuel plan for negative test',
+          evidenceSignals: [],
+          memoryFactsUsed: [],
+        },
+        createdAt: '2026-10-28T19:10:00.000Z',
+      };
+
+      // Snapshot without places / places_fuel signal
+      const snapshotWithoutPlaces = {
+        id: 'snap-no-places',
+        asOf: '2026-10-28T19:10:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [
+          createSimulatedSignal({
+            kind: 'fuel_percent',
+            value: { fuelPercent: 12, needsFuel: true },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1,
+            consentScope: 'device_only',
+          }),
+          createSimulatedSignal({
+            kind: 'location_status',
+            value: { status: 'available', lat: 37.7749, lng: -122.4194 },
+            issuedAt: '2026-10-28T19:10:00.000Z',
+            validFor: 3600000,
+            confidence: 1,
+            consentScope: 'device_only',
+          }),
+        ],
+      };
+
+      // 1. buildHomeComposition withholds the card (0 candidate cards)
+      const home = buildHomeComposition({
+        plan: inventedPlan,
+        spatialEvidence: null,
+        snapshot: snapshotWithoutPlaces,
+      });
+
+      expect(home.candidateCards).toHaveLength(0);
+
+      // 2. buildGroundedNavigateUrl returns undefined
+      const bundle = createFuelEvidenceBundle({ snapshot: snapshotWithoutPlaces });
+      expect(bundle.hasRecord('fuel-x-invented')).toBe(false);
+
+      const inventedCandidate = {
+        id: 'fuel-x-invented',
+        name: 'Blue Fern Gas',
+        coords: { lat: 37.775, lng: -122.418 },
+        sourceRef: { recordId: 'fuel-x-invented', field: 'name' },
+      };
+      const navUrl = buildGroundedNavigateUrl(inventedCandidate, bundle);
+      expect(navUrl).toBeUndefined();
+
+      // 3. Redacted Decision Log entry is written with candidate_outside_bundle
+      const latest = globalDecisionLogger.getLatest();
+      expect(latest).toBeDefined();
+      expect(latest!.validationResult.valid).toBe(false);
+      expect(latest!.validationResult.reason).toBe('candidate_outside_bundle');
+      expect(latest!.inputSignalIds).toEqual(['fuel-x-invented']);
+    });
   });
 });
