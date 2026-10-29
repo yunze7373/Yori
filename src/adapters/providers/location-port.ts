@@ -31,6 +31,7 @@ export interface LocationStatus {
 export interface LocationPort {
   getLocation(): LocationStatus;
   setLocation(status: LocationStatusKind, coords?: LocationCoords): void;
+  consentAndRequest?(options?: PositionOptions): Promise<LocationStatus>;
 }
 
 /**

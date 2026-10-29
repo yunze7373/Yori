@@ -570,7 +570,9 @@ export function computeSceneState(
           status: locPortStatus.status,
           lat: locPortStatus.coords?.lat,
           lng: locPortStatus.coords?.lng,
-          source: 'fixture',
+          source: locPortStatus.source || 'fixture',
+          accuracy: locPortStatus.accuracy,
+          notice: locPortStatus.notice,
         },
         issuedAt: '2026-10-28T19:10:00.000Z',
         validFor: 3600000,
@@ -2325,15 +2327,23 @@ export function renderApp(
     if (reqLocBtn) {
       reqLocBtn.addEventListener('click', async () => {
         if (
-          'requestCurrentPosition' in defaultLocationPort &&
-          typeof (defaultLocationPort as any).requestCurrentPosition === 'function'
+          'consentAndRequest' in defaultLocationPort &&
+          typeof (defaultLocationPort as any).consentAndRequest === 'function'
         ) {
-          await (defaultLocationPort as any).requestCurrentPosition();
-        } else if (
-          'grantConsent' in defaultLocationPort &&
-          typeof (defaultLocationPort as any).grantConsent === 'function'
-        ) {
-          (defaultLocationPort as any).grantConsent();
+          await (defaultLocationPort as any).consentAndRequest();
+        } else {
+          if (
+            'grantConsent' in defaultLocationPort &&
+            typeof (defaultLocationPort as any).grantConsent === 'function'
+          ) {
+            (defaultLocationPort as any).grantConsent();
+          }
+          if (
+            'requestCurrentPosition' in defaultLocationPort &&
+            typeof (defaultLocationPort as any).requestCurrentPosition === 'function'
+          ) {
+            await (defaultLocationPort as any).requestCurrentPosition();
+          }
         }
         update();
       });
@@ -2356,7 +2366,7 @@ export function renderApp(
       manualToggleBtn.addEventListener('click', () => {
         const section = root.querySelector('#v2-manual-location-section');
         if (section) {
-          const isHidden = (section as HTMLElement).style.display === 'none';
+          const isHidden = window.getComputedStyle(section).display === 'none';
           (section as HTMLElement).style.display = isHidden ? 'flex' : 'none';
           manualToggleBtn.setAttribute('aria-expanded', String(isHidden));
         }
@@ -2368,7 +2378,7 @@ export function renderApp(
       changeLocBtn.addEventListener('click', () => {
         const section = root.querySelector('#v2-manual-location-section');
         if (section) {
-          const isHidden = (section as HTMLElement).style.display === 'none';
+          const isHidden = window.getComputedStyle(section).display === 'none';
           (section as HTMLElement).style.display = isHidden ? 'flex' : 'none';
           changeLocBtn.setAttribute('aria-expanded', String(isHidden));
         }

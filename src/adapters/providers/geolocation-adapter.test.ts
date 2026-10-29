@@ -17,7 +17,7 @@ describe('V5-GEO: GeolocationAdapter (AC-211-1, AC-211-2)', () => {
     vi.restoreAllMocks();
   });
 
-  describe('AC-211-1: Consent, Degradation, Timeout, Stale, and Budget', () => {
+  describe('AC-211-1: Consent Tap, Real Chain Activation, Timeout, Stale, and Budget', () => {
     it('initializes in prompt state with consent needed notice and no coordinates', () => {
       const adapter = new GeolocationAdapter({
         initialStatus: 'prompt',
@@ -31,22 +31,100 @@ describe('V5-GEO: GeolocationAdapter (AC-211-1, AC-211-2)', () => {
       expect(adapter.getConsentStatus()).toBe('prompt');
     });
 
-    it('handles explicit consent grant and transitions to available', async () => {
+    it('initialStatus "available" initializes with source "fixture" while consentStatus remains "prompt" (no inferred consent)', () => {
       const adapter = new GeolocationAdapter({
-        initialStatus: 'prompt',
+        initialStatus: 'available',
         initialCoords: DEFAULT_DEMO_COORDS,
         simulated: true,
       });
 
-      expect(adapter.getLocation().status).toBe('prompt');
+      // Location is available from fixture
+      const loc = adapter.getLocation();
+      expect(loc.status).toBe('available');
+      expect(loc.coords).toEqual(DEFAULT_DEMO_COORDS);
+      expect(loc.source).toBe('fixture');
+
+      // Geolocation consent itself was NOT pre-granted from fixture
+      expect(adapter.getConsentStatus()).toBe('prompt');
+    });
+
+    it('consent tap via consentAndRequest() with real chain OFF: grants consent, returns unavailable with P-LOC notice, never fabricates coords/accuracy, 0 provider calls', async () => {
+      const adapter = new GeolocationAdapter({
+        enabled: true,
+        simulated: true, // flag-off in demo
+        geolocationProvider: mockGeo,
+        initialStatus: 'prompt',
+      });
+
+      const res = await adapter.consentAndRequest();
+
+      // Consent is now granted
+      expect(adapter.getConsentStatus()).toBe('granted');
+      // Status is unavailable because live geolocation is disabled
+      expect(res.status).toBe('unavailable');
+      expect(res.source).toBe('geolocation');
+      expect(res.coords).toBeUndefined();
+      expect(res.accuracy).toBeUndefined();
+      expect(res.notice).toContain('Live geolocation is disabled in this demo (owner gate P-LOC required)');
+
+      // Provider was NEVER called
+      expect(mockGeo.getCurrentPosition).not.toHaveBeenCalled();
+
+      // Subsequent getLocation() returns the same honest unavailable state and notice
+      const loc = adapter.getLocation();
+      expect(loc.status).toBe('unavailable');
+      expect(loc.coords).toBeUndefined();
+      expect(loc.notice).toContain('Live geolocation is disabled in this demo (owner gate P-LOC required)');
+    });
+
+    it('consent tap sequence (grantConsent then requestCurrentPosition) matches consentAndRequest() exactly', async () => {
+      const adapter = new GeolocationAdapter({
+        enabled: true,
+        simulated: true,
+        geolocationProvider: mockGeo,
+        initialStatus: 'prompt',
+      });
 
       adapter.grantConsent();
       expect(adapter.getConsentStatus()).toBe('granted');
 
+      const res = await adapter.requestCurrentPosition();
+      expect(res.status).toBe('unavailable');
+      expect(res.coords).toBeUndefined();
+      expect(res.accuracy).toBeUndefined();
+      expect(res.notice).toContain('Live geolocation is disabled in this demo (owner gate P-LOC required)');
+      expect(mockGeo.getCurrentPosition).not.toHaveBeenCalled();
+    });
+
+    it('consent tap with real chain ON (enabled=true, simulated=false, mock provider): invokes provider exactly once and returns available with real fix', async () => {
+      const now = Date.now();
+      mockGeo.getCurrentPosition.mockImplementation((success) => {
+        success({
+          coords: { latitude: 37.7749, longitude: -122.4194, accuracy: 8 },
+          timestamp: now,
+        });
+      });
+
+      const adapter = new GeolocationAdapter({
+        enabled: true,
+        simulated: false,
+        geolocationProvider: mockGeo,
+        initialStatus: 'prompt',
+      });
+
+      const res = await adapter.consentAndRequest();
+
+      expect(adapter.getConsentStatus()).toBe('granted');
+      expect(mockGeo.getCurrentPosition).toHaveBeenCalledTimes(1);
+      expect(res.status).toBe('available');
+      expect(res.source).toBe('geolocation');
+      expect(res.coords).toEqual({ lat: 37.7749, lng: -122.4194 });
+      expect(res.accuracy).toBe(8);
+
       const loc = adapter.getLocation();
       expect(loc.status).toBe('available');
-      expect(loc.coords).toEqual(DEFAULT_DEMO_COORDS);
-      expect(loc.accuracy).toBeDefined();
+      expect(loc.coords).toEqual({ lat: 37.7749, lng: -122.4194 });
+      expect(loc.accuracy).toBe(8);
     });
 
     it('handles explicit consent deny: status denied, zero coordinates, clear notice', () => {
@@ -64,27 +142,7 @@ describe('V5-GEO: GeolocationAdapter (AC-211-1, AC-211-2)', () => {
       expect(loc.notice).toContain('Location access denied');
     });
 
-    it('handles timeout error gracefully: status unavailable, clear notice', async () => {
-      mockGeo.getCurrentPosition.mockImplementation((_success, error) => {
-        error({ code: 3, message: 'Timeout expired' });
-      });
-
-      const adapter = new GeolocationAdapter({
-        enabled: true,
-        simulated: false,
-        geolocationProvider: mockGeo,
-        initialStatus: 'prompt',
-      });
-
-      adapter.grantConsent();
-      const res = await adapter.requestCurrentPosition();
-
-      expect(res.status).toBe('unavailable');
-      expect(res.coords).toBeUndefined();
-      expect(res.notice).toContain('timed out');
-    });
-
-    it('handles user deny error (code 1): transitions to denied', async () => {
+    it('handles provider error code 1 (denied) via consentAndRequest: transitions consent to denied', async () => {
       mockGeo.getCurrentPosition.mockImplementation((_success, error) => {
         error({ code: 1, message: 'User denied Geolocation' });
       });
@@ -96,23 +154,74 @@ describe('V5-GEO: GeolocationAdapter (AC-211-1, AC-211-2)', () => {
         initialStatus: 'prompt',
       });
 
-      adapter.grantConsent();
-      const res = await adapter.requestCurrentPosition();
+      const res = await adapter.consentAndRequest();
 
       expect(res.status).toBe('denied');
       expect(adapter.getConsentStatus()).toBe('denied');
       expect(res.notice).toContain('denied');
+
+      const loc = adapter.getLocation();
+      expect(loc.status).toBe('denied');
+      expect(loc.notice).toContain('Location access denied');
+    });
+
+    it('handles provider error code 2 (unavailable) via consentAndRequest: status unavailable, clear notice', async () => {
+      mockGeo.getCurrentPosition.mockImplementation((_success, error) => {
+        error({ code: 2, message: 'Position unavailable' });
+      });
+
+      const adapter = new GeolocationAdapter({
+        enabled: true,
+        simulated: false,
+        geolocationProvider: mockGeo,
+        initialStatus: 'prompt',
+      });
+
+      const res = await adapter.consentAndRequest();
+
+      expect(res.status).toBe('unavailable');
+      expect(res.coords).toBeUndefined();
+      expect(res.notice).toContain('unavailable');
+    });
+
+    it('handles provider error code 3 (timeout) via consentAndRequest: status unavailable, clear notice', async () => {
+      mockGeo.getCurrentPosition.mockImplementation((_success, error) => {
+        error({ code: 3, message: 'Timeout expired' });
+      });
+
+      const adapter = new GeolocationAdapter({
+        enabled: true,
+        simulated: false,
+        geolocationProvider: mockGeo,
+        initialStatus: 'prompt',
+      });
+
+      const res = await adapter.consentAndRequest();
+
+      expect(res.status).toBe('unavailable');
+      expect(res.coords).toBeUndefined();
+      expect(res.notice).toContain('timed out');
     });
 
     it('handles stale fix (age > threshold): status unavailable, isStale true', () => {
-      const adapter = new GeolocationAdapter({
-        initialStatus: 'available',
-        initialCoords: DEFAULT_DEMO_COORDS,
-        staleThresholdMs: 1000, // 1 second threshold for test
+      mockGeo.getCurrentPosition.mockImplementation((success) => {
+        success({
+          coords: { latitude: 37.7749, longitude: -122.4194, accuracy: 10 },
+          timestamp: Date.now(),
+        });
       });
 
-      // Initially fresh
-      expect(adapter.getLocation().status).toBe('available');
+      const adapter = new GeolocationAdapter({
+        enabled: true,
+        simulated: false,
+        geolocationProvider: mockGeo,
+        initialStatus: 'prompt',
+        staleThresholdMs: 1000,
+      });
+
+      // Acquire initial fresh fix
+      adapter.grantConsent();
+      adapter.requestCurrentPosition();
 
       // Fast forward time past stale threshold
       const dateSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 5000);
@@ -201,11 +310,12 @@ describe('V5-GEO: GeolocationAdapter (AC-211-1, AC-211-2)', () => {
         initialStatus: 'prompt',
       });
 
-      adapter.grantConsent();
-      const res = await adapter.requestCurrentPosition();
+      const res = await adapter.consentAndRequest();
 
-      expect(res.status).toBe('available');
-      expect(res.coords).toEqual(DEFAULT_DEMO_COORDS);
+      expect(res.status).toBe('unavailable');
+      expect(res.coords).toBeUndefined();
+      expect(res.accuracy).toBeUndefined();
+      expect(res.notice).toContain('Live geolocation is disabled in this demo (owner gate P-LOC required)');
       // Spy asserts 0 real-chain calls
       expect(mockGeo.getCurrentPosition).not.toHaveBeenCalled();
     });
@@ -218,10 +328,12 @@ describe('V5-GEO: GeolocationAdapter (AC-211-1, AC-211-2)', () => {
         initialStatus: 'prompt',
       });
 
-      adapter.grantConsent();
-      const res = await adapter.requestCurrentPosition();
+      const res = await adapter.consentAndRequest();
 
-      expect(res.status).toBe('available');
+      expect(res.status).toBe('unavailable');
+      expect(res.coords).toBeUndefined();
+      expect(res.accuracy).toBeUndefined();
+      expect(res.notice).toContain('Live geolocation is disabled in this demo (owner gate P-LOC required)');
       expect(mockGeo.getCurrentPosition).not.toHaveBeenCalled();
     });
 
@@ -240,11 +352,11 @@ describe('V5-GEO: GeolocationAdapter (AC-211-1, AC-211-2)', () => {
         initialStatus: 'prompt',
       });
 
-      adapter.grantConsent();
-      const res = await adapter.requestCurrentPosition();
+      const res = await adapter.consentAndRequest();
 
       expect(res.status).toBe('available');
       expect(res.coords).toEqual({ lat: 34.0522, lng: -118.2437 });
+      expect(res.accuracy).toBe(5);
       expect(mockGeo.getCurrentPosition).toHaveBeenCalledTimes(1);
     });
   });

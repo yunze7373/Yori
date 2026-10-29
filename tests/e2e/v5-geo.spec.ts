@@ -132,49 +132,62 @@ test.describe('V5-GEO: Consent-Aware Geolocation & Explicit Degradation (AC-211-
     // Visual screenshot 2: Denied State
     await maybeScreenshot(page, `geo-denied-${vpSuffix}.png`);
 
-    // 3. User Expands Manual Location Section
-    const manualSection = page.locator('#v2-manual-location-section');
-    await expect(manualSection).toBeVisible();
+    // 3. User taps "Try Again" (#btn-request-location): invokes consentAndRequest
+    const retryBtn = page.locator('#btn-request-location');
+    await expect(retryBtn).toBeVisible();
+    await expect(retryBtn).toContainText('Try Again');
+    await retryBtn.click();
 
-    const citySfBtn = page.locator('#btn-city-sf');
-    await expect(citySfBtn).toBeVisible();
+    // In flag-off demo mode, transitions honestly to unavailable (P-LOC required)
+    await expect(quietCard).toContainText('Location Unavailable');
+    await expect(quietCard).toContainText('Live geolocation is disabled in this demo (owner gate P-LOC required)');
+    await expect(candidateCards).toHaveCount(0);
+
+    // 4. User Selects Los Angeles Preset Chip (Manual Location)
     const cityLaBtn = page.locator('#btn-city-la');
     await expect(cityLaBtn).toBeVisible();
+    await cityLaBtn.click();
 
-    const latInput = page.locator('#input-manual-lat');
-    await expect(latInput).toBeVisible();
-    const lngInput = page.locator('#input-manual-lng');
-    await expect(lngInput).toBeVisible();
-
-    // Touch targets for city chips (>= 44px)
-    const sfBox = await citySfBtn.boundingBox();
-    expect(sfBox).not.toBeNull();
-    expect(sfBox!.width).toBeGreaterThanOrEqual(44);
-    expect(sfBox!.height).toBeGreaterThanOrEqual(44);
-
-    // Accessibility check on manual location section
-    await checkAxe(page);
-
-    // Visual screenshot 3: Manual Location Section
-    await maybeScreenshot(page, `geo-manual-location-${vpSuffix}.png`);
-
-    // 4. User Selects San Francisco Preset: Fuel Recommendations Appear
-    await citySfBtn.click();
-
-    // Now-card appears with fuel recommendations
+    // Now-card appears with fuel recommendations for Los Angeles
     const nowCard = page.locator('.now-card');
     await expect(nowCard).toBeVisible();
     await expect(nowCard).toContainText('Low Fuel Warning');
     await expect(nowCard).toContainText('SIMULATED');
 
-    // Candidate cards now populated from provider
+    // Candidates populated for Los Angeles (2 stations in LA fixture)
+    await expect(candidateCards).toHaveCount(2);
+    const laTopCard = candidateCards.first();
+    await expect(laTopCard).toContainText('Angel City Fuel');
+
+    // Location badge reflects manual Los Angeles location
+    const locBadge = page.locator('.v2-location-badge');
+    await expect(locBadge).toBeVisible();
+    await expect(locBadge).toContainText('Location: Los Angeles (manual)');
+
+    // Accessibility check on manual location layout with LA candidates
+    await checkAxe(page);
+
+    // Visual screenshot 3: Manual Location Section (distinct from denied, showing LA candidates & label)
+    await maybeScreenshot(page, `geo-manual-location-${vpSuffix}.png`);
+
+    // 5. User Changes Location to San Francisco Preset
+    const changeLocBtn = page.locator('#btn-change-location');
+    await expect(changeLocBtn).toBeVisible();
+    await changeLocBtn.click();
+
+    const citySfBtn = page.locator('#btn-city-sf');
+    await expect(citySfBtn).toBeVisible();
+    await citySfBtn.click();
+
+    // Candidates updated to San Francisco from provider
     await expect(candidateCards).toHaveCount(3);
-    const topCard = candidateCards.first();
-    await expect(topCard).toContainText('Metro Gas & Go');
-    await expect(topCard).toContainText('(straight-line)');
+    const sfTopCard = candidateCards.first();
+    await expect(sfTopCard).toContainText('Metro Gas & Go');
+    await expect(sfTopCard).toContainText('(straight-line)');
+    await expect(locBadge).toContainText('Location: San Francisco (manual)');
 
     // Directions button is active and >= 44px
-    const directionsBtn = topCard.locator('.v2-directions-btn');
+    const directionsBtn = sfTopCard.locator('.v2-directions-btn');
     await expect(directionsBtn).toBeVisible();
     const dirBox = await directionsBtn.boundingBox();
     expect(dirBox).not.toBeNull();
@@ -200,10 +213,48 @@ test.describe('V5-GEO: Consent-Aware Geolocation & Explicit Degradation (AC-211-
     // Accessibility check on fuel recommendations layout
     await checkAxe(page);
 
-    // Visual screenshot 4: Fuel Recommendations Layout With Manual Location Set
+    // Visual screenshot 4: Fuel Recommendations Layout With SF Location Set
     await maybeScreenshot(page, `geo-fuel-with-location-${vpSuffix}.png`);
 
-    // 5. Invariant: ZERO non-font external network requests across entire flow
+    // 6. Invariant: ZERO non-font external network requests across entire flow
+    expect(disallowedRequests).toHaveLength(0);
+  });
+
+  test('V5-GEO: "Use My Location" consent tap requests position and produces honest flag-off notice (AC-211-1, AC-211-2)', async ({
+    page,
+  }) => {
+    const disallowedRequests: string[] = [];
+    page.on('request', req => {
+      const url = req.url().toLowerCase();
+      if (
+        url.includes('overpass') ||
+        (url.includes('googleapis') && !url.includes('fonts.googleapis.com')) ||
+        url.includes('google.com/maps') ||
+        url.includes('maps.apple.com') ||
+        url.includes('openstreetmap') ||
+        url.includes('osrm') ||
+        url.includes('open-meteo')
+      ) {
+        disallowedRequests.push(url);
+      }
+    });
+
+    await page.goto('/?ui=v2&scene=fuel&geo_consent=prompt&test=1');
+    await page.waitForSelector('.app-layout');
+
+    // Tap "Use My Location" directly from prompt
+    const reqBtn = page.locator('#btn-request-location');
+    await expect(reqBtn).toBeVisible();
+    await reqBtn.click();
+
+    // Verify transition to honest unavailable notice with owner gate P-LOC mention
+    const quietCard = page.locator('.quiet-card');
+    await expect(quietCard).toBeVisible();
+    await expect(quietCard).toContainText('Location Unavailable');
+    await expect(quietCard).toContainText('Live geolocation is disabled in this demo (owner gate P-LOC required)');
+
+    // Invariant: zero candidates rendered and zero disallowed external requests
+    await expect(page.locator('.v2-candidate-card')).toHaveCount(0);
     expect(disallowedRequests).toHaveLength(0);
   });
 

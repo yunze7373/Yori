@@ -15,7 +15,6 @@
  */
 
 import type { LocationCoords, LocationPort, LocationStatus, LocationStatusKind } from './location-port.js';
-import { DEFAULT_DEMO_COORDS } from './location-port.js';
 import type { EvidenceRecord } from '../../ui/view-models/grounding.js';
 
 const DEFAULT_FALLBACK_COORDS: LocationCoords = Object.freeze({
@@ -65,7 +64,7 @@ export class GeolocationAdapter implements LocationPort {
   private cachedAccuracy?: number;
   private cachedTimestamp?: number;
   private manualStatus?: LocationStatus;
-  private initialCoords?: LocationCoords;
+  private lastNotice?: string;
 
   constructor(options: GeolocationAdapterOptions = {}) {
     this.enabled =
@@ -77,19 +76,22 @@ export class GeolocationAdapter implements LocationPort {
     this.cacheTtlMs = options.cacheTtlMs ?? 60000; // 1 min
     this.staleThresholdMs = options.staleThresholdMs ?? 300000; // 5 min
     this.debounceMs = options.debounceMs ?? 2000; // 2s
-    this.initialCoords = options.initialCoords;
     this.geolocationProvider = options.geolocationProvider;
 
     const initialStatus = options.initialStatus ?? 'available';
-    if (initialStatus === 'available') {
-      this.consentStatus = 'granted';
-      this.cachedCoords = options.initialCoords ?? DEFAULT_DEMO_COORDS ?? DEFAULT_FALLBACK_COORDS;
-      this.cachedAccuracy = 15;
-      this.cachedTimestamp = Date.now();
-    } else if (initialStatus === 'denied') {
+    if (initialStatus === 'denied') {
       this.consentStatus = 'denied';
     } else {
       this.consentStatus = 'prompt';
+    }
+
+    if (initialStatus === 'available') {
+      this.manualStatus = {
+        status: 'available',
+        coords: options.initialCoords ?? DEFAULT_FALLBACK_COORDS,
+        source: 'fixture',
+        updatedAt: new Date().toISOString(),
+      };
     }
   }
 
@@ -148,11 +150,12 @@ export class GeolocationAdapter implements LocationPort {
       status: 'unavailable',
       source: 'geolocation',
       updatedAt: new Date(now).toISOString(),
-      notice: 'No location fix acquired',
+      notice: this.lastNotice ?? 'No location fix acquired',
     };
   }
 
   public setLocation(status: LocationStatusKind, coords?: LocationCoords): void {
+    this.lastNotice = undefined;
     if (status === 'available' && !coords) {
       this.manualStatus = {
         status: 'unavailable',
@@ -187,11 +190,12 @@ export class GeolocationAdapter implements LocationPort {
   public grantConsent(): void {
     this.consentStatus = 'granted';
     this.manualStatus = undefined;
-    if (this.simulated || !this.enabled) {
-      this.cachedCoords = this.initialCoords ?? DEFAULT_DEMO_COORDS ?? DEFAULT_FALLBACK_COORDS;
-      this.cachedAccuracy = 15;
-      this.cachedTimestamp = Date.now();
-    }
+    this.lastNotice = undefined;
+  }
+
+  public async consentAndRequest(options?: PositionOptions): Promise<LocationStatus> {
+    this.grantConsent();
+    return this.requestCurrentPosition(options);
   }
 
   public denyConsent(): void {
@@ -199,6 +203,7 @@ export class GeolocationAdapter implements LocationPort {
     this.cachedCoords = undefined;
     this.cachedTimestamp = undefined;
     this.manualStatus = undefined;
+    this.lastNotice = undefined;
   }
 
   public getConsentStatus(): ConsentStatus {
@@ -240,11 +245,12 @@ export class GeolocationAdapter implements LocationPort {
 
     // 2. Budget guard
     if (this.requestCount >= this.maxRequestsPerSession) {
+      this.lastNotice = 'Session location request budget exhausted';
       return {
         status: 'unavailable',
         source: 'geolocation',
         updatedAt: new Date().toISOString(),
-        notice: 'Session location request budget exhausted',
+        notice: this.lastNotice,
       };
     }
 
@@ -263,10 +269,14 @@ export class GeolocationAdapter implements LocationPort {
       // Real chain stays OFF. Zero real navigator.geolocation calls.
       this.requestCount++;
       this.lastRequestTime = now;
-      this.cachedCoords = this.initialCoords ?? DEFAULT_DEMO_COORDS ?? DEFAULT_FALLBACK_COORDS;
-      this.cachedAccuracy = 15;
-      this.cachedTimestamp = now;
-      return this.getLocation();
+      this.lastNotice =
+        'Live geolocation is disabled in this demo (owner gate P-LOC required); please choose a city preset or enter coordinates manually';
+      return {
+        status: 'unavailable',
+        source: 'geolocation',
+        updatedAt: new Date(now).toISOString(),
+        notice: this.lastNotice,
+      };
     }
 
     // 6. Real browser geolocation call
@@ -275,11 +285,12 @@ export class GeolocationAdapter implements LocationPort {
       (typeof navigator !== 'undefined' ? navigator.geolocation : undefined);
 
     if (!geo || typeof geo.getCurrentPosition !== 'function') {
+      this.lastNotice = 'Browser geolocation not supported in this environment';
       return {
         status: 'unavailable',
         source: 'geolocation',
         updatedAt: new Date().toISOString(),
-        notice: 'Browser geolocation not supported in this environment',
+        notice: this.lastNotice,
       };
     }
 
@@ -295,6 +306,7 @@ export class GeolocationAdapter implements LocationPort {
           };
           this.cachedAccuracy = pos.coords.accuracy;
           this.cachedTimestamp = pos.timestamp || Date.now();
+          this.lastNotice = undefined;
           resolve({
             status: 'available',
             coords: this.cachedCoords,
@@ -315,6 +327,7 @@ export class GeolocationAdapter implements LocationPort {
           } else if (err.code === 3) {
             notice = 'Location request timed out';
           }
+          this.lastNotice = notice;
           resolve({
             status,
             source: 'geolocation',
@@ -359,6 +372,7 @@ export class GeolocationAdapter implements LocationPort {
     this.cachedTimestamp = undefined;
     this.manualStatus = undefined;
     this.consentStatus = 'prompt';
+    this.lastNotice = undefined;
   }
 }
 

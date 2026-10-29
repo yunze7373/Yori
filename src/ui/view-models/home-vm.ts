@@ -526,6 +526,24 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       }
     }
 
+    const locSig = snapshot?.signals?.find(s => s.kind === 'location_status' || s.kind === 'location');
+    const locVal = locSig?.value as any;
+    const locSource = locVal?.source;
+    let locationLabel = 'Selected City (simulated)';
+    if (locSource === 'manual') {
+      if (locVal?.lat && Math.abs(locVal.lat - 34.0522) < 0.05) {
+        locationLabel = 'Los Angeles (manual)';
+      } else if (locVal?.lat && Math.abs(locVal.lat - 37.7749) < 0.05) {
+        locationLabel = 'San Francisco (manual)';
+      } else if (locVal?.lat && locVal?.lng) {
+        locationLabel = `Custom Location (${locVal.lat.toFixed(2)}, ${locVal.lng.toFixed(2)}) (manual)`;
+      } else {
+        locationLabel = 'Manual Location';
+      }
+    } else if (locSource === 'geolocation') {
+      locationLabel = 'Acquired Position (live geolocation)';
+    }
+
     return {
       layoutKind: 'candidates',
       planId: plan.id,
@@ -543,6 +561,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       proposals: compileProposals(proposals),
       evidenceBundle: bundle,
       sourceRef: { recordId: 'loc-fuel-origin', field: 'name' },
+      locationLabel,
     };
   }
 

@@ -234,7 +234,10 @@ export function renderLocationControls(vm: HomeCompositionVM): string {
           ? `
         <div class="v2-location-notice-banner unavailable" role="status">
           <div class="v2-location-notice-title">Location Unavailable</div>
-          <div class="v2-location-notice-desc">Unable to acquire current position. Please select a city or enter coordinates manually.</div>
+          <div class="v2-location-notice-desc">${escapeHtml(
+            vm.locationNotice ||
+              'Unable to acquire current position. Please select a city or enter coordinates manually.'
+          )}</div>
         </div>
       `
           : ''
@@ -469,7 +472,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
               ? `
             <div class="v2-active-location-bar" role="region" aria-label="Active Location">
-              <span class="v2-location-badge">📍 Location: Selected City (simulated)</span>
+              <span class="v2-location-badge">📍 Location: ${escapeHtml(
+                vm.locationLabel || 'Selected City (simulated)'
+              )}</span>
               <button type="button" class="btn btn-outline btn-sm v2-change-loc-btn" id="btn-change-location" aria-expanded="false" aria-controls="v2-manual-location-section">
                 Change Location
               </button>
