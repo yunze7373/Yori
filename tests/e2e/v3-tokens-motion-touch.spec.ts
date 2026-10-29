@@ -495,8 +495,17 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     const headingNoTruncation = await sectionHeading.evaluate(el => el.scrollWidth <= el.clientWidth);
     expect(headingNoTruncation, 'Section heading should fit without ellipsis truncation').toBe(true);
 
+    // Lunch scene on mobile: places heading "Places Map" / "PLACES MAP"
+    await page.selectOption('#scene-select', 'away-lunch');
+    await page.waitForTimeout(200);
+    await expect(page.locator('.map-header .v2-heading-mobile').first()).toBeVisible();
+    await expect(page.locator('.map-header .v2-heading-desktop').first()).toBeHidden();
+    expect(await page.locator('.map-header .v2-heading-mobile').first().textContent()).toBe('Places Map');
+    expect(await page.locator('.map-header .v2-heading-mobile').first().innerText()).toBe('PLACES MAP');
+
     // 5. Verify desktop copy when expanded to 1280x800
     await page.setViewportSize({ width: 1280, height: 800 });
+    await page.selectOption('#scene-select', 'rain');
     await page.waitForTimeout(200);
     await expect(page.locator('#ask-bar .v2-ask-desktop')).toBeVisible();
     await expect(page.locator('#ask-bar .v2-ask-mobile')).toBeHidden();
@@ -507,7 +516,16 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     expect(await page.locator('.map-header .v2-heading-desktop').first().textContent()).toBe('Spatial Context Map');
     expect(await page.locator('.map-header .v2-heading-desktop').first().innerText()).toBe('SPATIAL CONTEXT MAP');
 
-    // 6. Verify effective computed font-size >= 10px on all map SVG text elements
+    // Lunch scene on desktop: places heading "Nearby Places Map" / "NEARBY PLACES MAP"
+    await page.selectOption('#scene-select', 'away-lunch');
+    await page.waitForTimeout(200);
+    await expect(page.locator('.map-header .v2-heading-desktop').first()).toBeVisible();
+    await expect(page.locator('.map-header .v2-heading-mobile').first()).toBeHidden();
+    expect(await page.locator('.map-header .v2-heading-desktop').first().textContent()).toBe('Nearby Places Map');
+    expect(await page.locator('.map-header .v2-heading-desktop').first().innerText()).toBe('NEARBY PLACES MAP');
+
+    // 6. Verify effective computed font-size >= 10px on all map SVG text elements at 390x844
+    await page.setViewportSize({ width: 390, height: 844 });
     for (const testScene of ['rain', 'clear', 'away-lunch']) {
       await page.selectOption('#scene-select', testScene);
       await page.waitForTimeout(200);
@@ -517,12 +535,17 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
       for (let i = 0; i < textCount; i++) {
         const textEl = svgTexts.nth(i);
         const textContent = await textEl.textContent();
-        const fontSize = await textEl.evaluate(el => {
-          return parseFloat(window.getComputedStyle(el).fontSize);
+        const effectiveFontSize = await textEl.evaluate(el => {
+          const svg = el.closest('svg')!;
+          const svgRect = svg.getBoundingClientRect();
+          const viewBoxWidth = svg.viewBox.baseVal.width || 340;
+          const scale = svgRect.width / viewBoxWidth;
+          const unscaledSize = parseFloat(window.getComputedStyle(el).fontSize);
+          return unscaledSize * scale;
         });
         expect(
-          fontSize,
-          `Map text "${textContent?.trim()}" effective computed font size should be >= 10px in ${testScene} scene`
+          effectiveFontSize,
+          `Map text "${textContent?.trim()}" effective computed font size should be >= 10px in ${testScene} scene at 390x844 (measured ${effectiveFontSize.toFixed(2)}px)`
         ).toBeGreaterThanOrEqual(10);
       }
     }

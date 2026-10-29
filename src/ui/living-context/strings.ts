@@ -205,6 +205,7 @@ export const STRINGS = Object.freeze({
   map: Object.freeze({
     label: 'Spatial Context Map',
     mobileLabel: 'Route Map',
+    mobilePlacesLabel: 'Places Map',
     abstractStreetDescription: 'Stylized street grid showing destination area',
     simulatedTag: 'Simulated Spatial Evidence',
   }),

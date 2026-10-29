@@ -581,4 +581,157 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     // Axe audit
     await checkAxe(page);
   });
+
+  test('V2 Video Script Verbatim Walkthrough: asserts all quoted text and recomputed timing (2:00 PM / 2:25 PM) under /?ui=v2', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+
+    const clickNav = async (tabName: 'home' | 'plans' | 'for-you' | 'me') => {
+      const isMobile = (page.viewportSize()?.width ?? 0) < 600;
+      if (isMobile) {
+        await page.locator(`#tab-${tabName}`).click();
+      } else {
+        await page.locator(`#desktop-nav-${tabName}`).click();
+      }
+    };
+
+    // --- Part 1 (Hook) Verbatim Quotes ---
+    await expect(page.locator('.demo-chip')).toHaveText('Demo · simulated context');
+    await expect(page.locator('#badge-ui-version')).toHaveText('V2 Preview');
+    await expect(page.locator('.now-card .now-subject')).toHaveText('Piano lesson at 3:00 PM');
+    await expect(page.locator('.now-card #now-title')).toHaveText('Get ready at 2:05 PM, leave by 2:25 PM');
+    await expect(page.locator('.now-card .card-badge')).toHaveText('SIMULATED');
+    await expect(page.locator('#ask-bar .ask-bar-hint')).toHaveText('Tap to chat');
+
+    // --- Part 2 (D2 Rain) Verbatim Quotes ---
+    await page.selectOption('#scene-select', 'rain');
+    await page.waitForTimeout(200);
+
+    await expect(page.locator('.v2-insight-title, .rain-banner').first()).toContainText('What changed: rain forecast');
+    await expect(page.locator('#chip-umbrella').first()).toContainText('Umbrella');
+    await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Rain forecast · simulated');
+    await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Issued 1:35 PM');
+
+    const optionCards = page.locator('.v2-options-grid .v2-option-card');
+    await expect(optionCards).toHaveCount(2);
+
+    const driveCard = optionCards.first();
+    await expect(driveCard.locator('.v2-option-label')).toHaveText('Drive · leave 2:30 PM');
+    await expect(driveCard.locator('.v2-option-badge')).toHaveText('Recommended');
+    await expect(driveCard.locator('.v2-option-meta')).toHaveText('25 min drive + 5m margin');
+    await expect(driveCard.locator('.v2-option-basis')).toHaveText(
+      'Ranked by habit: Rain travel habit (Demo profile · sample)'
+    );
+
+    const busCard = optionCards.nth(1);
+    await expect(busCard.locator('.v2-option-label')).toHaveText('Bus · leave 2:15 PM');
+    await expect(busCard.locator('.v2-option-badge')).toHaveText('Alternative');
+    await expect(busCard.locator('.v2-option-meta')).toHaveText('40 min bus + 5m margin');
+    await expect(page.locator('.habit-note')).toHaveText('You usually prefer driving when it rains.');
+
+    // --- Part 3 (D3 Away & D4 Busy) Verbatim Quotes ---
+    await page.selectOption('#scene-select', 'away-lunch');
+    await page.waitForTimeout(200);
+
+    await expect(page.locator('.v2-candidates-hero .now-subject')).toHaveText('Lunch options near you');
+    await expect(page.locator('.v2-candidates-hero #now-title')).toHaveText(
+      'Places matching what you like, within walking distance'
+    );
+    await expect(page.locator('.mock-places-notice')).toContainText(
+      'Mock places for this demo; real listings come from a place provider.'
+    );
+    await expect(page.locator('.v2-view-detail-link').first()).toContainText('Details →');
+
+    // Assert truthful rendered venue names (Demo Place A · Ramen, Demo Place B · Salad, Demo Place C · Sushi)
+    const venueCards = page.locator('.v2-candidate-card');
+    await expect(venueCards.nth(0)).toContainText('Demo Place A · Ramen');
+    await expect(venueCards.nth(1)).toContainText('Demo Place B · Salad');
+    await expect(venueCards.nth(2)).toContainText('Demo Place C · Sushi');
+
+    // Busy Lunch (D4) quiet state
+    await page.selectOption('#scene-select', 'busy-lunch');
+    await page.waitForTimeout(200);
+    await expect(page.locator('.quiet-title')).toHaveText('Nothing needs your attention right now.');
+
+    // --- Part 4 (Why Sheet & Adjust) Verbatim Quotes ---
+    await page.selectOption('#scene-select', 'rain');
+    await page.waitForTimeout(200);
+
+    await page.locator('#btn-why').click();
+    await expect(page.locator('#why-sheet-title')).toHaveText("Why you're seeing this");
+    await expect(page.locator('.why-section h3').first()).toContainText('Evidence & Signals');
+    await expect(page.locator('.why-section h3').nth(1)).toContainText('Memory & Habits');
+    await expect(
+      page.locator('#why-sheet-backdrop').getByText('Demo profile · sample preference').first()
+    ).toBeVisible();
+    await page.locator('#btn-close-why').click();
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+
+    // Open Adjust dialog and save preference
+    await page.locator('#btn-adjust').click();
+    await expect(page.locator('#adjust-dialog-title')).toContainText('Adjust Departure Timing');
+    await page.locator('#input-prep-minutes').fill('25');
+    await page.locator('#input-buffer-minutes').fill('10');
+    await page.locator('#btn-adjust-remember').click();
+    await expect(page.locator('#adjust-dialog-backdrop')).toHaveCount(0);
+
+    // --- Part 5 (For You, Me Tab & Recomputation) Verbatim Quotes ---
+    // Proposal appears on For You tab
+    await clickNav('for-you');
+    await expect(page.locator('.v2-for-you-view')).toBeVisible();
+    await expect(page.locator('.v2-for-you-view .v2-proposal-title')).toContainText(
+      'Remember departure prep & buffer routine?'
+    );
+
+    // Me tab shows budget, empty state, and proposal titled "Preparation buffer habit"
+    await clickNav('me');
+    await expect(page.locator('.me-title')).toHaveText('Me & Memory');
+    await expect(page.locator('.badge-budget')).toContainText('0 of 3 used today');
+    await expect(page.locator('#confirmed-facts-list .memory-empty')).toHaveText(
+      'No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.'
+    );
+
+    const pendingRow = page.locator('#proposal-prep_buffer_preference');
+    await expect(pendingRow).toBeVisible();
+    await expect(pendingRow.locator('.memory-key')).toHaveText('Preparation buffer habit');
+
+    // Confirm proposal
+    await pendingRow.locator('.btn-confirm-proposal').click();
+    await expect(pendingRow).toHaveCount(0);
+
+    const confirmedRow = page.locator('#fact-prep_buffer_preference');
+    await expect(confirmedRow).toBeVisible();
+    await expect(confirmedRow.locator('.badge-confirmed')).toContainText('Confirmed');
+
+    // Return to Home: schedule immediately recomputed to "Get ready at 2:00 PM, leave by 2:25 PM"
+    await clickNav('home');
+    await expect(page.locator('.now-card')).toBeVisible();
+    await expect(page.locator('#now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
+
+    // Post-confirmation Why sheet shows Confirmed
+    await page.locator('#btn-why').click();
+    await expect(page.locator('#why-sheet-backdrop')).toBeVisible();
+    await expect(page.locator('#why-sheet-backdrop .badge-confirmed').first()).toHaveText('Confirmed');
+    await page.locator('#btn-close-why').click();
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+
+    // --- Part 6 (Conversational Shell) Verbatim Quotes ---
+    await page.locator('#ask-bar').click();
+    const overlay = page.locator('#conversation-overlay');
+    await expect(overlay).toBeVisible();
+    await expect(page.locator('#conversation-title')).toHaveText('Ask Yori');
+    await expect(page.locator('#conversation-status-badge')).toContainText('Offline demo · simulated');
+    await expect(page.locator('#engine-status-chip')).toContainText('Offline fallback · deterministic');
+
+    await page.locator('#conversation-input').fill('Can I leave later?');
+    await page.locator('#conversation-send-btn').click();
+    await expect(page.locator('#engine-status-chip')).toContainText(
+      'Scripted model fixture · not a live model call'
+    );
+
+    await page.locator('#conversation-close-btn').click();
+    await expect(overlay).toHaveCount(0);
+  });
 });

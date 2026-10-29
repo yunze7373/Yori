@@ -25,7 +25,7 @@ Open **[http://127.0.0.1:5173](http://127.0.0.1:5173)** in your browser (mobile-
 # Run type checks
 npm run typecheck
 
-# Run unit & integration test suites (418 tests across 23 test files)
+# Run unit & integration test suites (454 tests across 24 test files)
 npm test
 
 # Run golden acceptance harness (18 tests across 4 test files)
@@ -34,7 +34,7 @@ npm run test:golden
 # Run degradation drills (53 fault-injection invariance tests)
 npm run test:drills
 
-# Run Playwright E2E verification (118 tests across full suite, mobile 390x844 & desktop 1280x800)
+# Run Playwright E2E verification (128 tests across full suite, mobile 390x844 & desktop 1280x800)
 npm run test:e2e
 
 # Run reproducible token pixel sampler (10/10 PASS)

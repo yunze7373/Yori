@@ -58,10 +58,10 @@ function renderMapSvg(map: MapVM): string {
             ? `
           <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 73}, ${map.weatherCallout.y - 18})">
             <rect width="146" height="36" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
-            <text x="73" y="15" fill="#FFFFFF" font-size="10" font-weight="700" text-anchor="middle" font-family="var(--font-sans)">
+            <text x="73" y="15" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle" font-family="var(--font-sans)">
               ${escapeHtml(map.weatherCallout.text)}
             </text>
-            <text x="73" y="28" fill="#E2EAE5" font-size="10" text-anchor="middle" font-family="var(--font-sans)">
+            <text x="73" y="28" fill="#E2EAE5" font-size="12" text-anchor="middle" font-family="var(--font-sans)">
               ${escapeHtml(map.weatherCallout.subtext || '')}
             </text>
           </g>
@@ -77,7 +77,7 @@ function renderMapSvg(map: MapVM): string {
                 <g class="v2-map-marker origin" transform="translate(${m.x}, ${m.y})">
                   <circle cx="0" cy="0" r="6" fill="#16382F"/>
                   <circle cx="0" cy="0" r="10" stroke="#16382F" stroke-width="1.5" opacity="0.4"/>
-                  <text x="0" y="18" fill="#16382F" font-size="10" font-weight="700" text-anchor="middle" font-family="sans-serif">
+                  <text x="0" y="18" fill="#16382F" font-size="12" font-weight="700" text-anchor="middle" font-family="sans-serif">
                     ${escapeHtml(m.label)}
                   </text>
                 </g>
@@ -88,7 +88,7 @@ function renderMapSvg(map: MapVM): string {
                 <g class="v2-map-marker destination" transform="translate(${m.x}, ${m.y})">
                   <circle cx="0" cy="0" r="8" fill="#2D6A4F"/>
                   <circle cx="0" cy="0" r="14" stroke="#2D6A4F" stroke-width="2" stroke-dasharray="4 2"/>
-                  <text x="0" y="-12" fill="#16382F" font-size="10" font-weight="700" text-anchor="middle" font-family="sans-serif">
+                  <text x="0" y="-12" fill="#16382F" font-size="12" font-weight="700" text-anchor="middle" font-family="sans-serif">
                     ${escapeHtml(m.label)}
                   </text>
                 </g>
@@ -99,7 +99,7 @@ function renderMapSvg(map: MapVM): string {
               <g class="v2-map-marker place ${m.isHighlight ? 'highlight' : ''}" transform="translate(${m.x}, ${m.y})">
                 <circle cx="0" cy="0" r="${m.isHighlight ? 7 : 5}" fill="${m.isHighlight ? '#2D6A4F' : '#5B6B65'}"/>
                 ${m.isHighlight ? '<circle cx="0" cy="0" r="11" stroke="#2D6A4F" stroke-width="1.5" opacity="0.5"/>' : ''}
-                <text x="0" y="${m.y < 70 ? -10 : 16}" fill="#16382F" font-size="10" font-weight="${m.isHighlight ? '700' : '500'}" text-anchor="middle" font-family="sans-serif">
+                <text x="0" y="${m.y < 70 ? -10 : 16}" fill="#16382F" font-size="12" font-weight="${m.isHighlight ? '700' : '500'}" text-anchor="middle" font-family="sans-serif">
                   ${escapeHtml(m.label)}
                 </text>
               </g>
@@ -112,10 +112,15 @@ function renderMapSvg(map: MapVM): string {
 }
 
 export function renderMapCard(map: MapVM): string {
+  const isPlacesMap = map.label.toLowerCase().includes('places');
+  const mobileLabel = isPlacesMap
+    ? (STRINGS.map.mobilePlacesLabel || 'Places Map')
+    : (STRINGS.map.mobileLabel || 'Route Map');
+
   return `
     <section class="card v2-map-card ${map.sizeHint}" aria-label="${escapeHtml(map.label)}">
       <div class="map-header">
-        <span class="section-label"><span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(STRINGS.map.mobileLabel || 'Route Map')}</span></span>
+        <span class="section-label"><span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span></span>
         <span class="card-badge">${escapeHtml(map.simulatedBadge)}</span>
       </div>
       ${renderMapSvg(map)}

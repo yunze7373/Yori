@@ -33,7 +33,7 @@ export function renderConversationOverlay(store: ActionStateStore): string {
               </svg>
             </div>
             <div class="conversation-title-block">
-              <h2 class="conversation-title">${escapeHtml(STRINGS.conversation.title)}</h2>
+              <h2 class="conversation-title" id="conversation-title">${escapeHtml(STRINGS.conversation.title)}</h2>
               <div class="conversation-subtitle-row">
                 <span class="v2-offline-badge" id="conversation-status-badge">Offline demo · simulated</span>
                 <span class="engine-status-chip" id="engine-status-chip">${escapeHtml(engineStatusLabel)}</span>

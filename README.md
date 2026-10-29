@@ -3,7 +3,7 @@
 > *A little ahead. By your side.*  
 > A calm, privacy-first, proactive context-aware assistant.
 
-[![Tests](https://img.shields.io/badge/tests-259%20unit%20%7C%2010%20golden%20%7C%2021%20drills%20%7C%2066%20e2e-brightgreen)](package.json)
+[![Tests](https://img.shields.io/badge/tests-454%20unit%20%7C%2018%20golden%20%7C%2053%20drills%20%7C%20128%20e2e-brightgreen)](package.json)
 [![Architecture](https://img.shields.io/badge/architecture-zero--diff%20core-blue)](docs/architecture/ARCHITECTURE.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -74,7 +74,7 @@ Yori includes a multi-tier test harness ensuring zero regressions, deterministic
 # 1. Typecheck (TypeScript strict mode)
 npm run typecheck
 
-# 2. Unit and mock integration tests (231 tests)
+# 2. Unit and mock integration tests (454 tests across 24 test files)
 npm test
 
 # 3. Deterministic Golden Scenarios (D1–D6 + AC-EXT-1 grocery proof)
@@ -83,7 +83,7 @@ npm run test:golden
 # 4. Degradation Drills (NFR-102/103 fault-injection invariance)
 npm run test:drills
 
-# 5. Playwright End-to-End Tests (38 tests across mobile 390x844 & desktop 1280x800)
+# 5. Playwright End-to-End Tests (128 tests across mobile 390x844 & desktop 1280x800)
 npm run test:e2e
 ```
 
