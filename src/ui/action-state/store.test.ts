@@ -466,66 +466,65 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       expect(res.response).toContain("There's no active lunch recommendation to filter right now");
     });
 
-    it('reverts actionState.status to idle on undo so Home reflects recomputed pipeline plans, while maintaining plan during working status for follow-up commands', () => {
-      const d3Clock = createFixedClock('2026-10-28T19:10:00.000Z');
-      const d3Snapshots = replayScenarioTimeline(d3Scenario, d3Clock);
-      const d3Snapshot = d3Snapshots[d3Snapshots.length - 1]!;
+    it('supports multi-command undo: leave-later -> Take the bus -> Undo restores leave-later -> Undo restores base plan', () => {
+      const d2Clock = createFixedClock('2026-10-28T20:35:00.000Z');
+      const d2Snapshots = replayScenarioTimeline(d2Scenario, d2Clock);
+      const d2Snapshot = d2Snapshots[d2Snapshots.length - 1]!;
       const candidate: IntentCandidate = {
-        intent: 'lunch',
-        confidence: 0.95,
-        evidence: d3Snapshot.signals.filter(s => s.kind === 'mock_places'),
+        intent: 'depart',
+        confidence: 1.0,
+        evidence: d2Snapshot.signals.filter(s => s.kind === 'calendar'),
       };
-      const basePlan = lunchPreparer.prepare(candidate, d3Snapshot, d3MemoryFacts)!;
+      const basePlan = departPreparer.prepare(candidate, d2Snapshot, d2MemoryFacts)!;
 
       const store = createActionStateStore();
+      store.openConversation();
       store.setCommandContext({
         plan: basePlan,
         candidate,
-        snapshot: d3Snapshot,
-        memory: d3MemoryFacts,
-        sceneId: 'away-lunch',
+        snapshot: d2Snapshot,
+        memory: d2MemoryFacts,
+        sceneId: 'rain',
       });
 
-      // 1. Initial idle state
+      // Initial state: idle, no store plan override (Home displays basePlan)
       expect(store.getActionState().status).toBe('idle');
+      expect(store.getActionState().plan).toBeUndefined();
 
-      // 2. User filters lunch -> updated state with overridden plan
-      const filterRes = store.submitMessage('quieter + vegetarian');
-      expect(filterRes.collapsed).toBe(true);
+      // 1. First command: Leave 15 minutes later -> Confirm
+      store.submitMessage('Leave 15 minutes later');
+      expect(store.getActionState().status).toBe('needs-confirmation');
+      const confirmRes = store.submitMessage('Looks good');
+      expect(confirmRes.collapsed).toBe(true);
       expect(store.getActionState().status).toBe('updated');
-      const updatedOverridePlan = store.getActionState().plan;
-      expect(updatedOverridePlan).toBeDefined();
+      expect(store.getActionState().plan?.headline).toContain('2:45 PM');
+      const leaveLaterPlan = store.getActionState().plan;
 
-      // View-model logic in app.ts: storePlan is rendered when updated
-      let storePlan =
-        store.getActionState().status === 'updated' ||
-        (store.getActionState().status === 'working' && store.getActionState().plan)
-          ? store.getActionState().plan
-          : undefined;
-      expect(storePlan).toBe(updatedOverridePlan);
+      // Update command context with the updated plan (as app.ts does on re-render)
+      store.setCommandContext({
+        plan: leaveLaterPlan!,
+        candidate,
+        snapshot: d2Snapshot,
+        memory: d2MemoryFacts,
+        sceneId: 'rain',
+      });
 
-      // 3. While follow-up command is in 'working' status, storePlan maintains the updated plan
-      store.beginCommand('Follow up query', 'Working on follow up');
-      expect(store.getActionState().status).toBe('working');
-      storePlan =
-        store.getActionState().status === 'updated' ||
-        (store.getActionState().status === 'working' && store.getActionState().plan)
-          ? store.getActionState().plan
-          : undefined;
-      expect(storePlan).toBe(updatedOverridePlan);
+      // 2. Second command: Take the bus
+      const busRes = store.submitMessage('Take the bus');
+      expect(busRes.collapsed).toBe(true);
+      expect(store.getActionState().status).toBe('updated');
+      expect(store.getActionState().plan?.headline).toContain('2:15 PM');
 
-      // Settle back to updated
-      store.resolveExecutable('Done');
+      // 3. First Undo: restores the leave-later plan (2:45 PM)
+      const undo1Res = store.submitMessage('Undo');
+      expect(undo1Res.collapsed).toBe(true);
+      expect(store.getActionState().plan?.headline).toContain('2:45 PM');
 
-      // 4. User performs Undo -> status reverts to 'idle', clearing override so Home reflects base/recomputed plan
-      store.undo();
+      // 4. Second Undo: restores the original base plan state (base departure 2:30 PM, idle)
+      const undo2Res = store.submitMessage('Undo');
+      expect(undo2Res.collapsed).toBe(true);
       expect(store.getActionState().status).toBe('idle');
-      storePlan =
-        store.getActionState().status === 'updated' ||
-        (store.getActionState().status === 'working' && store.getActionState().plan)
-          ? store.getActionState().plan
-          : undefined;
-      expect(storePlan).toBeUndefined(); // Home is freed to display recomputed pipeline plan
+      expect(store.getActionState().plan?.headline).toContain('2:30 PM');
     });
   });
 

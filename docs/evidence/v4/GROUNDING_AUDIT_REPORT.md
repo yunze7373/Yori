@@ -16,9 +16,9 @@ Every extracted token was checked via `GroundedRecommendationVerifier.verifyFiel
 | Category | Total Tokens | Grounded | Ungrounded | Resolution Rate | Status |
 |:---|:---:|:---:|:---:|:---:|:---:|
 | **Places / Venues** | 84 | 84 | 0 | 100.0% | ✅ PASS |
-| **Times & Clocks** | 98 | 98 | 0 | 100.0% | ✅ PASS |
+| **Times & Clocks** | 120 | 120 | 0 | 100.0% | ✅ PASS |
 | **Numbers & Margins** | 130 | 130 | 0 | 100.0% | ✅ PASS |
-| **Overall Total** | **312** | **312** | **0** | **100.0%** | **✅ PASS** |
+| **Overall Total** | **334** | **334** | **0** | **100.0%** | **✅ PASS** |
 
 ---
 
@@ -47,12 +47,12 @@ Per V4 acceptance criteria, UI chrome, quota tracking meters, and initial baseli
 
 | Token | Classification | Documented Rationale |
 |:---|:---|:---|
-| `2:05 PM` | UI Chrome / Initial Schedule | Initial Clear plan preparation time (D1 dry schedule before rain forecast signal arrives at 1:35 PM) |
-| `2:25 PM` | UI Chrome / Initial Schedule | Initial Clear plan departure time (D1 dry schedule before rain forecast signal arrives at 1:35 PM) |
-| `2:55 PM` | UI Chrome / Initial Schedule | Initial Clear plan arrival time (D1 dry schedule before rain forecast signal arrives at 1:35 PM) |
-| `30 min` | UI Chrome / Initial Schedule | Initial Clear plan travel duration (D1 baseline drive time before rain delay) |
-| `Home` | UI Chrome / Initial Schedule | Route map schematic origin label and bottom navigation tab (UI chrome / navigation) |
-| `0 of 3` | UI Chrome / Initial Schedule | Proactive Prompts quota meter under INV-107 / policy controls, not a domain record |
+| `Home` | All scenes & steps (UI chrome) | Route map schematic origin label and bottom navigation tab (UI chrome / navigation) |
+| `0 of 3` | All scenes & steps (Policy meter) | Proactive Prompts quota meter under INV-107 / policy controls, not a domain record |
+| `2:05 PM` | Initial Clear State | Initial Clear plan preparation time (D1 dry schedule before rain forecast signal arrives at 1:35 PM) |
+| `2:25 PM` | Initial Clear State | Initial Clear plan departure time (D1 dry schedule before rain forecast signal arrives at 1:35 PM) |
+| `2:55 PM` | Initial Clear State | Initial Clear plan arrival time (D1 dry schedule before rain forecast signal arrives at 1:35 PM) |
+| `30 min` | Initial Clear State | Initial Clear plan travel duration (D1 baseline drive time before rain delay) |
 
 ---
 
@@ -70,6 +70,7 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Change (Weather Shift) | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Change (Weather Shift) | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Change (Weather Shift) | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Change (Weather Shift) | 390x844 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Change (Weather Shift) | 390x844 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
 | `20m prep` | number | rain | Change (Weather Shift) | 390x844 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Change (Weather Shift) | 390x844 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -81,6 +82,7 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Route Options (Drive vs Bus) | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Route Options (Drive vs Bus) | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Route Options (Drive vs Bus) | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Route Options (Drive vs Bus) | 390x844 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Route Options (Drive vs Bus) | 390x844 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
 | `20m prep` | number | rain | Route Options (Drive vs Bus) | 390x844 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Route Options (Drive vs Bus) | 390x844 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -92,6 +94,7 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Map & Why Provenance | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Map & Why Provenance | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Map & Why Provenance | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Map & Why Provenance | 390x844 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Map & Why Provenance | 390x844 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
 | `10:00 AM` | time | rain | Map & Why Provenance | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `fetchedAt` | simulated | ✅ GROUNDED |
 | `20m prep` | number | rain | Map & Why Provenance | 390x844 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
@@ -106,7 +109,9 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Ask Yori: Leave Later Query | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Ask Yori: Leave Later Query | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Ask Yori: Leave Later Query | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Ask Yori: Leave Later Query | 390x844 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Ask Yori: Leave Later Query | 390x844 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:25 PM` | time | rain | Ask Yori: Leave Later Query | 390x844 | `user_override_timing` | `prepareTime` | session | ✅ GROUNDED |
 | `2:45 PM` | time | rain | Ask Yori: Leave Later Query | 390x844 | `user_override_timing` | `leaveTime` | session | ✅ GROUNDED |
 | `20m prep` | number | rain | Ask Yori: Leave Later Query | 390x844 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Ask Yori: Leave Later Query | 390x844 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -119,7 +124,9 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Compare Late Arrival | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Compare Late Arrival | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Compare Late Arrival | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Compare Late Arrival | 390x844 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Compare Late Arrival | 390x844 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:25 PM` | time | rain | Compare Late Arrival | 390x844 | `user_override_timing` | `prepareTime` | session | ✅ GROUNDED |
 | `2:45 PM` | time | rain | Compare Late Arrival | 390x844 | `user_override_timing` | `leaveTime` | session | ✅ GROUNDED |
 | `20m prep` | number | rain | Compare Late Arrival | 390x844 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Compare Late Arrival | 390x844 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -132,7 +139,9 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Confirm Shift | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Confirm Shift | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Confirm Shift | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Confirm Shift | 390x844 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Confirm Shift | 390x844 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:25 PM` | time | rain | Confirm Shift | 390x844 | `user_override_timing` | `prepareTime` | session | ✅ GROUNDED |
 | `2:45 PM` | time | rain | Confirm Shift | 390x844 | `user_override_timing` | `leaveTime` | session | ✅ GROUNDED |
 | `20m prep` | number | rain | Confirm Shift | 390x844 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Confirm Shift | 390x844 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -143,6 +152,7 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `Piano lesson` | place | rain | Confirm Shift | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `subjectTitle` | simulated | ✅ GROUNDED |
 | `1:35 PM` | time | rain | Collapse to Updated Home | 390x844 | `weather:2026-10-28T20:35:00.000Z` | `issuedTime` | simulated | ✅ GROUNDED |
 | `3:00 PM` | time | rain | Collapse to Updated Home | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
+| `2:25 PM` | time | rain | Collapse to Updated Home | 390x844 | `user_override_timing` | `prepareTime` | session | ✅ GROUNDED |
 | `2:45 PM` | time | rain | Collapse to Updated Home | 390x844 | `user_override_timing` | `leaveTime` | session | ✅ GROUNDED |
 | `3:10 PM` | time | rain | Collapse to Updated Home | 390x844 | `user_override_timing` | `arrivalTime` | session | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Collapse to Updated Home | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
@@ -156,6 +166,7 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Undo Override | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Undo Override | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Undo Override | 390x844 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Undo Override | 390x844 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Undo Override | 390x844 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
 | `20m prep` | number | rain | Undo Override | 390x844 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Undo Override | 390x844 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -174,6 +185,7 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Change (Weather Shift) | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Change (Weather Shift) | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Change (Weather Shift) | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Change (Weather Shift) | 1280x800 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Change (Weather Shift) | 1280x800 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
 | `20m prep` | number | rain | Change (Weather Shift) | 1280x800 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Change (Weather Shift) | 1280x800 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -185,6 +197,7 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Route Options (Drive vs Bus) | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Route Options (Drive vs Bus) | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Route Options (Drive vs Bus) | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Route Options (Drive vs Bus) | 1280x800 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Route Options (Drive vs Bus) | 1280x800 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
 | `20m prep` | number | rain | Route Options (Drive vs Bus) | 1280x800 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Route Options (Drive vs Bus) | 1280x800 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -196,6 +209,7 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Map & Why Provenance | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Map & Why Provenance | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Map & Why Provenance | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Map & Why Provenance | 1280x800 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Map & Why Provenance | 1280x800 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
 | `10:00 AM` | time | rain | Map & Why Provenance | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `fetchedAt` | simulated | ✅ GROUNDED |
 | `20m prep` | number | rain | Map & Why Provenance | 1280x800 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
@@ -210,7 +224,9 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Ask Yori: Leave Later Query | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Ask Yori: Leave Later Query | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Ask Yori: Leave Later Query | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Ask Yori: Leave Later Query | 1280x800 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Ask Yori: Leave Later Query | 1280x800 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:25 PM` | time | rain | Ask Yori: Leave Later Query | 1280x800 | `user_override_timing` | `prepareTime` | session | ✅ GROUNDED |
 | `2:45 PM` | time | rain | Ask Yori: Leave Later Query | 1280x800 | `user_override_timing` | `leaveTime` | session | ✅ GROUNDED |
 | `20m prep` | number | rain | Ask Yori: Leave Later Query | 1280x800 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Ask Yori: Leave Later Query | 1280x800 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -223,7 +239,9 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Compare Late Arrival | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Compare Late Arrival | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Compare Late Arrival | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Compare Late Arrival | 1280x800 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Compare Late Arrival | 1280x800 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:25 PM` | time | rain | Compare Late Arrival | 1280x800 | `user_override_timing` | `prepareTime` | session | ✅ GROUNDED |
 | `2:45 PM` | time | rain | Compare Late Arrival | 1280x800 | `user_override_timing` | `leaveTime` | session | ✅ GROUNDED |
 | `20m prep` | number | rain | Compare Late Arrival | 1280x800 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Compare Late Arrival | 1280x800 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -236,7 +254,9 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Confirm Shift | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Confirm Shift | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Confirm Shift | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Confirm Shift | 1280x800 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Confirm Shift | 1280x800 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:25 PM` | time | rain | Confirm Shift | 1280x800 | `user_override_timing` | `prepareTime` | session | ✅ GROUNDED |
 | `2:45 PM` | time | rain | Confirm Shift | 1280x800 | `user_override_timing` | `leaveTime` | session | ✅ GROUNDED |
 | `20m prep` | number | rain | Confirm Shift | 1280x800 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Confirm Shift | 1280x800 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |
@@ -247,6 +267,7 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `Piano lesson` | place | rain | Confirm Shift | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `subjectTitle` | simulated | ✅ GROUNDED |
 | `1:35 PM` | time | rain | Collapse to Updated Home | 1280x800 | `weather:2026-10-28T20:35:00.000Z` | `issuedTime` | simulated | ✅ GROUNDED |
 | `3:00 PM` | time | rain | Collapse to Updated Home | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
+| `2:25 PM` | time | rain | Collapse to Updated Home | 1280x800 | `user_override_timing` | `prepareTime` | session | ✅ GROUNDED |
 | `2:45 PM` | time | rain | Collapse to Updated Home | 1280x800 | `user_override_timing` | `leaveTime` | session | ✅ GROUNDED |
 | `3:10 PM` | time | rain | Collapse to Updated Home | 1280x800 | `user_override_timing` | `arrivalTime` | session | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Collapse to Updated Home | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
@@ -260,6 +281,7 @@ Below is the complete resolution ledger for all audited domain tokens:
 | `3:00 PM` | time | rain | Undo Override | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `apptTime` | simulated | ✅ GROUNDED |
 | `2:10 PM` | time | rain | Undo Override | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `prepareTime` | simulated | ✅ GROUNDED |
 | `2:30 PM` | time | rain | Undo Override | 1280x800 | `calendar:2026-10-28T17:00:00.000Z` | `leaveTime` | simulated | ✅ GROUNDED |
+| `2:55 PM` | time | rain | Undo Override | 1280x800 | `eta-drive-piano` | `arrivalTime` | simulated | ✅ GROUNDED |
 | `2:15 PM` | time | rain | Undo Override | 1280x800 | `eta-bus-piano` | `leaveTime` | simulated | ✅ GROUNDED |
 | `20m prep` | number | rain | Undo Override | 1280x800 | `prep_buffer_minutes` | `prepMinutes` | confirmed | ✅ GROUNDED |
 | `5m buffer` | number | rain | Undo Override | 1280x800 | `eta-drive-piano` | `bufferMinutes` | simulated | ✅ GROUNDED |

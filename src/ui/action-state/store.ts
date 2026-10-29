@@ -562,9 +562,13 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (this.actionState.status === 'needs-confirmation' && this.actionState.pendingPlan) {
         const confirmedPlan = this.actionState.pendingPlan;
         this.pushHistory({
-          planState: ctx?.plan ?? null,
+          planState: this.actionState.plan ?? ctx?.plan ?? null,
           sceneId: ctx?.sceneId ?? 'current',
-          actionState: { ...this.actionState },
+          actionState: {
+            ...this.actionState,
+            status: this.currentOverride ? 'updated' : 'idle',
+            plan: this.actionState.plan ?? ctx?.plan ?? undefined,
+          },
           override: this.currentOverride,
           timestamp: now,
         });
@@ -844,9 +848,13 @@ export class DefaultActionStateStore implements ActionStateStore {
 
       // On-time execution: determinate result
       this.pushHistory({
-        planState: ctx.plan ?? null,
+        planState: this.actionState.plan ?? ctx.plan ?? null,
         sceneId: ctx.sceneId ?? 'current',
-        actionState: { ...this.actionState },
+        actionState: {
+          ...this.actionState,
+          status: this.currentOverride ? 'updated' : 'idle',
+          plan: this.actionState.plan ?? ctx.plan ?? undefined,
+        },
         override: this.currentOverride,
         timestamp: now,
       });
@@ -925,9 +933,13 @@ export class DefaultActionStateStore implements ActionStateStore {
       }
 
       this.pushHistory({
-        planState: ctx.plan ?? null,
+        planState: this.actionState.plan ?? ctx.plan ?? null,
         sceneId: ctx.sceneId ?? 'current',
-        actionState: { ...this.actionState },
+        actionState: {
+          ...this.actionState,
+          status: this.currentOverride ? 'updated' : 'idle',
+          plan: this.actionState.plan ?? ctx.plan ?? undefined,
+        },
         override: this.currentOverride,
         timestamp: now,
       });
@@ -1004,9 +1016,13 @@ export class DefaultActionStateStore implements ActionStateStore {
       }
 
       this.pushHistory({
-        planState: ctx.plan ?? null,
+        planState: this.actionState.plan ?? ctx.plan ?? null,
         sceneId: ctx.sceneId ?? 'current',
-        actionState: { ...this.actionState },
+        actionState: {
+          ...this.actionState,
+          status: this.currentOverride ? 'updated' : 'idle',
+          plan: this.actionState.plan ?? ctx.plan ?? undefined,
+        },
         override: this.currentOverride,
         timestamp: now,
       });
@@ -1078,7 +1094,6 @@ export class DefaultActionStateStore implements ActionStateStore {
     const restored = this.historyStack.pop()!;
     this.actionState = {
       ...restored.actionState,
-      status: 'idle',
       plan: restored.planState ?? undefined,
       timestamp: new Date().toISOString(),
     };

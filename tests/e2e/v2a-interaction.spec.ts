@@ -537,5 +537,71 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       // After the 600ms pacing delay, the overlay auto-collapses
       await expect(overlay).toHaveCount(0, { timeout: 5000 });
     });
+
+    test(`multi-step undo: rain -> leave-later confirm -> "Take the bus" -> Undo restores 2:25/2:45 -> Undo restores 2:10/2:30 (${viewport.name})`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto('/?ui=v2');
+      await page.waitForSelector('.app-layout');
+
+      const sceneSelect = page.locator('#scene-select');
+      await sceneSelect.selectOption('rain');
+      await page.waitForSelector('.now-card', { timeout: 10000 });
+
+      // Initial state: Rain base plan (2:10 PM prep, 2:30 PM departure)
+      const nowCard = page.locator('.now-card');
+      await expect(nowCard).toContainText('2:10 PM');
+      await expect(nowCard).toContainText('2:30 PM');
+
+      // 1. Leave 15 minutes later -> Confirm
+      const askBar = page.locator('#ask-bar');
+      await askBar.click();
+      const overlay = page.locator('#conversation-overlay');
+      await expect(overlay).toBeVisible();
+
+      const input = page.locator('#conversation-input');
+      await input.fill('Can I leave 15 minutes later?');
+      await page.locator('#conversation-send-btn').click();
+
+      const confirmBtn = page.locator('#btn-chat-confirm');
+      await expect(confirmBtn).toBeVisible({ timeout: 5000 });
+      await confirmBtn.click();
+      await expect(overlay).toHaveCount(0, { timeout: 5000 });
+
+      // Home now reflects leave-later: 2:25 PM prep, 2:45 PM departure
+      await expect(nowCard).toContainText('2:25 PM');
+      await expect(nowCard).toContainText('2:45 PM');
+
+      // 2. Chat "Take the bus"
+      await askBar.click();
+      await expect(overlay).toBeVisible();
+      await input.fill('Take the bus');
+      await page.locator('#conversation-send-btn').click();
+      await expect(overlay).toHaveCount(0, { timeout: 5000 });
+
+      // Home now reflects bus route
+      await expect(nowCard).toContainText('Bus');
+
+      // 3. First Undo: restores leave-later (2:25 PM prep, 2:45 PM departure)
+      await askBar.click();
+      await expect(overlay).toBeVisible();
+      await input.fill('Undo');
+      await page.locator('#conversation-send-btn').click();
+      await expect(overlay).toHaveCount(0, { timeout: 5000 });
+
+      await expect(nowCard).toContainText('2:25 PM');
+      await expect(nowCard).toContainText('2:45 PM');
+
+      // 4. Second Undo: restores original base plan (2:10 PM prep, 2:30 PM departure)
+      await askBar.click();
+      await expect(overlay).toBeVisible();
+      await input.fill('Undo');
+      await page.locator('#conversation-send-btn').click();
+      await expect(overlay).toHaveCount(0, { timeout: 5000 });
+
+      await expect(nowCard).toContainText('2:10 PM');
+      await expect(nowCard).toContainText('2:30 PM');
+    });
   }
 });

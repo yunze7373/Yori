@@ -217,32 +217,59 @@ const STANDALONE_PLACES = [
 ];
 
 // Explicit out-of-scope UI chrome and non-domain tokens documented with rationale
-export const OUT_OF_SCOPE_TOKENS: ReadonlyMap<string, string> = new Map([
-  [
-    '2:05 PM',
-    'Initial Clear plan preparation time (D1 dry schedule before rain forecast signal arrives at 1:35 PM)',
-  ],
-  [
-    '2:25 PM',
-    'Initial Clear plan departure time (D1 dry schedule before rain forecast signal arrives at 1:35 PM)',
-  ],
-  [
-    '2:55 PM',
-    'Initial Clear plan arrival time (D1 dry schedule before rain forecast signal arrives at 1:35 PM)',
-  ],
-  [
-    '30 min',
-    'Initial Clear plan travel duration (D1 baseline drive time before rain delay)',
-  ],
-  [
-    'Home',
-    'Route map schematic origin label and bottom navigation tab (UI chrome / navigation)',
-  ],
-  [
-    '0 of 3',
-    'Proactive Prompts quota meter under INV-107 / policy controls, not a domain record',
-  ],
-]);
+export interface OutOfScopeRule {
+  token: string;
+  scope: string;
+  rationale: string;
+  matches: (scene: string, step: string, token: string) => boolean;
+}
+
+export const OUT_OF_SCOPE_RULES: OutOfScopeRule[] = [
+  {
+    token: 'Home',
+    scope: 'All scenes & steps (UI chrome)',
+    rationale: 'Route map schematic origin label and bottom navigation tab (UI chrome / navigation)',
+    matches: (_scene, _step, token) => token === 'Home',
+  },
+  {
+    token: '0 of 3',
+    scope: 'All scenes & steps (Policy meter)',
+    rationale: 'Proactive Prompts quota meter under INV-107 / policy controls, not a domain record',
+    matches: (_scene, _step, token) => token === '0 of 3',
+  },
+  {
+    token: '2:05 PM',
+    scope: 'Initial Clear State',
+    rationale: 'Initial Clear plan preparation time (D1 dry schedule before rain forecast signal arrives at 1:35 PM)',
+    matches: (_scene, step, token) => step === 'Initial Clear State' && token === '2:05 PM',
+  },
+  {
+    token: '2:25 PM',
+    scope: 'Initial Clear State',
+    rationale: 'Initial Clear plan departure time (D1 dry schedule before rain forecast signal arrives at 1:35 PM)',
+    matches: (_scene, step, token) => step === 'Initial Clear State' && token === '2:25 PM',
+  },
+  {
+    token: '2:55 PM',
+    scope: 'Initial Clear State',
+    rationale: 'Initial Clear plan arrival time (D1 dry schedule before rain forecast signal arrives at 1:35 PM)',
+    matches: (_scene, step, token) => step === 'Initial Clear State' && token === '2:55 PM',
+  },
+  {
+    token: '30 min',
+    scope: 'Initial Clear State',
+    rationale: 'Initial Clear plan travel duration (D1 baseline drive time before rain delay)',
+    matches: (_scene, step, token) => step === 'Initial Clear State' && token === '30 min',
+  },
+];
+
+export function isOutOfScope(scene: string, step: string, token: string): boolean {
+  return OUT_OF_SCOPE_RULES.some(rule => rule.matches(scene, step, token));
+}
+
+export const OUT_OF_SCOPE_TOKENS: ReadonlyMap<string, string> = new Map(
+  OUT_OF_SCOPE_RULES.map(r => [r.token, r.rationale])
+);
 
 /**
  * Resolves the best candidate SourceRef for a given token against an EvidenceBundle.
@@ -698,7 +725,7 @@ export function runGroundingAudit() {
 
       for (const item of tokens) {
         // Skip tokens categorized under explicit UI chrome / initial plan allowlist
-        if (OUT_OF_SCOPE_TOKENS.has(item.token)) {
+        if (isOutOfScope(dump.scene, dump.step, item.token)) {
           continue;
         }
 
@@ -782,8 +809,8 @@ export function runGroundingAudit() {
   }
 
   // Step 4: Write Deterministic Markdown Report
-  const allowlistRows = Array.from(OUT_OF_SCOPE_TOKENS.entries())
-    .map(([token, reason]) => `| \`${token}\` | UI Chrome / Initial Schedule | ${reason} |`)
+  const allowlistRows = OUT_OF_SCOPE_RULES
+    .map(r => `| \`${r.token}\` | ${r.scope} | ${r.rationale} |`)
     .join('\n');
 
   const reportContent = `# Automated Grounding Evidence Audit Report (YORI_V2 Task V4)
