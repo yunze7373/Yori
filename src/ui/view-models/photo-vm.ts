@@ -136,6 +136,25 @@ function createDefaultDiningSvg(): string {
   `.trim();
 }
 
+function createFuelPumpSvg(): string {
+  return `
+    <svg width="100%" height="100%" viewBox="0 0 200 130" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-hidden="true">
+      <rect width="100%" height="100%" fill="#F1F5F9" rx="8"/>
+      <!-- Ground line -->
+      <line x1="20" y1="105" x2="180" y2="105" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round"/>
+      <!-- Pump body -->
+      <rect x="75" y="35" width="50" height="70" rx="6" fill="#3B82F6"/>
+      <!-- Display screen -->
+      <rect x="85" y="45" width="30" height="20" rx="3" fill="#1E293B"/>
+      <rect x="88" y="52" width="24" height="6" rx="1" fill="#38BDF8"/>
+      <!-- Fuel nozzle hose -->
+      <path d="M125 55 C145 55 145 85 135 90 C130 92 125 90 125 80" stroke="#475569" stroke-width="4" stroke-linecap="round" fill="none"/>
+      <!-- Pump base -->
+      <rect x="70" y="100" width="60" height="6" rx="2" fill="#1E293B"/>
+    </svg>
+  `.trim();
+}
+
 export function getLocalIllustration(cuisineOrCategory: string, name?: string): PhotoVM {
   const norm = (cuisineOrCategory || '').toLowerCase();
   const nameNorm = (name || '').toLowerCase();
@@ -144,7 +163,11 @@ export function getLocalIllustration(cuisineOrCategory: string, name?: string): 
   let label = 'Dining illustration';
   let svgMarkup = createDefaultDiningSvg();
 
-  if (norm.includes('ramen') || nameNorm.includes('ramen')) {
+  if (norm.includes('fuel') || norm.includes('gas') || norm.includes('petrol') || nameNorm.includes('gas') || nameNorm.includes('fuel') || nameNorm.includes('petrol')) {
+    category = 'fuel';
+    label = 'Gas station illustration';
+    svgMarkup = createFuelPumpSvg();
+  } else if (norm.includes('ramen') || nameNorm.includes('ramen')) {
     category = 'ramen';
     label = 'Ramen dish illustration';
     svgMarkup = createRamenSvg();

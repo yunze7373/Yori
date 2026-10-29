@@ -149,10 +149,10 @@ describe('V2a-1 Negative Tests & Integration Suite', () => {
     expect(lunchRes.response).toContain('The filter "cheap" is not supported in this offline demo');
     expect(store.getActionState().plan).toEqual(originalPlan);
 
-    // 3. Future V5-FUEL capability query (honest deferred answer)
-    const fuelRes = store.submitMessage('Find gas along the way');
-    expect(fuelRes.rule).toBe('unsupported_ask');
-    expect(fuelRes.response).toContain('Finding fuel or charging stops arrives in V5-FUEL');
+    // 3. General unsupported query (honest capability answer)
+    const genRes = store.submitMessage('What is the capital of France?');
+    expect(genRes.rule).toBe('unsupported_ask');
+    expect(genRes.response).toContain("I can help adjust your departure plan");
     expect(store.getActionState().plan).toEqual(originalPlan);
   });
 

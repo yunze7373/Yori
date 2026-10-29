@@ -23,6 +23,7 @@ export type CommandIntent =
   | 'LEAVE_LATER'
   | 'CHANGE_ROUTE'
   | 'FIND_LUNCH'
+  | 'FIND_FUEL'
   | 'WHY'
   | 'ACCEPT'
   | 'UNDO'
@@ -35,6 +36,7 @@ export interface CommandSlotValues {
   readonly deltaMinutes?: number;
   readonly mode?: SupportedMode;
   readonly filters?: readonly SupportedLunchFilter[];
+  readonly ambiguous?: boolean;
 }
 
 export interface SituationAttribution {
@@ -76,10 +78,7 @@ export interface CommandInterpreter {
 
 
 const HONEST_CAPABILITY_GENERAL =
-  "I can help adjust your departure plan ('Leave 15 minutes later', 'Take the bus') or find lunch spots ('Find a quieter vegetarian lunch spot', 'Find lunch nearby'). You can also ask 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
-
-const HONEST_FUEL_DEFERRED =
-  "Finding fuel or charging stops arrives in V5-FUEL. For this offline demo, I can help you adjust departure times or switch route options.";
+  "I can help adjust your departure plan ('Leave 15 minutes later', 'Take the bus'), find lunch spots ('Find a quieter vegetarian lunch spot'), or find nearby fuel ('Find gas'). You can also ask 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
 
 const LUNCH_STOP_WORDS: ReadonlySet<string> = new Set([
   'find', 'me', 'a', 'an', 'the', 'spot', 'spots', 'place', 'places',
@@ -111,15 +110,6 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
         rawText,
         slots: {},
         honestAnswer: HONEST_CAPABILITY_GENERAL,
-      };
-    }
-
-    if (/\b(?:gas|fuel|charging|charge|station)\b/i.test(normalized)) {
-      return {
-        intent: 'UNSUPPORTED',
-        rawText,
-        slots: {},
-        honestAnswer: HONEST_FUEL_DEFERRED,
       };
     }
 
@@ -293,7 +283,47 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
       };
     }
 
-    // 7. TOTAL PARSER FALLBACK -> UNSUPPORTED
+    // 7. FIND_FUEL ('gas', 'find gas', '加油', 'gas station' per LIVING_CONTEXT_V2.md §10.3)
+    const isExplicitFuel =
+      /\b(?:gas|fuel|petrol)\b/i.test(normalized) ||
+      /\b(?:gas\s*station|fuel\s*station|petrol\s*station|find\s+gas|get\s+gas|need\s+gas|where\s+is\s+gas)\b/i.test(
+        normalized
+      ) ||
+      /(?:加油站|去加油|帮我找加油站|找加油站)/.test(rawText);
+
+    const isChineseJiayou = /(?:^|\s)加油(?:\s|$|[!！。?？])/i.test(rawText.trim());
+
+    if (isExplicitFuel || isChineseJiayou) {
+      // Disambiguation check for "加油" (also means encouragement in Chinese)
+      if (isChineseJiayou && !isExplicitFuel && !/(?:站|车|油箱)/.test(rawText)) {
+        const hasTravelContext =
+          context?.currentPlanIntent === 'depart' ||
+          context?.currentPlanIntent === 'fuel' ||
+          context?.sceneId === 'rain' ||
+          context?.sceneId === 'clear' ||
+          context?.sceneId === 'fuel';
+
+        if (!hasTravelContext) {
+          // Ambiguous: ask in needs-confirmation state instead of guessing
+          return {
+            intent: 'FIND_FUEL',
+            rawText,
+            slots: { ambiguous: true },
+            honestAnswer: 'Did you mean: find a gas station?',
+            explanation: 'Disambiguation needed: "加油" can mean encouragement or refueling.',
+          };
+        }
+      }
+
+      return {
+        intent: 'FIND_FUEL',
+        rawText,
+        slots: { ambiguous: false },
+        explanation: 'Finding nearby gas stations.',
+      };
+    }
+
+    // 8. TOTAL PARSER FALLBACK -> UNSUPPORTED
     return {
       intent: 'UNSUPPORTED',
       rawText,

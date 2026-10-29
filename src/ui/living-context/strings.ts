@@ -40,6 +40,7 @@ export const STRINGS = Object.freeze({
     missingWeather: 'Missing weather',
     corruptStorage: 'Storage error',
     multiCandidate: 'Reasoning demo',
+    fuel: 'Fuel (Low Fuel Warning)',
   }),
   tabs: Object.freeze({
     today: 'Today',
@@ -179,6 +180,13 @@ export const STRINGS = Object.freeze({
     primaryLine: 'Places matching what you like, within walking distance',
     basisLine: 'Based on your location, schedule window, and what you usually like.',
     mockPlacesNotice: 'Mock places for this demo; real listings come from a place provider.',
+  }),
+  fuel: Object.freeze({
+    title: 'Low Fuel Warning',
+    primaryLine: 'Fuel level 18% · nearby gas stations found',
+    basisLine: 'Nearby gas stations · straight-line distances · simulated',
+    mockPlacesNotice: 'Nearby gas stations from simulated fixture · straight-line distances shown',
+    unavailableNotice: 'Cannot search for gas stations: location is unavailable or denied',
   }),
   storageError: Object.freeze({
     title: 'Storage error detected',

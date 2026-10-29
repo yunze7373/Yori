@@ -6,6 +6,7 @@ import { createFixedClock, replayScenarioTimeline } from '../../app/scenario-pla
 import { departPreparer } from '../../plugins/depart/preparer.js';
 import { lunchPreparer } from '../../plugins/lunch/preparer.js';
 import type { IntentCandidate } from '../../core/contracts/index.js';
+import { defaultLocationPort, DEFAULT_DEMO_COORDS } from '../../adapters/providers/location-port.js';
 
 describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
   describe('2.1 Action States & Guarded Transitions Lifecycle', () => {
@@ -525,6 +526,103 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       expect(undo2Res.collapsed).toBe(true);
       expect(store.getActionState().status).toBe('idle');
       expect(store.getActionState().plan?.headline).toContain('2:30 PM');
+    });
+
+    it('handles FIND_FUEL: searches gas stations, updates plan, auto-collapses on success, and supports Undo', () => {
+      defaultLocationPort.setLocation('available', DEFAULT_DEMO_COORDS);
+      const store = createActionStateStore();
+      store.openConversation();
+
+      const fuelCandidate: IntentCandidate = {
+        intent: 'fuel',
+        confidence: 1.0,
+        evidence: [],
+      };
+
+      store.setCommandContext({
+        plan: null,
+        candidate: fuelCandidate,
+        snapshot: {
+          id: 'snap-fuel-test-1',
+          asOf: '2026-10-28T19:10:00.000Z',
+          timezone: 'America/Los_Angeles',
+          signals: [],
+        },
+        memory: [],
+        sceneId: 'clear',
+      });
+
+      const res = store.submitMessage('find a gas station');
+      expect(res.collapsed).toBe(true);
+      expect(store.getActionState().status).toBe('updated');
+      expect(store.getActionState().plan?.intentId).toBe('fuel');
+      expect(store.getActionState().plan?.headline).toContain('Metro Gas & Go');
+      expect(store.canUndo()).toBe(true);
+
+      // Undo restores prior state
+      const undoRes = store.submitMessage('Undo');
+      expect(undoRes.collapsed).toBe(true);
+      expect(store.getActionState().status).toBe('idle');
+    });
+
+    it('handles Chinese "加油" disambiguation: enters needs-confirmation state, then "yes"/"accept" triggers fuel search', () => {
+      defaultLocationPort.setLocation('available', DEFAULT_DEMO_COORDS);
+      const store = createActionStateStore();
+      store.openConversation();
+
+      store.setCommandContext({
+        plan: null,
+        candidate: undefined,
+        snapshot: {
+          id: 'snap-fuel-test-2',
+          asOf: '2026-10-28T19:10:00.000Z',
+          timezone: 'America/Los_Angeles',
+          signals: [],
+        },
+        memory: [],
+        sceneId: 'away-lunch', // Non-travel scene -> ambiguous!
+      });
+
+      // 1. Ambiguous query
+      const ambigRes = store.submitMessage('加油');
+      expect(ambigRes.collapsed).toBe(false);
+      expect(ambigRes.rule).toBe('needs_confirmation');
+      expect(ambigRes.response).toBe('Did you mean: find a gas station?');
+      expect(store.getActionState().status).toBe('needs-confirmation');
+
+      // 2. User confirms with "yes"
+      const confirmRes = store.submitMessage('yes');
+      expect(confirmRes.collapsed).toBe(true);
+      expect(store.getActionState().status).toBe('updated');
+      expect(store.getActionState().plan?.intentId).toBe('fuel');
+      expect(store.getActionState().plan?.headline).toContain('Metro Gas & Go');
+    });
+
+    it('handles FIND_FUEL when location is unavailable: degrades gracefully with honest notice without fabricating merchants', () => {
+      defaultLocationPort.setLocation('unavailable');
+      const store = createActionStateStore();
+      store.openConversation();
+
+      store.setCommandContext({
+        plan: null,
+        candidate: undefined,
+        snapshot: {
+          id: 'snap-fuel-test-3',
+          asOf: '2026-10-28T19:10:00.000Z',
+          timezone: 'America/Los_Angeles',
+          signals: [],
+        },
+        memory: [],
+        sceneId: 'clear',
+      });
+
+      const res = store.submitMessage('find gas');
+      expect(res.collapsed).toBe(false);
+      expect(res.rule).toBe('degraded_failure');
+      expect(res.response).toContain('Cannot search for gas stations: location is unavailable or denied');
+
+      // Restore location port
+      defaultLocationPort.setLocation('available', DEFAULT_DEMO_COORDS);
     });
   });
 

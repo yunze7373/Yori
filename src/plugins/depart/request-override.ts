@@ -18,7 +18,7 @@ export interface UserRequestOverrideProvenance {
 export type LunchFilter = 'quieter' | 'vegetarian' | 'nearer';
 
 export interface UserRequestOverride {
-  readonly kind: 'leave_later' | 'route_preference' | 'lunch_filter';
+  readonly kind: 'leave_later' | 'route_preference' | 'lunch_filter' | 'fuel_search';
   readonly deltaMinutes?: number;
   readonly mode?: 'drive' | 'bus';
   readonly filters?: readonly LunchFilter[];
@@ -26,7 +26,7 @@ export interface UserRequestOverride {
 }
 
 export function createUserRequestOverride(params: {
-  kind: 'leave_later' | 'route_preference' | 'lunch_filter';
+  kind: 'leave_later' | 'route_preference' | 'lunch_filter' | 'fuel_search';
   deltaMinutes?: number;
   mode?: 'drive' | 'bus';
   filters?: readonly LunchFilter[];

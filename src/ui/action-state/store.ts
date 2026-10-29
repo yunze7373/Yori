@@ -16,7 +16,7 @@ import type {
   MessageItem,
   WorkingSubstate,
 } from './types.js';
-import type { PreparedPlan } from '../../core/contracts/index.js';
+import type { PreparedPlan, IntentCandidate, ContextSnapshot } from '../../core/contracts/index.js';
 import {
   type CommandInterpreter,
   type SituationAttribution,
@@ -28,6 +28,8 @@ import {
 } from '../../adapters/model/decision-log.js';
 import { departPreparer } from '../../plugins/depart/preparer.js';
 import { lunchPreparer } from '../../plugins/lunch/preparer.js';
+import { fuelPreparer } from '../../plugins/fuel/index.js';
+import { defaultLocationPort } from '../../adapters/providers/location-port.js';
 import {
   createUserRequestOverride,
   type UserRequestOverride,
@@ -36,7 +38,11 @@ import { formatTime } from '../living-context/presentation.js';
 import { derivePlanTimingFacts } from '../view-models/timing.js';
 import { buildHumanDerivation, humanizeMemoryKey } from '../review/why-sheet.js';
 import { classifyFactSource, provenanceLabel } from '../view-models/provenance.js';
-import { createRainEvidenceBundle, createLunchEvidenceBundle } from '../view-models/grounding.js';
+import {
+  createRainEvidenceBundle,
+  createLunchEvidenceBundle,
+  createFuelEvidenceBundle,
+} from '../view-models/grounding.js';
 
 function checkSystemReducedMotion(): boolean {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -62,6 +68,7 @@ export class DefaultActionStateStore implements ActionStateStore {
   private pendingOverride: UserRequestOverride | null = null;
   private interpreter: CommandInterpreter;
   private currentSituationAttribution?: SituationAttribution;
+  private pendingFuelDisambiguation = false;
 
   constructor(options: ActionStateStoreOptions = {}) {
     this.actionState = {
@@ -170,7 +177,12 @@ export class DefaultActionStateStore implements ActionStateStore {
         this.commandContext?.sceneId === 'away-lunch' ||
         this.commandContext?.sceneId === 'busy-lunch' ||
         this.commandContext?.plan?.intentId === 'lunch';
-      const welcomeText = isLunch
+      const isFuel =
+        this.commandContext?.sceneId === 'fuel' ||
+        this.commandContext?.plan?.intentId === 'fuel';
+      const welcomeText = isFuel
+        ? "I can help find nearby gas stations: ask 'find gas', 'Why this station?', 'Looks good' to confirm, or 'Undo' to restore."
+        : isLunch
         ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Why this restaurant?', 'Looks good' to confirm, or 'Undo' to restore."
         : "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
       this.transcriptList.push({
@@ -559,6 +571,11 @@ export class DefaultActionStateStore implements ActionStateStore {
 
     // 1. ACCEPT ('Looks good', 'Accept', 'Confirm')
     if (cmd.intent === 'ACCEPT') {
+      if (this.pendingFuelDisambiguation) {
+        this.pendingFuelDisambiguation = false;
+        return this.submitMessage('find gas');
+      }
+
       if (this.actionState.status === 'needs-confirmation' && this.actionState.pendingPlan) {
         const confirmedPlan = this.actionState.pendingPlan;
         this.pushHistory({
@@ -1058,13 +1075,138 @@ export class DefaultActionStateStore implements ActionStateStore {
       };
     }
 
-    // 7. UNSUPPORTED (Honest capability answers)
+    // 7. FIND_FUEL ('gas', 'find gas', '加油')
+    if (cmd.intent === 'FIND_FUEL') {
+      if (cmd.slots.ambiguous) {
+        this.pendingFuelDisambiguation = true;
+        this.beginCommand(trimmed);
+        const question = cmd.honestAnswer ?? 'Did you mean: find a gas station?';
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: question,
+          timestamp: new Date().toISOString(),
+        });
+        this.resolveNeedsConfirmation(question);
+        this.notify();
+        return { collapsed: false, rule: 'needs_confirmation', response: question };
+      }
+
+      this.pendingFuelDisambiguation = false;
+      this.beginCommand(trimmed, 'Finding nearby gas stations · simulated', 'comparing');
+
+      const locStatus = defaultLocationPort.getLocation();
+      if (locStatus.status !== 'available' || !locStatus.coords) {
+        const degradedMsg =
+          'Cannot search for gas stations: location is unavailable or denied. Location is required to find nearby fuel.';
+        this.resolveDegraded(degradedMsg);
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: degradedMsg,
+          timestamp: new Date().toISOString(),
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: degradedMsg };
+      }
+
+      const override = createUserRequestOverride({
+        kind: 'fuel_search',
+        at: now,
+      });
+
+      const fuelCandidate: IntentCandidate = {
+        intent: 'fuel',
+        confidence: 1.0,
+        evidence: [],
+      };
+
+      const fallbackSnapshot: ContextSnapshot = {
+        id: 'snap-fuel-store',
+        asOf: now,
+        timezone: 'America/Los_Angeles',
+        signals: [],
+      };
+
+      const effectiveSnapshot = ctx?.snapshot ?? fallbackSnapshot;
+      createFuelEvidenceBundle({ snapshot: effectiveSnapshot, originCoords: locStatus.coords });
+
+      const newPlan = fuelPreparer.prepareWithRequest(
+        fuelCandidate,
+        effectiveSnapshot,
+        ctx?.memory ?? [],
+        override,
+        locStatus.coords
+      );
+
+      if (!newPlan) {
+        const errorMsg = 'No gas stations found nearby in fixture data.';
+        this.resolveDegraded(errorMsg);
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: errorMsg,
+          timestamp: new Date().toISOString(),
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
+      }
+
+      this.pushHistory({
+        planState: this.actionState.plan ?? ctx?.plan ?? null,
+        sceneId: ctx?.sceneId ?? 'current',
+        actionState: {
+          ...this.actionState,
+          status: this.currentOverride ? 'updated' : 'idle',
+          plan: this.actionState.plan ?? ctx?.plan ?? undefined,
+        },
+        override: this.currentOverride,
+        timestamp: now,
+      });
+
+      this.currentOverride = override;
+
+      const topOption = newPlan.optionsOrSteps?.[0];
+      const topName =
+        typeof topOption === 'object' && topOption !== null
+          ? (topOption as { name?: string; label?: string }).name || (topOption as { name?: string; label?: string }).label
+          : 'nearby gas station';
+
+      const successMsg = `Found nearby gas stations: ${topName} is the closest.`;
+      this.transcriptList.push({
+        id: `msg-${Date.now()}-a`,
+        sender: 'assistant',
+        text: successMsg,
+        timestamp: new Date().toISOString(),
+      });
+
+      this.resolveExecutable(
+        'Nearby gas stations found.',
+        newPlan
+      );
+
+      const collapsed = this.evaluateAutoCollapse('executable_determinate');
+      this.notify();
+      return {
+        collapsed,
+        rule: 'executable_determinate',
+        response: successMsg,
+        plan: newPlan,
+      };
+    }
+
+    // 8. UNSUPPORTED (Honest capability answers)
     this.beginCommand(trimmed);
     const isLunch =
       this.commandContext?.sceneId === 'away-lunch' ||
       this.commandContext?.sceneId === 'busy-lunch' ||
       this.commandContext?.plan?.intentId === 'lunch';
-    const fallbackText = isLunch
+    const isFuel =
+      this.commandContext?.sceneId === 'fuel' ||
+      this.commandContext?.plan?.intentId === 'fuel';
+    const fallbackText = isFuel
+      ? "I can help find nearby gas stations: ask 'find gas', 'Why this station?', 'Looks good' to confirm, or 'Undo' to restore."
+      : isLunch
       ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Why this restaurant?', 'Looks good' to confirm, or 'Undo' to restore."
       : "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
     const responseText = cmd.honestAnswer ?? fallbackText;

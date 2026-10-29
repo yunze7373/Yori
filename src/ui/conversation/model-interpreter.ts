@@ -63,6 +63,7 @@ const CLOSED_INTENTS: ReadonlySet<string> = new Set([
   'LEAVE_LATER',
   'CHANGE_ROUTE',
   'FIND_LUNCH',
+  'FIND_FUEL',
   'WHY',
   'ACCEPT',
   'UNDO',

@@ -18,6 +18,12 @@ import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
 import type { UserRequestOverride } from '../../plugins/depart/request-override.js';
 import { mockPlaceAdapter } from '../../adapters/mock/index.js';
+import {
+  FIXTURE_PLACE_TEMPLATES,
+  computeHaversineDistanceMeters,
+  formatStraightLineDistance,
+} from '../../adapters/providers/simulated-places-provider.js';
+import type { PlaceItem } from '../../adapters/providers/places-types.js';
 
 export type EvidenceKind = 'poi' | 'route' | 'eta' | 'weather' | 'habit' | 'calendar';
 
@@ -400,7 +406,7 @@ export class GroundedRecommendationVerifier {
     }
 
     // 4. Distance check
-    if (typeof candidate.distanceMinutes === 'number') {
+    if (typeof candidate.distanceMinutes === 'number' && rec.fields.distanceMinutes !== undefined) {
       const normRecDist = normalizeFieldValue('distanceMinutes', rec.fields.distanceMinutes, bundle.timezone);
       const normCandDist = normalizeFieldValue('distanceMinutes', candidate.distanceMinutes, bundle.timezone);
       if (normRecDist !== normCandDist) {
@@ -480,14 +486,34 @@ export function buildNavigateUrl(
     readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
     readonly [key: string]: unknown;
   },
-  bundle: EvidenceBundle
+  bundle: EvidenceBundle,
+  options?: { platform?: 'ios' | 'android' | 'desktop' | 'app_scheme'; forceFail?: boolean }
 ): string | undefined {
+  if (options?.forceFail) {
+    GroundedRecommendationVerifier.verifyField(
+      { recordId: '__forced_failure__', field: 'name' },
+      candidate.name,
+      bundle
+    );
+    return undefined;
+  }
+
   const result = GroundedRecommendationVerifier.verifyCandidateCard(candidate, bundle);
   if (!result.valid) {
     return undefined; // Verifier failure => navigation disabled
   }
 
   const rec = bundle.getRecord(candidate.sourceRef?.recordId || candidate.id);
+  const recCoords = (rec?.fields.coords as { lat: number; lng: number } | undefined) ?? (candidate as any).coords;
+
+  if (options?.platform && options.platform !== 'app_scheme' && recCoords) {
+    if (options.platform === 'ios') {
+      const q = encodeURIComponent(String(rec?.fields.name || candidate.name));
+      return `https://maps.apple.com/?daddr=${recCoords.lat},${recCoords.lng}&dirflg=d&q=${q}`;
+    }
+    return `https://www.google.com/maps/dir/?api=1&destination=${recCoords.lat}%2C${recCoords.lng}&travelmode=driving`;
+  }
+
   const destName = encodeURIComponent(String(rec?.fields.name || candidate.name));
   return `yori://navigate?id=${encodeURIComponent(candidate.id)}&name=${destName}`;
 }
@@ -969,3 +995,106 @@ export function createLunchEvidenceBundle(options?: {
 
   return createEvidenceBundle('bundle-lunch-d3', sceneClockIso, [...recordMap.values()], timezone, aliases);
 }
+
+export function createFuelEvidenceBundle(options?: {
+  plan?: PreparedPlan;
+  places?: readonly PlaceItem[];
+  snapshot?: { asOf?: string; timezone?: string; signals?: readonly { kind: string; id?: string; issuedAt?: string; value?: unknown }[] } | null;
+  sceneClockIso?: string;
+  timezone?: string;
+  originCoords?: { lat: number; lng: number };
+}): EvidenceBundle {
+  const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T19:10:00.000Z';
+  const timezone = options?.timezone ?? options?.snapshot?.timezone ?? 'America/Los_Angeles';
+  const originCoords = options?.originCoords ?? { lat: 37.7749, lng: -122.4194 };
+
+  const recordMap = new Map<string, EvidenceRecord>();
+  const aliases = new Map<string, string>();
+
+  // If places were explicitly provided, use them; otherwise use FIXTURE_PLACE_TEMPLATES with computed straight-line distances
+  const placesList: readonly PlaceItem[] =
+    options?.places ??
+    FIXTURE_PLACE_TEMPLATES.filter(p => p.category === 'gas_station').map(t => {
+      const dist = computeHaversineDistanceMeters(originCoords, t.coords);
+      return {
+        id: t.id,
+        placeId: t.id,
+        name: t.name,
+        coords: t.coords,
+        category: t.category,
+        address: t.address,
+        brand: t.brand,
+        distanceMeters: dist,
+        straightLineDistanceMeters: dist,
+        straightLineDistanceLabel: formatStraightLineDistance(dist),
+        source: 'simulated' as const,
+        fetchedAt: sceneClockIso,
+      };
+    });
+
+  for (const place of placesList) {
+    const pid = place.id || place.placeId;
+    const distMeters = place.distanceMeters ?? place.straightLineDistanceMeters;
+    const distMinutes = Math.round((distMeters ?? 500) / 80);
+    const distLabel = place.straightLineDistanceLabel ?? (distMeters ? formatStraightLineDistance(distMeters) : undefined);
+
+    recordMap.set(pid, {
+      id: pid,
+      provider: 'simulated-places',
+      kind: 'poi',
+      fetchedAt: sceneClockIso,
+      provenance: 'simulated',
+      fields: {
+        id: pid,
+        name: place.name,
+        coords: place.coords,
+        lat: place.coords.lat,
+        lng: place.coords.lng,
+        category: place.category,
+        address: place.address,
+        brand: place.brand,
+        distanceMinutes: distMinutes,
+        distanceMeters: distMeters,
+        straightLineDistance: distLabel,
+        straightLineDistanceLabel: distLabel,
+        straight_line: true,
+      },
+    });
+    aliases.set(place.name.toLowerCase(), pid);
+  }
+
+  // Location record
+  const locRecordId = 'loc-fuel-origin';
+  recordMap.set(locRecordId, {
+    id: locRecordId,
+    provider: 'location-port',
+    kind: 'poi',
+    fetchedAt: sceneClockIso,
+    provenance: 'simulated',
+    fields: {
+      lat: originCoords.lat,
+      lng: originCoords.lng,
+      status: 'available',
+    },
+  });
+
+  // Vehicle fuel signal / status
+  const fuelSig = options?.snapshot?.signals?.find(s => s.kind === 'fuel_percent' || s.kind === 'vehicle_fuel');
+  const fuelVal = fuelSig?.value as any;
+  const fuelPercent = typeof fuelVal === 'number' ? fuelVal : (fuelVal?.fuelPercent ?? 18);
+  recordMap.set('fuel_status', {
+    id: 'fuel_status',
+    provider: 'vehicle',
+    kind: 'poi',
+    fetchedAt: sceneClockIso,
+    provenance: 'simulated',
+    fields: {
+      fuelPercent,
+      needsFuel: fuelPercent <= 25,
+      status: `Fuel level ${fuelPercent}% (low)`,
+    },
+  });
+
+  return createEvidenceBundle('bundle-fuel-v5', sceneClockIso, [...recordMap.values()], timezone, aliases);
+}
+

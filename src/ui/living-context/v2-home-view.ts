@@ -210,6 +210,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           </div>
           <h2 class="quiet-title">${escapeHtml(vm.title)}</h2>
           <p class="quiet-subtitle">${escapeHtml(vm.headline)}</p>
+          ${vm.basis ? `<p class="quiet-basis">${escapeHtml(vm.basis)}</p>` : ''}
         </section>
       </div>
     `;
@@ -354,14 +355,22 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           <span class="card-badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
           <h2 class="now-subject">${escapeHtml(vm.title)}</h2>
           <div class="now-title" id="now-title">${escapeHtml(vm.headline)}</div>
-          <div class="mock-places-notice">${escapeHtml(STRINGS.lunch.mockPlacesNotice)}</div>
+          <div class="mock-places-notice">${escapeHtml(
+            vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
+              ? STRINGS.fuel.mockPlacesNotice
+              : STRINGS.lunch.mockPlacesNotice
+          )}</div>
         </div>
 
         <!-- Candidate Cards with Local Labelled SVG Illustrations -->
         ${
           vm.candidateCards && vm.candidateCards.length > 0
             ? `
-          <div class="v2-candidate-list" aria-label="Lunch Recommendations">
+          <div class="v2-candidate-list" aria-label="${escapeHtml(
+            vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
+              ? 'Fuel Recommendations'
+              : 'Lunch Recommendations'
+          )}">
             ${vm.candidateCards
               .map(
                 c => `
@@ -387,6 +396,15 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   </div>
                   <div class="v2-candidate-basis">${escapeHtml(c.basis)}</div>
                   <div class="v2-candidate-footer">
+                    <button
+                      type="button"
+                      class="btn btn-outline v2-directions-btn"
+                      id="btn-navigate-${c.id}"
+                      data-candidate-id="${c.id}"
+                      aria-label="Directions to ${escapeHtml(c.name)}"
+                    >
+                      Directions →
+                    </button>
                     <span class="v2-view-detail-link">Details →</span>
                   </div>
                 </div>

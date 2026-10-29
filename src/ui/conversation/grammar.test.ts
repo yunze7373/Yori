@@ -216,14 +216,31 @@ describe('Closed Command Grammar & Total Parser (LIVING_CONTEXT_V2.md §3)', () 
     });
   });
 
-  describe('UNSUPPORTED Intent & Capability Answers', () => {
-
-    it("maps fuel/charging requests to honest deferred notice (V5-FUEL non-goal)", () => {
-      const res = interpreter.interpret('Find a gas station');
-      expect(res.intent).toBe('UNSUPPORTED');
-      expect(res.honestAnswer).toContain('Finding fuel or charging stops arrives in V5-FUEL');
+  describe('FIND_FUEL Intent & Disambiguation', () => {
+    it('interprets explicit gas / fuel queries deterministically', () => {
+      const queries = ['Find a gas station', 'gas', 'need gas', 'where is gas', 'find petrol station', '加油站', '找加油站'];
+      for (const q of queries) {
+        const res = interpreter.interpret(q);
+        expect(res.intent).toBe('FIND_FUEL');
+        expect(res.slots.ambiguous).toBe(false);
+      }
     });
 
+    it('disambiguates Chinese "加油" based on context', () => {
+      // Without travel context: ambiguous -> needs-confirmation
+      const ambig = interpreter.interpret('加油', { sceneId: 'away-lunch' });
+      expect(ambig.intent).toBe('FIND_FUEL');
+      expect(ambig.slots.ambiguous).toBe(true);
+      expect(ambig.honestAnswer).toBe('Did you mean: find a gas station?');
+
+      // With travel context: direct FIND_FUEL
+      const direct = interpreter.interpret('加油', { sceneId: 'rain', currentPlanIntent: 'depart' });
+      expect(direct.intent).toBe('FIND_FUEL');
+      expect(direct.slots.ambiguous).toBe(false);
+    });
+  });
+
+  describe('UNSUPPORTED Intent & Capability Answers', () => {
     it("maps random chat to general honest capabilities", () => {
       const res = interpreter.interpret('What is the capital of France?');
       expect(res.intent).toBe('UNSUPPORTED');

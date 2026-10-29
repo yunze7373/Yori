@@ -30,6 +30,7 @@ import {
   GroundedRecommendationVerifier,
   createRainEvidenceBundle,
   createLunchEvidenceBundle,
+  createFuelEvidenceBundle,
   type EvidenceBundle,
   type SourceRef,
 } from './grounding.js';
@@ -83,10 +84,39 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
             timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
             isConfirmedTaste: userConfirmedKeys?.has('taste_preference_lunch_cuisine'),
           })
-        : undefined);
+        : plan?.intentId === 'fuel'
+          ? createFuelEvidenceBundle({
+              plan,
+              snapshot,
+              sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
+              timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+            })
+          : undefined);
 
   // 1. Quiet State (D4: 0 prompts is valid; honest quiet state)
   if (!plan) {
+    if (snapshot?.signals?.some(s => s.kind === 'fuel_percent' || s.kind === 'fuel_status')) {
+      const locSig = snapshot.signals.find(s => s.kind === 'location_status');
+      const locVal = locSig?.value as any;
+      const isUnavailable = locVal?.status === 'unavailable' || locVal?.status === 'denied';
+      if (isUnavailable) {
+        return {
+          layoutKind: 'quiet',
+          title: 'Location Unavailable',
+          headline: 'Cannot find nearby gas stations without location access',
+          basis: 'Location permission or fixture coordinates required · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+        };
+      }
+    }
+
     return {
       layoutKind: 'quiet',
       title: STRINGS.quietState.title,
@@ -337,6 +367,76 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       proposals: compileProposals(proposals),
       evidenceBundle: bundle,
       sourceRef: { recordId: 'loc-downtown', field: 'name' },
+    };
+  }
+
+  // 4. Fuel / Gas Stations Layout (V5-FUEL)
+  if (plan.intentId === 'fuel') {
+    const candidateCards: CandidateCardVM[] = [];
+    if (plan.optionsOrSteps) {
+      for (let i = 0; i < plan.optionsOrSteps.length; i++) {
+        const raw = plan.optionsOrSteps[i];
+        if (typeof raw === 'object' && raw !== null) {
+          const opt = raw as any;
+          const name = opt.name || opt.label;
+          const straightLineDist =
+            opt.straightLineDistanceLabel ||
+            (opt.straightLineDistanceMeters
+              ? `${opt.straightLineDistanceMeters} m (straight-line)`
+              : 'nearby');
+          const photo = getLocalIllustration('fuel', name);
+          const basis = opt.brand ? `Simulated fixture · ${opt.brand}` : 'Simulated fixture';
+
+          const recId = opt.recordId || opt.id;
+          const sourceRef: SourceRef = { recordId: recId, field: 'name' };
+          const fieldSourceRefs: Record<string, SourceRef> = {
+            name: { recordId: recId, field: 'name' },
+          };
+
+          const card: CandidateCardVM = {
+            id: opt.id || `fuel-cand-${i}`,
+            name,
+            cuisine: 'Gas Station',
+            distanceMinutes: Math.round((opt.straightLineDistanceMeters ?? 500) / 80),
+            distanceText: straightLineDist,
+            basis,
+            photo,
+            isSelected: i === 0,
+            sourceRef,
+            fieldSourceRefs,
+          };
+
+          if (bundle) {
+            const verification = GroundedRecommendationVerifier.verifyCandidateCard(card, bundle);
+            if (!verification.valid) {
+              continue;
+            }
+          }
+
+          candidateCards.push(card);
+        }
+      }
+    }
+
+    const map = deriveMapVM(plan, spatialEvidence, 'compact', { snapshot, evidenceBundle: bundle });
+
+    return {
+      layoutKind: 'candidates',
+      planId: plan.id,
+      title: 'Low Fuel Warning',
+      headline: plan.headline,
+      basis: 'Nearby gas stations · straight-line distances · simulated',
+      isRain: false,
+      map,
+      options: [],
+      candidateCards: Object.freeze(candidateCards),
+      isAccepted,
+      canUndo,
+      actions,
+      aheadItems: compileAheadItems(aheadPlans),
+      proposals: compileProposals(proposals),
+      evidenceBundle: bundle,
+      sourceRef: { recordId: 'loc-fuel-origin', field: 'name' },
     };
   }
 

@@ -341,7 +341,7 @@
       "slice": 5,
       "title": "Consented geolocation adapter with degradation and manual location",
       "priority": "P1",
-      "goal": "Single adapter module owning navigator.geolocation (rescoped static guard: any reference outside it fails), one-shot fix with accuracy/timestamp behind the explicit in-app consent step; denied/timeout/stale degrade to a clear notice plus manual location; debounce, cache, refresh threshold, session request budget; no watchPosition. Real chain stays off unless GATE-P-LOC is DONE; the simulated-scenario switch disables it entirely. Build and test proceed WITHOUT waiting for GATE-P-LOC: geolocation is mocked in tests and no coordinate leaves the device in this slice.",
+      "goal": "Single adapter module owning navigator.geolocation (rescoped static guard: any reference outside it fails), one-shot fix with accuracy/timestamp behind the explicit in-app consent step; denied/timeout/stale degrade to a clear notice plus manual location; debounce, cache, refresh threshold, session request budget; no watchPosition. Real chain stays off unless GATE-P-LOC is DONE; the simulated-scenario switch disables it entirely. Build and test proceed WITHOUT waiting for GATE-P-LOC: geolocation is mocked in tests and no coordinate leaves the device in this slice. When built, the real adapter plugs into the SAME LocationPort seam V5-FUEL already uses, without changing the fuel plugin.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
@@ -375,14 +375,14 @@
       "slice": 5,
       "title": "PlacesProvider (Overpass default) + fuel plugin + FIND_FUEL + navigate handoff",
       "priority": "P1",
-      "goal": "PlacesProvider seam shared by lunch (real mode) and the new fuel plugin (detector+preparer+adapter, zero core diff, AC-EXT-1 path). FIND_FUEL joins the closed grammar ('gas'/'find gas'/'加油' with context disambiguation and needs-confirmation when ambiguous). Navigate handoff only on user click via unit-tested Google/Apple Maps URL builders with platform fallback. Provider-unavailable is prominent; no fabricated merchants, distances, or ETAs (straight-line labelled, or OSRM with terms noted). If the owner chose Google Places, GATE-P-BILL must be DONE first and the key lives server-side only. Build and test against a recorded/simulated PlacesProvider fixture (clearly labelled simulated); the live provider call is NOT part of this slice. Rev6 GROUNDING: provider results become EvidenceRecords in a session EvidenceBundle; every displayed POI/ETA/route/weather value carries sourceRef {recordId, field} (provenance classes via the existing classifyFactSource, no core types). GroundedRecommendationVerifier.verify runs INSIDE the render view-model path and INSIDE the navigate-URL builder (not skippable): on failure the field shows unknown or the card is withheld, navigation is disabled (no URL built), and the reason is logged redacted to the Decision Log. It EXTENDS the G12-CORE verifier (already guarding the recorded scenes) to PlacesProvider results and the navigate-URL builder.",
+      "goal": "PlacesProvider seam shared by lunch (real mode) and the new fuel plugin (detector+preparer+adapter, zero core diff, AC-EXT-1 path). FIND_FUEL joins the closed grammar ('gas'/'find gas'/'加油' with context disambiguation and needs-confirmation when ambiguous). Navigate handoff only on user click via unit-tested Google/Apple Maps URL builders with platform fallback. Provider-unavailable is prominent; no fabricated merchants, distances, or ETAs (straight-line labelled, or OSRM with terms noted). If the owner chose Google Places, GATE-P-BILL must be DONE first and the key lives server-side only. Build and test against a recorded/simulated PlacesProvider fixture (clearly labelled simulated); the live provider call is NOT part of this slice. Rev6 GROUNDING: provider results become EvidenceRecords in a session EvidenceBundle; every displayed POI/ETA/route/weather value carries sourceRef {recordId, field} (provenance classes via the existing classifyFactSource, no core types). GroundedRecommendationVerifier.verify runs INSIDE the render view-model path and INSIDE the navigate-URL builder (not skippable): on failure the field shows unknown or the card is withheld, navigation is disabled (no URL built), and the reason is logged redacted to the Decision Log. It EXTENDS the G12-CORE verifier (already guarding the recorded scenes) to PlacesProvider results and the navigate-URL builder. Rev7 prerequisite (in-slice): a LocationPort seam fed ONLY by the scenario fixture or a manual location - zero navigator.geolocation/watchPosition anywhere. Denied consent or no location yields 'location unavailable' and the slice degrades prominently. No coordinate leaves the device and no live provider call happens in this slice.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
       "pipeline": "new_feature",
       "estimated_hours": 6,
       "dependencies": [
-        "V5-GEO"
+        "V2b"
       ],
       "owner_gate": "P-BILL applies only if Google Places is chosen at GATE-P-LOC: owner provides key + billing; otherwise Overpass needs no key",
       "goal_ids": [
@@ -403,7 +403,9 @@
       ],
       "checks": [
         "Fixture-based evidence (labelled simulated/recorded): POI candidates change after the fixture location changes, 'gas' resolves to gas_station results, and the built navigate URL targets the fixture coordinates exactly on desktop and mobile fallback (AC-212-1)",
-        "Negative tests: denied consent, empty result set, provider failure, and cost-off fallback each degrade prominently; URL builder unit tests pin exact coordinates and encoding; core zero diff and grocery AC-EXT-1 proof unregressed (AC-212-2)",
+        "Negative tests: LocationPort unavailable/denied (denied consent or no location), empty result set, provider failure, and cost-off fallback each degrade prominently; URL builder unit tests pin exact coordinates and encoding; core zero diff and grocery AC-EXT-1 proof unregressed (AC-212-2)",
+        "Static guard: ZERO navigator.geolocation or watchPosition references repo-wide (the whole V5-FUEL slice runs on the fixture/manual LocationPort)",
+        "Zero-external-request e2e: with the fixture LocationPort, no request leaves the device to overpass/google/apple/osrm hosts (network log asserted empty)",
         "GROUNDING G1: every rendered POI/ETA/route/weather value in tests resolves through sourceRef to a bundle record whose normalized field equals the displayed value; provenance class matches the record (simulated/recorded/live/sample/confirmed/session distinct)",
         "GROUNDING G2 negative suite (all must fail closed): tampered displayed value, missing ref, stale fetchedAt, simulated record labelled live, model-invented place, model-selected candidate outside the bundle, and forced verifier failure - each yields unknown/withheld card, NO navigate URL built, and a redacted Decision Log entry",
         "Recordability: the app previews and both demo scenes remain runnable end to end in this slice's state (v1 flag path intact)",
@@ -415,15 +417,16 @@
       "slice": 5,
       "title": "Live provider switch and real-run evidence (behind GATE-P-LOC)",
       "priority": "P1",
-      "goal": "The ONLY slice that discloses real coordinates: enable the live PlacesProvider (Overpass by default; Google only if GATE-P-BILL is also DONE with the key server-side) behind the consent flow, and collect the real-run evidence. Until GATE-P-LOC is DONE this slice does not run and the real chain stays OFF by default.",
+      "goal": "The ONLY slice that discloses real coordinates: enable the live PlacesProvider (Overpass by default; Google only if GATE-P-BILL is also DONE with the key server-side) behind the consent flow, and collect the real-run evidence. Until GATE-P-LOC is DONE this slice does not run and the real chain stays OFF by default. Real location is never used before V5-GEO is approved (in addition to GATE-P-LOC being DONE).",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
       "pipeline": "new_feature",
       "estimated_hours": 3,
       "dependencies": [
-        "GATE-P-LOC",
-        "V5-FUEL"
+        "V5-GEO",
+        "V5-FUEL",
+        "GATE-P-LOC"
       ],
       "owner_gate": "P-LOC must be DONE (provider named, disclosure consented); P-BILL additionally if Google Places was chosen",
       "goal_ids": [
@@ -485,7 +488,7 @@
       "slice": 5,
       "title": "Proactive lunch on real POIs (Spark ranking behind S1, dedup, evidence labels)",
       "priority": "P2",
-      "goal": "Real-mode lunch: GPS fix + local mealtime + MemoryPort preferences (XMemo only if X1 authorized, otherwise local and labelled) + PlacesProvider candidates. Muse Spark ranks/explains behind the SUBMIT plan's S1 gate with the deterministic ranking as fallback; shared suppression prevents duplicate reminders. Open-now, ratings, and route times render only with provider evidence, labelled with source and fetchedAt, never blended with simulated cards.",
+      "goal": "Real-mode lunch: GPS fix + local mealtime + MemoryPort preferences (XMemo only if X1 authorized, otherwise local and labelled) + PlacesProvider candidates. Muse Spark ranks/explains behind the SUBMIT plan's S1 gate with the deterministic ranking as fallback; shared suppression prevents duplicate reminders. Open-now, ratings, and route times render only with provider evidence, labelled with source and fetchedAt, never blended with simulated cards. Released only after V5-FUEL is approved, at the coordinator's call.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
@@ -792,5 +795,6 @@
     "Both owner loops demonstrable end to end on real viewports with recordings, or the 2026-11-01 noon JST cut line honestly falls back to the approved UI",
     "No concept-image data presented as real; token/layout finality claimed only if R1-R3 actually arrived with hash receipt"
   ],
-  "release_order": "After CUTLINE_CHECK_V2: V3 -> G3-PARITY -> DOC-RESYNC -> G12-CORE -> V4 (recordable demo first), then V5 if time permits before the 2026-11-04 freeze. The coordinator decides interleaving at each slice decision point. Rev5 slices are first in the cut order."
+  "release_order": "V4 approved @e530f1e is the stable fallback (docs/evidence/v4, MANIFEST 11/11, stays untouched). Then: V5-FUEL first (fixture/manual LocationPort, no geolocation), then V5-GEO / V5-LUNCH at the coordinator's call, then V5-LIVE-POI only after GATE-P-LOC (and V5-GEO approved). G3-PARITY remains independent and early. The coordinator decides interleaving at each slice decision point; Rev5/Rev6 slices beyond V5-FUEL are first in the cut order before the 2026-11-04 freeze.",
+  "amendment_rev7": "Rev7 (coordinator decision msg_3fd635e4d6c64970, 2026-10-29): V5-FUEL was dispatched by the Reviewer (TID INBOX-20261029-3A2E00, decision 8b7f6f50) ahead of V5-GEO and is being executed fixture-only. Rather than silently bypass the V5-GEO dependency, this amendment makes the prerequisite satisfiable in-slice via a fixture/manual LocationPort with a repo-wide zero-geolocation static guard, so the gate change is reviewed, not improvised. V5-GEO keeps owning the real consented adapter and must plug into the same LocationPort; V5-LIVE-POI now requires V5-GEO AND V5-FUEL AND GATE-P-LOC, so real location is never used before the real adapter is approved. FALLBACK IF THIS AMENDMENT IS REJECTED: V5-GEO must be completed and approved before V5-FUEL can be approved, and the dispatched fixture work remains unapproved until then."
 }

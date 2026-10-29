@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   createRainEvidenceBundle,
   createLunchEvidenceBundle,
+  createFuelEvidenceBundle,
   createEvidenceBundle,
   GroundedRecommendationVerifier,
   buildNavigateUrl,
@@ -1026,6 +1027,47 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
 
       const driveVerify = GroundedRecommendationVerifier.verifyOptionCard(cards[1]!, bundle);
       expect(driveVerify.valid).toBe(true);
+    });
+  });
+
+  describe('Part 5: Fuel Evidence Bundle Suite (V5-FUEL)', () => {
+    it('creates a grounded fuel evidence bundle with fixture stations, origin location, and fuel status', () => {
+      const bundle = createFuelEvidenceBundle({
+        originCoords: { lat: 37.7749, lng: -122.4194 },
+      });
+
+      expect(bundle.id).toBe('bundle-fuel-v5');
+      expect(bundle.hasRecord('loc-fuel-origin')).toBe(true);
+      expect(bundle.hasRecord('fuel_status')).toBe(true);
+
+      const fuelRec = bundle.getRecord('fuel_status');
+      expect(fuelRec?.fields.fuelPercent).toBe(18);
+      expect(fuelRec?.fields.needsFuel).toBe(true);
+
+      // Gas stations from fixture
+      const metroGas = bundle.getRecord('fuel-sf-1');
+      expect(metroGas).toBeDefined();
+      expect(metroGas?.fields.name).toBe('Metro Gas & Go');
+      expect(metroGas?.fields.straight_line).toBe(true);
+      expect(metroGas?.fields.straightLineDistance).toMatch(/\d+ m \(straight-line\)/);
+      expect(metroGas?.provenance).toBe('simulated');
+
+      // Verifies candidate card against bundle
+      const candidate = {
+        id: 'fuel-sf-1',
+        name: 'Metro Gas & Go',
+        coords: { lat: 37.7755, lng: -122.418 },
+        sourceRef: { recordId: 'fuel-sf-1', field: 'name' },
+      };
+
+      const result = GroundedRecommendationVerifier.verifyCandidateCard(candidate, bundle);
+      expect(result.valid).toBe(true);
+
+      // Verifies navigation URL builder produces valid URL
+      const navUrl = buildNavigateUrl(candidate, bundle, { platform: 'desktop' });
+      expect(navUrl).toBe(
+        'https://www.google.com/maps/dir/?api=1&destination=37.7755%2C-122.418&travelmode=driving'
+      );
     });
   });
 });

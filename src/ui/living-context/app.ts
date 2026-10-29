@@ -80,7 +80,10 @@ import {
   deriveTripDetailVM,
   deriveRestaurantDetailVM,
   createLunchEvidenceBundle,
+  createFuelEvidenceBundle,
 } from '../view-models/index.js';
+import { defaultLocationPort } from '../../adapters/providers/location-port.js';
+import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
 import { renderV2Home } from './v2-home-view.js';
 import {
   renderTripDetail,
@@ -96,7 +99,8 @@ export type DemoSceneId =
   | 'busy-lunch'
   | 'missing-weather'
   | 'corrupt-storage'
-  | 'multi-candidate';
+  | 'multi-candidate'
+  | 'fuel';
 
 export type UiVersion = 'v1' | 'v2';
 
@@ -551,6 +555,80 @@ export function computeSceneState(
         combinedMemory,
       };
     }
+
+    case 'fuel': {
+      const locPortStatus = defaultLocationPort.getLocation();
+      const isLocationAvailable = locPortStatus.status === 'available' && locPortStatus.coords;
+
+      const fuelSig = createSimulatedSignal({
+        kind: 'fuel_percent',
+        value: { fuelPercent: 18, needsFuel: true },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+
+      const locSig = createSimulatedSignal({
+        kind: 'location_status',
+        value: {
+          status: locPortStatus.status,
+          lat: locPortStatus.coords?.lat,
+          lng: locPortStatus.coords?.lng,
+          source: 'fixture',
+        },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+
+      const schedSig = createSimulatedSignal({
+        kind: 'schedule_window',
+        value: {
+          freeUntil: '2026-10-28T22:00:00.000Z',
+          nextEvent: 'Evening commute',
+        },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+
+      const snapshot: ContextSnapshot = freezeSnapshot({
+        id: 'snapshot-fuel-d5',
+        asOf: '2026-10-28T19:10:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [fuelSig, locSig, schedSig],
+      });
+
+      const result = runPipeline({
+        snapshot,
+        memory: storedConfirmedFacts,
+        clock: '2026-10-28T19:10:00.000Z',
+        plugins,
+        storage: effectiveStorage,
+        suppressions: storedSuppressions,
+      });
+
+      const mapEvidence: SpatialMapEvidence | null = isLocationAvailable
+        ? {
+            placeOrRoute: { name: 'Metro Gas & Go', destination: '850 Market St, San Francisco, CA' },
+            spatialEvidence: locSig,
+          }
+        : null;
+
+      return {
+        pipelineResult: result,
+        spatialMapEvidence: mapEvidence,
+        storageError: false,
+        storage: effectiveStorage,
+        snapshotAsOf: snapshot.asOf,
+        snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
+        snapshot,
+        combinedMemory: storedConfirmedFacts,
+      };
+    }
   }
 }
 
@@ -592,6 +670,17 @@ export function renderApp(
   const memoryPort = createMemoryPort(sharedStorage);
   const actionStore: ActionStateStore = createActionStateStore();
   let conversationCleanup: (() => void) | null = null;
+
+  if (typeof window !== 'undefined') {
+    (window as any).__YORI_SET_LOCATION__ = (
+      status: 'available' | 'unavailable' | 'denied',
+      coords?: { lat: number; lng: number }
+    ) => {
+      defaultLocationPort.setLocation(status, coords);
+      update();
+    };
+    (window as any).__YORI_ACTION_STORE__ = actionStore;
+  }
 
   let activeModal:
     | null
@@ -1232,6 +1321,7 @@ export function renderApp(
                   <option value="missing-weather" ${currentScene === 'missing-weather' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.missingWeather)}</option>
                   <option value="corrupt-storage" ${currentScene === 'corrupt-storage' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.corruptStorage)}</option>
                   <option value="multi-candidate" ${currentScene === 'multi-candidate' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.multiCandidate)}</option>
+                  <option value="fuel" ${currentScene === 'fuel' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.fuel)}</option>
                 </select>
                 ${
                   uiVersion === 'v2'
@@ -1574,6 +1664,86 @@ export function renderApp(
           if (ke.key === 'Enter' || ke.key === ' ') {
             ke.preventDefault();
             openCandidate();
+          }
+        });
+      });
+
+      // Directions button on candidate cards (V5-FUEL verified navigate handoff)
+      root.querySelectorAll<HTMLElement>('.v2-directions-btn').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const candId = btn.getAttribute('data-candidate-id');
+          if (!candId) return;
+
+          const candidate = (nowPlan?.optionsOrSteps as any[])?.find(
+            (o: any) => o && (o.id === candId || `candidate-${o.id}` === candId)
+          );
+          if (!candidate) return;
+
+          const bundle =
+            nowPlan?.intentId === 'fuel'
+              ? createFuelEvidenceBundle({ plan: nowPlan ?? undefined, snapshot })
+              : createLunchEvidenceBundle({ plan: nowPlan ?? undefined, snapshot });
+
+          const navUrl = buildGroundedNavigateUrl(
+            {
+              id: candidate.id,
+              name: candidate.name || candidate.label,
+              coords: candidate.coords,
+              sourceRef: { recordId: candidate.id, field: 'name' },
+            },
+            bundle,
+            { platform: 'desktop' }
+          );
+
+          if (navUrl) {
+            root.querySelector('#navigate-confirm-backdrop')?.remove();
+
+            const modalEl = document.createElement('div');
+            modalEl.className = 'v2-navigate-modal-backdrop';
+            modalEl.id = 'navigate-confirm-backdrop';
+            modalEl.innerHTML = `
+              <div class="v2-navigate-modal" id="navigate-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="nav-modal-title">
+                <div class="v2-modal-header">
+                  <h2 id="nav-modal-title">Start Navigation</h2>
+                  <span class="v2-illustration-badge">Verified handoff</span>
+                </div>
+                <p class="v2-modal-body">
+                  Open driving directions to <strong>${escapeHtml(candidate.name || candidate.label)}</strong> in Google Maps?
+                </p>
+                <div class="v2-modal-url-preview">
+                  <span class="v2-url-label">Verified Destination URL:</span>
+                  <code class="v2-url-code" id="navigate-verified-url">${escapeHtml(navUrl)}</code>
+                </div>
+                <div class="v2-modal-actions">
+                  <button type="button" class="btn btn-secondary" id="btn-cancel-navigate">Cancel</button>
+                  <a
+                    href="${escapeHtml(navUrl)}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="btn btn-primary"
+                    id="btn-confirm-navigate"
+                    role="button"
+                  >
+                    Open Maps
+                  </a>
+                </div>
+              </div>
+            `;
+            root.appendChild(modalEl);
+
+            const closeModal = () => modalEl.remove();
+            modalEl.querySelector('#btn-cancel-navigate')?.addEventListener('click', closeModal);
+            modalEl.addEventListener('click', ev => {
+              if (ev.target === modalEl) closeModal();
+            });
+            modalEl.querySelector('#btn-confirm-navigate')?.addEventListener('click', ev => {
+              if ((window as any).__YORI_TEST_INTERCEPT_NAV__) {
+                ev.preventDefault();
+                (window as any).__YORI_LAST_NAV_URL__ = navUrl;
+                closeModal();
+              }
+            });
           }
         });
       });
