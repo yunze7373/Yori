@@ -21,6 +21,9 @@ export interface PlaceItem {
   readonly straightLineDistanceLabel?: string;
   readonly openingStatus?: 'open' | 'closed' | 'unknown';
   readonly brand?: string;
+  readonly cuisine?: string;
+  readonly noiseLevel?: 'quiet' | 'moderate' | 'lively' | string;
+  readonly vegetarian?: boolean;
 }
 
 export interface PlacesQuery {

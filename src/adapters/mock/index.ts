@@ -22,6 +22,9 @@ export interface MockPlaceItem {
   readonly distanceMinutes: number;
   readonly noiseLevel?: PlaceNoiseLevel;
   readonly vegetarian?: boolean;
+  readonly coords?: { readonly lat: number; readonly lng: number };
+  readonly straightLineDistanceMeters?: number;
+  readonly straightLineDistanceLabel?: string;
 }
 
 export const DEFAULT_MOCK_PLACES: readonly MockPlaceItem[] = Object.freeze([

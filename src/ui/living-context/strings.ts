@@ -36,6 +36,7 @@ export const STRINGS = Object.freeze({
     clear: 'Clear',
     rain: 'Rain',
     awayLunch: 'Away lunch',
+    lunch: 'Lunch',
     busyLunch: 'Busy lunch',
     missingWeather: 'Missing weather',
     corruptStorage: 'Storage error',

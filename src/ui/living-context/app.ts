@@ -76,15 +76,21 @@ import {
   attachConversationEvents,
 } from '../conversation/index.js';
 import {
+  defaultModelCommandInterpreter,
+  ModelCommandInterpreter,
+} from '../conversation/model-interpreter.js';
+import {
   buildHomeComposition,
   deriveTripDetailVM,
   deriveRestaurantDetailVM,
   createLunchEvidenceBundle,
+  createLunchPlacesEvidenceBundle,
   createFuelEvidenceBundle,
   type EvidenceBundle,
 } from '../view-models/index.js';
 import { defaultLocationPort } from '../../adapters/providers/location-port.js';
 import { mockFuelAdapter } from '../../plugins/fuel/adapter.js';
+import { mockLunchAdapter } from '../../plugins/lunch/adapter.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import { renderV2Home } from './v2-home-view.js';
@@ -99,6 +105,7 @@ export type DemoSceneId =
   | 'clear'
   | 'rain'
   | 'away-lunch'
+  | 'lunch'
   | 'busy-lunch'
   | 'missing-weather'
   | 'corrupt-storage'
@@ -347,6 +354,127 @@ export function computeSceneState(
         snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
         snapshot,
         combinedMemory,
+      };
+    }
+
+    case 'lunch': {
+      const locPortStatus = defaultLocationPort.getLocation();
+      const isLocationAvailable = locPortStatus.status === 'available' && locPortStatus.coords;
+
+      const locSig = createSimulatedSignal({
+        kind: 'location_status',
+        value: {
+          isHome: false,
+          currentArea: 'Downtown',
+          status: locPortStatus.status,
+          lat: locPortStatus.coords?.lat,
+          lng: locPortStatus.coords?.lng,
+          source: locPortStatus.source || 'fixture',
+          accuracy: locPortStatus.accuracy,
+          notice: locPortStatus.notice,
+        },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+
+      const tempSnapshot: ContextSnapshot = {
+        id: 'snapshot-lunch-temp',
+        asOf: '2026-10-28T19:10:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [locSig],
+      };
+
+      const placesSignals = isLocationAvailable ? mockLunchAdapter.signals(tempSnapshot) : [];
+      const placesSig =
+        placesSignals[0] ??
+        createSimulatedSignal({
+          kind: 'places_lunch',
+          value: {
+            status: isLocationAvailable ? 'empty' : 'error',
+            places: [],
+            originCoords: locPortStatus.coords,
+          },
+          issuedAt: '2026-10-28T19:10:00.000Z',
+          validFor: 3600000,
+          confidence: 1.0,
+          consentScope: 'device_only',
+        });
+      const places = (placesSig.value as any).places ?? [];
+
+      const schedSig = createSimulatedSignal({
+        kind: 'schedule_window',
+        value: {
+          freeUntil: '2026-10-28T22:00:00.000Z',
+          windowStart: '2026-10-28T19:10:00.000Z',
+        },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+
+      const eatingSig = createSimulatedSignal({
+        kind: 'eating_status',
+        value: { eatenToday: false },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+
+      const snapshot: ContextSnapshot = freezeSnapshot({
+        id: 'snapshot-lunch-v5',
+        asOf: '2026-10-28T19:10:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [locSig, schedSig, eatingSig, placesSig],
+      });
+
+      const combinedMemory = [
+        ...d3MemoryFacts.filter(f => !activeConfirmedFacts.some(sc => sc.key === f.key)),
+        ...activeConfirmedFacts,
+        ...storedProposals,
+      ];
+
+      const result = runPipeline({
+        snapshot,
+        memory: combinedMemory,
+        clock: '2026-10-28T19:10:00.000Z',
+        plugins,
+        storage: effectiveStorage,
+        suppressions: storedSuppressions,
+      });
+
+      const topCandidate = result.livingContext.now?.optionsOrSteps?.[0] as any;
+      const mapEvidence: SpatialMapEvidence | null =
+        isLocationAvailable && topCandidate
+          ? {
+              placeOrRoute: {
+                name: topCandidate.name,
+                destination: topCandidate.address || `${topCandidate.coords?.lat}, ${topCandidate.coords?.lng}`,
+              },
+              spatialEvidence: locSig,
+            }
+          : null;
+
+      const lunchBundle = createLunchPlacesEvidenceBundle({
+        places,
+        snapshot,
+        originCoords: locPortStatus.coords,
+        userConfirmedKeys: new Set(combinedMemory.filter(f => f.status === 'confirmed').map(f => f.key)),
+      });
+
+      return {
+        pipelineResult: result,
+        spatialMapEvidence: mapEvidence,
+        storageError: false,
+        storage: effectiveStorage,
+        snapshotAsOf: snapshot.asOf,
+        snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
+        snapshot,
+        combinedMemory,
+        evidenceBundle: lunchBundle,
       };
     }
 
@@ -756,12 +884,18 @@ export function renderApp(
       if ('setSimulateError' in provider && typeof (provider as any).setSimulateError === 'function') {
         (provider as any).setSimulateError(shouldError);
       }
+      const lunchProvider = mockLunchAdapter.getProvider();
+      if ('setSimulateError' in lunchProvider && typeof (lunchProvider as any).setSimulateError === 'function') {
+        (lunchProvider as any).setSimulateError(shouldError);
+      }
       update();
     };
     (window as any).__YORI_DECISION_LOGGER__ = globalDecisionLogger;
     (window as any).__YORI_BUILD_NAV_URL__ = buildGroundedNavigateUrl;
     (window as any).__YORI_GET_CURRENT_EVIDENCE_BUNDLE__ = () => currentEvidenceBundle;
     (window as any).__YORI_ACTION_STORE__ = actionStore;
+    (window as any).__YORI_MODEL_INTERPRETER__ = defaultModelCommandInterpreter;
+    (window as any).__YORI_MODEL_COMMAND_INTERPRETER_CLASS__ = ModelCommandInterpreter;
   }
 
   let activeModal:
@@ -900,9 +1034,9 @@ export function renderApp(
     const nowPlan = storePlan ?? baseNowPlan;
 
     const effectiveEvidenceBundle =
-      (nowPlan?.intentId === 'fuel' ? actionStore.getActiveEvidenceBundle() : undefined) ?? evidenceBundle;
+      ((nowPlan?.intentId === 'fuel' || nowPlan?.intentId === 'lunch') ? actionStore.getActiveEvidenceBundle() : undefined) ?? evidenceBundle;
     const effectiveSnapshot =
-      (nowPlan?.intentId === 'fuel' ? actionStore.getActiveSnapshot() : undefined) ?? snapshot;
+      ((nowPlan?.intentId === 'fuel' || nowPlan?.intentId === 'lunch') ? actionStore.getActiveSnapshot() : undefined) ?? snapshot;
 
     currentEvidenceBundle = effectiveEvidenceBundle;
     const aheadPlans = reasoningState && reasoningState.scene === currentScene ? reasoningState.ahead : living.ahead;
@@ -1410,6 +1544,7 @@ export function renderApp(
                   <option value="clear" ${currentScene === 'clear' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.clear)}</option>
                   <option value="rain" ${currentScene === 'rain' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.rain)}</option>
                   <option value="away-lunch" ${currentScene === 'away-lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.awayLunch)}</option>
+                  <option value="lunch" ${currentScene === 'lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.lunch)}</option>
                   <option value="busy-lunch" ${currentScene === 'busy-lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.busyLunch)}</option>
                   <option value="missing-weather" ${currentScene === 'missing-weather' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.missingWeather)}</option>
                   <option value="corrupt-storage" ${currentScene === 'corrupt-storage' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.corruptStorage)}</option>
@@ -1777,7 +1912,9 @@ export function renderApp(
             effectiveEvidenceBundle ??
             (nowPlan?.intentId === 'fuel'
               ? createFuelEvidenceBundle({ snapshot: effectiveSnapshot })
-              : createLunchEvidenceBundle({ plan: nowPlan ?? undefined, snapshot: effectiveSnapshot }));
+              : effectiveSnapshot?.signals?.some(s => s.kind === 'places_lunch')
+                ? createLunchPlacesEvidenceBundle({ snapshot: effectiveSnapshot })
+                : createLunchEvidenceBundle({ plan: nowPlan ?? undefined, snapshot: effectiveSnapshot }));
 
           const navPlatform =
             typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent || '')
@@ -1786,12 +1923,13 @@ export function renderApp(
               ? 'android'
               : 'desktop';
 
+          const recId = (candidate as any).recordId || candidate.id;
           const navUrl = buildGroundedNavigateUrl(
             {
-              id: candidate.id,
+              id: recId,
               name: candidate.name || candidate.label,
               coords: candidate.coords,
-              sourceRef: { recordId: candidate.id, field: 'name' },
+              sourceRef: { recordId: recId, field: 'name' },
             },
             bundle,
             { platform: navPlatform }
@@ -1940,25 +2078,31 @@ export function renderApp(
     const undoAcceptBtn = root.querySelector('#btn-undo-accept') as HTMLButtonElement | null;
     if (undoAcceptBtn && nowPlan) {
       undoAcceptBtn.addEventListener('click', () => {
+        const envelope = sharedStorage.load();
+        const existingAccepted = envelope?.payload.acceptedPlanIds ?? [];
+        if (existingAccepted.includes(nowPlan.id)) {
+          const updatedAccepted = existingAccepted.filter(id => id !== nowPlan.id);
+          sharedStorage.save(
+            {
+              memoryFacts: envelope?.payload.memoryFacts ?? [],
+              proposals: envelope?.payload.proposals ?? [],
+              suppressions: envelope?.payload.suppressions ?? [],
+              promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
+              acceptedPlanIds: updatedAccepted,
+            },
+            snapshotAsOf
+          );
+          actionFeedbackMessage = 'Plan restored. Acceptance undone.';
+          update();
+          return;
+        }
+
         if (actionStore.canUndo()) {
           actionStore.undo();
           actionFeedbackMessage = 'Plan restored. Changes undone.';
           update();
           return;
         }
-        const envelope = sharedStorage.load();
-        const existingAccepted = envelope?.payload.acceptedPlanIds ?? [];
-        const updatedAccepted = existingAccepted.filter(id => id !== nowPlan.id);
-        sharedStorage.save(
-          {
-            memoryFacts: envelope?.payload.memoryFacts ?? [],
-            proposals: envelope?.payload.proposals ?? [],
-            suppressions: envelope?.payload.suppressions ?? [],
-            promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
-            acceptedPlanIds: updatedAccepted,
-          },
-          snapshotAsOf
-        );
         update();
       });
     }

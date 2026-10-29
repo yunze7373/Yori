@@ -9,6 +9,8 @@ import path from 'node:path';
 import { lunchDetector, LunchDetector } from './detector.js';
 import { lunchPreparer, LunchPreparer } from './preparer.js';
 import { lunchPlugin } from './index.js';
+import { LunchPlacesAdapter } from './adapter.js';
+import { SimulatedPlacesProvider } from '../../adapters/providers/simulated-places-provider.js';
 import { mockPlaceAdapter } from '../../adapters/mock/index.js';
 import {
   createSimulatedSignal,
@@ -401,6 +403,148 @@ describe('Mock Place Adapter (INV-101, INV-102)', () => {
     expect(lunchPlugin.detector).toBeInstanceOf(LunchDetector);
     expect(lunchPlugin.preparer).toBeInstanceOf(LunchPreparer);
     expect(lunchPlugin.adapter).toBe(mockPlaceAdapter);
+  });
+});
+
+describe('LunchPlacesAdapter & PlacesProvider Seam (V5-LUNCH / AC-213-1, AC-213-2)', () => {
+  it('emits places_lunch signal with nearby restaurants from provider', () => {
+    const adapter = new LunchPlacesAdapter();
+    const snapshot: ContextSnapshot = {
+      id: 'snap-sf',
+      asOf: '2026-10-28T19:10:00.000Z',
+      timezone: 'America/Los_Angeles',
+      signals: [
+        createSimulatedSignal({
+          kind: 'location_status',
+          value: { lat: 37.7749, lng: -122.4194, isHome: false },
+          issuedAt: '2026-10-28T19:10:00.000Z',
+          validFor: 3600000,
+          confidence: 1.0,
+          consentScope: 'device_only',
+        }),
+      ],
+    };
+
+    const signals = adapter.signals(snapshot);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.kind).toBe('places_lunch');
+    expect(signals[0]!.value.status).toBe('ok');
+    expect(signals[0]!.value.places.length).toBeGreaterThan(0);
+    expect(signals[0]!.value.places.every((p: any) => p.category === 'restaurant')).toBe(true);
+  });
+
+  it('fails closed and returns error status when provider search fails', () => {
+    const errorProvider = new SimulatedPlacesProvider({ simulateError: true });
+    const adapter = new LunchPlacesAdapter(errorProvider);
+    const snapshot: ContextSnapshot = {
+      id: 'snap-err',
+      asOf: '2026-10-28T19:10:00.000Z',
+      timezone: 'America/Los_Angeles',
+      signals: [
+        createSimulatedSignal({
+          kind: 'location_status',
+          value: { lat: 37.7749, lng: -122.4194 },
+          issuedAt: '2026-10-28T19:10:00.000Z',
+          validFor: 3600000,
+          confidence: 1.0,
+          consentScope: 'device_only',
+        }),
+      ],
+    };
+
+    const signals = adapter.signals(snapshot);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.value.status).toBe('error');
+    expect(signals[0]!.value.places).toHaveLength(0);
+  });
+
+  const testMemory: readonly MemoryFact[] = [
+    createMemoryFact(
+      'taste_preference',
+      'ramen_or_salad',
+      'confirmed',
+      { source: 'user_confirmed', recordedAt: '2026-10-25T10:00:00.000Z' },
+      '2026-10-25T10:00:00.000Z'
+    ),
+  ];
+
+  const testSnapshot: ContextSnapshot = {
+    id: 'snap-lunch-test',
+    asOf: '2026-10-28T19:10:00.000Z',
+    timezone: 'America/Los_Angeles',
+    signals: [
+      createSimulatedSignal({
+        kind: 'location_status',
+        value: { lat: 37.7749, lng: -122.4194, isHome: false },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      }),
+      createSimulatedSignal({
+        kind: 'schedule_window',
+        value: { freeUntil: '2026-10-28T22:00:00.000Z' },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      }),
+    ],
+  };
+
+  it('prepares lunch plan from places_lunch signal with proper recordId', () => {
+    const adapter = new LunchPlacesAdapter();
+    const candidate = lunchDetector.detect(testSnapshot, testMemory)!;
+    const placesSignals = adapter.signals(testSnapshot);
+
+    const snapshotWithPlaces: ContextSnapshot = {
+      ...testSnapshot,
+      signals: [...testSnapshot.signals, ...placesSignals],
+    };
+
+    const plan = lunchPreparer.prepare(candidate, snapshotWithPlaces, testMemory);
+    expect(plan).not.toBeNull();
+    expect(plan?.optionsOrSteps.length).toBeGreaterThan(0);
+    const firstOpt = plan?.optionsOrSteps[0] as any;
+    expect(firstOpt.recordId).toBeDefined();
+    expect(firstOpt.recordId).toMatch(/^lunch-sf-/);
+  });
+
+  it('fails closed (returns null) when places_lunch signal has error or empty status', () => {
+    const candidate = lunchDetector.detect(testSnapshot, testMemory)!;
+    const errorSnapshot: ContextSnapshot = {
+      ...testSnapshot,
+      signals: [
+        ...testSnapshot.signals,
+        createSimulatedSignal({
+          kind: 'places_lunch',
+          value: { status: 'error', error: 'Database timeout', places: [] },
+          issuedAt: '2026-10-28T19:10:00.000Z',
+          validFor: 3600000,
+          confidence: 1.0,
+          consentScope: 'device_only',
+        }),
+      ],
+    };
+
+    expect(lunchPreparer.prepare(candidate, errorSnapshot, testMemory)).toBeNull();
+
+    const emptySnapshot: ContextSnapshot = {
+      ...testSnapshot,
+      signals: [
+        ...testSnapshot.signals,
+        createSimulatedSignal({
+          kind: 'places_lunch',
+          value: { status: 'empty', places: [] },
+          issuedAt: '2026-10-28T19:10:00.000Z',
+          validFor: 3600000,
+          confidence: 1.0,
+          consentScope: 'device_only',
+        }),
+      ],
+    };
+
+    expect(lunchPreparer.prepare(candidate, emptySnapshot, testMemory)).toBeNull();
   });
 });
 

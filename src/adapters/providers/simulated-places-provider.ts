@@ -51,6 +51,9 @@ export interface SimulatedPlaceTemplate {
   readonly category: 'gas_station' | 'restaurant';
   readonly address?: string;
   readonly brand?: string;
+  readonly cuisine?: string;
+  readonly noiseLevel?: 'quiet' | 'moderate' | 'lively';
+  readonly vegetarian?: boolean;
 }
 
 /**
@@ -86,6 +89,52 @@ export const FIXTURE_PLACE_TEMPLATES: readonly SimulatedPlaceTemplate[] = Object
     brand: 'Bayfront',
   },
 
+  // San Francisco Restaurants
+  {
+    id: 'lunch-sf-1',
+    name: 'Pacific Ramen Bar',
+    coords: { lat: 37.776, lng: -122.4175 },
+    category: 'restaurant',
+    address: '780 Market St, San Francisco, CA',
+    brand: 'Pacific Ramen',
+    cuisine: 'japanese',
+    noiseLevel: 'lively',
+    vegetarian: false,
+  },
+  {
+    id: 'lunch-sf-2',
+    name: 'Garden Fresh Bowls',
+    coords: { lat: 37.774, lng: -122.4205 },
+    category: 'restaurant',
+    address: '350 9th St, San Francisco, CA',
+    brand: 'Garden Fresh',
+    cuisine: 'salad',
+    noiseLevel: 'quiet',
+    vegetarian: true,
+  },
+  {
+    id: 'lunch-sf-3',
+    name: 'Bay City Sushi',
+    coords: { lat: 37.7775, lng: -122.416 },
+    category: 'restaurant',
+    address: '1050 Mission St, San Francisco, CA',
+    brand: 'Bay City',
+    cuisine: 'japanese',
+    noiseLevel: 'quiet',
+    vegetarian: false,
+  },
+  {
+    id: 'lunch-sf-4',
+    name: 'Mission Fast Bites',
+    coords: { lat: 37.773, lng: -122.422 },
+    category: 'restaurant',
+    address: '500 Valencia St, San Francisco, CA',
+    brand: 'Mission Bites',
+    cuisine: 'american',
+    noiseLevel: 'lively',
+    vegetarian: false,
+  },
+
   // Los Angeles Gas Stations
   {
     id: 'fuel-la-1',
@@ -104,6 +153,41 @@ export const FIXTURE_PLACE_TEMPLATES: readonly SimulatedPlaceTemplate[] = Object
     brand: 'Angel City',
   },
 
+  // Los Angeles Restaurants
+  {
+    id: 'lunch-la-1',
+    name: 'Angel City Ramen',
+    coords: { lat: 34.0535, lng: -118.2415 },
+    category: 'restaurant',
+    address: '250 N Main St, Los Angeles, CA',
+    brand: 'Angel City',
+    cuisine: 'japanese',
+    noiseLevel: 'lively',
+    vegetarian: false,
+  },
+  {
+    id: 'lunch-la-2',
+    name: 'Sunset Organic Greens',
+    coords: { lat: 34.0515, lng: -118.2445 },
+    category: 'restaurant',
+    address: '450 S Broadway, Los Angeles, CA',
+    brand: 'Sunset Greens',
+    cuisine: 'salad',
+    noiseLevel: 'quiet',
+    vegetarian: true,
+  },
+  {
+    id: 'lunch-la-3',
+    name: 'Little Tokyo Handroll',
+    coords: { lat: 34.0505, lng: -118.2405 },
+    category: 'restaurant',
+    address: '330 E 1st St, Los Angeles, CA',
+    brand: 'Little Tokyo',
+    cuisine: 'japanese',
+    noiseLevel: 'quiet',
+    vegetarian: false,
+  },
+
   // Seattle Gas Stations
   {
     id: 'fuel-sea-1',
@@ -112,6 +196,19 @@ export const FIXTURE_PLACE_TEMPLATES: readonly SimulatedPlaceTemplate[] = Object
     category: 'gas_station',
     address: '1200 4th Ave, Seattle, WA',
     brand: 'Emerald Gas',
+  },
+
+  // Seattle Restaurants
+  {
+    id: 'lunch-sea-1',
+    name: 'Emerald Noodle Workshop',
+    coords: { lat: 47.608, lng: -122.33 },
+    category: 'restaurant',
+    address: '1400 4th Ave, Seattle, WA',
+    brand: 'Emerald Noodles',
+    cuisine: 'japanese',
+    noiseLevel: 'moderate',
+    vegetarian: false,
   },
 ]);
 
@@ -172,6 +269,9 @@ export class SimulatedPlacesProvider implements PlacesProvider {
           straightLineDistanceLabel: formatStraightLineDistance(distMeters),
           openingStatus: 'open',
           brand: t.brand,
+          cuisine: t.cuisine,
+          noiseLevel: t.noiseLevel,
+          vegetarian: t.vegetarian,
         });
       }
     }

@@ -102,6 +102,11 @@ const DEFAULT_RECORDED_FIXTURES: Record<string, ModelCommandDecisionOutput> = {
   'quiet place for lunch': FIXTURE_CMD_FIND_LUNCH_QUIET,
   'quiet lunch': FIXTURE_CMD_FIND_LUNCH_QUIET,
   'quieter lunch': FIXTURE_CMD_FIND_LUNCH_QUIET,
+  'quieter': FIXTURE_CMD_FIND_LUNCH_QUIET,
+  'vegetarian': FIXTURE_CMD_FIND_LUNCH_VEGETARIAN,
+  'closer': FIXTURE_CMD_FIND_LUNCH_NEARBY,
+  'nearer': FIXTURE_CMD_FIND_LUNCH_NEARBY,
+  'closer lunch': FIXTURE_CMD_FIND_LUNCH_NEARBY,
 };
 
 function normalizeKey(str: string): string {
@@ -119,6 +124,8 @@ export class ModelCommandInterpreter implements CommandInterpreter {
   private readonly logger: DecisionLogger;
   private readonly endpoint: string;
   private readonly timeoutMs: number;
+  private consecutiveFailures = 0;
+  private isPaused = false;
 
   constructor(options: ModelInterpreterOptions = {}) {
     this.mode = options.mode ?? 'scripted_fixture';
@@ -127,6 +134,19 @@ export class ModelCommandInterpreter implements CommandInterpreter {
     this.logger = options.logger ?? globalDecisionLogger;
     this.endpoint = options.endpoint ?? '/api/model/command';
     this.timeoutMs = options.timeoutMs ?? 2000;
+  }
+
+  public isModelPaused(): boolean {
+    return this.isPaused;
+  }
+
+  public resetPause(): void {
+    this.isPaused = false;
+    this.consecutiveFailures = 0;
+  }
+
+  public getConsecutiveFailures(): number {
+    return this.consecutiveFailures;
   }
 
   /**
@@ -445,6 +465,15 @@ export class ModelCommandInterpreter implements CommandInterpreter {
     const key = normalizeKey(input);
     const now = new Date().toISOString();
 
+    // G4 Breaker: If model is paused, stop calling model and fall back to deterministic directly
+    if (this.isPaused) {
+      const deterministic = this.fallbackInterpreter.interpret(input, context);
+      return {
+        ...deterministic,
+        engineStatus: 'offline_deterministic',
+      };
+    }
+
     // Mode: Offline fallback directly
     if (this.mode === 'offline') {
       const deterministic = this.fallbackInterpreter.interpret(input, context);
@@ -490,6 +519,12 @@ export class ModelCommandInterpreter implements CommandInterpreter {
     const validation = this.validateDecisionOutput(candidateFixture, context);
 
     if (!validation.valid) {
+      this.consecutiveFailures++;
+      const reachedPauseThreshold = this.consecutiveFailures >= 3;
+      if (reachedPauseThreshold && !this.isPaused) {
+        this.isPaused = true;
+      }
+
       // Discard invalid / uncited output to deterministic fallback (C7)
       const deterministic = this.fallbackInterpreter.interpret(input, context);
       this.logger.log({
@@ -497,12 +532,12 @@ export class ModelCommandInterpreter implements CommandInterpreter {
         templateId: 'decision_command',
         inputSignalIds: context?.availableSignalIds ?? [],
         inputFactKeys: context?.confirmedFactKeys ?? [],
-        outputReasonCodes: [],
+        outputReasonCodes: reachedPauseThreshold ? ['model_paused'] : [],
         outputIntent: undefined,
         validationResult: {
           valid: false,
-          reason: validation.reason,
-          error: validation.error,
+          reason: reachedPauseThreshold ? 'model_paused' : validation.reason,
+          error: reachedPauseThreshold ? 'model paused' : validation.error,
         },
         engineStatus: 'offline_deterministic',
       });
@@ -511,6 +546,9 @@ export class ModelCommandInterpreter implements CommandInterpreter {
         engineStatus: 'offline_deterministic',
       };
     }
+
+    // Valid fixture: reset consecutive failure counter
+    this.consecutiveFailures = 0;
 
     // Valid fixture: emit truthfully according to mode ('scripted_fixture' vs 'recorded_model_replay')
     const out = validation.output;
@@ -556,6 +594,14 @@ export class ModelCommandInterpreter implements CommandInterpreter {
     input: string,
     context?: CommandInterpretationContext
   ): Promise<InterpretedCommand> {
+    if (this.isPaused) {
+      const deterministic = this.fallbackInterpreter.interpret(input, context);
+      return {
+        ...deterministic,
+        engineStatus: 'offline_deterministic',
+      };
+    }
+
     if (this.mode !== 'live') {
       return this.interpret(input, context);
     }
@@ -628,6 +674,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
           }
         : undefined;
 
+      this.consecutiveFailures = 0;
       return {
         intent: out.intent,
         rawText: input,
@@ -641,18 +688,24 @@ export class ModelCommandInterpreter implements CommandInterpreter {
         engineStatus: 'meta_model_live',
       };
     } catch (err: unknown) {
+      this.consecutiveFailures++;
+      const reachedPauseThreshold = this.consecutiveFailures >= 3;
+      if (reachedPauseThreshold && !this.isPaused) {
+        this.isPaused = true;
+      }
+
       // Discard to deterministic fallback on any error, timeout, or 500
       const deterministic = this.fallbackInterpreter.interpret(input, context);
       const isTimeout = err instanceof Error && err.name === 'AbortError';
-      const reason = isTimeout ? 'timeout' : 'error';
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const reason = reachedPauseThreshold ? 'model_paused' : (isTimeout ? 'timeout' : 'error');
+      const errorMsg = reachedPauseThreshold ? 'model paused' : (err instanceof Error ? err.message : String(err));
 
       this.logger.log({
         timestamp: now,
         templateId: 'decision_command',
         inputSignalIds: context?.availableSignalIds ?? [],
         inputFactKeys: context?.confirmedFactKeys ?? [],
-        outputReasonCodes: [],
+        outputReasonCodes: reachedPauseThreshold ? ['model_paused'] : [],
         outputIntent: deterministic.intent,
         validationResult: {
           valid: false,

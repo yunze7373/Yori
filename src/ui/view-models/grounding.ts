@@ -1102,3 +1102,159 @@ export function createFuelEvidenceBundle(options?: {
   return createEvidenceBundle('bundle-fuel-v5', sceneClockIso, [...recordMap.values()], timezone, aliases);
 }
 
+export function createLunchPlacesEvidenceBundle(options?: {
+  places?: readonly PlaceItem[];
+  snapshot?: { asOf?: string; timezone?: string; signals?: readonly { kind: string; id?: string; issuedAt?: string; value?: unknown }[] } | null;
+  sceneClockIso?: string;
+  timezone?: string;
+  originCoords?: { lat: number; lng: number };
+  userConfirmedKeys?: ReadonlySet<string>;
+  isConfirmedTaste?: boolean;
+}): EvidenceBundle {
+  const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T19:10:00.000Z';
+  const timezone = options?.timezone ?? options?.snapshot?.timezone ?? 'America/Los_Angeles';
+  const isConfirmedTaste =
+    options?.isConfirmedTaste ?? options?.userConfirmedKeys?.has('taste_preference_lunch_cuisine') ?? false;
+
+  const locSig = options?.snapshot?.signals?.find(s => s.kind === 'location_status' || s.kind === 'location');
+  const locVal = locSig?.value as any;
+  const originCoords =
+    options?.originCoords ??
+    (typeof locVal?.lat === 'number' && typeof locVal?.lng === 'number'
+      ? { lat: locVal.lat, lng: locVal.lng }
+      : undefined);
+
+  const recordMap = new Map<string, EvidenceRecord>();
+  const aliases = new Map<string, string>();
+
+  // Resolve PlaceItems strictly from options.places or snapshot places_lunch signal (never self-ground from plan)
+  let placesList: readonly PlaceItem[] = options?.places ?? [];
+  if (placesList.length === 0 && options?.snapshot?.signals) {
+    const placesSig = options.snapshot.signals.find(s => s.kind === 'places_lunch');
+    if (placesSig && typeof placesSig.value === 'object' && placesSig.value !== null) {
+      const pVal = placesSig.value as any;
+      if (Array.isArray(pVal.places)) {
+        placesList = pVal.places;
+      }
+    }
+  }
+
+  for (const place of placesList) {
+    const pid = place.id || place.placeId;
+    const distMeters = place.straightLineDistanceMeters ?? place.distanceMeters ?? 500;
+    const distLabel =
+      place.straightLineDistanceLabel ??
+      (distMeters !== undefined ? formatStraightLineDistance(distMeters) : undefined);
+    const distMins =
+      typeof (place as any).distanceMinutes === 'number'
+        ? (place as any).distanceMinutes
+        : Math.max(1, Math.round(distMeters / 80));
+    const cuisine = place.cuisine
+      ? place.cuisine.charAt(0).toUpperCase() + place.cuisine.slice(1)
+      : 'Dining';
+
+    recordMap.set(pid, {
+      id: pid,
+      provider: 'simulated-places',
+      kind: 'poi',
+      fetchedAt: sceneClockIso,
+      provenance: 'simulated',
+      fields: {
+        id: pid,
+        name: place.name,
+        coords: place.coords,
+        lat: place.coords.lat,
+        lng: place.coords.lng,
+        category: place.category,
+        address: place.address,
+        brand: place.brand,
+        cuisine,
+        noiseLevel: place.noiseLevel,
+        vegetarian: place.vegetarian,
+        distanceMinutes: distMins,
+        distanceText: `${distMins}m away`,
+        distanceMeters: distMeters,
+        straightLineDistance: distLabel,
+        straightLineDistanceLabel: distLabel,
+        straight_line: true,
+      },
+    });
+    aliases.set(place.name.toLowerCase(), pid);
+  }
+
+  // Location record (only when originCoords exists)
+  if (originCoords) {
+    const locRecordId = 'loc-lunch-origin';
+    recordMap.set(locRecordId, {
+      id: locRecordId,
+      provider: 'location-port',
+      kind: 'poi',
+      fetchedAt: sceneClockIso,
+      provenance: 'simulated',
+      fields: {
+        lat: originCoords.lat,
+        lng: originCoords.lng,
+        status: locVal?.status || 'available',
+        name: 'Selected City (simulated)',
+      },
+    });
+    recordMap.set('loc-downtown', {
+      id: 'loc-downtown',
+      provider: 'location',
+      kind: 'poi',
+      fetchedAt: sceneClockIso,
+      provenance: 'simulated',
+      fields: {
+        name: 'Downtown Dining District',
+        area: 'Downtown',
+      },
+    });
+  }
+
+  // Schedule window
+  const schedSig = options?.snapshot?.signals?.find(s => s.kind === 'schedule_window');
+  if (schedSig) {
+    const windowStartIso = (schedSig as any)?.value?.windowStart || schedSig.issuedAt;
+    const freeUntilIso = (schedSig as any)?.value?.freeUntil || (schedSig as any)?.value?.until;
+    const windowStart = windowStartIso ? formatTime(windowStartIso, timezone) : undefined;
+    const freeUntil = freeUntilIso ? formatTime(freeUntilIso, timezone) : undefined;
+    if (windowStart && freeUntil) {
+      recordMap.set('schedule_window', {
+        id: 'schedule_window',
+        provider: 'calendar',
+        kind: 'calendar',
+        fetchedAt: sceneClockIso,
+        provenance: 'simulated',
+        fields: {
+          windowStart,
+          freeUntil,
+          lunchWindow: `Lunch window ${windowStart}–${freeUntil}`,
+        },
+      });
+      aliases.set('sched-lunch-window', 'schedule_window');
+    }
+  }
+
+  // Habit / taste preference record
+  const habitId = 'taste_preference_lunch_cuisine';
+  recordMap.set(habitId, {
+    id: habitId,
+    provider: 'memory',
+    kind: 'habit',
+    fetchedAt: sceneClockIso,
+    provenance: isConfirmedTaste ? 'confirmed' : 'sample',
+    fields: {
+      key: 'taste_preference_lunch_cuisine',
+      value: 'japanese',
+      cuisine: 'Japanese',
+      basis: isConfirmedTaste
+        ? 'Based on taste: Japanese (You confirmed)'
+        : 'Based on taste: Japanese (Demo profile · sample)',
+    },
+  });
+  aliases.set('habit-taste-cuisine', habitId);
+
+  return createEvidenceBundle('bundle-lunch-places', sceneClockIso, [...recordMap.values()], timezone, aliases);
+}
+
+

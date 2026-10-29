@@ -99,10 +99,10 @@ export class LunchDetector implements IntentDetector {
     const signals = snapshot.signals;
 
     // Locate lunch-relevant environmental signals
-    const locationSignal = signals.find(s => s.kind === 'location_status');
+    const locationSignal = signals.find(s => s.kind === 'location_status' || s.kind === 'location');
     const scheduleSignal = signals.find(s => s.kind === 'schedule_window');
     const eatingSignal = signals.find(s => s.kind === 'eating_status');
-    const mockPlacesSignal = signals.find(s => s.kind === 'mock_places');
+    const mockPlacesSignal = signals.find(s => s.kind === 'mock_places' || s.kind === 'places_lunch');
 
     // 2. Location check (Finding 4): If user is explicitly at home (isHome === true), no lunch recommendation
     if (locationSignal && locationSignal.value && typeof locationSignal.value === 'object') {

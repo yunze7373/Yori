@@ -455,6 +455,156 @@ describe('V2a-2: Muse Spark Constrained Decision Engine & Decision Log', () => {
         globalThis.fetch = originalFetch;
       }
     });
+
+    describe('G4 Model-Pause Breaker (YORI_V2.plan.json Rev7 / ADR-102)', () => {
+      it('three consecutive validation failures pause the model for the session, stop calls at 3, and log redacted model_paused entry', () => {
+        const logger = new DecisionLogger();
+        let providerQueryCount = 0;
+        const faultFixture: ModelCommandDecisionOutput = FIXTURE_FAULT_UNCITED_SIGNAL;
+
+        const fixturesProxy = new Proxy(
+          { 'faulty command': faultFixture },
+          {
+            get(target, prop) {
+              if (prop === 'faulty command') {
+                providerQueryCount++;
+              }
+              return (target as any)[prop];
+            },
+          }
+        );
+
+        const interpreter = new ModelCommandInterpreter({
+          mode: 'replay',
+          fixtures: fixturesProxy,
+          logger,
+        });
+
+        expect(interpreter.isModelPaused()).toBe(false);
+        expect(interpreter.getConsecutiveFailures()).toBe(0);
+
+        // Call 1: 1st failure
+        const res1 = interpreter.interpret('faulty command');
+        expect(res1.engineStatus).toBe('offline_deterministic');
+        expect(interpreter.getConsecutiveFailures()).toBe(1);
+        expect(interpreter.isModelPaused()).toBe(false);
+        expect(providerQueryCount).toBe(1);
+
+        // Call 2: 2nd failure
+        const res2 = interpreter.interpret('faulty command');
+        expect(res2.engineStatus).toBe('offline_deterministic');
+        expect(interpreter.getConsecutiveFailures()).toBe(2);
+        expect(interpreter.isModelPaused()).toBe(false);
+        expect(providerQueryCount).toBe(2);
+
+        // Call 3: 3rd failure -> pauses model
+        const res3 = interpreter.interpret('faulty command');
+        expect(res3.engineStatus).toBe('offline_deterministic');
+        expect(interpreter.getConsecutiveFailures()).toBe(3);
+        expect(interpreter.isModelPaused()).toBe(true);
+        expect(providerQueryCount).toBe(3);
+
+        // Assert Decision Log records redacted 'model_paused' entry
+        const latest = logger.getLatest()!;
+        expect(latest.validationResult.valid).toBe(false);
+        expect(latest.validationResult.reason).toBe('model_paused');
+        expect(latest.outputReasonCodes).toContain('model_paused');
+        expect(latest.engineStatus).toBe('offline_deterministic');
+        expect(logger.getEngineStatusLabel()).toBe('Offline fallback · deterministic');
+
+        const logCountAtPause = logger.getEntries().length;
+
+        // Call 4: Model is paused. Must immediately return deterministic fallback without calling model provider
+        const res4 = interpreter.interpret('faulty command');
+        expect(res4.engineStatus).toBe('offline_deterministic');
+        expect(providerQueryCount).toBe(3); // Call count strictly stopped at 3, no retry loop
+        expect(interpreter.isModelPaused()).toBe(true);
+        // No additional error logs emitted while paused
+        expect(logger.getEntries().length).toBe(logCountAtPause);
+
+        // Call 5: Even with another input, remains paused and call count does not advance
+        const res5 = interpreter.interpret('Can I leave later?');
+        expect(res5.engineStatus).toBe('offline_deterministic');
+        expect(providerQueryCount).toBe(3);
+        expect(interpreter.isModelPaused()).toBe(true);
+
+        // Reset pause restores normal execution
+        interpreter.resetPause();
+        expect(interpreter.isModelPaused()).toBe(false);
+        expect(interpreter.getConsecutiveFailures()).toBe(0);
+      });
+
+      it('consecutive failure counter resets to 0 upon a valid decision output', () => {
+        const logger = new DecisionLogger();
+        const validFixture: ModelCommandDecisionOutput = FIXTURE_CMD_CHANGE_ROUTE_BUS;
+        const faultFixture: ModelCommandDecisionOutput = FIXTURE_FAULT_UNCITED_SIGNAL;
+
+        const interpreter = new ModelCommandInterpreter({
+          mode: 'scripted_fixture',
+          fixtures: {
+            'valid command': validFixture,
+            'faulty command': faultFixture,
+          },
+          logger,
+        });
+
+        // 2 failures
+        interpreter.interpret('faulty command');
+        interpreter.interpret('faulty command');
+        expect(interpreter.getConsecutiveFailures()).toBe(2);
+        expect(interpreter.isModelPaused()).toBe(false);
+
+        // 1 valid interpretation with all required citations
+        const validRes = interpreter.interpret('valid command', {
+          availableModes: ['drive', 'bus'],
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
+          confirmedFactKeys: ['rain_transport_preference', 'prep_buffer_minutes'],
+          validTimes: [rainPlan.leaveAt, rainPlan.prepareAt, rainPlan.apptAt],
+          validPlaces: [rainPlan.subjectTitle],
+        });
+        expect(validRes.engineStatus).toBe('scripted_fixture');
+        expect(interpreter.getConsecutiveFailures()).toBe(0);
+        expect(interpreter.isModelPaused()).toBe(false);
+      });
+
+      it('async mode: 3 consecutive network/server failures trigger G4 breaker and stop fetch calls at 3', async () => {
+        const logger = new DecisionLogger();
+        let fetchCallCount = 0;
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = async () => {
+          fetchCallCount++;
+          return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+        };
+
+        const interpreter = new ModelCommandInterpreter({
+          mode: 'live',
+          endpoint: 'http://localhost:9999/api/model/command',
+          logger,
+        });
+
+        try {
+          // 3 consecutive failures
+          await interpreter.interpretAsync('query 1');
+          await interpreter.interpretAsync('query 2');
+          await interpreter.interpretAsync('query 3');
+
+          expect(fetchCallCount).toBe(3);
+          expect(interpreter.isModelPaused()).toBe(true);
+
+          const latest = logger.getLatest()!;
+          expect(latest.validationResult.reason).toBe('model_paused');
+          expect(latest.outputReasonCodes).toContain('model_paused');
+          expect(latest.engineStatus).toBe('offline_deterministic');
+
+          // 4th call: directly returns deterministic fallback without fetch
+          const res4 = await interpreter.interpretAsync('query 4');
+          expect(res4.engineStatus).toBe('offline_deterministic');
+          expect(fetchCallCount).toBe(3); // Stopped at 3!
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+      });
+    });
   });
 
   describe('Carry-over (b): Disabling Stale Buttons & Scene Isolation', () => {

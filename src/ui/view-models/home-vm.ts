@@ -31,6 +31,7 @@ import {
   GroundedRecommendationVerifier,
   createRainEvidenceBundle,
   createLunchEvidenceBundle,
+  createLunchPlacesEvidenceBundle,
   createFuelEvidenceBundle,
   type EvidenceBundle,
   type SourceRef,
@@ -69,29 +70,36 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
 
   const bundle =
     evidenceBundle ??
-    (plan?.intentId === 'depart'
-      ? createRainEvidenceBundle({
-          plan,
+    (snapshot?.signals?.some(s => s.kind === 'places_lunch')
+      ? createLunchPlacesEvidenceBundle({
           snapshot,
-          sceneClockIso: snapshot?.asOf ?? '2026-10-28T20:35:00.000Z',
-          timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
-          isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
+          sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
+          timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+          userConfirmedKeys,
         })
-      : plan?.intentId === 'lunch'
-        ? createLunchEvidenceBundle({
+      : plan?.intentId === 'depart'
+        ? createRainEvidenceBundle({
             plan,
             snapshot,
-            sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
-            timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
-            isConfirmedTaste: userConfirmedKeys?.has('taste_preference_lunch_cuisine'),
+            sceneClockIso: snapshot?.asOf ?? '2026-10-28T20:35:00.000Z',
+            timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+            isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
           })
-        : plan?.intentId === 'fuel'
-          ? createFuelEvidenceBundle({
+        : plan?.intentId === 'lunch'
+          ? createLunchEvidenceBundle({
+              plan,
               snapshot,
               sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
               timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+              isConfirmedTaste: userConfirmedKeys?.has('taste_preference_lunch_cuisine'),
             })
-          : undefined);
+          : plan?.intentId === 'fuel' || snapshot?.signals?.some(s => s.kind === 'fuel_percent' || s.kind === 'fuel_status' || s.kind === 'places_fuel')
+            ? createFuelEvidenceBundle({
+                snapshot,
+                sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
+                timezone: plan?.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+              })
+            : undefined);
 
   // 1. Quiet State (D4: 0 prompts is valid; honest quiet state)
   if (!plan) {
@@ -181,6 +189,104 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
           title: 'No Gas Stations Nearby',
           headline: 'No fuel stations found within search radius',
           basis: 'Zero gas stations returned by provider · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+        };
+      }
+    }
+
+    if (snapshot?.signals?.some(s => s.kind === 'places_lunch')) {
+      const locSig = snapshot.signals.find(s => s.kind === 'location_status' || s.kind === 'location');
+      const locVal = locSig?.value as any;
+
+      if (locVal?.status === 'prompt') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Location Needed',
+          headline: 'Location permission needed to find nearby lunch places',
+          basis: 'Grant location access or enter coordinates manually · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+          locationState: 'prompt',
+          locationNotice: locVal?.notice || 'Location permission needed to find nearby lunch places',
+        };
+      }
+
+      if (locVal?.status === 'denied') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Location Denied',
+          headline: 'Location access denied by user',
+          basis: 'Location permission was denied · enter coordinates manually or enable permission',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+          locationState: 'denied',
+          locationNotice: locVal?.notice || 'Location access denied by user',
+        };
+      }
+
+      if (locVal?.status === 'unavailable') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Location Unavailable',
+          headline: 'Cannot find nearby lunch places without location access',
+          basis: 'Location permission or fixture coordinates required · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+          locationState: 'unavailable',
+          locationNotice: locVal?.notice || 'Cannot find nearby lunch places without location access',
+        };
+      }
+
+      const placesSig = snapshot.signals.find(s => s.kind === 'places_lunch');
+      const placesVal = placesSig?.value as any;
+      if (placesVal?.status === 'error') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Lunch Place Lookup Failed',
+          headline: 'Unable to load nearby lunch places from places provider',
+          basis: 'Places provider error · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+        };
+      }
+
+      if (placesVal?.status === 'empty' || (Array.isArray(placesVal?.places) && placesVal.places.length === 0)) {
+        return {
+          layoutKind: 'quiet',
+          title: 'No Lunch Places Nearby',
+          headline: 'No restaurants found within search radius',
+          basis: 'Zero restaurants returned by provider · fails closed',
           isRain: false,
           options: [],
           isAccepted: false,
@@ -426,6 +532,28 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
 
     const map = deriveMapVM(plan, spatialEvidence, 'compact', { snapshot, evidenceBundle: bundle });
 
+    const isDynamicLunch = snapshot?.signals?.some(s => s.kind === 'places_lunch');
+    let locationLabel: string | undefined;
+    if (isDynamicLunch) {
+      const locSig = snapshot?.signals?.find(s => s.kind === 'location_status' || s.kind === 'location');
+      const locVal = locSig?.value as any;
+      const locSource = locVal?.source;
+      locationLabel = 'Selected City (simulated)';
+      if (locSource === 'manual') {
+        if (locVal?.lat && Math.abs(locVal.lat - 34.0522) < 0.05) {
+          locationLabel = 'Los Angeles (manual)';
+        } else if (locVal?.lat && Math.abs(locVal.lat - 37.7749) < 0.05) {
+          locationLabel = 'San Francisco (manual)';
+        } else if (locVal?.lat && locVal?.lng) {
+          locationLabel = `Custom Location (${locVal.lat.toFixed(2)}, ${locVal.lng.toFixed(2)}) (manual)`;
+        } else {
+          locationLabel = 'Manual Location';
+        }
+      } else if (locSource === 'geolocation') {
+        locationLabel = 'Acquired Position (live geolocation)';
+      }
+    }
+
     return {
       layoutKind: 'candidates',
       planId: plan.id,
@@ -442,7 +570,8 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
       aheadItems: compileAheadItems(aheadPlans),
       proposals: compileProposals(proposals),
       evidenceBundle: bundle,
-      sourceRef: { recordId: 'loc-downtown', field: 'name' },
+      sourceRef: { recordId: isDynamicLunch ? 'loc-lunch-origin' : 'loc-downtown', field: 'name' },
+      locationLabel,
     };
   }
 

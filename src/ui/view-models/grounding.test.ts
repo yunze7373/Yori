@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   createRainEvidenceBundle,
   createLunchEvidenceBundle,
+  createLunchPlacesEvidenceBundle,
   createFuelEvidenceBundle,
   createEvidenceBundle,
   GroundedRecommendationVerifier,
@@ -1361,6 +1362,164 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(latest!.validationResult.valid).toBe(false);
       expect(latest!.validationResult.reason).toBe('candidate_outside_bundle');
       expect(latest!.inputSignalIds).toEqual(['fuel-x-invented']);
+    });
+  });
+
+  describe('V5-LUNCH: Places Lunch Evidence Bundle & Grounding Verification', () => {
+    const sfSnapshot = {
+      id: 'snap-sf-lunch',
+      asOf: '2026-10-28T19:10:00.000Z',
+      timezone: 'America/Los_Angeles',
+      signals: [
+        createSimulatedSignal({
+          kind: 'location_status',
+          value: { status: 'available', lat: 37.7749, lng: -122.4194, source: 'manual' },
+          issuedAt: '2026-10-28T19:10:00.000Z',
+          validFor: 3600000,
+          confidence: 1,
+          consentScope: 'device_only',
+        }),
+        createSimulatedSignal({
+          kind: 'places_lunch',
+          value: {
+            status: 'ok',
+            places: [
+              {
+                id: 'lunch-sf-1',
+                name: 'Pacific Ramen Bar',
+                category: 'restaurant',
+                cuisine: 'japanese',
+                noiseLevel: 'quiet',
+                vegetarian: true,
+                coords: { lat: 37.7765, lng: -122.4172 },
+                straightLineDistanceMeters: 250,
+                straightLineDistanceLabel: '250 m (straight-line)',
+                distanceMinutes: 4,
+              },
+              {
+                id: 'lunch-sf-2',
+                name: 'Garden Fresh Bowls',
+                category: 'restaurant',
+                cuisine: 'salad',
+                noiseLevel: 'moderate',
+                vegetarian: true,
+                coords: { lat: 37.778, lng: -122.415 },
+                straightLineDistanceMeters: 510,
+                straightLineDistanceLabel: '510 m (straight-line)',
+                distanceMinutes: 7,
+              },
+            ],
+          },
+          issuedAt: '2026-10-28T19:10:00.000Z',
+          validFor: 3600000,
+          confidence: 1,
+          consentScope: 'device_only',
+        }),
+      ],
+    };
+
+    it('builds lunch bundle with origin and restaurant POIs and passes verification', () => {
+      const bundle = createLunchPlacesEvidenceBundle({ snapshot: sfSnapshot });
+      expect(bundle.hasRecord('loc-lunch-origin')).toBe(true);
+      expect(bundle.hasRecord('lunch-sf-1')).toBe(true);
+      expect(bundle.hasRecord('lunch-sf-2')).toBe(true);
+
+      const ramenRec = bundle.getRecord('lunch-sf-1')!;
+      expect(ramenRec.fields.name).toBe('Pacific Ramen Bar');
+      expect(ramenRec.fields.cuisine).toBe('Japanese');
+      expect(ramenRec.fields.noiseLevel).toBe('quiet');
+      expect(ramenRec.fields.vegetarian).toBe(true);
+      expect(ramenRec.fields.straightLineDistanceLabel).toBe('250 m (straight-line)');
+      expect(ramenRec.fields.straight_line).toBe(true);
+
+      const candidate = {
+        id: 'lunch-sf-1',
+        name: 'Pacific Ramen Bar',
+        cuisine: 'japanese',
+        distanceMinutes: 4,
+        distanceText: '4m away',
+        coords: { lat: 37.7765, lng: -122.4172 },
+        sourceRef: { recordId: 'lunch-sf-1', field: 'name' },
+        fieldSourceRefs: {
+          name: { recordId: 'lunch-sf-1', field: 'name' },
+          cuisine: { recordId: 'lunch-sf-1', field: 'cuisine' },
+          distanceMinutes: { recordId: 'lunch-sf-1', field: 'distanceMinutes' },
+        },
+      };
+
+      const result = GroundedRecommendationVerifier.verifyCandidateCard(candidate, bundle);
+      expect(result.valid).toBe(true);
+
+      const navUrl = buildGroundedNavigateUrl(candidate, bundle);
+      expect(navUrl).toBeDefined();
+      expect(navUrl).toContain('37.7765%2C-122.4172');
+    });
+
+    it('withholds out-of-session candidate (Seattle candidate queried from SF) and returns no URL', () => {
+      globalDecisionLogger.clear();
+      const bundle = createLunchPlacesEvidenceBundle({ snapshot: sfSnapshot });
+
+      // Emerald Noodle Workshop is in Seattle, not in the SF session bundle
+      const outOfSessionCandidate = {
+        id: 'lunch-sea-1',
+        name: 'Emerald Noodle Workshop',
+        cuisine: 'chinese',
+        distanceMinutes: 5,
+        coords: { lat: 47.6062, lng: -122.3321 },
+        sourceRef: { recordId: 'lunch-sea-1', field: 'name' },
+      };
+
+      const result = GroundedRecommendationVerifier.verifyCandidateCard(outOfSessionCandidate, bundle);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('candidate_outside_bundle');
+
+      const navUrl = buildGroundedNavigateUrl(outOfSessionCandidate, bundle);
+      expect(navUrl).toBeUndefined();
+
+      const latestLog = globalDecisionLogger.getLatest();
+      expect(latestLog).toBeDefined();
+      expect(latestLog!.validationResult.valid).toBe(false);
+      expect(latestLog!.validationResult.reason).toBe('candidate_outside_bundle');
+      expect(latestLog!.inputSignalIds).toEqual(['lunch-sea-1']);
+    });
+
+    it('detects tampered candidate name and fails closed', () => {
+      const bundle = createLunchPlacesEvidenceBundle({ snapshot: sfSnapshot });
+
+      const tamperedCandidate = {
+        id: 'lunch-sf-1',
+        name: 'Tampered Ramen House',
+        cuisine: 'japanese',
+        distanceMinutes: 4,
+        sourceRef: { recordId: 'lunch-sf-1', field: 'name' },
+      };
+
+      const result = GroundedRecommendationVerifier.verifyCandidateCard(tamperedCandidate, bundle);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('tampered_value');
+      expect(result.error).toContain('tampered');
+
+      const navUrl = buildGroundedNavigateUrl(tamperedCandidate, bundle);
+      expect(navUrl).toBeUndefined();
+    });
+
+    it('detects tampered distance minutes and fails closed', () => {
+      const bundle = createLunchPlacesEvidenceBundle({ snapshot: sfSnapshot });
+
+      const tamperedCandidate = {
+        id: 'lunch-sf-1',
+        name: 'Pacific Ramen Bar',
+        cuisine: 'japanese',
+        distanceMinutes: 99, // Bundle has 4
+        sourceRef: { recordId: 'lunch-sf-1', field: 'name' },
+      };
+
+      const result = GroundedRecommendationVerifier.verifyCandidateCard(tamperedCandidate, bundle);
+      expect(result.valid).toBe(false);
+      expect(result.reason).toBe('tampered_value');
+
+      const navUrl = buildGroundedNavigateUrl(tamperedCandidate, bundle);
+      expect(navUrl).toBeUndefined();
     });
   });
 });

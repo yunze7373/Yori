@@ -20,6 +20,7 @@ import type { PreparedPlan, IntentCandidate, ContextSnapshot } from '../../core/
 import { createSimulatedSignal } from '../../core/contracts/index.js';
 import type { PlaceItem } from '../../adapters/providers/places-types.js';
 import { mockFuelAdapter } from '../../plugins/fuel/adapter.js';
+import { mockLunchAdapter } from '../../plugins/lunch/adapter.js';
 import {
   type CommandInterpreter,
   type SituationAttribution,
@@ -44,6 +45,7 @@ import { classifyFactSource, provenanceLabel } from '../view-models/provenance.j
 import {
   createRainEvidenceBundle,
   createLunchEvidenceBundle,
+  createLunchPlacesEvidenceBundle,
   createFuelEvidenceBundle,
 } from '../view-models/grounding.js';
 
@@ -1004,6 +1006,66 @@ export class DefaultActionStateStore implements ActionStateStore {
       const filters = cmd.slots.filters ?? [];
       const filtersDesc = filters.length > 0 ? filters.join(' and ') : 'lunch';
 
+      const locStatus = defaultLocationPort.getLocation();
+      const isDynamicLunch = ctx?.sceneId === 'lunch' || ctx?.snapshot?.signals?.some(s => s.kind === 'places_lunch');
+
+      if (isDynamicLunch) {
+        if (locStatus.status === 'prompt') {
+          const degradedMsg = 'Location permission needed to search for nearby lunch spots. Please grant location access.';
+          this.resolveDegraded(degradedMsg);
+          this.transcriptList.push({
+            id: `msg-${Date.now()}-a`,
+            sender: 'assistant',
+            text: degradedMsg,
+            timestamp: new Date().toISOString(),
+          });
+          this.notify();
+          return { collapsed: false, rule: 'degraded_failure', response: degradedMsg };
+        }
+        if (locStatus.status === 'denied') {
+          const degradedMsg = 'Location permission was denied. Cannot find lunch places without location access.';
+          this.resolveDegraded(degradedMsg);
+          this.transcriptList.push({
+            id: `msg-${Date.now()}-a`,
+            sender: 'assistant',
+            text: degradedMsg,
+            timestamp: new Date().toISOString(),
+          });
+          this.notify();
+          return { collapsed: false, rule: 'degraded_failure', response: degradedMsg };
+        }
+        if (locStatus.status === 'unavailable' || !locStatus.coords) {
+          const degradedMsg = 'Location is currently unavailable. Please enter coordinates manually.';
+          this.resolveDegraded(degradedMsg);
+          this.transcriptList.push({
+            id: `msg-${Date.now()}-a`,
+            sender: 'assistant',
+            text: degradedMsg,
+            timestamp: new Date().toISOString(),
+          });
+          this.notify();
+          return { collapsed: false, rule: 'degraded_failure', response: degradedMsg };
+        }
+
+        try {
+          const provider = mockLunchAdapter.getProvider();
+          if (provider.searchNearbySync) {
+            provider.searchNearbySync({ location: locStatus.coords, category: 'restaurant', radiusMeters: 10000 });
+          }
+        } catch {
+          const errorMsg = 'Unable to search for lunch places: places provider failure. Fails closed.';
+          this.resolveDegraded(errorMsg);
+          this.transcriptList.push({
+            id: `msg-${Date.now()}-a`,
+            sender: 'assistant',
+            text: errorMsg,
+            timestamp: new Date().toISOString(),
+          });
+          this.notify();
+          return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
+        }
+      }
+
       if (!ctx || !ctx.plan || ctx.plan.intentId !== 'lunch' || !ctx.candidate || !ctx.snapshot || !ctx.memory) {
         const noPlanMsg = "There's no active lunch recommendation to filter right now.";
         this.resolveDegraded(noPlanMsg);
@@ -1067,6 +1129,16 @@ export class DefaultActionStateStore implements ActionStateStore {
         `Lunch recommendations updated to prioritize ${filtersDesc}.`,
         newPlan
       );
+
+      if (isDynamicLunch && ctx.snapshot) {
+        const lunchBundle = createLunchPlacesEvidenceBundle({
+          snapshot: ctx.snapshot,
+          originCoords: locStatus.coords,
+          userConfirmedKeys: ctx.userConfirmedKeys,
+        });
+        this.activeEvidenceBundle = lunchBundle;
+        this.activeSnapshot = ctx.snapshot;
+      }
 
       const topOption = newPlan.optionsOrSteps?.[0];
       const topName =

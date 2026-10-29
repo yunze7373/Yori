@@ -469,7 +469,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               : STRINGS.lunch.mockPlacesNotice
           )}</div>
           ${
-            vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
+            vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') || Boolean(vm.locationLabel)
               ? `
             <div class="v2-active-location-bar" role="region" aria-label="Active Location">
               <span class="v2-location-badge">📍 Location: ${escapeHtml(

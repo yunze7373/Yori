@@ -83,11 +83,41 @@ export class LunchPreparer implements Preparer {
       }
     }
 
-    // 3. Locate mock places from snapshot signals, or fall back to mockPlaceAdapter
+    // 3. Locate places from snapshot signals (places_lunch or mock_places), or fall back to mockPlaceAdapter
+    const lunchPlacesSignal = snapshot.signals.find(s => s.kind === 'places_lunch');
     const placesSignal = snapshot.signals.find(s => s.kind === 'mock_places');
     let availablePlaces: readonly MockPlaceItem[] = [];
 
-    if (placesSignal?.value && Array.isArray(placesSignal.value)) {
+    if (lunchPlacesSignal) {
+      const val = lunchPlacesSignal.value as any;
+      if (
+        val?.status === 'error' ||
+        val?.status === 'empty' ||
+        !Array.isArray(val?.places) ||
+        val.places.length === 0
+      ) {
+        // Fail closed on provider error or empty places per AC-213-1/AC-213-2
+        return null;
+      }
+      availablePlaces = val.places.map((p: any) => {
+        const distM = p.straightLineDistanceMeters ?? p.distanceMeters ?? 500;
+        const distMins =
+          typeof p.distanceMinutes === 'number'
+            ? p.distanceMinutes
+            : Math.max(1, Math.round(distM / 80));
+        return {
+          id: p.id || p.placeId,
+          name: p.name,
+          cuisine: p.cuisine || 'dining',
+          distanceMinutes: distMins,
+          noiseLevel: p.noiseLevel,
+          vegetarian: p.vegetarian,
+          coords: p.coords,
+          straightLineDistanceMeters: distM,
+          straightLineDistanceLabel: p.straightLineDistanceLabel,
+        };
+      });
+    } else if (placesSignal?.value && Array.isArray(placesSignal.value)) {
       availablePlaces = placesSignal.value as readonly MockPlaceItem[];
     } else {
       availablePlaces = mockPlaceAdapter.getPlaces();
@@ -178,6 +208,9 @@ export class LunchPreparer implements Preparer {
         name: p.name,
         cuisine: p.cuisine,
         distanceMinutes: p.distanceMinutes,
+        coords: (p as any).coords,
+        straightLineDistanceMeters: (p as any).straightLineDistanceMeters,
+        straightLineDistanceLabel: (p as any).straightLineDistanceLabel,
         requiresConfirmation: false,
         noiseLevel: p.noiseLevel,
         vegetarian: p.vegetarian,
@@ -209,7 +242,16 @@ export class LunchPreparer implements Preparer {
         })
       );
     }
-    if (placesSignal && !evidenceSignals.some(e => e.kind === 'mock_places')) {
+    if (lunchPlacesSignal && !evidenceSignals.some(e => e.kind === 'places_lunch')) {
+      evidenceSignals.push(
+        Object.freeze({
+          kind: lunchPlacesSignal.kind,
+          source: lunchPlacesSignal.source,
+          issuedAt: lunchPlacesSignal.issuedAt,
+          description: 'Simulated restaurant places from provider',
+        })
+      );
+    } else if (placesSignal && !evidenceSignals.some(e => e.kind === 'mock_places')) {
       evidenceSignals.push(
         Object.freeze({
           kind: placesSignal.kind,

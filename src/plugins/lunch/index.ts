@@ -12,6 +12,7 @@ import { mockPlaceAdapter } from '../../adapters/mock/index.js';
 
 export * from './detector.js';
 export * from './preparer.js';
+export * from './adapter.js';
 
 export const lunchPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
   id: 'lunch',
