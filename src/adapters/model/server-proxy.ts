@@ -14,6 +14,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as crypto from 'node:crypto';
 import type {
   ModelPortRequest,
   ModelPortResponse,
@@ -69,6 +70,9 @@ export interface ModelProxyConfig {
   readonly modelName: string;
   readonly liveEnabled: boolean;
   readonly maxCalls: number;
+  readonly timeoutMs: number;
+  readonly maxTokensOverride?: number;
+  readonly ledgerPath: string;
 }
 
 let processLiveCallCount = 0;
@@ -90,9 +94,240 @@ export function resolveMaxCalls(env: Record<string, string | undefined> = proces
 }
 
 /**
+ * Resolves MODEL_TIMEOUT_MS with strict clamp [500, 20000].
+ * Default: 2000 ms. NaN/negative/empty -> 2000.
+ */
+export function resolveTimeoutMs(env: Record<string, string | undefined> = process.env): number {
+  const raw = env['MODEL_TIMEOUT_MS'];
+  if (raw === undefined || raw.trim() === '') return 2000;
+  const parsed = parseInt(raw, 10);
+  if (isNaN(parsed) || parsed < 0) return 2000;
+  return Math.max(500, Math.min(20000, parsed));
+}
+
+/**
+ * Resolves MODEL_MAX_TOKENS with clamp [1, 1024].
+ * Unset / empty / non-numeric -> undefined (path defaults 150/250/300 preserved).
+ */
+export function resolveMaxTokensOverride(
+  env: Record<string, string | undefined> = process.env
+): number | undefined {
+  const raw = env['MODEL_MAX_TOKENS'];
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const parsed = parseInt(raw, 10);
+  if (isNaN(parsed)) return undefined;
+  return Math.max(1, Math.min(1024, parsed));
+}
+
+/**
+ * Resolves the persistent call attempt ledger path.
+ * Default: .yori-runtime/model-live-ledger.json
+ */
+export function resolveLedgerPath(
+  env: Record<string, string | undefined> = process.env,
+  baseDir: string = process.cwd()
+): string {
+  const custom = env['MODEL_LIVE_LEDGER_PATH'];
+  if (custom && custom.trim().length > 0) {
+    return path.isAbsolute(custom.trim())
+      ? custom.trim()
+      : path.resolve(baseDir, custom.trim());
+  }
+  return path.resolve(baseDir, '.yori-runtime', 'model-live-ledger.json');
+}
+
+export interface LedgerReservationEntry {
+  readonly id: string;
+  readonly timestamp: string;
+  readonly endpoint: string;
+  readonly callIndex: number;
+}
+
+export interface ModelLedgerData {
+  readonly version: 1;
+  readonly call_count: number;
+  readonly reservations: readonly LedgerReservationEntry[];
+}
+
+export interface LedgerReservationResult {
+  readonly success: boolean;
+  readonly callCount: number;
+  readonly maxCalls: number;
+  readonly error?: 'cap_exceeded' | 'corrupt_ledger' | 'unwritable_ledger' | 'lock_timeout';
+}
+
+export interface LedgerState {
+  readonly status: 'ok' | 'missing' | 'corrupt';
+  readonly callCount: number;
+}
+
+/**
+ * Reads persistent ledger state synchronously without acquiring lock.
+ */
+export function readLedgerState(ledgerPath: string): LedgerState {
+  if (!fs.existsSync(ledgerPath)) {
+    return { status: 'missing', callCount: 0 };
+  }
+  try {
+    const content = fs.readFileSync(ledgerPath, 'utf-8');
+    const data = JSON.parse(content);
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      typeof data.call_count !== 'number' ||
+      data.call_count < 0 ||
+      !Array.isArray(data.reservations)
+    ) {
+      return { status: 'corrupt', callCount: -1 };
+    }
+    return { status: 'ok', callCount: data.call_count };
+  } catch {
+    return { status: 'corrupt', callCount: -1 };
+  }
+}
+
+/**
+ * Resets the persistent ledger and lock file (for tests and verification tooling).
+ */
+export function resetLedger(ledgerPath: string = resolveLedgerPath()): void {
+  const lockPath = `${ledgerPath}.lock`;
+  try {
+    if (fs.existsSync(lockPath)) {
+      fs.unlinkSync(lockPath);
+    }
+  } catch {}
+  try {
+    if (fs.existsSync(ledgerPath)) {
+      fs.unlinkSync(ledgerPath);
+    }
+  } catch {}
+}
+
+/**
+ * Atomically reserves a call slot BEFORE dispatching an outbound fetch.
+ * Uses an exclusive lock file (O_CREAT | O_EXCL) with retry.
+ * Concurrent reservations serialize safely and never exceed maxCalls.
+ * Ledger records call counts and timestamps only; NEVER secret keys or prompts.
+ * Fails closed (success: false) on corrupt JSON or filesystem error.
+ */
+export async function reserveLedgerSlot(
+  ledgerPath: string,
+  maxCalls: number,
+  endpoint: string,
+  logger: (msg: string) => void = () => {}
+): Promise<LedgerReservationResult> {
+  const dir = path.dirname(ledgerPath);
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch (err: any) {
+    logger(`[ModelProxy] Failed to create ledger directory ${dir}: ${err?.message || err}`);
+    return { success: false, callCount: -1, maxCalls, error: 'unwritable_ledger' };
+  }
+
+  const lockPath = `${ledgerPath}.lock`;
+  let lockFd: number | null = null;
+  const startTime = Date.now();
+  const maxWaitMs = 5000;
+
+  while (lockFd === null) {
+    try {
+      lockFd = fs.openSync(lockPath, 'wx');
+    } catch (err: any) {
+      if (err && err.code === 'EEXIST') {
+        try {
+          const stat = fs.statSync(lockPath);
+          if (Date.now() - stat.mtimeMs > 10000) {
+            try {
+              fs.unlinkSync(lockPath);
+            } catch {}
+          }
+        } catch {}
+        if (Date.now() - startTime > maxWaitMs) {
+          logger('[ModelProxy] Ledger lock acquisition timed out');
+          return { success: false, callCount: -1, maxCalls, error: 'lock_timeout' };
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      } else {
+        logger(`[ModelProxy] Ledger lock error: ${err?.message || err}`);
+        return { success: false, callCount: -1, maxCalls, error: 'unwritable_ledger' };
+      }
+    }
+  }
+
+  try {
+    let data: { version: number; call_count: number; reservations: LedgerReservationEntry[] };
+    if (!fs.existsSync(ledgerPath)) {
+      data = { version: 1, call_count: 0, reservations: [] };
+    } else {
+      try {
+        const raw = fs.readFileSync(ledgerPath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        if (
+          !parsed ||
+          typeof parsed !== 'object' ||
+          typeof parsed.call_count !== 'number' ||
+          parsed.call_count < 0 ||
+          !Array.isArray(parsed.reservations)
+        ) {
+          logger('[ModelProxy] Ledger file contains invalid structure');
+          return { success: false, callCount: -1, maxCalls, error: 'corrupt_ledger' };
+        }
+        data = parsed;
+      } catch (parseErr: any) {
+        logger(`[ModelProxy] Ledger file unreadable or corrupt JSON: ${parseErr?.message || parseErr}`);
+        return { success: false, callCount: -1, maxCalls, error: 'corrupt_ledger' };
+      }
+    }
+
+    if (data.call_count >= maxCalls) {
+      return { success: false, callCount: data.call_count, maxCalls, error: 'cap_exceeded' };
+    }
+
+    data.call_count += 1;
+    data.reservations.push({
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      endpoint,
+      callIndex: data.call_count,
+    });
+
+    const tmpFile = `${ledgerPath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
+    try {
+      fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf-8');
+      fs.renameSync(tmpFile, ledgerPath);
+    } catch (writeErr: any) {
+      try {
+        if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+      } catch {}
+      logger(`[ModelProxy] Failed to write ledger file: ${writeErr?.message || writeErr}`);
+      return { success: false, callCount: -1, maxCalls, error: 'unwritable_ledger' };
+    }
+
+    return { success: true, callCount: data.call_count, maxCalls };
+  } finally {
+    if (lockFd !== null) {
+      try {
+        fs.closeSync(lockFd);
+      } catch {}
+      try {
+        if (fs.existsSync(lockPath)) {
+          fs.unlinkSync(lockPath);
+        }
+      } catch {}
+    }
+  }
+}
+
+/**
  * Loads .env.local variables into process.env if present.
+ * In test runners (Vitest / NODE_ENV=test), environment variables are controlled by the test harness.
  */
 export function loadEnvLocal(baseDir: string = process.cwd()): void {
+  if (process.env.VITEST || process.env.NODE_ENV === 'test') {
+    return;
+  }
   const envPath = path.join(baseDir, '.env.local');
   if (fs.existsSync(envPath)) {
     try {
@@ -152,6 +387,9 @@ export function resolveModelConfig(
   const modelName = process.env['MODEL_NAME'] || 'muse-spark-1.3';
   const liveEnabled = process.env['MODEL_LIVE_ENABLED'] === '1';
   const maxCalls = resolveMaxCalls(process.env);
+  const timeoutMs = resolveTimeoutMs(process.env);
+  const maxTokensOverride = resolveMaxTokensOverride(process.env);
+  const ledgerPath = resolveLedgerPath(process.env);
 
   return {
     apiKey,
@@ -160,6 +398,9 @@ export function resolveModelConfig(
     modelName,
     liveEnabled,
     maxCalls,
+    timeoutMs,
+    maxTokensOverride,
+    ledgerPath,
   };
 }
 
@@ -273,6 +514,18 @@ export class ModelDevProxy {
           ? Math.min(Math.max(0, customConfig.maxCalls), 10)
           : resolved.maxCalls;
 
+      const timeoutMs =
+        customConfig.timeoutMs !== undefined
+          ? Math.max(500, Math.min(20000, customConfig.timeoutMs))
+          : resolved.timeoutMs;
+
+      const maxTokensOverride =
+        customConfig.maxTokensOverride !== undefined
+          ? Math.max(1, Math.min(1024, customConfig.maxTokensOverride))
+          : resolved.maxTokensOverride;
+
+      const ledgerPath = customConfig.ledgerPath ?? resolved.ledgerPath;
+
       this.config = {
         apiKey,
         keySource,
@@ -280,6 +533,9 @@ export class ModelDevProxy {
         modelName: customConfig.modelName ?? resolved.modelName,
         liveEnabled,
         maxCalls,
+        timeoutMs,
+        maxTokensOverride,
+        ledgerPath,
       };
     } else {
       this.config = resolved;
@@ -304,12 +560,20 @@ export class ModelDevProxy {
   }
 
   public getDiagnostics(): ModelPortDiagnostics {
+    let providerHost: string | undefined;
+    try {
+      providerHost = new URL(this.config.baseUrl).hostname;
+    } catch {
+      providerHost = undefined;
+    }
+
     if (!this.config.apiKey) {
       return {
         status: 'disabled',
         message: 'model: disabled (no MODEL_API_KEY)',
         modelName: this.config.modelName,
         keySource: 'none',
+        providerHost,
       };
     }
 
@@ -319,15 +583,29 @@ export class ModelDevProxy {
         message: 'model: key present, live disabled (MODEL_LIVE_ENABLED!=1)',
         modelName: this.config.modelName,
         keySource: this.config.keySource,
+        providerHost,
       };
     }
 
-    if (processLiveCallCount >= this.config.maxCalls) {
+    const ledgerState = readLedgerState(this.config.ledgerPath);
+    if (ledgerState.status === 'corrupt') {
       return {
         status: 'disabled',
-        message: `model: live call cap reached (${processLiveCallCount}/${this.config.maxCalls}), falling back to deterministic`,
+        message: 'model: persistent ledger corrupt or unreadable, falling back to deterministic',
         modelName: this.config.modelName,
         keySource: this.config.keySource,
+        providerHost,
+      };
+    }
+
+    const effectiveCallCount = Math.max(processLiveCallCount, ledgerState.callCount);
+    if (effectiveCallCount >= this.config.maxCalls) {
+      return {
+        status: 'disabled',
+        message: `model: live call cap reached (${effectiveCallCount}/${this.config.maxCalls}), falling back to deterministic`,
+        modelName: this.config.modelName,
+        keySource: this.config.keySource,
+        providerHost,
       };
     }
 
@@ -336,6 +614,7 @@ export class ModelDevProxy {
       message: `model: enabled (${this.config.modelName} via ${this.config.keySource})`,
       modelName: this.config.modelName,
       keySource: this.config.keySource,
+      providerHost,
     };
   }
 
@@ -731,11 +1010,28 @@ export class ModelDevProxy {
         fallbackReason: 'disabled',
       };
     }
-    processLiveCallCount++;
+
+    const reservation = await reserveLedgerSlot(
+      this.config.ledgerPath,
+      this.config.maxCalls,
+      'refine',
+      this.logger
+    );
+    if (!reservation.success) {
+      this.logger(
+        `[ModelProxy] Ledger reservation rejected (${reservation.error}): falling back to deterministic`
+      );
+      return {
+        wording: fallbackWording,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+    processLiveCallCount = Math.max(processLiveCallCount + 1, reservation.callCount);
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
       // Facts are inserted as quoted JSON data, never concatenated into instructions (Requirement 4)
       const userMessageContent = JSON.stringify({
@@ -752,7 +1048,7 @@ export class ModelDevProxy {
         },
         body: JSON.stringify({
           model: this.config.modelName,
-          max_tokens: 150,
+          max_tokens: this.config.maxTokensOverride ?? 150,
           messages: [
             {
               role: 'system',
@@ -781,7 +1077,7 @@ export class ModelDevProxy {
         choices?: Array<{ message?: { content?: string } }>;
       };
       const content = json.choices?.[0]?.message?.content;
-      if (!content) {
+      if (!content || !content.trim()) {
         return {
           wording: fallbackWording,
           usedFallback: true,
@@ -824,7 +1120,9 @@ export class ModelDevProxy {
         usedFallback: false,
       };
     } catch (err: unknown) {
-      const isTimeout = err instanceof Error && err.name === 'AbortError';
+      const isTimeout =
+        err instanceof Error &&
+        (err.name === 'AbortError' || err.name === 'TimeoutError');
       return {
         wording: fallbackWording,
         usedFallback: true,
@@ -887,11 +1185,28 @@ export class ModelDevProxy {
         fallbackReason: 'disabled',
       };
     }
-    processLiveCallCount++;
+
+    const reservation = await reserveLedgerSlot(
+      this.config.ledgerPath,
+      this.config.maxCalls,
+      'reason_rank',
+      this.logger
+    );
+    if (!reservation.success) {
+      this.logger(
+        `[ModelProxy] Ledger reservation rejected (${reservation.error}): falling back to deterministic`
+      );
+      return {
+        result: fallback,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+    processLiveCallCount = Math.max(processLiveCallCount + 1, reservation.callCount);
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
       const userMessageContent = JSON.stringify({
         templateId: tmpl.id,
@@ -907,7 +1222,7 @@ export class ModelDevProxy {
         },
         body: JSON.stringify({
           model: this.config.modelName,
-          max_tokens: 250,
+          max_tokens: this.config.maxTokensOverride ?? 250,
           messages: [
             {
               role: 'system',
@@ -936,7 +1251,7 @@ export class ModelDevProxy {
         choices?: Array<{ message?: { content?: string } }>;
       };
       const content = json.choices?.[0]?.message?.content;
-      if (!content) {
+      if (!content || !content.trim()) {
         return {
           result: fallback,
           usedFallback: true,
@@ -972,7 +1287,9 @@ export class ModelDevProxy {
         usedFallback: false,
       };
     } catch (err: unknown) {
-      const isTimeout = err instanceof Error && err.name === 'AbortError';
+      const isTimeout =
+        err instanceof Error &&
+        (err.name === 'AbortError' || err.name === 'TimeoutError');
       return {
         result: fallback,
         usedFallback: true,
@@ -1029,11 +1346,28 @@ export class ModelDevProxy {
         fallbackReason: 'disabled',
       };
     }
-    processLiveCallCount++;
+
+    const reservation = await reserveLedgerSlot(
+      this.config.ledgerPath,
+      this.config.maxCalls,
+      'decision_command',
+      this.logger
+    );
+    if (!reservation.success) {
+      this.logger(
+        `[ModelProxy] Ledger reservation rejected (${reservation.error}): falling back to deterministic`
+      );
+      return {
+        result: null,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+    processLiveCallCount = Math.max(processLiveCallCount + 1, reservation.callCount);
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
       const userMessageContent = JSON.stringify({
         templateId: tmpl.id,
@@ -1049,7 +1383,7 @@ export class ModelDevProxy {
         },
         body: JSON.stringify({
           model: this.config.modelName,
-          max_tokens: 300,
+          max_tokens: this.config.maxTokensOverride ?? 300,
           messages: [
             {
               role: 'system',
@@ -1078,7 +1412,7 @@ export class ModelDevProxy {
         choices?: Array<{ message?: { content?: string } }>;
       };
       const content = json.choices?.[0]?.message?.content;
-      if (!content) {
+      if (!content || !content.trim()) {
         return {
           result: null,
           usedFallback: true,
@@ -1122,7 +1456,9 @@ export class ModelDevProxy {
         usedFallback: false,
       };
     } catch (err: unknown) {
-      const isTimeout = err instanceof Error && err.name === 'AbortError';
+      const isTimeout =
+        err instanceof Error &&
+        (err.name === 'AbortError' || err.name === 'TimeoutError');
       return {
         result: null,
         usedFallback: true,

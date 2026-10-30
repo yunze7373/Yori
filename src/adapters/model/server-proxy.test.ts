@@ -11,12 +11,20 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import {
   ModelDevProxy,
   resolveModelConfig,
   resolveMaxCalls,
+  resolveTimeoutMs,
+  resolveMaxTokensOverride,
+  resolveLedgerPath,
+  readLedgerState,
   resetProcessLiveCallCount,
   getProcessLiveCallCount,
+  resetLedger,
 } from './server-proxy.js';
 import type { ModelPortRequest } from './types.js';
 
@@ -66,12 +74,17 @@ describe('GATE-S1-PREP: Explicit Live Switch (MODEL_LIVE_ENABLED === 1)', () => 
     delete process.env['MODEL_NAME'];
     delete process.env['MODEL_LIVE_ENABLED'];
     delete process.env['MODEL_LIVE_MAX_CALLS'];
+    delete process.env['MODEL_TIMEOUT_MS'];
+    delete process.env['MODEL_MAX_TOKENS'];
+    delete process.env['MODEL_LIVE_LEDGER_PATH'];
     resetProcessLiveCallCount();
+    resetLedger();
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     resetProcessLiveCallCount();
+    resetLedger();
   });
 
   it('no API key: diagnostics report disabled with (no MODEL_API_KEY) and no fetch is made', async () => {
@@ -204,12 +217,17 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
     delete process.env['MODEL_API_KEY'];
     delete process.env['MODEL_LIVE_ENABLED'];
     delete process.env['MODEL_LIVE_MAX_CALLS'];
+    delete process.env['MODEL_TIMEOUT_MS'];
+    delete process.env['MODEL_MAX_TOKENS'];
+    delete process.env['MODEL_LIVE_LEDGER_PATH'];
     resetProcessLiveCallCount();
+    resetLedger();
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     resetProcessLiveCallCount();
+    resetLedger();
   });
 
   it('defaults call cap to 10 and clamps any higher value to at most 10', () => {
@@ -362,12 +380,17 @@ describe('GATE-S1-PREP: Secret Hygiene (Keys Never Leaked)', () => {
     delete process.env['MODEL_NAME'];
     delete process.env['MODEL_LIVE_ENABLED'];
     delete process.env['MODEL_LIVE_MAX_CALLS'];
+    delete process.env['MODEL_TIMEOUT_MS'];
+    delete process.env['MODEL_MAX_TOKENS'];
+    delete process.env['MODEL_LIVE_LEDGER_PATH'];
     resetProcessLiveCallCount();
+    resetLedger();
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     resetProcessLiveCallCount();
+    resetLedger();
   });
 
   it.each([
@@ -479,4 +502,654 @@ describe('GATE-S1-PREP: Secret Hygiene (Keys Never Leaked)', () => {
       }
     }
   );
+});
+
+describe('S1-PREP-PROVIDER: MODEL_TIMEOUT_MS clamping & enforcement', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    delete process.env['MODEL_API_KEY'];
+    delete process.env['MODEL_LIVE_ENABLED'];
+    delete process.env['MODEL_LIVE_MAX_CALLS'];
+    delete process.env['MODEL_TIMEOUT_MS'];
+    delete process.env['MODEL_MAX_TOKENS'];
+    delete process.env['MODEL_LIVE_LEDGER_PATH'];
+    resetProcessLiveCallCount();
+    resetLedger();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    resetProcessLiveCallCount();
+    resetLedger();
+  });
+
+  it('verifies timeout clamp values: 100->500, 99999->20000, "abc"->2000, negative->2000, empty->2000', () => {
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '100' })).toBe(500);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '99999' })).toBe(20000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: 'abc' })).toBe(2000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '-500' })).toBe(2000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '' })).toBe(2000);
+    expect(resolveTimeoutMs({})).toBe(2000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '5000' })).toBe(5000);
+  });
+
+  it('triggers fallbackReason: "timeout" across refine, reason, and command fetch paths', async () => {
+    process.env.MODEL_API_KEY = 'sk-mock-timeout-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_TIMEOUT_MS = '500';
+
+    const originalFetch = globalThis.fetch;
+    const abortErr = new Error('The operation was aborted');
+    abortErr.name = 'AbortError';
+    globalThis.fetch = vi.fn().mockRejectedValue(abortErr);
+
+    try {
+      const proxy = new ModelDevProxy();
+
+      // Refine path
+      const refineRes = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(refineRes.usedFallback).toBe(true);
+      expect(refineRes.fallbackReason).toBe('timeout');
+
+      // Reason path
+      const reasonRes = await proxy.handleReasoning({
+        candidates: [
+          {
+            id: 'plan-1',
+            intentId: 'depart',
+            confidence: 0.8,
+            times: ['2:05 PM', '2:25 PM'],
+            places: ['Piano Studio'],
+            optionModes: ['drive', 'bus'],
+            citedSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+            citedFactKeys: [],
+          },
+        ],
+        availableSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+        confirmedFactKeys: [],
+        timeZone: 'Asia/Tokyo',
+      });
+      expect(reasonRes.usedFallback).toBe(true);
+      expect(reasonRes.fallbackReason).toBe('timeout');
+
+      // Command path
+      const cmdRes = await proxy.handleCommand({
+        utterance: 'Can I leave later?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+      });
+      expect(cmdRes.usedFallback).toBe(true);
+      expect(cmdRes.fallbackReason).toBe('timeout');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('S1-PREP-PROVIDER: MODEL_MAX_TOKENS clamping & override', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    delete process.env['MODEL_API_KEY'];
+    delete process.env['MODEL_LIVE_ENABLED'];
+    delete process.env['MODEL_LIVE_MAX_CALLS'];
+    delete process.env['MODEL_TIMEOUT_MS'];
+    delete process.env['MODEL_MAX_TOKENS'];
+    delete process.env['MODEL_LIVE_LEDGER_PATH'];
+    resetProcessLiveCallCount();
+    resetLedger();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    resetProcessLiveCallCount();
+    resetLedger();
+  });
+
+  it('verifies max_tokens clamp values: 0->1, 2000->1024, "x"->undefined, empty->undefined', () => {
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '0' })).toBe(1);
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '2000' })).toBe(1024);
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: 'x' })).toBeUndefined();
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '' })).toBeUndefined();
+    expect(resolveMaxTokensOverride({})).toBeUndefined();
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '512' })).toBe(512);
+  });
+
+  it('applies max_tokens override to all three fetch paths', async () => {
+    process.env.MODEL_API_KEY = 'sk-mock-tokens-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_MAX_TOKENS = '450';
+
+    const recordedBodies: any[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+      recordedBodies.push(JSON.parse(init.body));
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  wording: 'Time: 2:25 PM',
+                  orderedPlanIds: ['plan-1'],
+                  rationale: [],
+                  intent: 'leave_later',
+                  command: 'shift_departure',
+                  reasonCode: 'user_request',
+                  userFacingReason: 'Shifted',
+                  suggestedTimes: ['2:45 PM'],
+                  usedSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+                  usedFactKeys: ['habit_rain_transit'],
+                }),
+              },
+            },
+          ],
+        }),
+      };
+    });
+
+    try {
+      const proxy = new ModelDevProxy();
+
+      await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+
+      await proxy.handleReasoning({
+        candidates: [
+          {
+            id: 'plan-1',
+            intentId: 'depart',
+            confidence: 0.8,
+            times: ['2:05 PM', '2:25 PM'],
+            places: ['Piano Studio'],
+            optionModes: ['drive', 'bus'],
+            citedSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+            citedFactKeys: ['habit_rain_transit'],
+          },
+        ],
+        availableSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        timeZone: 'Asia/Tokyo',
+      });
+
+      await proxy.handleCommand({
+        utterance: 'Can I leave later?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+        validTimes: ['2:45 PM'],
+      });
+
+      expect(recordedBodies).toHaveLength(3);
+      for (const b of recordedBodies) {
+        expect(b.max_tokens).toBe(450);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('S1-PREP-PROVIDER: Durable Pre-Fetch Attempt Ledger', () => {
+  const originalEnv = { ...process.env };
+  const tempDir = path.join(os.tmpdir(), `yori-ledger-test-${Date.now()}`);
+  const testLedgerPath = path.join(tempDir, 'test-ledger.json');
+
+  beforeEach(() => {
+    delete process.env['MODEL_API_KEY'];
+    delete process.env['MODEL_LIVE_ENABLED'];
+    delete process.env['MODEL_LIVE_MAX_CALLS'];
+    delete process.env['MODEL_TIMEOUT_MS'];
+    delete process.env['MODEL_MAX_TOKENS'];
+    delete process.env['MODEL_LIVE_LEDGER_PATH'];
+    resetProcessLiveCallCount();
+    resetLedger(testLedgerPath);
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    process.env.MODEL_LIVE_LEDGER_PATH = testLedgerPath;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    resetProcessLiveCallCount();
+    resetLedger(testLedgerPath);
+    try {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    } catch {}
+  });
+
+  it('survives new proxy instance + resetProcessLiveCallCount() across restarts', async () => {
+    process.env.MODEL_API_KEY = 'sk-mock-restart-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '4';
+
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({ wording: 'Time: 2:25 PM' }) } }],
+      }),
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchSpy as any;
+
+    try {
+      // Instance 1 makes 2 calls
+      const proxy1 = new ModelDevProxy();
+      await proxy1.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      await proxy1.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+      // Simulate process restart
+      resetProcessLiveCallCount();
+      expect(getProcessLiveCallCount()).toBe(0);
+
+      // Instance 2 starts in new process
+      const proxy2 = new ModelDevProxy();
+      // Diagnostics must see ledger at 2/4
+      const diag2 = proxy2.getDiagnostics();
+      expect(diag2.status).toBe('enabled');
+
+      await proxy2.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      await proxy2.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(fetchSpy).toHaveBeenCalledTimes(4);
+
+      // 5th call is blocked by persistent ledger cap
+      const blockedRes = await proxy2.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(blockedRes.usedFallback).toBe(true);
+      expect(blockedRes.fallbackReason).toBe('disabled');
+      expect(fetchSpy).toHaveBeenCalledTimes(4); // NO 5th fetch
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('fails closed when ledger is corrupt JSON: diagnostics reports disabled and 0 fetches occur', async () => {
+    process.env.MODEL_API_KEY = 'sk-mock-corrupt-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+
+    // Write corrupt JSON to ledger
+    fs.writeFileSync(testLedgerPath, '{ NOT_VALID_JSON ...corrupted!!', 'utf-8');
+
+    const fetchSpy = vi.fn();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchSpy as any;
+
+    try {
+      const proxy = new ModelDevProxy();
+      const diag = proxy.getDiagnostics();
+      expect(diag.status).toBe('disabled');
+      expect(diag.message).toContain('persistent ledger corrupt or unreadable');
+
+      const res = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(res.usedFallback).toBe(true);
+      expect(res.fallbackReason).toBe('disabled');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('fails closed when ledger directory is unwritable', async () => {
+    process.env.MODEL_API_KEY = 'sk-mock-unwritable-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+    // Use an impossible directory path
+    process.env.MODEL_LIVE_LEDGER_PATH = '/dev/null/impossible/path/ledger.json';
+
+    const fetchSpy = vi.fn();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchSpy as any;
+
+    try {
+      const proxy = new ModelDevProxy();
+      const res = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(res.usedFallback).toBe(true);
+      expect(res.fallbackReason).toBe('disabled');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('parallel 20 reservations with cap 10 -> exactly 10 fetches, exactly 10 fallbacks', async () => {
+    process.env.MODEL_API_KEY = 'sk-mock-parallel-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '10';
+
+    let fetchCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async () => {
+      fetchCount++;
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ wording: 'Time: 2:25 PM' }) } }],
+        }),
+      };
+    });
+
+    try {
+      const proxy = new ModelDevProxy();
+      const req: ModelPortRequest = {
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      };
+
+      // Launch 20 concurrent requests
+      const promises = Array.from({ length: 20 }, () => proxy.handleRefine(req));
+      const results = await Promise.all(promises);
+
+      const accepted = results.filter(r => !r.usedFallback);
+      const rejected = results.filter(r => r.usedFallback && r.fallbackReason === 'disabled');
+
+      expect(accepted).toHaveLength(10);
+      expect(rejected).toHaveLength(10);
+      expect(fetchCount).toBe(10);
+
+      // Verify ledger file on disk
+      const state = readLedgerState(testLedgerPath);
+      expect(state.status).toBe('ok');
+      expect(state.callCount).toBe(10);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('flag OFF: fetch mock called 0 times, ledger remains uncreated/0', async () => {
+    process.env.MODEL_API_KEY = 'sk-mock-flag-off-key';
+    delete process.env.MODEL_LIVE_ENABLED;
+
+    const fetchSpy = vi.fn();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchSpy as any;
+
+    try {
+      const proxy = new ModelDevProxy();
+      const res = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM' },
+      });
+      expect(res.usedFallback).toBe(true);
+      expect(res.fallbackReason).toBe('disabled');
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      const state = readLedgerState(testLedgerPath);
+      expect(state.status).toBe('missing');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('S1-PREP-PROVIDER: Diagnostics providerHost & Hygiene', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    delete process.env['MODEL_API_KEY'];
+    delete process.env['MODEL_LIVE_ENABLED'];
+    delete process.env['MODEL_BASE_URL'];
+    delete process.env['MODEL_NAME'];
+    resetProcessLiveCallCount();
+    resetLedger();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    resetProcessLiveCallCount();
+    resetLedger();
+  });
+
+  it('extracts providerHost hostname only without key or query', () => {
+    // Baseten provider
+    process.env.MODEL_BASE_URL = 'https://inference.baseten.co/v1';
+    process.env.MODEL_API_KEY = 'sk-baseten-dummy-key';
+    const proxyBaseten = new ModelDevProxy();
+    const diagBaseten = proxyBaseten.getDiagnostics();
+    expect(diagBaseten.providerHost).toBe('inference.baseten.co');
+    expect(diagBaseten.message).not.toContain('sk-baseten-dummy-key');
+
+    // Meta provider
+    process.env.MODEL_BASE_URL = 'https://api.meta.ai/v1';
+    const proxyMeta = new ModelDevProxy();
+    const diagMeta = proxyMeta.getDiagnostics();
+    expect(diagMeta.providerHost).toBe('api.meta.ai');
+  });
+});
+
+describe('S1-PREP-PROVIDER: Baseten Provider Fallback Tests with Mocked Fetch', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    delete process.env['MODEL_API_KEY'];
+    delete process.env['MODEL_LIVE_ENABLED'];
+    delete process.env['MODEL_BASE_URL'];
+    delete process.env['MODEL_NAME'];
+    resetProcessLiveCallCount();
+    resetLedger();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    resetProcessLiveCallCount();
+    resetLedger();
+  });
+
+  it('sends request to Baseten /chat/completions with Bearer header and mocked slug', async () => {
+    process.env.MODEL_BASE_URL = 'https://inference.baseten.co/v1';
+    process.env.MODEL_NAME = 'meta-models/muse-spark-open-1026';
+    process.env.MODEL_API_KEY = 'baseten-test-sentinel-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+
+    let capturedUrl = '';
+    let capturedHeaders: Record<string, string> = {};
+    let capturedBody: any;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string, init: any) => {
+      capturedUrl = url;
+      capturedHeaders = init.headers;
+      capturedBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ wording: 'Time: 2:25 PM' }) } }],
+        }),
+      };
+    });
+
+    try {
+      const proxy = new ModelDevProxy();
+      const res = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(res.usedFallback).toBe(false);
+      expect(capturedUrl).toBe('https://inference.baseten.co/v1/chat/completions');
+      expect(capturedHeaders['Authorization']).toBe('Bearer baseten-test-sentinel-key');
+      expect(capturedBody.model).toBe('meta-models/muse-spark-open-1026');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('handles reasoning-only / empty / whitespace content -> schema_invalid fallback', async () => {
+    process.env.MODEL_BASE_URL = 'https://inference.baseten.co/v1';
+    process.env.MODEL_NAME = 'meta-models/muse-spark-open-1026';
+    process.env.MODEL_API_KEY = 'baseten-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+
+    const originalFetch = globalThis.fetch;
+    let mockContent = '';
+    globalThis.fetch = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: mockContent } }],
+      }),
+    }));
+
+    try {
+      const proxy = new ModelDevProxy();
+
+      // Empty string
+      mockContent = '';
+      const r1 = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(r1.usedFallback).toBe(true);
+      expect(r1.fallbackReason).toBe('schema_invalid');
+
+      // Whitespace only (reasoning token exhaustion)
+      mockContent = '   \n  \t  ';
+      const r2 = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(r2.usedFallback).toBe(true);
+      expect(r2.fallbackReason).toBe('schema_invalid');
+
+      // Reasoning path with empty content
+      const r3 = await proxy.handleReasoning({
+        candidates: [
+          {
+            id: 'plan-1',
+            intentId: 'depart',
+            confidence: 0.8,
+            times: ['2:05 PM', '2:25 PM'],
+            places: ['Piano Studio'],
+            optionModes: ['drive', 'bus'],
+            citedSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+            citedFactKeys: [],
+          },
+        ],
+        availableSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+        confirmedFactKeys: [],
+        timeZone: 'Asia/Tokyo',
+      });
+      expect(r3.usedFallback).toBe(true);
+      expect(r3.fallbackReason).toBe('schema_invalid');
+
+      // Command path with empty content
+      const r4 = await proxy.handleCommand({
+        utterance: 'Can I leave later?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+      });
+      expect(r4.usedFallback).toBe(true);
+      expect(r4.fallbackReason).toBe('schema_invalid');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('handles 401 and 429 errors -> error fallback with NO retry (exactly 1 call)', async () => {
+    process.env.MODEL_BASE_URL = 'https://inference.baseten.co/v1';
+    process.env.MODEL_API_KEY = 'baseten-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+
+    const originalFetch = globalThis.fetch;
+
+    // 401 Unauthorized
+    let fetchCount = 0;
+    globalThis.fetch = vi.fn().mockImplementation(async () => {
+      fetchCount++;
+      return { ok: false, status: 401 };
+    });
+
+    try {
+      const proxy = new ModelDevProxy();
+      const r1 = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(r1.usedFallback).toBe(true);
+      expect(r1.fallbackReason).toBe('error');
+      expect(fetchCount).toBe(1); // 0 retries!
+
+      // 429 Rate Limit
+      fetchCount = 0;
+      globalThis.fetch = vi.fn().mockImplementation(async () => {
+        fetchCount++;
+        return { ok: false, status: 429 };
+      });
+
+      const r2 = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(r2.usedFallback).toBe(true);
+      expect(r2.fallbackReason).toBe('error');
+      expect(fetchCount).toBe(1); // 0 retries!
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('greps ledger file, diagnostics, and test results to guarantee no apiKey bytes leak', async () => {
+    const SENTINEL_SECRET = 'sk-BASETEN-SECRET-SENTINEL-PROBE-999888777';
+    process.env.MODEL_BASE_URL = 'https://inference.baseten.co/v1';
+    process.env.MODEL_API_KEY = SENTINEL_SECRET;
+    process.env.MODEL_LIVE_ENABLED = '1';
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({ wording: 'Time: 2:25 PM' }) } }],
+      }),
+    });
+
+    try {
+      const proxy = new ModelDevProxy();
+      const diag = proxy.getDiagnostics();
+      const diagJson = JSON.stringify(diag);
+      expect(diagJson).not.toContain(SENTINEL_SECRET);
+
+      const res = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(JSON.stringify(res)).not.toContain(SENTINEL_SECRET);
+
+      // Read ledger from disk
+      const ledgerPath = resolveLedgerPath();
+      if (fs.existsSync(ledgerPath)) {
+        const ledgerContent = fs.readFileSync(ledgerPath, 'utf-8');
+        expect(ledgerContent).not.toContain(SENTINEL_SECRET);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

@@ -71,6 +71,7 @@ import {
   ModelDevProxy,
   resetProcessLiveCallCount,
   getProcessLiveCallCount,
+  resetLedger,
 } from '../src/adapters/model/server-proxy.js';
 import { runPipeline } from '../src/core/pipeline/index.js';
 import {
@@ -232,6 +233,7 @@ async function runDryRunAudit(): Promise<boolean> {
 
   // 2. Set up mock environment with <= 10 planned calls
   resetProcessLiveCallCount();
+  resetLedger();
   process.env.MODEL_API_KEY = 'sk-mock-spark-dryrun-sentinel-key';
   process.env.MODEL_LIVE_ENABLED = '1';
   process.env.MODEL_LIVE_MAX_CALLS = '10';
@@ -692,6 +694,7 @@ async function runDryRunAudit(): Promise<boolean> {
     delete process.env.MODEL_LIVE_ENABLED;
     delete process.env.MODEL_LIVE_MAX_CALLS;
     resetProcessLiveCallCount();
+    resetLedger();
   }
 
   // 5. D1–D6 Byte-Identity Check (Live Off vs Live On Fallback)

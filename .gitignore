@@ -25,6 +25,7 @@ $RECYCLE.BIN/
 
 # Local progress, scratch files, and logs
 .progress/
+.yori-runtime/
 work/
 tmp/
 temp/

@@ -40,6 +40,7 @@ export interface ModelPortDiagnostics {
   readonly message: string;
   readonly modelName: string;
   readonly keySource: 'MODEL_API_KEY' | 'META_API_KEY' | 'none';
+  readonly providerHost?: string;
 }
 
 export interface ModelPort {

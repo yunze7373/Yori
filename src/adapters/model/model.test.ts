@@ -12,6 +12,7 @@ import {
   createModelProxyMiddleware,
   resolveBindHost,
   resetProcessLiveCallCount,
+  resetLedger,
 } from './server-proxy.js';
 import { SERVER_TEMPLATES, validateTemplateRequest } from './template-registry.js';
 import {
@@ -34,6 +35,7 @@ import type { SuppliedFacts, ModelPortRequest } from './types.js';
 
 beforeEach(() => {
   resetProcessLiveCallCount();
+  resetLedger();
 });
 
 describe('ModelPort Fact Checker (INV-103, AC-106-1)', () => {
