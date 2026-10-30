@@ -177,6 +177,14 @@ export class XMemoDevProxy {
       configOverride?.mcpUrl ??
       (configOverride?.issuer ? `${issuer}/mcp` : resolved.mcpUrl);
 
+    // When configOverride is provided (typically in tests), do NOT default clientStoragePath to cwd
+    // (.xmemo-client.json). Only default to cwd when configOverride is omitted (production/preview)
+    // or when explicitly configured via process.env.XMEMO_CLIENT_STORAGE_PATH.
+    const clientStoragePath =
+      configOverride !== undefined
+        ? (configOverride.clientStoragePath ?? (process.env.XMEMO_CLIENT_STORAGE_PATH || undefined))
+        : resolved.clientStoragePath;
+
     this.config = {
       ...resolved,
       ...configOverride,
@@ -185,6 +193,7 @@ export class XMemoDevProxy {
       tokenUrl,
       revokeUrl,
       mcpUrl,
+      clientStoragePath,
       scopes: configOverride?.scopes ?? resolved.scopes,
     };
     this.rateLimiter = rateLimiter ?? new RateLimiter(60, 60_000);
@@ -223,6 +232,38 @@ export class XMemoDevProxy {
         const raw = fs.readFileSync(this.config.clientStoragePath, 'utf-8');
         const data = JSON.parse(raw);
         if (typeof data.client_id === 'string' && data.client_id.trim()) {
+          // Validate issuer matches configured issuer
+          if (data.issuer !== this.config.issuer) {
+            this.logger(
+              `[XMemoProxy] Persisted client registration issuer mismatch: stored '${data.issuer}' != configured '${this.config.issuer}'. Ignoring persisted registration.`
+            );
+            return false;
+          }
+
+          // Resolve stored redirect_uri: explicit field or extract from RFC 7591 JWT payload
+          let storedRedirectUri = data.redirect_uri;
+          if (!storedRedirectUri && typeof data.client_id === 'string' && data.client_id.startsWith('xmemo-dcr.')) {
+            try {
+              const parts = data.client_id.split('.');
+              if (parts.length >= 2) {
+                const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+                if (Array.isArray(payload.redirect_uris) && payload.redirect_uris.length > 0) {
+                  storedRedirectUri = payload.redirect_uris[0];
+                }
+              }
+            } catch {
+              // ignore malformed token payload
+            }
+          }
+
+          // Validate redirect_uri matches configured redirectUri
+          if (!storedRedirectUri || storedRedirectUri !== this.config.redirectUri) {
+            this.logger(
+              `[XMemoProxy] Persisted client registration redirect_uri mismatch: stored '${storedRedirectUri}' != configured '${this.config.redirectUri}'. Ignoring persisted registration.`
+            );
+            return false;
+          }
+
           this.clientId = data.client_id.trim();
           if (typeof data.client_secret === 'string' && data.client_secret.trim()) {
             this.clientSecret = data.client_secret.trim();
@@ -247,6 +288,7 @@ export class XMemoDevProxy {
       const data: Record<string, string> = {
         client_id: clientId,
         issuer: this.config.issuer,
+        redirect_uri: this.config.redirectUri,
         registered_at: new Date().toISOString(),
       };
       if (clientSecret) {

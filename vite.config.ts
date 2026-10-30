@@ -83,5 +83,8 @@ export default defineConfig(({ mode }) => {
       port: 4173,
       host: bindHost,
     },
-  };
+    test: {
+      setupFiles: ['./tests/setup-netguard.ts'],
+    },
+  } as any;
 });

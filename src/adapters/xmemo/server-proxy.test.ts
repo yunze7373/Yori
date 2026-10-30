@@ -668,7 +668,11 @@ describe('XMemoDevProxy: Flag ON', () => {
 
     it('enforces rate limiting with 429 when quota exceeded', async () => {
       const strictLimiter = new RateLimiter(2, 60_000);
-      const limitedProxy = new XMemoDevProxy({ enabled: true }, () => {}, strictLimiter);
+      const limitedProxy = new XMemoDevProxy(
+        { enabled: true, clientId: 'mock-rate-limit-client' },
+        () => {},
+        strictLimiter
+      );
 
       const makeReq = () => {
         const req = createMockReq({ url: '/api/xmemo/auth-url', method: 'POST' });
@@ -866,6 +870,8 @@ describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
     const content = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
     expect(content.client_id).toBe('persisted-client-id-888');
     expect(content.client_secret).toBe('mock_secret_server_only');
+    expect(content.redirect_uri).toBe('http://127.0.0.1:5173/api/xmemo/callback');
+    expect(content.issuer).toBe('https://xmemo.dev');
 
     // Instance 2 (restart simulation): loads from file with 0 registration calls
     const rejectingFetch = (async () => {
@@ -883,6 +889,183 @@ describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
     expect(res2.success).toBe(true);
     expect(res2.clientId).toBe('persisted-client-id-888');
     expect(regCallCount).toBe(1); // Still 1, no second call!
+  });
+
+  it('does NOT default clientStoragePath to cwd when configOverride is provided', () => {
+    const proxyWithOverride = new XMemoDevProxy({ enabled: true });
+    expect((proxyWithOverride as any).config.clientStoragePath).toBeUndefined();
+
+    const proxyWithoutOverride = new XMemoDevProxy();
+    expect((proxyWithoutOverride as any).config.clientStoragePath).toBe(
+      path.resolve(process.cwd(), '.xmemo-client.json')
+    );
+  });
+
+  it('ignores persisted client_id when stored issuer does not match current config (mock vs real)', async () => {
+    // 1. Write persisted record with mock issuer
+    fs.writeFileSync(
+      stateFile,
+      JSON.stringify({
+        client_id: 'mock-sink-client-id',
+        issuer: 'http://127.0.0.1:9999',
+        redirect_uri: 'http://127.0.0.1:5173/api/xmemo/callback',
+        registered_at: new Date().toISOString(),
+      }),
+      { encoding: 'utf-8', mode: 0o600 }
+    );
+
+    let regCalled = false;
+    const mockFetch = (async (url: string) => {
+      if (url.includes('.well-known')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+        };
+      }
+      if (url.includes('/oauth/register')) {
+        regCalled = true;
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ client_id: 'real-fresh-client-id' }),
+        };
+      }
+      return { ok: false, status: 404 };
+    }) as any;
+
+    // Config has real issuer https://xmemo.dev
+    const proxy = new XMemoDevProxy(
+      {
+        enabled: true,
+        issuer: 'https://xmemo.dev',
+        redirectUri: 'http://127.0.0.1:5173/api/xmemo/callback',
+        clientStoragePath: stateFile,
+      },
+      () => {},
+      undefined,
+      mockFetch
+    );
+
+    const result = await proxy.ensureRegistered(mockFetch);
+    expect(result.success).toBe(true);
+    expect(result.clientId).toBe('real-fresh-client-id');
+    expect(regCalled).toBe(true);
+
+    const updated = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    expect(updated.client_id).toBe('real-fresh-client-id');
+    expect(updated.issuer).toBe('https://xmemo.dev');
+  });
+
+  it('ignores persisted client_id when stored issuer does not match current config (real vs mock)', async () => {
+    // 1. Write persisted record with real issuer
+    fs.writeFileSync(
+      stateFile,
+      JSON.stringify({
+        client_id: 'real-xmemo-client-id',
+        issuer: 'https://xmemo.dev',
+        redirect_uri: 'http://127.0.0.1:5173/api/xmemo/callback',
+        registered_at: new Date().toISOString(),
+      }),
+      { encoding: 'utf-8', mode: 0o600 }
+    );
+
+    let regCalled = false;
+    const mockFetch = (async (url: string) => {
+      if (url.includes('.well-known')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ registration_endpoint: 'http://127.0.0.1:9999/oauth/register' }),
+        };
+      }
+      if (url.includes('/oauth/register')) {
+        regCalled = true;
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ client_id: 'mock-sink-fresh-client-id' }),
+        };
+      }
+      return { ok: false, status: 404 };
+    }) as any;
+
+    // Config has mock issuer http://127.0.0.1:9999
+    const proxy = new XMemoDevProxy(
+      {
+        enabled: true,
+        issuer: 'http://127.0.0.1:9999',
+        redirectUri: 'http://127.0.0.1:5173/api/xmemo/callback',
+        clientStoragePath: stateFile,
+      },
+      () => {},
+      undefined,
+      mockFetch
+    );
+
+    const result = await proxy.ensureRegistered(mockFetch);
+    expect(result.success).toBe(true);
+    expect(result.clientId).toBe('mock-sink-fresh-client-id');
+    expect(regCalled).toBe(true);
+
+    const updated = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    expect(updated.client_id).toBe('mock-sink-fresh-client-id');
+    expect(updated.issuer).toBe('http://127.0.0.1:9999');
+  });
+
+  it('ignores persisted client_id when stored redirect_uri does not match current config', async () => {
+    // Write persisted record with different redirect_uri
+    fs.writeFileSync(
+      stateFile,
+      JSON.stringify({
+        client_id: 'different-redirect-client-id',
+        issuer: 'https://xmemo.dev',
+        redirect_uri: 'http://127.0.0.1:9999/other/callback',
+        registered_at: new Date().toISOString(),
+      }),
+      { encoding: 'utf-8', mode: 0o600 }
+    );
+
+    let regPayload: any = null;
+    const mockFetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('.well-known')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+        };
+      }
+      if (url.includes('/oauth/register')) {
+        regPayload = JSON.parse(init?.body as string);
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ client_id: 'fresh-matching-redirect-client-id' }),
+        };
+      }
+      return { ok: false, status: 404 };
+    }) as any;
+
+    const proxy = new XMemoDevProxy(
+      {
+        enabled: true,
+        issuer: 'https://xmemo.dev',
+        redirectUri: 'http://127.0.0.1:5173/api/xmemo/callback',
+        clientStoragePath: stateFile,
+      },
+      () => {},
+      undefined,
+      mockFetch
+    );
+
+    const result = await proxy.ensureRegistered(mockFetch);
+    expect(result.success).toBe(true);
+    expect(result.clientId).toBe('fresh-matching-redirect-client-id');
+    expect(regPayload.redirect_uris).toEqual(['http://127.0.0.1:5173/api/xmemo/callback']);
+
+    const updated = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    expect(updated.client_id).toBe('fresh-matching-redirect-client-id');
+    expect(updated.redirect_uri).toBe('http://127.0.0.1:5173/api/xmemo/callback');
   });
 });
 
@@ -1208,5 +1391,20 @@ describe('DELETE /api/xmemo/confirmed-facts', () => {
     await proxy.handleHttpRequest(req, res);
     expect(res.statusCode).toBe(400);
     expect(res.body).toContain('Bad Request: key must be string');
+  });
+});
+
+describe('NetGuard external call interceptor (setup-netguard.ts)', () => {
+  it('blocks unmocked non-loopback network fetch attempts to xmemo.dev', async () => {
+    await expect(globalThis.fetch('https://xmemo.dev/oauth/register')).rejects.toThrow(
+      /\[NETGUARD\] Blocked unmocked non-loopback network fetch to: https:\/\/xmemo\.dev\/oauth\/register/
+    );
+  });
+
+  it('permits loopback network fetch attempts to 127.0.0.1 and localhost', async () => {
+    // A fetch to an unused local port fails with connection refused, NOT NetGuard blocked
+    await expect(globalThis.fetch('http://127.0.0.1:19999/test-health')).rejects.not.toThrow(
+      /\[NETGUARD\] Blocked/
+    );
   });
 });
