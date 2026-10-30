@@ -9,7 +9,7 @@
  * 3. Secret hygiene: sentinel keys never appear in logs, diagnostics, HTTP responses, or error messages.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import { EventEmitter } from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -21,10 +21,12 @@ import {
   resolveTimeoutMs,
   resolveMaxTokensOverride,
   resolveLedgerPath,
+  getDefaultLedgerPath,
   readLedgerState,
   resetProcessLiveCallCount,
   getProcessLiveCallCount,
   resetLedger,
+  loadEnvLocal,
 } from './server-proxy.js';
 import type { ModelPortRequest } from './types.js';
 
@@ -64,6 +66,9 @@ function createMockRes(): any {
   return res;
 }
 
+const suiteTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-proxy-suite-'));
+const suiteLedgerPath = path.join(suiteTempDir, 'suite-ledger.json');
+
 describe('GATE-S1-PREP: Explicit Live Switch (MODEL_LIVE_ENABLED === 1)', () => {
   const originalEnv = { ...process.env };
 
@@ -76,15 +81,15 @@ describe('GATE-S1-PREP: Explicit Live Switch (MODEL_LIVE_ENABLED === 1)', () => 
     delete process.env['MODEL_LIVE_MAX_CALLS'];
     delete process.env['MODEL_TIMEOUT_MS'];
     delete process.env['MODEL_MAX_TOKENS'];
-    delete process.env['MODEL_LIVE_LEDGER_PATH'];
+    process.env['MODEL_LIVE_LEDGER_PATH'] = suiteLedgerPath;
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   it('no API key: diagnostics report disabled with (no MODEL_API_KEY) and no fetch is made', async () => {
@@ -219,15 +224,15 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
     delete process.env['MODEL_LIVE_MAX_CALLS'];
     delete process.env['MODEL_TIMEOUT_MS'];
     delete process.env['MODEL_MAX_TOKENS'];
-    delete process.env['MODEL_LIVE_LEDGER_PATH'];
+    process.env['MODEL_LIVE_LEDGER_PATH'] = suiteLedgerPath;
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   it('defaults call cap to 10 and clamps any higher value to at most 10', () => {
@@ -382,15 +387,15 @@ describe('GATE-S1-PREP: Secret Hygiene (Keys Never Leaked)', () => {
     delete process.env['MODEL_LIVE_MAX_CALLS'];
     delete process.env['MODEL_TIMEOUT_MS'];
     delete process.env['MODEL_MAX_TOKENS'];
-    delete process.env['MODEL_LIVE_LEDGER_PATH'];
+    process.env['MODEL_LIVE_LEDGER_PATH'] = suiteLedgerPath;
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   it.each([
@@ -513,15 +518,15 @@ describe('S1-PREP-PROVIDER: MODEL_TIMEOUT_MS clamping & enforcement', () => {
     delete process.env['MODEL_LIVE_MAX_CALLS'];
     delete process.env['MODEL_TIMEOUT_MS'];
     delete process.env['MODEL_MAX_TOKENS'];
-    delete process.env['MODEL_LIVE_LEDGER_PATH'];
+    process.env['MODEL_LIVE_LEDGER_PATH'] = suiteLedgerPath;
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   it('verifies timeout clamp values: 100->500, 99999->20000, "abc"->2000, negative->2000, empty->2000', () => {
@@ -599,15 +604,15 @@ describe('S1-PREP-PROVIDER: MODEL_MAX_TOKENS clamping & override', () => {
     delete process.env['MODEL_LIVE_MAX_CALLS'];
     delete process.env['MODEL_TIMEOUT_MS'];
     delete process.env['MODEL_MAX_TOKENS'];
-    delete process.env['MODEL_LIVE_LEDGER_PATH'];
+    process.env['MODEL_LIVE_LEDGER_PATH'] = suiteLedgerPath;
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   it('verifies max_tokens clamp values: 0->1, 2000->1024, "x"->undefined, empty->undefined', () => {
@@ -920,14 +925,15 @@ describe('S1-PREP-PROVIDER: Diagnostics providerHost & Hygiene', () => {
     delete process.env['MODEL_LIVE_ENABLED'];
     delete process.env['MODEL_BASE_URL'];
     delete process.env['MODEL_NAME'];
+    process.env['MODEL_LIVE_LEDGER_PATH'] = suiteLedgerPath;
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   it('extracts providerHost hostname only without key or query', () => {
@@ -955,14 +961,15 @@ describe('S1-PREP-PROVIDER: Baseten Provider Fallback Tests with Mocked Fetch', 
     delete process.env['MODEL_LIVE_ENABLED'];
     delete process.env['MODEL_BASE_URL'];
     delete process.env['MODEL_NAME'];
+    process.env['MODEL_LIVE_LEDGER_PATH'] = suiteLedgerPath;
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     resetProcessLiveCallCount();
-    resetLedger();
+    resetLedger(suiteLedgerPath);
   });
 
   it('sends request to Baseten /chat/completions with Bearer header and mocked slug', async () => {
@@ -1152,4 +1159,171 @@ describe('S1-PREP-PROVIDER: Baseten Provider Fallback Tests with Mocked Fetch', 
       globalThis.fetch = originalFetch;
     }
   });
+});
+
+describe('S1-PREP-PROVIDER: Default Production Ledger Protection & Isolation (P1)', () => {
+  const defaultProdLedger = getDefaultLedgerPath();
+  const originalEnv = { ...process.env };
+  const prodDir = path.dirname(defaultProdLedger);
+
+  beforeEach(() => {
+    delete process.env['MODEL_API_KEY'];
+    delete process.env['MODEL_LIVE_ENABLED'];
+    delete process.env['MODEL_LIVE_MAX_CALLS'];
+    delete process.env['MODEL_TIMEOUT_MS'];
+    delete process.env['MODEL_MAX_TOKENS'];
+    delete process.env['MODEL_LIVE_LEDGER_PATH'];
+    resetProcessLiveCallCount();
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    resetProcessLiveCallCount();
+  });
+
+  it('refuses to reset the default production ledger without allowProduction: true', () => {
+    expect(() => resetLedger(defaultProdLedger)).toThrow(
+      /refused to reset the default production ledger/
+    );
+  });
+
+  it('pre-seeded default ledger survives running mocked live proxy tests under isolated MODEL_LIVE_LEDGER_PATH', async () => {
+    // 1. If default production ledger already exists (e.g. pre-seeded by reviewer), preserve it.
+    // Otherwise, create a synthetic pre-seeded ledger and clean it up in finally.
+    const hadExisting = fs.existsSync(defaultProdLedger);
+    let createdForTest = false;
+
+    if (!hadExisting) {
+      if (!fs.existsSync(prodDir)) {
+        fs.mkdirSync(prodDir, { recursive: true });
+      }
+      const preSeededData = {
+        version: 1,
+        call_count: 10,
+        reservations: [
+          {
+            id: 'preseeded-s1-live-reservation',
+            timestamp: '2026-10-30T15:00:00.000Z',
+            endpoint: 'refine',
+            callIndex: 10,
+          },
+        ],
+      };
+      fs.writeFileSync(defaultProdLedger, JSON.stringify(preSeededData, null, 2), 'utf-8');
+      createdForTest = true;
+    }
+
+    const initialContent = fs.readFileSync(defaultProdLedger, 'utf-8');
+
+    // 2. Set test environment with isolated temp ledger path
+    const isolatedTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-preseed-check-'));
+    const isolatedLedgerPath = path.join(isolatedTempDir, 'isolated-ledger.json');
+    process.env.MODEL_LIVE_LEDGER_PATH = isolatedLedgerPath;
+    process.env.MODEL_API_KEY = 'sk-test-preseed-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+    resetLedger(isolatedLedgerPath);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: JSON.stringify({ wording: 'Time: 2:25 PM' }) } }],
+      }),
+    });
+
+    try {
+      const proxy = new ModelDevProxy();
+      const res = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
+      });
+      expect(res.usedFallback).toBe(false);
+
+      // 3. Assert isolated ledger recorded the call
+      const isolatedState = readLedgerState(isolatedLedgerPath);
+      expect(isolatedState.callCount).toBe(1);
+
+      // 4. Critical check: default production ledger remains completely untouched (byte-identical)
+      const finalContent = fs.readFileSync(defaultProdLedger, 'utf-8');
+      expect(finalContent).toBe(initialContent);
+
+      const prodState = readLedgerState(defaultProdLedger);
+      expect(prodState.status).toBe('ok');
+    } finally {
+      globalThis.fetch = originalFetch;
+      try {
+        resetLedger(isolatedLedgerPath);
+        if (fs.existsSync(isolatedTempDir)) {
+          fs.rmSync(isolatedTempDir, { recursive: true, force: true });
+        }
+        if (createdForTest && fs.existsSync(defaultProdLedger)) {
+          fs.unlinkSync(defaultProdLedger);
+        }
+      } catch {}
+    }
+  });
+});
+
+describe('S1-PREP-PROVIDER: loadEnvLocal test-mode regression tests (P2)', () => {
+  const originalEnv = { ...process.env };
+  const tempEnvDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-loadenv-test-'));
+
+  beforeEach(() => {
+    delete process.env['MODEL_API_KEY'];
+    delete process.env['META_API_KEY'];
+    fs.writeFileSync(
+      path.join(tempEnvDir, '.env.local'),
+      'MODEL_API_KEY="sk-secret-from-env-local-999"\n',
+      'utf-8'
+    );
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  afterAll(() => {
+    try {
+      if (fs.existsSync(tempEnvDir)) {
+        fs.rmSync(tempEnvDir, { recursive: true, force: true });
+      }
+    } catch {}
+  });
+
+  it('when VITEST is set: loadEnvLocal leaves MODEL_API_KEY unset (test runner protection)', () => {
+    process.env.VITEST = 'true';
+    delete process.env.NODE_ENV;
+    delete process.env.MODEL_API_KEY;
+
+    loadEnvLocal(tempEnvDir);
+    expect(process.env.MODEL_API_KEY).toBeUndefined();
+  });
+
+  it('when NODE_ENV is "test": loadEnvLocal leaves MODEL_API_KEY unset', () => {
+    delete process.env.VITEST;
+    process.env.NODE_ENV = 'test';
+    delete process.env.MODEL_API_KEY;
+
+    loadEnvLocal(tempEnvDir);
+    expect(process.env.MODEL_API_KEY).toBeUndefined();
+  });
+
+  it('when neither VITEST nor NODE_ENV=test is set: loadEnvLocal loads MODEL_API_KEY from .env.local', () => {
+    delete process.env.VITEST;
+    delete process.env.NODE_ENV;
+    delete process.env.MODEL_API_KEY;
+
+    loadEnvLocal(tempEnvDir);
+    expect(process.env.MODEL_API_KEY).toBe('sk-secret-from-env-local-999');
+  });
+});
+
+afterAll(() => {
+  try {
+    resetLedger(suiteLedgerPath);
+    if (fs.existsSync(suiteTempDir)) {
+      fs.rmSync(suiteTempDir, { recursive: true, force: true });
+    }
+  } catch {}
+  delete process.env.MODEL_LIVE_LEDGER_PATH;
 });

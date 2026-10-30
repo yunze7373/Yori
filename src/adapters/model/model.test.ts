@@ -3,8 +3,11 @@
  * Governed by Architecture Rev3 Section 9.1 and AC-106-1, AC-106-2.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import { EventEmitter } from 'node:events';
+import * as os from 'node:os';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { validateFactsInWording, parseTimeToMinutes } from './fact-checker.js';
 import {
   ModelDevProxy,
@@ -33,9 +36,27 @@ import {
 import { sharedPolicy } from '../../core/policy/index.js';
 import type { SuppliedFacts, ModelPortRequest } from './types.js';
 
+const modelTestTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-model-spec-'));
+const modelTestLedgerPath = path.join(modelTestTempDir, 'spec-ledger.json');
+
 beforeEach(() => {
+  process.env.MODEL_LIVE_LEDGER_PATH = modelTestLedgerPath;
   resetProcessLiveCallCount();
-  resetLedger();
+  resetLedger(modelTestLedgerPath);
+});
+
+afterEach(() => {
+  resetLedger(modelTestLedgerPath);
+});
+
+afterAll(() => {
+  try {
+    resetLedger(modelTestLedgerPath);
+    if (fs.existsSync(modelTestTempDir)) {
+      fs.rmSync(modelTestTempDir, { recursive: true, force: true });
+    }
+  } catch {}
+  delete process.env.MODEL_LIVE_LEDGER_PATH;
 });
 
 describe('ModelPort Fact Checker (INV-103, AC-106-1)', () => {

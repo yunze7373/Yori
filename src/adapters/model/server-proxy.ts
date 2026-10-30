@@ -120,6 +120,13 @@ export function resolveMaxTokensOverride(
 }
 
 /**
+ * Resolves the default persistent call attempt ledger path.
+ */
+export function getDefaultLedgerPath(baseDir: string = process.cwd()): string {
+  return path.resolve(baseDir, '.yori-runtime', 'model-live-ledger.json');
+}
+
+/**
  * Resolves the persistent call attempt ledger path.
  * Default: .yori-runtime/model-live-ledger.json
  */
@@ -133,7 +140,7 @@ export function resolveLedgerPath(
       ? custom.trim()
       : path.resolve(baseDir, custom.trim());
   }
-  return path.resolve(baseDir, '.yori-runtime', 'model-live-ledger.json');
+  return getDefaultLedgerPath(baseDir);
 }
 
 export interface LedgerReservationEntry {
@@ -187,9 +194,20 @@ export function readLedgerState(ledgerPath: string): LedgerState {
 }
 
 /**
- * Resets the persistent ledger and lock file (for tests and verification tooling).
+ * Resets the specified ledger and lock file (for tests and verification tooling).
+ * Protects the production default ledger: refuses to reset the default production path
+ * unless allowProduction: true is explicitly provided.
  */
-export function resetLedger(ledgerPath: string = resolveLedgerPath()): void {
+export function resetLedger(ledgerPath: string, allowProduction: boolean = false): void {
+  if (!ledgerPath) {
+    throw new Error('resetLedger requires an explicit ledgerPath');
+  }
+  const defaultPath = getDefaultLedgerPath();
+  if (path.resolve(ledgerPath) === path.resolve(defaultPath) && !allowProduction) {
+    throw new Error(
+      `resetLedger refused to reset the default production ledger at ${defaultPath} without allowProduction: true`
+    );
+  }
   const lockPath = `${ledgerPath}.lock`;
   try {
     if (fs.existsSync(lockPath)) {

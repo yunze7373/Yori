@@ -231,9 +231,15 @@ async function runDryRunAudit(): Promise<boolean> {
     return false;
   }
 
-  // 2. Set up mock environment with <= 10 planned calls
+  // 2. Set up mock environment with <= 10 planned calls and isolated temp ledger
   resetProcessLiveCallCount();
-  resetLedger();
+  const dryRunLedgerPath = path.resolve(
+    projectRoot,
+    '.yori-runtime',
+    `dryrun-ledger-${process.pid}-${Date.now()}.json`
+  );
+  process.env.MODEL_LIVE_LEDGER_PATH = dryRunLedgerPath;
+  resetLedger(dryRunLedgerPath);
   process.env.MODEL_API_KEY = 'sk-mock-spark-dryrun-sentinel-key';
   process.env.MODEL_LIVE_ENABLED = '1';
   process.env.MODEL_LIVE_MAX_CALLS = '10';
@@ -694,7 +700,10 @@ async function runDryRunAudit(): Promise<boolean> {
     delete process.env.MODEL_LIVE_ENABLED;
     delete process.env.MODEL_LIVE_MAX_CALLS;
     resetProcessLiveCallCount();
-    resetLedger();
+    try {
+      resetLedger(dryRunLedgerPath);
+    } catch {}
+    delete process.env.MODEL_LIVE_LEDGER_PATH;
   }
 
   // 5. D1–D6 Byte-Identity Check (Live Off vs Live On Fallback)
