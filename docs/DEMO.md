@@ -222,6 +222,35 @@ OAuth 2.0 PKCE remains the mandatory, production-grade authentication path for a
 4. Tokens remain in server process memory (zero browser credentials).
 5. **Deterministic Precedence**: If both an active OAuth session and an owner key are configured, the OAuth session takes deterministic precedence, suppressing the owner key to respect user authorization.
 
+### 3. Read-Only Owner-Key Connectivity Check (XMEMO-RO)
+For single-tenant connectivity verification and shape discovery prior to owner-gated release:
+- **Exact Owner Command**:
+  ```bash
+  XMEMO_AUTH_MODE=owner_key XMEMO_KEY="<xmemo-owner-key>" npm run verify:live:xmemo -- --owner-key --read-only --confirm-live-readonly
+  ```
+  *(Or safe offline dry-run without external network calls: `npm run verify:live:xmemo -- --owner-key --read-only --dry-run`)*
+- **Prerequisites**:
+  1. Explicit owner go-ahead authorization.
+  2. Same-window service health check passing (confirming XMemo Postgres connection-slot stability per BACKLOG-20261030-84B8F7).
+  3. Non-production environment (`NODE_ENV != production`).
+  4. Both `XMEMO_AUTH_MODE=owner_key` and non-empty `XMEMO_KEY` configured in process environment.
+  5. Explicit CLI flag `--confirm-live-readonly`.
+- **Expected Report Fields** (`docs/evidence/s2-ro/` JSON & MD):
+  - `timestampUtc` & `timestampJst`
+  - Target `host` and HTTP status per request
+  - Latency (ms)
+  - Envelope shape classification (`result.facts[]`, `result.content[text]`, `result.memories[]`, etc.)
+  - Item count, Yori managed key count, Yori tagged count
+  - Top-level field names set (names only, zero values)
+  - MemoryPort read-side roundtrip classification (`MemoryFact[]` vs fail-closed)
+  - Zero content, values, text, tokens, or PII persisted.
+- **Revocation & Disconnect**:
+  - Immediate process revocation: call `POST /api/xmemo/disconnect` to clear session and disable owner-key mode.
+  - Environment revocation: unset or remove `XMEMO_KEY` and `XMEMO_AUTH_MODE` from `.env.local`.
+- **Governance Notice**:
+  - This is strictly an **owner-key demo/connectivity mode**, **NOT** per-user OAuth consent.
+  - Slice `GATE-X1` (interactive OAuth 2.0 PKCE release) remains separately owner-gated, and its preliminary 2026-10-31 safe date is recorded as at risk pending full upstream OAuth surface verification.
+
 ---
 
 ## 🔗 Submission Documents
