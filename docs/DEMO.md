@@ -195,6 +195,7 @@ If you wish to test live AI phrasing refinement via Meta Muse Spark:
    - Non-JSON content types (e.g. `text/plain` CORS bypasses) are rejected with **HTTP 415 Unsupported Media Type**.
    - Request bodies are capped at **8 KB (HTTP 413)**.
    - Rate limiting is enforced at **30 requests/minute (HTTP 429)**.
+   - **Lifetime & Per-Run Budget Protection (S1-CAP50)**: Enforces a durable lifetime ceiling of **50 total calls** (`MODEL_LIFETIME_MAX_CALLS = 50`) stored in `.yori-runtime/model-live-ledger.json` and a per-run cap of **1..10 calls** (`MODEL_LIVE_MAX_CALLS`). The verification runner refuses to start if the requested per-run cap exceeds the remaining lifetime calls.
    - All model outputs undergo rigorous **fact-checking**: any hallucinated time or place token not present in the supplied fact set is discarded for the deterministic template.
 
 ---

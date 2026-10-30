@@ -92,12 +92,25 @@ export function resetProcessLiveCallCount(): void {
   processLiveCallCount = 0;
 }
 
+/**
+ * Lifetime and per-run call budget limits for Meta Model API (S1-CAP50).
+ * MODEL_LIFETIME_MAX_CALLS: 50 total lifetime calls enforced atomically in persistent ledger.
+ * MODEL_PER_RUN_MAX_CALLS: 10 calls maximum per verification session.
+ */
+export const MODEL_LIFETIME_MAX_CALLS = 50;
+export const MODEL_PER_RUN_MAX_CALLS = 10;
+
+/**
+ * Resolves MODEL_LIVE_MAX_CALLS from environment with strict bounds [1, MODEL_PER_RUN_MAX_CALLS].
+ * Defaults to MODEL_PER_RUN_MAX_CALLS (10) when unset or empty.
+ * Values above MODEL_PER_RUN_MAX_CALLS are clamped to 10.
+ */
 export function resolveMaxCalls(env: Record<string, string | undefined> = process.env): number {
   const raw = env['MODEL_LIVE_MAX_CALLS'];
-  if (raw === undefined || raw.trim() === '') return 10;
+  if (raw === undefined || raw.trim() === '') return MODEL_PER_RUN_MAX_CALLS;
   const parsed = parseInt(raw, 10);
-  if (isNaN(parsed) || parsed < 0) return 10;
-  return Math.min(parsed, 10);
+  if (isNaN(parsed) || parsed < 0) return MODEL_PER_RUN_MAX_CALLS;
+  return Math.min(parsed, MODEL_PER_RUN_MAX_CALLS);
 }
 
 /**
@@ -113,9 +126,12 @@ export function resolveTimeoutMs(env: Record<string, string | undefined> = proce
 }
 
 /**
- * Documented maximum completion token ceiling for Meta Model API (api.meta.ai).
- * Context window is 1M tokens; max completion token ceiling is safely bounded at 8192.
- * Reference: https://api.meta.ai/v1 & Meta Model API documentation.
+ * Operational maximum completion token ceiling for Meta Model API (api.meta.ai).
+ * Context window: 1M tokens (1,048,576) [UNVERIFIED on public docs page; cited in release notes].
+ * Llama 3.1 architecture limit: up to 131,072 context tokens (https://llama.meta.com/docs/model-cards-and-prompt-formats/llama3_1/, retrieved Oct 2026; "Context length: up to 128k tokens").
+ * For muse-spark-1.3 Chat Completions, maximum completion ceiling is [UNVERIFIED on public endpoint without auth];
+ * safely bounded operationally at MAX_TOKENS_CEILING = 8192.
+ * Pricing reference: ~$2.00 per 1M completion tokens ($0.000002/token) [UNVERIFIED estimate used for worst-case budget bounds].
  */
 export const MAX_TOKENS_CEILING = 8192;
 
@@ -136,10 +152,10 @@ export function resolveMaxTokensOverride(
 
 /**
  * Resolves MODEL_REASONING_EFFORT from environment.
- * Meta Model API documentation (api.meta.ai) specifies supported values:
+ * Meta Model API documentation (https://api.meta.ai/v1, retrieved Oct 2026) specifies supported values:
  * 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'.
- * Note: 'none' is explicitly unsupported on reasoning models and causes HTTP 400.
- * Unset or unrecognized values return undefined (omitted from payload).
+ * Note: 'none' is documented to cause HTTP 400 on reasoning endpoints [UNVERIFIED on live endpoint].
+ * Unset or unrecognized values return undefined (omitted from payload to eliminate HTTP 400 risk).
  */
 export function resolveReasoningEffort(
   env: Record<string, string | undefined> = process.env
@@ -272,7 +288,9 @@ export async function reserveLedgerSlot(
   ledgerPath: string,
   maxCalls: number,
   endpoint: string,
-  logger: (msg: string) => void = () => {}
+  logger: (msg: string) => void = () => {},
+  lifetimeMaxCalls: number = MODEL_LIFETIME_MAX_CALLS,
+  runStartCount: number = 0
 ): Promise<LedgerReservationResult> {
   const dir = path.dirname(ledgerPath);
   try {
@@ -339,7 +357,14 @@ export async function reserveLedgerSlot(
       }
     }
 
-    if (data.call_count >= maxCalls) {
+    // 1. Check lifetime cap (50 calls total across all runs)
+    if (data.call_count >= lifetimeMaxCalls) {
+      return { success: false, callCount: data.call_count, maxCalls, error: 'cap_exceeded' };
+    }
+
+    // 2. Check per-run cap (maxCalls per verification run)
+    const runCallCount = Math.max(0, data.call_count - runStartCount);
+    if (runCallCount >= maxCalls) {
       return { success: false, callCount: data.call_count, maxCalls, error: 'cap_exceeded' };
     }
 
@@ -540,13 +565,15 @@ export function stripCodeFences(text: string): string {
 export type ContentExtractionResult =
   | { readonly kind: 'ok'; readonly content: string }
   | { readonly kind: 'truncated'; readonly reason: 'truncated' }
-  | { readonly kind: 'extraction_fault'; readonly reason: 'extraction_fault' };
+  | { readonly kind: 'extraction_fault'; readonly reason: 'extraction_fault' }
+  | { readonly kind: 'schema_invalid'; readonly reason: 'schema_invalid' };
 
 /**
  * Parses visible output content from an OpenAI-compatible choice object and
- * classifies outcomes into three distinct failure modes per S1-DIAG:
- * - 'truncated': finish_reason='length' or empty visible content (budget exhausted)
- * - 'extraction_fault': content in unexpected field or shape (e.g. non-array object, malformed parts, or missing content while alternative fields exist)
+ * classifies outcomes into distinct failure modes per S1-DIAG & S1-CAP50:
+ * - 'truncated': finish_reason='length' (completion budget exhausted)
+ * - 'extraction_fault': content in unexpected field/shape or reasoning fields present without visible content
+ * - 'schema_invalid': empty or missing visible content when finish_reason is 'stop' or absent
  * - 'ok': visible content successfully extracted and code fences stripped
  */
 export function parseMessageContent(
@@ -573,6 +600,11 @@ export function parseMessageContent(
     return { kind: 'extraction_fault', reason: 'extraction_fault' };
   }
 
+  const hasReasoning = Boolean(
+    (typeof msg.reasoning_content === 'string' && msg.reasoning_content.trim().length > 0) ||
+    (typeof msg.reasoning === 'string' && msg.reasoning.trim().length > 0)
+  );
+
   // 2. Extraction fault: content in unexpected field or shape
   if (
     msg.content !== undefined &&
@@ -583,12 +615,15 @@ export function parseMessageContent(
     return { kind: 'extraction_fault', reason: 'extraction_fault' };
   }
 
-  // 3. Extraction fault or truncation when content is missing
+  // 3. Content is missing (undefined or null)
   if (msg.content === undefined || msg.content === null) {
-    if (msg.reasoning_content !== undefined || msg.reasoning !== undefined || (msg as any).parts !== undefined) {
+    if (choice.finish_reason === 'length') {
+      return { kind: 'truncated', reason: 'truncated' };
+    }
+    if (hasReasoning) {
       return { kind: 'extraction_fault', reason: 'extraction_fault' };
     }
-    return { kind: 'truncated', reason: 'truncated' };
+    return { kind: 'schema_invalid', reason: 'schema_invalid' };
   }
 
   // 4. Extract raw text from string or well-formed parts array
@@ -611,7 +646,13 @@ export function parseMessageContent(
   }
 
   if (!rawText || !rawText.trim()) {
-    return { kind: 'truncated', reason: 'truncated' };
+    if (choice.finish_reason === 'length') {
+      return { kind: 'truncated', reason: 'truncated' };
+    }
+    if (hasReasoning) {
+      return { kind: 'extraction_fault', reason: 'extraction_fault' };
+    }
+    return { kind: 'schema_invalid', reason: 'schema_invalid' };
   }
 
   return { kind: 'ok', content: stripCodeFences(rawText) };
@@ -649,6 +690,7 @@ export class ModelDevProxy {
   private readonly rateLimiter: RateLimiter;
   private lastFinishReason?: string;
   private lastReasoningTokens?: number;
+  private runStartLedgerCount?: number;
 
   constructor(
     customConfig?: Partial<ModelProxyConfig>,
@@ -671,7 +713,7 @@ export class ModelDevProxy {
 
       const maxCalls =
         customConfig.maxCalls !== undefined
-          ? Math.min(Math.max(0, customConfig.maxCalls), 10)
+          ? Math.min(Math.max(0, customConfig.maxCalls), MODEL_PER_RUN_MAX_CALLS)
           : resolved.maxCalls;
 
       const timeoutMs =
@@ -719,6 +761,7 @@ export class ModelDevProxy {
 
   public resetCallCount(): void {
     processLiveCallCount = 0;
+    this.runStartLedgerCount = undefined;
   }
 
   public getRateLimiter(): RateLimiter {
@@ -781,12 +824,25 @@ export class ModelDevProxy {
       };
     }
 
-    const effectiveCallCount = Math.max(processLiveCallCount, ledgerState.callCount);
-    if (effectiveCallCount >= this.config.maxCalls) {
+    if (ledgerState.callCount >= MODEL_LIFETIME_MAX_CALLS) {
       return {
         ...baseDiag,
         status: 'disabled',
-        message: `model: live call cap reached (${effectiveCallCount}/${this.config.maxCalls}), falling back to deterministic`,
+        message: `model: lifetime call cap reached (${ledgerState.callCount}/${MODEL_LIFETIME_MAX_CALLS}), falling back to deterministic`,
+        keySource: this.config.keySource,
+      };
+    }
+
+    const runCallCount =
+      this.runStartLedgerCount !== undefined && ledgerState.status === 'ok'
+        ? Math.max(processLiveCallCount, Math.max(0, ledgerState.callCount - this.runStartLedgerCount))
+        : processLiveCallCount;
+
+    if (runCallCount >= this.config.maxCalls) {
+      return {
+        ...baseDiag,
+        status: 'disabled',
+        message: `model: live call cap reached (${runCallCount}/${this.config.maxCalls}), falling back to deterministic`,
         keySource: this.config.keySource,
       };
     }
@@ -1193,11 +1249,18 @@ export class ModelDevProxy {
       };
     }
 
+    if (this.runStartLedgerCount === undefined) {
+      const state = readLedgerState(this.config.ledgerPath);
+      this.runStartLedgerCount = state.status === 'ok' ? state.callCount : 0;
+    }
+
     const reservation = await reserveLedgerSlot(
       this.config.ledgerPath,
       this.config.maxCalls,
       'refine',
-      this.logger
+      this.logger,
+      MODEL_LIFETIME_MAX_CALLS,
+      this.runStartLedgerCount
     );
     if (!reservation.success) {
       this.logger(
@@ -1406,11 +1469,18 @@ export class ModelDevProxy {
       };
     }
 
+    if (this.runStartLedgerCount === undefined) {
+      const state = readLedgerState(this.config.ledgerPath);
+      this.runStartLedgerCount = state.status === 'ok' ? state.callCount : 0;
+    }
+
     const reservation = await reserveLedgerSlot(
       this.config.ledgerPath,
       this.config.maxCalls,
       'reason_rank',
-      this.logger
+      this.logger,
+      MODEL_LIFETIME_MAX_CALLS,
+      this.runStartLedgerCount
     );
     if (!reservation.success) {
       this.logger(
@@ -1592,11 +1662,18 @@ export class ModelDevProxy {
       };
     }
 
+    if (this.runStartLedgerCount === undefined) {
+      const state = readLedgerState(this.config.ledgerPath);
+      this.runStartLedgerCount = state.status === 'ok' ? state.callCount : 0;
+    }
+
     const reservation = await reserveLedgerSlot(
       this.config.ledgerPath,
       this.config.maxCalls,
       'decision_command',
-      this.logger
+      this.logger,
+      MODEL_LIFETIME_MAX_CALLS,
+      this.runStartLedgerCount
     );
     if (!reservation.success) {
       this.logger(

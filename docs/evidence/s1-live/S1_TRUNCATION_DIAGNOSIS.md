@@ -115,15 +115,15 @@ Investigation of public Meta Model API documentation and OpenAI-compatible speci
 Per the review scope amendment (coordinator `msg_c311c286` / `msg_ec85a729`), the proxy and test harness were hardened with the following four mechanisms:
 
 1. **Configurable Output Budget Ceiling (`MAX_TOKENS_CEILING = 8192`)**:
-   - Evaluated ceilings 4096 vs 8192 against public Meta Model API documentation (`https://api.meta.ai/v1`). While the model context window is 1M tokens and maximum completion ceiling is 131,072 tokens, an operational clamp of **8192** was established as an upper ceiling.
+   - Evaluated ceilings 4096 vs 8192 against public Meta Model API documentation (`https://api.meta.ai/v1`, retrieved Oct 2026). While model marketing notes describe a 1M token context capacity `[UNVERIFIED on public docs page]` and Llama 3.1 architecture documentation defines a context limit of up to 131,072 tokens (`https://llama.meta.com/docs/model-cards-and-prompt-formats/llama3_1/`, retrieved Oct 2026; "Context length: up to 128k tokens"), the maximum completion ceiling for `muse-spark-1.3` on `api.meta.ai` is `[UNVERIFIED in live production]`. Therefore, an operational clamp of **8192** was established as an upper ceiling.
    - `MODEL_MAX_TOKENS` values exceeding 8192 are clamped to 8192.
    - Values of `0`, negative numbers, or non-numeric strings fall back to `undefined`, preserving per-endpoint defaults (150 for refine, 250 for reason, 300 for command).
-   - **Cost Implication**: Standard pricing for `muse-spark-1.3` is ~\$2.00 per 1M completion tokens (\$0.000002/token). At endpoint defaults (150–300 tokens), cost is ~\$0.0003–\$0.0006 per call. With a generous 2048-token override, a complete run of 3 calls costs ~\$0.009–\$0.012 total.
+   - **Cost Implication**: Standard pricing estimate for `muse-spark-1.3` is ~\$2.00 per 1M completion tokens (\$0.000002/token) `[UNVERIFIED estimate; used for worst-case budget bounds]`. At endpoint defaults (150–300 tokens), cost is ~\$0.0003–\$0.0006 per call. With a generous 2048-token override, a complete run of 3 calls costs ~\$0.009–\$0.012 total.
 
 2. **Reasoning Effort Configuration (`MODEL_REASONING_EFFORT`)**:
-   - Added env-configurable `resolveReasoningEffort()`. Supported values: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`.
-   - Meta Model API documentation explicitly states that reasoning cannot be turned off (`reasoning_effort: "none"` returns HTTP 400). When unset, empty, or set to unsupported values (e.g. `none`), `reasoning_effort` is safely omitted from the payload.
-   - Injected into Chat Completions fetch body when set.
+   - Added env-configurable `resolveReasoningEffort()`. Supported values in ecosystem documentation: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`.
+   - Meta Model API documentation notes that reasoning cannot be turned off (`reasoning_effort: "none"` returns HTTP 400 `[UNVERIFIED on live endpoint]`). When unset, empty, or set to unsupported values (e.g. `none`), `reasoning_effort` is safely omitted from the payload to avoid API rejection.
+   - Injected into Chat Completions fetch body only when explicitly set via environment variable.
 
 3. **Visible-Answer Validation (Three Distinct Fallback Reasons)**:
    - Added `parseMessageContent()` to classify failure modes into three distinct fallback reason codes:
@@ -145,27 +145,30 @@ Per the review scope amendment (coordinator `msg_c311c286` / `msg_ec85a729`), th
 > [!CAUTION]
 > **Strict Operational Invariant**: S1-LIVE-2 requires explicit, fresh owner authorization. It is **NOT** authorized to run during this slice and must NOT be self-started.
 
-When authorized by owner, S1-LIVE-2 should be executed with the following bounded, fail-safe configuration:
+When authorized by owner, S1-LIVE-2 should be executed with the following bounded, fail-safe configuration under the 50-call lifetime allowance (S1-CAP50):
 
 1. **Endpoint & Host**:
    - URL: `https://api.meta.ai/v1/chat/completions` (strict host allowlist: `api.meta.ai` only).
    - Bearer Authentication via owner's `MODEL_API_KEY`.
 2. **Model Parameters & HTTP 400 Risk Mitigation**:
    - **Model**: `muse-spark-1.3`
-   - **`max_tokens` (Re-derived Budget)**: `2048` (or `4096`), leveraging the new `MAX_TOKENS_CEILING = 8192` ceiling. Unlike the restrictive 1024 clamp from S1-LIVE, a 2048+ budget provides ample headroom for default reasoning depth (~800–1200 tokens) while leaving 800+ tokens for complete JSON output generation.
-   - **`reasoning_effort` (Behind Opt-In Env Flag)**: Controlled solely via `MODEL_REASONING_EFFORT` (defaults to omitted/unset).
+   - **`max_tokens` (Re-derived Budget)**: `2048` to `4096` by default, leveraging `MAX_TOKENS_CEILING = 8192` with adequate budget per owner direction. Unlike the restrictive 1024 clamp from S1-LIVE, a 2048–4096 budget provides ample headroom for default reasoning depth (~800–1200 tokens) while leaving 1000+ tokens for complete JSON output generation.
+   - **`reasoning_effort` (Behind Opt-In Env Flag)**: Unset by default (omitted from payload).
      - *HTTP 400 Risk*: If `muse-spark-1.3` does not support `reasoning_effort` on this endpoint or rejects specific tiers, sending it risks an immediate HTTP 400 failure.
-     - *Recommendation*: Run with `MODEL_REASONING_EFFORT` unset by default. If output is still lengthy, test with `MODEL_REASONING_EFFORT="low"` only if verified safe.
+     - *Recommendation*: Run with `MODEL_REASONING_EFFORT` unset first.
    - **`response_format` (Omitted to Avoid HTTP 400)**: Do **not** send `response_format` in request bodies. Many reasoning endpoints reject `response_format: {"type": "json_object"}` with HTTP 400. The proxy's hardened `stripCodeFences()` and `parseMessageContent()` handle both raw JSON and fenced JSON seamlessly without risking API rejection.
    - **`timeout_ms`**: `20000` (20 seconds) — comfortably accommodates reasoning latency without prematurely triggering client timeout.
 3. **Execution Scope, Budget & Spend Estimate**:
-   - **Authorized Call Cap**: $\le 5$ calls total (durable ledger reservation cap).
-   - **Planned Dispatches**: Exactly 3 calls (1 refine, 1 reason, 1 command).
-   - **Per-Run Spend Estimate**:
-     - Standard Meta Model API pricing: ~\$2.00 per 1M completion tokens (\$0.000002/token).
-     - With `max_tokens=2048`: 3 calls $\times$ 1,500–2,048 tokens $\times$ \$0.000002 $\approx$ **\$0.009 to \$0.012** total.
-     - With `max_tokens=4096`: 3 calls $\times$ up to 4,096 tokens $\times$ \$0.000002 $\approx$ **\$0.024** total max.
-     - Total run expenditure remains under **2.5 cents**.
+   - **Authorized Lifetime Allowance**: 50 calls total (`MODEL_LIFETIME_MAX_CALLS = 50`; 10 used in S1-LIVE, 40 remain).
+   - **Per-Run Authorized Cap**: $\le 10$ calls total (durable ledger reservation cap).
+   - **Planned Dispatches**: 3 planned calls (1 refine, 1 reason, 1 command).
+   - **Stop-on-First-Accepted Safeguard**: The runner automatically halts at the first fact-checked accepted output per planned objective (`refine`, `reason`, `command`), preventing unnecessary token and call consumption.
+   - **Hard Stop Safeguard**: Immediate halt on first 4xx, non-api.meta.ai host, or fallbackReason `truncated` / `extraction_fault`.
+   - **Per-Run Spend Estimate (Range)**:
+     - Assumes ~$2.00 per 1M completion tokens ($0.000002/token) and 1000–4096 tokens per call.
+     - At 1000 tokens/call: 3 calls $\times$ 1,000 $\times$ \$0.000002 $\approx$ **\$0.006 total**.
+     - At 4096 tokens/call (maximum budget): 3 calls $\times$ 4,096 $\times$ \$0.000002 $\approx$ **\$0.0246 total**.
+     - Worst-case spend range: **\$0.006 to \$0.025 total** (less than 3 cents).
 4. **Acceptance Criteria**:
    - At least 1 fact-checked **ACCEPTED** output ($0$ fallbacks on valid grounded facts).
    - Telemetry confirms `finish_reason == "stop"` (no `"length"` truncation) and records `reasoning_tokens`.

@@ -75,6 +75,8 @@ import {
   getProcessLiveCallCount,
   resetLedger,
   loadEnvLocal,
+  MODEL_LIFETIME_MAX_CALLS,
+  MODEL_PER_RUN_MAX_CALLS,
 } from '../src/adapters/model/server-proxy.js';
 import { runPipeline } from '../src/core/pipeline/index.js';
 import {
@@ -647,14 +649,51 @@ async function runDryRunAudit(): Promise<boolean> {
       fallbackPreserved: Boolean(c10.wording),
     });
 
-    // Call 11: Call Cap Exhaustion Probe (Hard cap 10 exceeded)
+    // Call 11: Per-Run Cap Probe (Hard cap 10 exceeded)
     const initialFetchCount = (recordedCallBodies as any[]).length;
     const c11 = await proxy.handleRefine({
       templateId: 'depart',
       facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
     });
-    const capBlocked = (recordedCallBodies as any[]).length === initialFetchCount;
-    const capReported = proxy.getDiagnostics().message.includes('live call cap reached');
+    const perRunCapBlocked =
+      (recordedCallBodies as any[]).length === initialFetchCount &&
+      c11.usedFallback &&
+      proxy.getDiagnostics().message.includes('live call cap reached');
+
+    // Lifetime Cap Boundary Probe (temp ledger pre-seeded with 50 calls)
+    const lifetimeProbeLedger = path.resolve(
+      projectRoot,
+      '.yori-runtime',
+      `lifetime-probe-ledger-${process.pid}-${Date.now()}.json`
+    );
+    resetLedger(lifetimeProbeLedger);
+    fs.writeFileSync(
+      lifetimeProbeLedger,
+      JSON.stringify(
+        {
+          version: 1,
+          call_count: MODEL_LIFETIME_MAX_CALLS,
+          reservations: Array.from({ length: MODEL_LIFETIME_MAX_CALLS }, (_, idx) => ({
+            id: crypto.randomUUID(),
+            timestamp: new Date().toISOString(),
+            endpoint: 'refine',
+            callIndex: idx + 1,
+          })),
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+    const lifetimeProxy = new ModelDevProxy({ ledgerPath: lifetimeProbeLedger, apiKey: 'sk-mock-lifetime' });
+    const cLifetime = await lifetimeProxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+    });
+    const lifetimeCapBlocked =
+      cLifetime.usedFallback &&
+      lifetimeProxy.getDiagnostics().message.includes('lifetime call cap reached (50/50)');
+    resetLedger(lifetimeProbeLedger);
 
     // 3. Print Fact-Check Pass-Rate Report
     console.log('----------------------------------------------------------------------');
@@ -678,7 +717,8 @@ async function runDryRunAudit(): Promise<boolean> {
 
     console.log('\n--- Safety Cap Verification ---');
     console.log(`Process Call Count:     ${getProcessLiveCallCount()} / 10`);
-    console.log(`Post-Cap Probe (11th):  ${capBlocked && c11.usedFallback && capReported ? '✅ BLOCKED (fell back without fetch)' : '❌ FAILED'}`);
+    console.log(`Per-Run Cap Probe:      ${perRunCapBlocked ? '✅ BLOCKED (per-run cap enforced without fetch)' : '❌ FAILED'}`);
+    console.log(`Lifetime Cap Probe:     ${lifetimeCapBlocked ? '✅ BLOCKED (lifetime cap 50/50 enforced at ledger level)' : '❌ FAILED'}`);
     console.log(`Diagnostics:            "${proxy.getDiagnostics().message}"`);
 
     // 4. Token budget check across captured bodies
@@ -836,6 +876,9 @@ export interface LiveVerificationReport {
   readonly providerHost: string;
   readonly modelName: string;
   readonly authorizedCap: number;
+  readonly preRunLedgerCount: number;
+  readonly lifetimeRemaining: number;
+  readonly lifetimeCap: number;
   readonly totalCallsDispatched: number;
   readonly ledgerCallCount: number;
   readonly ledgerPath: string;
@@ -856,9 +899,12 @@ function generateMarkdownReport(report: LiveVerificationReport): string {
   lines.push(`| **Timestamp** | ${report.timestamp} |`);
   lines.push(`| **Provider Host** | \`${report.providerHost}\` |`);
   lines.push(`| **Model** | \`${report.modelName}\` |`);
-  lines.push(`| **Authorized Call Cap** | \`${report.authorizedCap}\` |`);
+  lines.push(`| **Authorized Per-Run Cap** | \`${report.authorizedCap}\` |`);
+  lines.push(`| **Pre-Run Ledger Count** | \`${report.preRunLedgerCount}\` |`);
+  lines.push(`| **Lifetime Allowance** | \`${report.lifetimeCap}\` |`);
+  lines.push(`| **Lifetime Remaining** | \`${report.lifetimeRemaining}\` |`);
   lines.push(`| **Total Calls Dispatched** | \`${report.totalCallsDispatched}\` |`);
-  lines.push(`| **Durable Ledger Count** | \`${report.ledgerCallCount} / ${report.authorizedCap}\` |`);
+  lines.push(`| **Durable Ledger Count** | \`${report.ledgerCallCount} / ${report.lifetimeCap}\` |`);
   lines.push(`| **Durable Ledger File** | \`${report.ledgerPath}\` |`);
   lines.push(`| **Execution Status** | \`${report.executionStatus === 'completed' ? 'COMPLETED' : `HARD STOP (${report.hardStopReason ?? 'error'})`}\` |`);
   lines.push(`| **Target Host Compliance** | \`${report.hostList.every(h => h === 'api.meta.ai') ? 'api.meta.ai ONLY ✅' : 'NON-COMPLIANT HOST DETECTED ❌'}\` |`);
@@ -928,8 +974,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   }
 
   const rawMax = parseInt(process.env.MODEL_LIVE_MAX_CALLS ?? '', 10);
-  if (Number.isNaN(rawMax) || rawMax > 10 || rawMax < 1) {
-    throw new Error(`REFUSING EXECUTION: MODEL_LIVE_MAX_CALLS must be between 1 and 10 (got ${process.env.MODEL_LIVE_MAX_CALLS})`);
+  if (Number.isNaN(rawMax) || rawMax > MODEL_PER_RUN_MAX_CALLS || rawMax < 1) {
+    throw new Error(`REFUSING EXECUTION: MODEL_LIVE_MAX_CALLS must be between 1 and ${MODEL_PER_RUN_MAX_CALLS} (got ${process.env.MODEL_LIVE_MAX_CALLS})`);
   }
 
   const isConfirmedBilled = options?.confirmBilled ?? process.argv.includes('--confirm-billed');
@@ -959,8 +1005,15 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   process.env.MODEL_LIVE_LEDGER_PATH = ledgerPath;
 
   const initialLedger = readLedgerState(ledgerPath);
-  if (initialLedger.status === 'ok' && initialLedger.callCount >= rawMax) {
-    throw new Error(`REFUSING EXECUTION: Production ledger at ${ledgerPath} has already reached cap (${initialLedger.callCount}/${rawMax}).`);
+  const lifetimeUsed = initialLedger.status === 'ok' ? initialLedger.callCount : 0;
+  const lifetimeRemaining = Math.max(0, MODEL_LIFETIME_MAX_CALLS - lifetimeUsed);
+
+  if (lifetimeRemaining <= 0) {
+    throw new Error(`REFUSING EXECUTION: Lifetime call allowance (${MODEL_LIFETIME_MAX_CALLS}) exhausted (${lifetimeUsed}/${MODEL_LIFETIME_MAX_CALLS} used).`);
+  }
+
+  if (rawMax > lifetimeRemaining) {
+    throw new Error(`REFUSING EXECUTION: Requested per-run cap (${rawMax}) exceeds lifetime remaining calls (${lifetimeRemaining}/${MODEL_LIFETIME_MAX_CALLS}).`);
   }
 
   // 3. Telemetry and Safety Interceptor Setup
@@ -1068,6 +1121,19 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
 
   const results: LiveVerificationCallRecord[] = [];
   const proxy = new ModelDevProxy();
+  const maxTokensConfig = proxy.getConfig().maxTokensOverride ?? 'endpoint defaults (150/250/300)';
+
+  console.log('----------------------------------------------------------------------');
+  console.log('📋 PRE-DISPATCH BUDGET & SAFETY SUMMARY');
+  console.log('----------------------------------------------------------------------');
+  console.log(`Planned Objectives:     refine, reason, command (up to 1 accepted per objective)`);
+  console.log(`Per-Run Call Cap:       ${rawMax} (valid 1..${MODEL_PER_RUN_MAX_CALLS})`);
+  console.log(`Lifetime Cap:           ${MODEL_LIFETIME_MAX_CALLS}`);
+  console.log(`Lifetime Calls Used:    ${lifetimeUsed}`);
+  console.log(`Lifetime Remaining:     ${lifetimeRemaining}`);
+  console.log(`Per-Call max_tokens:    ${maxTokensConfig}`);
+  console.log(`Worst-Case Spend Range: $0.003 - $0.025 (assumes ~$2.00/1M tokens, 1000-4096 tokens/call)`);
+  console.log('----------------------------------------------------------------------\n');
 
   // 4. Planned Call Definitions
   const plannedCalls: Array<{
@@ -1235,15 +1301,30 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     },
   ];
 
+  const acceptedObjectives = new Set<'refine' | 'reason' | 'command'>();
+
   try {
     for (let i = 0; i < plannedCalls.length; i++) {
       const callDef = plannedCalls[i]!;
       const callIndex = i + 1;
 
-      // Check ledger cap before executing
+      // Stop safeguard: skip objective if already accepted
+      if (acceptedObjectives.has(callDef.endpoint)) {
+        console.log(`  [SKIP] Planned call #${callIndex} [${callDef.endpoint.toUpperCase()}]: Objective '${callDef.endpoint}' already has an accepted response.`);
+        continue;
+      }
+
+      // Check per-run cap before executing
+      const currentRunCount = results.length;
+      if (currentRunCount >= rawMax) {
+        console.log(`\n🛑 Per-run call cap reached (${currentRunCount}/${rawMax}). Stopping planned calls.`);
+        break;
+      }
+
+      // Check lifetime cap before executing
       const preLedger = readLedgerState(ledgerPath);
-      if (preLedger.status === 'ok' && preLedger.callCount >= rawMax) {
-        console.log(`\n🛑 Call cap reached (${preLedger.callCount}/${rawMax}). Stopping planned calls.`);
+      if (preLedger.status === 'ok' && preLedger.callCount >= MODEL_LIFETIME_MAX_CALLS) {
+        console.log(`\n🛑 Lifetime call cap reached (${preLedger.callCount}/${MODEL_LIFETIME_MAX_CALLS}). Stopping planned calls.`);
         break;
       }
 
@@ -1258,6 +1339,12 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         callResult = await callDef.execute();
       } catch (err: any) {
         callResult = { usedFallback: true, fallbackReason: 'error' };
+      }
+
+      // HARD STOP on truncated or extraction_fault
+      if (callResult.fallbackReason === 'truncated' || callResult.fallbackReason === 'extraction_fault') {
+        hardStopTriggered = true;
+        hardStopMessage = `fallbackReason: ${callResult.fallbackReason}`;
       }
 
       const meta = lastFetchMeta || {
@@ -1293,6 +1380,14 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
       const outcomeTag = record.factCheckOutcome === 'accepted' ? 'ACCEPTED ✅' : `DISCARDED (${record.fallbackReason ?? 'fallback'})`;
       console.log(`  Call #${callIndex.toString().padStart(2, ' ')} [${callDef.endpoint.toUpperCase()}]: HTTP ${record.httpStatus} (${record.latencyMs}ms) — ${outcomeTag} — ${callDef.description}`);
 
+      if (record.factCheckOutcome === 'accepted') {
+        acceptedObjectives.add(callDef.endpoint);
+        if (acceptedObjectives.has('refine') && acceptedObjectives.has('reason') && acceptedObjectives.has('command')) {
+          console.log('\n🎯 All planned objectives (refine, reason, command) accepted! Halting run early to conserve calls.');
+          break;
+        }
+      }
+
       if (hardStopTriggered) {
         console.log(`\n🛑 HARD STOP triggered after call #${callIndex}: ${hardStopMessage}. Halting.`);
         break;
@@ -1316,7 +1411,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   console.log('📊 S1-LIVE EXECUTION SUMMARY');
   console.log('======================================================================');
   console.log(`Total Calls Dispatched:  ${totalCalls}`);
-  console.log(`Durable Ledger Count:    ${ledgerCount} / ${rawMax}`);
+  console.log(`Durable Ledger Count:    ${ledgerCount} / ${MODEL_LIFETIME_MAX_CALLS} (lifetime)`);
   console.log(`Execution Status:        ${hardStopTriggered ? `HARD STOP (${hardStopMessage})` : 'COMPLETED'}`);
   console.log(`Target Host:             ${expectedHost}`);
   console.log(`Dispatched Hosts:        ${Array.from(hostsSeen).join(', ') || expectedHost}`);
@@ -1338,6 +1433,9 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     providerHost: expectedHost,
     modelName,
     authorizedCap: rawMax,
+    preRunLedgerCount: lifetimeUsed,
+    lifetimeRemaining: Math.max(0, MODEL_LIFETIME_MAX_CALLS - ledgerCount),
+    lifetimeCap: MODEL_LIFETIME_MAX_CALLS,
     totalCallsDispatched: totalCalls,
     ledgerCallCount: ledgerCount,
     ledgerPath: path.relative(root, ledgerPath),

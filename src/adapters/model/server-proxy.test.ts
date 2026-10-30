@@ -32,6 +32,8 @@ import {
   parseMessageContent,
   resolveReasoningEffort,
   MAX_TOKENS_CEILING,
+  MODEL_LIFETIME_MAX_CALLS,
+  reserveLedgerSlot,
 } from './server-proxy.js';
 import { runLiveVerification } from '../../../scripts/live-verify-spark.js';
 import type { ModelPortRequest } from './types.js';
@@ -1844,18 +1846,23 @@ describe('S1-DIAG: output extraction, shape handling, and diagnostic metadata te
       kind: 'truncated',
       reason: 'truncated',
     });
-    // Truncation: empty/missing visible content
-    expect(parseMessageContent({ message: { content: '' }, finish_reason: 'stop' })).toEqual({
+    // Truncation: finish_reason='length'
+    expect(parseMessageContent({ message: { content: '' }, finish_reason: 'length' })).toEqual({
       kind: 'truncated',
       reason: 'truncated',
+    });
+    // Schema invalid: empty/missing visible content without finish_reason='length' and no reasoning
+    expect(parseMessageContent({ message: { content: '' }, finish_reason: 'stop' })).toEqual({
+      kind: 'schema_invalid',
+      reason: 'schema_invalid',
     });
     expect(parseMessageContent({ message: { content: '   ' }, finish_reason: 'stop' })).toEqual({
-      kind: 'truncated',
-      reason: 'truncated',
+      kind: 'schema_invalid',
+      reason: 'schema_invalid',
     });
     expect(parseMessageContent({ message: { content: null }, finish_reason: 'stop' })).toEqual({
-      kind: 'truncated',
-      reason: 'truncated',
+      kind: 'schema_invalid',
+      reason: 'schema_invalid',
     });
 
     // Extraction fault: content in unexpected field or shape
@@ -2148,6 +2155,282 @@ describe('S1-DIAG: output extraction, shape handling, and diagnostic metadata te
     expect(serializedDiag).not.toContain('987654321');
     expect(diag.lastFinishReason).toBe('stop');
     expect(diag.lastReasoningTokens).toBe(888);
+  });
+});
+
+describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safeguards', () => {
+  const cap50Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-cap50-'));
+  const cap50Ledger = path.join(cap50Dir, 'model-live-ledger.json');
+
+  beforeEach(() => {
+    resetLedger(cap50Ledger);
+    resetProcessLiveCallCount();
+  });
+
+  afterAll(() => {
+    try {
+      resetLedger(cap50Ledger);
+      if (fs.existsSync(cap50Dir)) {
+        fs.rmSync(cap50Dir, { recursive: true, force: true });
+      }
+    } catch {}
+  });
+
+  it('pre-seeded call_count 10 allows exactly 40 more; the 51st is blocked at lifetime cap', async () => {
+    // Seed ledger with 10 existing calls (simulating S1-LIVE reservations)
+    fs.writeFileSync(
+      cap50Ledger,
+      JSON.stringify(
+        {
+          version: 1,
+          call_count: 10,
+          reservations: Array.from({ length: 10 }, (_, i) => ({
+            id: `seed-${i + 1}`,
+            timestamp: new Date().toISOString(),
+            endpoint: 'refine',
+            callIndex: i + 1,
+          })),
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+
+    // Make 40 reservations with lifetime cap 50
+    for (let i = 11; i <= 50; i++) {
+      const res = await reserveLedgerSlot(cap50Ledger, 50, 'refine', () => {}, MODEL_LIFETIME_MAX_CALLS, 10);
+      expect(res.success).toBe(true);
+      expect(res.callCount).toBe(i);
+    }
+
+    // 51st reservation is blocked by lifetime cap
+    const blockedRes = await reserveLedgerSlot(cap50Ledger, 50, 'refine', () => {}, MODEL_LIFETIME_MAX_CALLS, 10);
+    expect(blockedRes.success).toBe(false);
+    expect(blockedRes.error).toBe('cap_exceeded');
+    expect(blockedRes.callCount).toBe(50);
+
+    const finalState = readLedgerState(cap50Ledger);
+    expect(finalState.callCount).toBe(50);
+  });
+
+  it('per-run cap 11 is refused (clamped in resolveMaxCalls, rejected in runLiveVerification)', async () => {
+    // resolveMaxCalls clamps any value above MODEL_PER_RUN_MAX_CALLS (10) to 10
+    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '11' })).toBe(10);
+    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '50' })).toBe(10);
+
+    // runLiveVerification strictly refuses per-run cap > 10
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '11';
+    await expect(
+      runLiveVerification({
+        confirmBilled: true,
+        skipPreconditions: true,
+        tempLedgerPath: cap50Ledger,
+      })
+    ).rejects.toThrow('MODEL_LIVE_MAX_CALLS must be between 1 and 10');
+    delete process.env.MODEL_LIVE_ENABLED;
+    delete process.env.MODEL_LIVE_MAX_CALLS;
+  });
+
+  it('a per-run cap above the remainder is refused (e.g. seeded 45, cap 10 -> refuse)', async () => {
+    // Seed ledger with 45 calls (5 remaining under 50 lifetime cap)
+    fs.writeFileSync(
+      cap50Ledger,
+      JSON.stringify(
+        {
+          version: 1,
+          call_count: 45,
+          reservations: Array.from({ length: 45 }, (_, i) => ({
+            id: `seed-${i + 1}`,
+            timestamp: new Date().toISOString(),
+            endpoint: 'refine',
+            callIndex: i + 1,
+          })),
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '10'; // 10 requested > 5 remaining
+    process.env.MODEL_API_KEY = 'sk-mock-key';
+
+    await expect(
+      runLiveVerification({
+        confirmBilled: true,
+        skipPreconditions: true,
+        tempLedgerPath: cap50Ledger,
+      })
+    ).rejects.toThrow(/exceeds lifetime remaining calls \(5\/50\)/);
+
+    delete process.env.MODEL_LIVE_ENABLED;
+    delete process.env.MODEL_LIVE_MAX_CALLS;
+    delete process.env.MODEL_API_KEY;
+  });
+
+  it('concurrent reservations at 49 -> exactly one succeeds, exceeding reservations blocked', async () => {
+    // Seed ledger with 49 calls
+    fs.writeFileSync(
+      cap50Ledger,
+      JSON.stringify(
+        {
+          version: 1,
+          call_count: 49,
+          reservations: Array.from({ length: 49 }, (_, i) => ({
+            id: `seed-${i + 1}`,
+            timestamp: new Date().toISOString(),
+            endpoint: 'refine',
+            callIndex: i + 1,
+          })),
+        },
+        null,
+        2
+      ),
+      'utf-8'
+    );
+
+    // Launch 10 concurrent reservation attempts at the boundary of 50
+    const attempts = Array.from({ length: 10 }, () =>
+      reserveLedgerSlot(cap50Ledger, 10, 'refine', () => {}, MODEL_LIFETIME_MAX_CALLS, 49)
+    );
+    const results = await Promise.all(attempts);
+
+    const succeeded = results.filter(r => r.success);
+    const failed = results.filter(r => !r.success);
+
+    expect(succeeded).toHaveLength(1);
+    expect(succeeded[0]!.callCount).toBe(50);
+    expect(failed).toHaveLength(9);
+    for (const f of failed) {
+      expect(f.error).toBe('cap_exceeded');
+    }
+
+    const finalState = readLedgerState(cap50Ledger);
+    expect(finalState.callCount).toBe(50);
+  });
+
+  it('stop-on-first-accepted: runner halts after achieving accepted output on each objective', async () => {
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '10';
+    process.env.MODEL_API_KEY = 'sk-mock-test-key';
+
+    // Mock fetch that always returns valid accepted JSON for all 3 endpoints
+    const mockFetch = vi.fn().mockImplementation(async (_input: any, init: any) => {
+      const body = JSON.parse(init.body);
+      const isReason = body.messages.some((m: any) => m.content?.includes('plan-1'));
+      const isCommand = body.messages.some((m: any) => m.content?.includes('Can I leave later'));
+
+      let contentStr = '';
+      if (isCommand) {
+        contentStr = JSON.stringify({
+          intent: 'LEAVE_LATER',
+          slots: { deltaMinutes: 20 },
+          citedSignalIds: ['weather:2026-10-28T11:30:00Z'],
+          citedFactKeys: ['habit_rain_transit'],
+          reasonCodes: ['weather_adjusted'],
+          explanation: 'Leaving later by 20 minutes.',
+        });
+      } else if (isReason) {
+        contentStr = JSON.stringify({ orderedPlanIds: ['plan-1', 'plan-2'], rationale: [{ planId: 'plan-1', citedSignalIds: ['weather:2026-10-28T11:30:00Z'], citedFactKeys: ['habit_rain_transit'], reasonCodes: ['weather_adjusted'], text: 'Piano Studio prepare at 2:10 PM.' }] });
+      } else {
+        contentStr = JSON.stringify({ wording: 'Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM' });
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        clone: () => ({
+          json: async () => ({
+            choices: [{ message: { content: contentStr }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        }),
+        json: async () => ({
+          choices: [{ message: { content: contentStr }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        }),
+      } as any;
+    });
+
+    const reportPath = path.join(cap50Dir, 'test-stop-report.md');
+    const jsonReportPath = path.join(cap50Dir, 'test-stop-report.json');
+
+    const { ok, report } = await runLiveVerification({
+      confirmBilled: true,
+      skipPreconditions: true,
+      tempLedgerPath: cap50Ledger,
+      mockFetch: mockFetch as any,
+      reportPath,
+      jsonReportPath,
+    });
+
+    expect(ok).toBe(true);
+    // Dispatched calls should be exactly 3 (1 refine, 1 reason, 1 command), NOT all 10 planned calls!
+    expect(report.totalCallsDispatched).toBe(3);
+    expect(report.calls).toHaveLength(3);
+    expect(report.calls[0]!.endpoint).toBe('refine');
+    expect(report.calls[0]!.factCheckOutcome).toBe('accepted');
+    expect(report.calls[1]!.endpoint).toBe('reason');
+    expect(report.calls[1]!.factCheckOutcome).toBe('accepted');
+    expect(report.calls[2]!.endpoint).toBe('command');
+    expect(report.calls[2]!.factCheckOutcome).toBe('accepted');
+
+    // Report records preRunLedgerCount and lifetimeRemaining
+    expect(report.preRunLedgerCount).toBe(0);
+    expect(report.lifetimeCap).toBe(50);
+    expect(report.lifetimeRemaining).toBe(47);
+
+    delete process.env.MODEL_LIVE_ENABLED;
+    delete process.env.MODEL_LIVE_MAX_CALLS;
+    delete process.env.MODEL_API_KEY;
+  });
+
+  it('hard stop on truncated: runner halts immediately when response is truncated', async () => {
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '10';
+    process.env.MODEL_API_KEY = 'sk-mock-trunc-key';
+
+    // Mock fetch that returns truncated on call 1
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      clone: () => ({
+        json: async () => ({
+          choices: [{ message: { content: '{"incomplete":' }, finish_reason: 'length' }],
+          usage: { prompt_tokens: 100, completion_tokens: 1024, total_tokens: 1124 },
+        }),
+      }),
+      json: async () => ({
+        choices: [{ message: { content: '{"incomplete":' }, finish_reason: 'length' }],
+        usage: { prompt_tokens: 100, completion_tokens: 1024, total_tokens: 1124 },
+      }),
+    } as any);
+
+    const reportPath = path.join(cap50Dir, 'test-trunc-report.md');
+    const jsonReportPath = path.join(cap50Dir, 'test-trunc-report.json');
+
+    const { ok, report } = await runLiveVerification({
+      confirmBilled: true,
+      skipPreconditions: true,
+      tempLedgerPath: cap50Ledger,
+      mockFetch: mockFetch as any,
+      reportPath,
+      jsonReportPath,
+    });
+
+    expect(ok).toBe(true);
+    // Halts after call 1!
+    expect(report.totalCallsDispatched).toBe(1);
+    expect(report.executionStatus).toBe('hard_stop');
+    expect(report.hardStopReason).toContain('fallbackReason: truncated');
+    expect(report.calls[0]!.fallbackReason).toBe('truncated');
+
+    delete process.env.MODEL_LIVE_ENABLED;
+    delete process.env.MODEL_LIVE_MAX_CALLS;
+    delete process.env.MODEL_API_KEY;
   });
 });
 
