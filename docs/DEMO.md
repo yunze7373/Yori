@@ -20,6 +20,8 @@ npm run preview
 ```
 Open **[http://127.0.0.1:5173](http://127.0.0.1:5173)** in your browser (mobile-friendly at 390×844 or desktop at 1280×800).
 
+> **Offline & Privacy Note (UIFONT)**: All fonts (`Inter` and `Newsreader` in WOFF2 format) are self-hosted locally under `/fonts/` with SIL Open Font License 1.1 notices in `THIRD_PARTY_NOTICES.md`. Yori has zero runtime dependencies on Google Fonts or external CDNs, ensuring full offline functionality and zero IP leakage on page views.
+
 ### Running Tests
 ```bash
 # Run type checks

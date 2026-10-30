@@ -51,6 +51,11 @@ const FORBIDDEN_URL_FORCING_KEYS = [
   'geo_consent',
 ] as const;
 
+const FORBIDDEN_EXTERNAL_FONT_HOSTS = [
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+] as const;
+
 function findFiles(dir: string): string[] {
   if (!fs.existsSync(dir)) {
     throw new Error(`Directory does not exist: ${dir}. Did you run 'npm run build' first?`);
@@ -74,10 +79,11 @@ export function verifyProductionBuild(): {
   hookHits: Record<string, number>;
   suffixHits: Record<string, number>;
   forcingHits: Record<string, number>;
+  fontHostHits: Record<string, number>;
   prefixHits: number;
 } {
   console.log('===============================================================');
-  console.log('🔒 YORI LIVING CONTEXT — PRODUCTION BUILD GATING AUDIT (PRE-S1-C)');
+  console.log('🔒 YORI LIVING CONTEXT — PRODUCTION BUILD GATING AUDIT (PRE-S1-C & UIFONT)');
   console.log('===============================================================');
 
   console.log('Building clean shipping bundle: npm run build ...');
@@ -104,6 +110,11 @@ export function verifyProductionBuild(): {
   const forcingHits: Record<string, number> = {};
   for (const key of FORBIDDEN_URL_FORCING_KEYS) {
     forcingHits[key] = 0;
+  }
+
+  const fontHostHits: Record<string, number> = {};
+  for (const host of FORBIDDEN_EXTERNAL_FONT_HOSTS) {
+    fontHostHits[host] = 0;
   }
 
   for (const filePath of files) {
@@ -143,7 +154,22 @@ export function verifyProductionBuild(): {
         console.error(`❌ Found ${count} occurrence(s) of URL forcing key '${key}' in ${relPath}`);
       }
     }
+
+    for (const host of FORBIDDEN_EXTERNAL_FONT_HOSTS) {
+      if (content.includes(host)) {
+        const count = content.split(host).length - 1;
+        fontHostHits[host] += count;
+        totalHits += count;
+        console.error(`❌ Found ${count} occurrence(s) of external font host '${host}' in ${relPath}`);
+      }
+    }
   }
+
+  // Audit self-hosted fonts in dist/fonts/
+  const fontsDistDir = path.join(distDir, 'fonts');
+  const fontFiles = fs.existsSync(fontsDistDir) ? fs.readdirSync(fontsDistDir) : [];
+  const woff2Files = fontFiles.filter(f => f.endsWith('.woff2'));
+  const licenseFiles = fontFiles.filter(f => f.startsWith('LICENSE'));
 
   console.log('\n--- Audit Summary ---');
   console.log(`Distribution Files Scanned: ${files.length}`);
@@ -160,15 +186,25 @@ export function verifyProductionBuild(): {
   for (const [key, count] of Object.entries(forcingHits)) {
     console.log(`   - ${key}: ${count} hits (pass bar: 0)`);
   }
+  console.log('5. External Font Hosts:');
+  for (const [host, count] of Object.entries(fontHostHits)) {
+    console.log(`   - ${host}: ${count} hits (pass bar: 0)`);
+  }
+  console.log(`6. Self-Hosted Fonts: ${woff2Files.length} woff2 files, ${licenseFiles.length} license files in dist/fonts/`);
   console.log(`Total Forbidden Occurrences: ${totalHits}`);
 
   if (totalHits > 0) {
-    console.error('\n❌ FAIL: Shipping production build contains dev/test hooks or forcing keys!');
+    console.error('\n❌ FAIL: Shipping production build contains dev/test hooks, forcing keys, or external font hosts!');
     process.exit(1);
   }
 
-  console.log('\n✅ PASS: Shipping production build is 100% free of __YORI_* hooks, suffix tokens, and forcing keys.\n');
-  return { scannedFiles: files, totalHits, hookHits, suffixHits, forcingHits, prefixHits };
+  if (woff2Files.length === 0 || licenseFiles.length === 0) {
+    console.error('\n❌ FAIL: Shipping production build is missing self-hosted woff2 fonts or OFL licenses!');
+    process.exit(1);
+  }
+
+  console.log('\n✅ PASS: Shipping production build is 100% free of __YORI_* hooks, forcing keys, and external font hosts.\n');
+  return { scannedFiles: files, totalHits, hookHits, suffixHits, forcingHits, fontHostHits, prefixHits };
 }
 
 // Execute when run as CLI

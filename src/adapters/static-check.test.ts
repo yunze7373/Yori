@@ -226,4 +226,54 @@ describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
       }
     }
   });
+
+  it('ensures zero external font host references in src/, index.html, and dist/ (UIFONT)', () => {
+    const forbiddenFontHosts = [
+      'fonts.googleapis.com',
+      'fonts.gstatic.com',
+    ];
+
+    // Check index.html
+    const indexHtml = fs.readFileSync(path.resolve('index.html'), 'utf-8');
+    for (const host of forbiddenFontHosts) {
+      expect(indexHtml).not.toContain(host);
+    }
+
+    // Check src/
+    const srcFiles = collectFiles(path.resolve('src'));
+    for (const filePath of srcFiles) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      for (const host of forbiddenFontHosts) {
+        expect(content, `External font host '${host}' found in ${path.relative(process.cwd(), filePath)}`).not.toContain(host);
+      }
+    }
+
+    // Check dist/ if built
+    const distPath = path.resolve('dist');
+    if (fs.existsSync(distPath)) {
+      const distFiles = collectFiles(distPath);
+      for (const filePath of distFiles) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        for (const host of forbiddenFontHosts) {
+          expect(content, `External font host '${host}' found in dist file ${path.relative(process.cwd(), filePath)}`).not.toContain(host);
+        }
+      }
+    }
+  });
+
+  it('ensures public/fonts/ contains only .woff2 font files and SIL OFL license texts (UIFONT)', () => {
+    const fontsDir = path.resolve('public/fonts');
+    expect(fs.existsSync(fontsDir)).toBe(true);
+
+    const fontEntries = fs.readdirSync(fontsDir);
+    expect(fontEntries.length).toBeGreaterThan(0);
+
+    const woff2Files = fontEntries.filter(f => f.endsWith('.woff2'));
+    const licenseFiles = fontEntries.filter(f => f.startsWith('LICENSE'));
+    const invalidFiles = fontEntries.filter(f => !f.endsWith('.woff2') && !f.startsWith('LICENSE'));
+
+    expect(invalidFiles).toEqual([]);
+    expect(woff2Files.length).toBe(8); // 4 Inter (400, 500, 600, 700) + 4 Newsreader (400, 500, 600, 400-italic)
+    expect(licenseFiles.length).toBe(2); // LICENSE-inter.txt, LICENSE-newsreader.txt
+  });
 });

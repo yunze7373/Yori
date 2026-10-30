@@ -78,6 +78,10 @@ Yori enforces strict architectural boundaries isolating external service integra
 - **Origin Allowlist**: Enforces RFC 8414 §3.3 issuer exact-match and HTTPS same-origin allowlists. No tokens, credentials, or facts are dispatched to foreign or untrusted endpoints.
 - **Fallback Resilience**: When XMemo is disconnected or disabled, Yori seamlessly degrades to in-browser storage (`LocalMemoryAdapter`) with zero data loss or UI interruption.
 
+### C. Zero External CDN Dependencies (Self-Hosted Typography)
+- **Local Font Serving**: All typography assets (`Inter` and `Newsreader` in WOFF2 format) are self-hosted directly within the application bundle under `/fonts/` with `font-display: swap`.
+- **Zero Third-Party Network Calls**: Yori contains zero runtime connections to external font delivery networks (such as Google Fonts / `fonts.googleapis.com` or `fonts.gstatic.com`). Page views transmit no IP addresses or client metadata to third-party font CDNs, ensuring strict viewer privacy and offline/air-gapped demo resilience.
+
 ---
 
 ## 4. Data Retention, Storage & Deletion Controls
