@@ -15,6 +15,10 @@ This checklist contains the **exact, ordered commands** required to perform the 
 > **DO NOT RUN THESE COMMANDS AS AN AGENT OR EXECUTOR.**  
 > These commands alter the canonical git repository and push to GitHub. Only the project owner (`Han`) has the legal authority and credentials to execute this procedure.
 
+> [!CAUTION]
+> **CRITICAL ROLLBACK BOUNDARY (POINT OF NO RETURN)**  
+> Local rollback procedures can only recover the repository **BEFORE Step 5 (`git push`)**. Once commits, tags, and blobs are pushed to a public GitHub repository, history cannot be silently unpublished or revoked. **All verification gates in Step 3 MUST be 100% green before proceeding to Step 4 or Step 5.**
+
 ---
 
 ## Pre-Flight Requirements
@@ -34,26 +38,33 @@ Before beginning, ensure the following tools are available in your terminal:
 4. Clean working tree:
    ```bash
    git status --porcelain
-   # Must be empty
+   # Must be completely empty
    ```
 
 ---
 
 ## Ordered Execution Steps
 
-### Step 1: Create Complete Pre-Rewrite Backup Bundle
-Create a full standalone git bundle containing all refs, branches, and tags before making any changes.
+### Step 1: Record Baseline & Create Pre-Rewrite Backup Bundle
+Capture initial baseline counts and create a complete standalone backup bundle containing all refs, branches, and tags.
 
 ```bash
-# 1. Create full backup bundle outside the repository
-git bundle create "$HOME/Desktop/Yori-pre-rewrite-backup-$(date +%Y%m%d).bundle" --all
+# 1. Define backup bundle path once and export (e.g. Yori-pre-rewrite-backup-20261031.bundle)
+export BUNDLE="$HOME/Desktop/Yori-pre-rewrite-backup-$(date +%Y%m%d).bundle"
 
-# 2. Verify bundle integrity
-git bundle verify "$HOME/Desktop/Yori-pre-rewrite-backup-$(date +%Y%m%d).bundle"
+# 2. Record pre-rewrite commit count and email distribution
+export BEFORE_COUNT="$(git rev-list --count HEAD)"
+echo "Pre-rewrite commit count: $BEFORE_COUNT"
+
+# 3. Create full standalone backup bundle outside the repository
+git bundle create "$BUNDLE" --all
+
+# 4. Verify bundle integrity
+git bundle verify "$BUNDLE"
 ```
 
 > [!IMPORTANT]
-> Keep this `.bundle` file safe. If anything unexpected occurs during the rewrite, it guarantees 100% instant recovery of the entire repository.
+> Keep `$BUNDLE` intact. If any test fails in Step 3, it enables instant, 100% restoration of the entire repository.
 
 ---
 
@@ -63,7 +74,6 @@ Run `git-filter-repo` with the tested mailmap and text replacement rules.
 ```bash
 # 1. Prepare temporary rewrite rule files
 LOCAL_USER="$(whoami)"
-LOCAL_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
 cat << 'EOF' > /tmp/yori-prod-mailmap.txt
 Han <han@yonro.co.jp> <han315@example.com>
@@ -86,33 +96,48 @@ rm -f /tmp/yori-prod-mailmap.txt /tmp/yori-prod-replace.txt
 
 ---
 
-### Step 3: Local Verification on Rewritten HEAD
-Verify that the rewritten tree is completely sound, all tests pass, and privacy rules hold.
+### Step 3: Comprehensive Local Verification on Rewritten HEAD
+Verify that the rewritten tree is completely sound, all tests pass, privacy rules hold, and architectural baselines re-bind cleanly.
 
 ```bash
-# 1. Verify author and committer emails (must show 138 han@yonro.co.jp, 0 han315)
+# 1. Verify author and committer emails (must show all commits on han@yonro.co.jp, 0 on han315)
 git log --format="%ae" | sort | uniq -c
 git log --format="%ce" | sort | uniq -c
 
-# 2. Verify zero occurrences of local machine paths
-git log -S "/Users/$(whoami)" --oneline
-# Must output 0 commits
+# 2. Verify annotated tag tagger email (must show 0 legacy emails)
+git for-each-ref --format='%(taggeremail)' refs/tags | grep -c "han315@example.com"
+# Must output: 0
 
-# 3. Verify total commit count (must remain exactly 138)
-git rev-list --count HEAD
+# 3. Verify total commit count (must match exactly the pre-rewrite count captured in Step 1)
+AFTER_COUNT="$(git rev-list --count HEAD)"
+echo "Commit count: before=$BEFORE_COUNT, after=$AFTER_COUNT"
+[[ "$BEFORE_COUNT" -eq "$AFTER_COUNT" ]] || { echo "ERROR: Commit count mismatch!"; exit 1; }
 
-# 4. Run test suites
-npm run test:golden      # 18/18 golden tests
-npm run test:drills      # 56/56 integration drills
-npm run verify:production
+# 4. Full-history blob scan: audit every blob in all revisions for local machine paths
+git grep -F "/Users/$(whoami)" $(git rev-list --all)
+# Must return exit code 1 with 0 matches
 
-# 5. Run privacy and secret scanner
-node scripts/publish/privacy-scan.ts
+# 5. Core Invariant Re-Binding: verify Zero-Core-Diff against rewritten PH-001 baseline
+# Look up new SHA of original baseline f43c6c1d74c4bc1159300fed9d62aec9447b886e
+NEW_F43C="$(grep '^f43c6c1d74c4bc1159300fed9d62aec9447b886e' .git/filter-repo/commit-map | awk '{print $2}')"
+echo "Rewritten PH-001 Baseline: $NEW_F43C"
+# Zero-Core-Diff check (must output 0 files changed)
+git diff "$NEW_F43C" HEAD -- src/core
+
+# 6. Run full automated test suites
+npm test                                   # 756/756 unit tests
+npm run test:golden                        # 18/18 golden tests
+npm run test:drills                        # 56/56 integration drills
+npx vitest run src/plugins/grocery-stub    # AC-EXT-1 extensibility verification
+npm run verify:production                  # Gating production build verification
+
+# 7. Run privacy and secret scanner
+node scripts/publish/privacy-scan.ts       # 6/6 categories PASS (0 leaks, 0 real keys)
 ```
 
 ---
 
-### Step 4: Create Remote GitHub Repository (Owner Gate)
+### Step 4: Create Remote GitHub Repository (Explicit Owner Gate)
 Create the public GitHub repository under account `yunze7373`.
 
 > [!NOTE]
@@ -123,7 +148,7 @@ Create the public GitHub repository under account `yunze7373`.
 gh repo create yunze7373/Yori --public --source=. --remote=origin --description "Living Context Assistant: proactive, grounded daily orchestration that adapts without distraction."
 ```
 
-If the repository already exists or was created privately:
+If the repository already exists or was pre-created:
 ```bash
 git remote add origin https://github.com/yunze7373/Yori.git
 ```
@@ -142,15 +167,37 @@ git push -u origin main --tags
 
 ## Rollback Procedures
 
-If any failure occurs before or during Step 5, restore the exact original repository state from the backup bundle created in Step 1:
+If any verification fails in Step 3 or any error occurs **prior to Step 5 (`git push`)**, restore the repository from the backup bundle `$BUNDLE`:
+
+### Primary Option (Recommended): Fresh Clone from Bundle
+The cleanest and safest rollback method creates a pristine checkout directly from the backup bundle:
 
 ```bash
-# Option A: In-place ref restoration from bundle
-git fetch "$HOME/Desktop/Yori-pre-rewrite-backup-$(date +%Y%m%d).bundle" 'refs/*:refs/*'
+# 1. Clone fresh checkout from bundle
+git clone "$BUNDLE" Yori-recovered
 
-# Option B: Fresh clone from bundle
-git clone "$HOME/Desktop/Yori-pre-rewrite-backup-$(date +%Y%m%d).bundle" Yori-restored
-cd Yori-restored
+# 2. Inspect restored repository
+cd Yori-recovered
+git status
+git log --oneline -n 5
+```
+
+### Secondary Option: In-Place Restoration into Existing Checkout
+If you wish to restore the current directory in-place:
+
+```bash
+# 1. Detach HEAD so refs/heads/main is not locked
+git checkout --detach
+
+# 2. Fetch all refs with force (+) and --update-head-ok
+git fetch --update-head-ok "$BUNDLE" '+refs/*:refs/*'
+
+# 3. Re-attach to restored main branch and hard reset
+git checkout main
+git reset --hard
+
+# 4. Clean any untracked rewrite artifacts
+git clean -fd
 ```
 
 ---

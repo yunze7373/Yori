@@ -1,20 +1,24 @@
 {
   "taskId": "INBOX-20261030-7E07D1",
   "taskName": "PUBLISH-PREP-REHEARSAL",
-  "timestamp": "2026-10-30T23:25:08Z",
+  "timestamp": "2026-10-30T23:30:57Z",
   "filterRepoVersion": "a40bce548d2c",
   "verification": {
-    "commitCountBefore": 138,
-    "commitCountAfter": 138,
+    "commitCountBefore": 139,
+    "commitCountAfter": 139,
     "timestampsIdentical": true,
     "oldEmailOccurrencesBefore": 115,
     "oldEmailOccurrencesAfter": 0,
-    "canonicalEmailOccurrencesAfter": 138,
+    "canonicalEmailOccurrencesAfter": 139,
+    "oldTaggerEmailOccurrencesBefore": 1,
+    "oldTaggerEmailOccurrencesAfter": 0,
+    "canonicalTaggerEmailOccurrencesAfter": 1,
     "localPathOccurrencesBefore": 6,
     "localPathOccurrencesAfter": 0,
-    "headTreeShaOriginal": "3ca498e53e424dbe70ebac9b20e0906baa7d84ec",
-    "headTreeShaRewritten": "3ca498e53e424dbe70ebac9b20e0906baa7d84ec",
+    "headTreeShaOriginal": "e9a6d8d8eb87e40f4e202c83e2126851076d2a2b",
+    "headTreeShaRewritten": "e9a6d8d8eb87e40f4e202c83e2126851076d2a2b",
     "headTreesIdentical": true,
+    "coreDiffLineCountAgainstRewrittenBaseline": 0,
     "allPassed": true
   },
   "baselineMappings": {
@@ -35,8 +39,8 @@
       "rewrittenSha": "8203e8f410a9ab9a836b8ffc18417169e49be824"
     },
     "rehearsalHead": {
-      "originalSha": "62ef8248a1a3afb2652d9aafdeddddb45139e0d0",
-      "rewrittenSha": "5de76baa4920548245f9d1c3cb1402599a1fe5a7"
+      "originalSha": "9f7b8c9895fe531b400aa41641d57be8dd066072",
+      "rewrittenSha": "dacca4132ea047cbad510a4d11c0fc3018a26786"
     }
   }
 }
