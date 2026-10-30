@@ -17,7 +17,13 @@ import {
   normalizeIssuer,
   isLoopbackHost,
   validateEndpointUrl,
+  YORI_MANAGED_FACT_KEYS,
+  isYoriManagedFactKey,
+  extractCandidateFacts,
+  hasYoriProvenance,
+  verifyFactProvenance,
 } from './server-proxy.js';
+import { humanizeMemoryKey } from '../../ui/review/why-sheet.js';
 import { RateLimiter } from '../model/server-proxy.js';
 
 function createMockReq(options: {
@@ -496,7 +502,7 @@ describe('XMemoDevProxy: Flag ON', () => {
 
       const writeResult = await proxy.writeConfirmedFact(
         {
-          key: 'rain_habit',
+          key: 'rain_transport_preference',
           value: 'drive',
           status: 'confirmed',
           provenance: { source: 'user_confirmed', recordedAt: '2026-10-28T10:00:00Z' },
@@ -508,7 +514,7 @@ describe('XMemoDevProxy: Flag ON', () => {
       expect((writeResult.data as any).success).toBe(true);
       expect(capturedPayload.params.name).toBe(UNVERIFIED_XMEMO_MCP_MAPPING.writeTool);
       expect(capturedPayload.params.arguments[UNVERIFIED_XMEMO_MCP_MAPPING.writeKeyArg]).toBe(
-        'rain_habit'
+        'rain_transport_preference'
       );
       expect(capturedPayload.params.arguments[UNVERIFIED_XMEMO_MCP_MAPPING.writeStatusArg]).toBe(
         'confirmed'
@@ -527,7 +533,7 @@ describe('XMemoDevProxy: Flag ON', () => {
 
       const writeResult = await proxy.writeConfirmedFact(
         {
-          key: 'rain_habit',
+          key: 'rain_transport_preference',
           value: 'drive',
           status: 'confirmed',
           provenance: { source: 'user_confirmed', recordedAt: '2026-10-28T10:00:00Z' },
@@ -549,7 +555,7 @@ describe('XMemoDevProxy: Flag ON', () => {
 
       const writeResult = await proxy.writeConfirmedFact(
         {
-          key: 'rain_habit',
+          key: 'rain_transport_preference',
           value: 'drive',
           status: 'confirmed',
           provenance: { source: 'user_confirmed', recordedAt: '2026-10-28T10:00:00Z' },
@@ -1592,7 +1598,18 @@ describe('RFC 8414 §3.3 Issuer Normalization & Endpoint Origin Allowlist (GATE-
           return {
             ok: true,
             status: 200,
-            json: async () => ({ jsonrpc: '2.0', result: { memories: [] } }),
+            json: async () => ({
+              jsonrpc: '2.0',
+              result: {
+                memories: [
+                  {
+                    key: 'prep_buffer_minutes',
+                    value: 5,
+                    tag: 'yori:living-context',
+                  },
+                ],
+              },
+            }),
           };
         }
         return { ok: false, status: 404 };
@@ -1622,20 +1639,21 @@ describe('RFC 8414 §3.3 Issuer Normalization & Endpoint Origin Allowlist (GATE-
       await proxy.readPreferences('test', mockFetch);
       await proxy.writeConfirmedFact(
         {
-          key: 'test:key',
-          value: 'val',
+          key: 'prep_buffer_minutes',
+          value: '5',
           status: 'confirmed',
           provenance: { source: 'user', timestamp: new Date().toISOString() },
         },
         mockFetch
       );
-      await proxy.deleteFact('test:key', mockFetch);
+      await proxy.deleteFact('prep_buffer_minutes', mockFetch);
 
       // Assert evil host was NEVER fetched
       expect(fetchedUrls.some((u) => u.includes('evil.example'))).toBe(false);
       // Assert all MCP calls targeted https://xmemo.dev/mcp
+      // 1 readPreferences + 1 writeConfirmedFact + 1 deleteFact (pre-read + forget = 2) = 4 calls
       const mcpCalls = fetchedUrls.filter((u) => u.includes('/mcp'));
-      expect(mcpCalls.length).toBe(3);
+      expect(mcpCalls.length).toBe(4);
       for (const callUrl of mcpCalls) {
         expect(callUrl).toBe('https://xmemo.dev/mcp');
       }
@@ -2013,12 +2031,33 @@ describe('DELETE /api/xmemo/confirmed-facts', () => {
     let mcpBody: any = null;
     const mockFetch = (async (url: string, init?: RequestInit) => {
       if (url.includes('/mcp')) {
-        mcpBody = JSON.parse(init?.body as string);
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ jsonrpc: '2.0', result: { content: [{ type: 'text', text: 'deleted' }] } }),
-        };
+        const body = JSON.parse(init?.body as string);
+        if (body.params?.name === 'recall') {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              jsonrpc: '2.0',
+              result: {
+                facts: [
+                  {
+                    key: 'prep_buffer_minutes',
+                    value: 5,
+                    tag: 'yori:living-context',
+                  },
+                ],
+              },
+            }),
+          };
+        }
+        if (body.params?.name === 'forget') {
+          mcpBody = body;
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ jsonrpc: '2.0', result: { content: [{ type: 'text', text: 'deleted' }] } }),
+          };
+        }
       }
       return { ok: false, status: 404 };
     }) as any;
@@ -2036,7 +2075,7 @@ describe('DELETE /api/xmemo/confirmed-facts', () => {
       url: '/api/xmemo/confirmed-facts',
       method: 'DELETE',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ key: 'yori:pref:coffee' }),
+      body: JSON.stringify({ key: 'prep_buffer_minutes' }),
     });
     const res = createMockRes();
 
@@ -2045,7 +2084,7 @@ describe('DELETE /api/xmemo/confirmed-facts', () => {
     expect(mcpBody).toBeDefined();
     expect(mcpBody.method).toBe('tools/call');
     expect(mcpBody.params.name).toBe('forget');
-    expect(mcpBody.params.arguments).toEqual({ key: 'yori:pref:coffee' });
+    expect(mcpBody.params.arguments).toEqual({ key: 'prep_buffer_minutes' });
   });
 
   it('rejects DELETE without key or with invalid key with 400', async () => {
@@ -2328,7 +2367,7 @@ describe('XKEY01: Server-only owner-key demo mode', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        key: 'habit_coffee',
+        key: 'prep_buffer_preference',
         value: 'espresso',
         status: 'confirmed',
         provenance: { source: 'user_explicit' },
@@ -2452,5 +2491,562 @@ describe('XKEY01: Server-only owner-key demo mode', () => {
         expect(content).not.toContain(MOCK_OWNER_KEY);
       }
     }
+  });
+
+  describe('XKEY-DEL: Closed Fact-Key Registry, Pre-Delete Provenance, and User Confirmation Marker', () => {
+    describe('1. Fact-Key Registry Completeness & Boundary Validation', () => {
+      it('verifies every UI write/forget key from why-sheet.ts is in YORI_MANAGED_FACT_KEYS', () => {
+        const knownUiKeys = [
+          'prep_buffer_minutes',
+          'prep_duration_minutes',
+          'prep_buffer_preference',
+          'rain_transport_preference',
+          'taste_preference',
+          'taste_preferences',
+          'favorite_cuisine',
+          'suppress_lunch',
+          'suppress_lunch_recommendations',
+        ];
+
+        for (const k of knownUiKeys) {
+          expect(YORI_MANAGED_FACT_KEYS.has(k)).toBe(true);
+          expect(isYoriManagedFactKey(k)).toBe(true);
+          const label = humanizeMemoryKey(k);
+          expect(label).toBeTruthy();
+        }
+      });
+
+      it('rejects arbitrary personal memory keys', () => {
+        expect(isYoriManagedFactKey('bank_pin')).toBe(false);
+        expect(isYoriManagedFactKey('family/address')).toBe(false);
+        expect(isYoriManagedFactKey('medical_records')).toBe(false);
+        expect(isYoriManagedFactKey('social_security_number')).toBe(false);
+        expect(isYoriManagedFactKey('credit_card')).toBe(false);
+      });
+
+      it('rejects prefix tricks, traversal, and lookalikes', () => {
+        expect(isYoriManagedFactKey('yori:living-context/../x')).toBe(false);
+        expect(isYoriManagedFactKey('yori:living-context:prep_buffer_minutes')).toBe(false);
+        expect(isYoriManagedFactKey('../prep_buffer_minutes')).toBe(false);
+        expect(isYoriManagedFactKey('prep_buffer_minutes/sub')).toBe(false);
+      });
+
+      it('rejects whitespace variants and casing differences', () => {
+        expect(isYoriManagedFactKey(' prep_buffer_minutes')).toBe(false);
+        expect(isYoriManagedFactKey('prep_buffer_minutes ')).toBe(false);
+        expect(isYoriManagedFactKey('prep_buffer_minutes\n')).toBe(false);
+        expect(isYoriManagedFactKey('PREP_BUFFER_MINUTES')).toBe(false);
+        expect(isYoriManagedFactKey('Prep_Buffer_Minutes')).toBe(false);
+        expect(isYoriManagedFactKey('taste_Preference')).toBe(false);
+      });
+
+      it('rejects non-string types, null, undefined, empty string', () => {
+        expect(isYoriManagedFactKey(null)).toBe(false);
+        expect(isYoriManagedFactKey(undefined)).toBe(false);
+        expect(isYoriManagedFactKey('')).toBe(false);
+        expect(isYoriManagedFactKey(123)).toBe(false);
+        expect(isYoriManagedFactKey({})).toBe(false);
+        expect(isYoriManagedFactKey([])).toBe(false);
+      });
+    });
+
+    describe('2. Provenance Parsing & Verification Helpers', () => {
+      it('extracts candidate facts from diverse MCP response shapes', () => {
+        // Shape A: result.facts array
+        const shapeA = { jsonrpc: '2.0', result: { facts: [{ key: 'prep_buffer_minutes', value: 5 }] } };
+        expect(extractCandidateFacts(shapeA)).toEqual([{ key: 'prep_buffer_minutes', value: 5 }]);
+
+        // Shape B: result.memories array
+        const shapeB = { jsonrpc: '2.0', result: { memories: [{ key: 'prep_buffer_minutes', value: 5 }] } };
+        expect(extractCandidateFacts(shapeB)).toEqual([{ key: 'prep_buffer_minutes', value: 5 }]);
+
+        // Shape C: result.items array
+        const shapeC = { jsonrpc: '2.0', result: { items: [{ key: 'prep_buffer_minutes', value: 5 }] } };
+        expect(extractCandidateFacts(shapeC)).toEqual([{ key: 'prep_buffer_minutes', value: 5 }]);
+
+        // Shape D: result.content MCP text json
+        const shapeD = {
+          jsonrpc: '2.0',
+          result: {
+            content: [{ type: 'text', text: JSON.stringify([{ key: 'prep_buffer_minutes', value: 5 }]) }],
+          },
+        };
+        expect(extractCandidateFacts(shapeD)).toEqual([{ key: 'prep_buffer_minutes', value: 5 }]);
+
+        // Shape E: result is array
+        const shapeE = { jsonrpc: '2.0', result: [{ key: 'prep_buffer_minutes', value: 5 }] };
+        expect(extractCandidateFacts(shapeE)).toEqual([{ key: 'prep_buffer_minutes', value: 5 }]);
+
+        // Unknown shape returns null
+        expect(extractCandidateFacts({ jsonrpc: '2.0', result: { unknownShape: true } })).toBeNull();
+        expect(extractCandidateFacts(null)).toBeNull();
+        expect(extractCandidateFacts('invalid')).toBeNull();
+      });
+
+      it('identifies Yori provenance across direct tags, array tags, and provenance objects', () => {
+        expect(hasYoriProvenance({ tag: 'yori:living-context' })).toBe(true);
+        expect(hasYoriProvenance({ tag: ['yori:living-context', 'other'] })).toBe(true);
+        expect(hasYoriProvenance({ tags: 'yori:living-context' })).toBe(true);
+        expect(hasYoriProvenance({ tags: ['yori:living-context'] })).toBe(true);
+        expect(hasYoriProvenance({ provenance: { tag: 'yori:living-context' } })).toBe(true);
+        expect(hasYoriProvenance({ provenance: { source: 'yori' } })).toBe(true);
+        expect(hasYoriProvenance({ provenance: { source: 'yori:living-context' } })).toBe(true);
+
+        // Foreign or missing tags
+        expect(hasYoriProvenance({ tag: 'other:system' })).toBe(false);
+        expect(hasYoriProvenance({ tags: ['personal', 'private'] })).toBe(false);
+        expect(hasYoriProvenance({})).toBe(false);
+      });
+
+      it('verifyFactProvenance validates single match with provenance and fails closed otherwise', () => {
+        const validData = {
+          result: {
+            facts: [{ key: 'prep_buffer_minutes', value: 5, tag: 'yori:living-context' }],
+          },
+        };
+        expect(verifyFactProvenance(validData, 'prep_buffer_minutes')).toEqual({ ok: true });
+
+        // Missing fact -> 409
+        const missingData = { result: { facts: [] } };
+        const missRes = verifyFactProvenance(missingData, 'prep_buffer_minutes');
+        expect(missRes.ok).toBe(false);
+        if (!missRes.ok) {
+          expect(missRes.status).toBe(409);
+          expect(missRes.error).toContain('fact not found');
+        }
+
+        // Ambiguous multiple matches -> 409
+        const dupData = {
+          result: {
+            facts: [
+              { key: 'prep_buffer_minutes', value: 5, tag: 'yori:living-context' },
+              { key: 'prep_buffer_minutes', value: 10, tag: 'yori:living-context' },
+            ],
+          },
+        };
+        const dupRes = verifyFactProvenance(dupData, 'prep_buffer_minutes');
+        expect(dupRes.ok).toBe(false);
+        if (!dupRes.ok) {
+          expect(dupRes.status).toBe(409);
+          expect(dupRes.error).toContain('ambiguous');
+        }
+
+        // Missing Yori tag -> 409
+        const untaggedData = {
+          result: {
+            facts: [{ key: 'prep_buffer_minutes', value: 5, tag: 'unrelated:tag' }],
+          },
+        };
+        const untaggedRes = verifyFactProvenance(untaggedData, 'prep_buffer_minutes');
+        expect(untaggedRes.ok).toBe(false);
+        if (!untaggedRes.ok) {
+          expect(untaggedRes.status).toBe(409);
+          expect(untaggedRes.error).toContain('provenance');
+        }
+
+        // Unknown shape -> 424
+        const unknownData = { result: { weird: true } };
+        const unkRes = verifyFactProvenance(unknownData, 'prep_buffer_minutes');
+        expect(unkRes.ok).toBe(false);
+        if (!unkRes.ok) {
+          expect(unkRes.status).toBe(424);
+          expect(unkRes.error).toContain('unknown upstream read response shape');
+        }
+      });
+    });
+
+    describe('3. Write Fact Enforcement (writeConfirmedFact & POST /api/xmemo/confirmed-facts)', () => {
+      it('rejects unmanaged key on writeConfirmedFact with 403 and NEVER invokes fetch', async () => {
+        const mockFetch = vi.fn();
+        const proxy = new XMemoDevProxy({ enabled: true, clientId: 'test-client' }, () => {}, undefined, mockFetch as any);
+        (proxy as any).session = { accessToken: 'valid-token' };
+
+        const res = await proxy.writeConfirmedFact(
+          {
+            key: 'bank_pin',
+            value: '1234',
+            status: 'confirmed',
+            provenance: { source: 'user' },
+          },
+          mockFetch as any
+        );
+
+        expect(res.status).toBe(403);
+        expect((res.data as any).error).toContain('not a Yori-managed key');
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+
+      it('rejects unmanaged key on POST /api/xmemo/confirmed-facts with 403 and NEVER invokes fetch', async () => {
+        const mockFetch = vi.fn();
+        const proxy = new XMemoDevProxy({ enabled: true, clientId: 'test-client' }, () => {}, undefined, mockFetch as any);
+        (proxy as any).session = { accessToken: 'valid-token' };
+
+        const req = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            key: 'family/address',
+            value: 'secret-location',
+            status: 'confirmed',
+            provenance: { source: 'user' },
+          }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(403);
+        expect(res.body).toContain('not a Yori-managed key');
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('4. Delete Fact Enforcement & Negative Drill Scenarios', () => {
+      it('arbitrary key (e.g. bank_pin, family/address) -> 403, zero fetch calls', async () => {
+        const mockFetch = vi.fn();
+        const proxy = new XMemoDevProxy({ enabled: true, clientId: 'test-client' }, () => {}, undefined, mockFetch as any);
+        (proxy as any).session = { accessToken: 'valid-token' };
+
+        for (const badKey of ['bank_pin', 'family/address']) {
+          mockFetch.mockClear();
+          const req = createMockReq({
+            url: '/api/xmemo/confirmed-facts',
+            method: 'DELETE',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ key: badKey }),
+          });
+          const res = createMockRes();
+          await proxy.handleHttpRequest(req, res);
+
+          expect(res.statusCode).toBe(403);
+          expect(res.body).toContain('not a Yori-managed key');
+          expect(mockFetch).not.toHaveBeenCalled();
+        }
+      });
+
+      it('prefix trick, unicode lookalike, whitespace, case variant -> 403, zero fetch calls', async () => {
+        const mockFetch = vi.fn();
+        const proxy = new XMemoDevProxy({ enabled: true, clientId: 'test-client' }, () => {}, undefined, mockFetch as any);
+        (proxy as any).session = { accessToken: 'valid-token' };
+
+        const tricks = [
+          'yori:living-context/../x',
+          ' prep_buffer_minutes ',
+          'PREP_BUFFER_MINUTES',
+          '\u202eprep_buffer_minutes',
+          'prep_buffer_minutes\0',
+        ];
+
+        for (const trick of tricks) {
+          mockFetch.mockClear();
+          const req = createMockReq({
+            url: '/api/xmemo/confirmed-facts',
+            method: 'DELETE',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ key: trick }),
+          });
+          const res = createMockRes();
+          await proxy.handleHttpRequest(req, res);
+
+          expect(res.statusCode).toBe(403);
+          expect(res.body).toContain('not a Yori-managed key');
+          expect(mockFetch).not.toHaveBeenCalled();
+        }
+      });
+
+      it('registry key whose stored fact lacks the tag -> 409, forget tool NEVER called', async () => {
+        let forgetCalled = false;
+        const mockFetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+          const body = JSON.parse(init.body);
+          if (body.params?.name === 'recall') {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                jsonrpc: '2.0',
+                result: {
+                  facts: [{ key: 'prep_buffer_minutes', value: 5 }],
+                },
+              }),
+            };
+          }
+          if (body.params?.name === 'forget') {
+            forgetCalled = true;
+            return { ok: true, status: 200, json: async () => ({ result: { success: true } }) };
+          }
+          return { ok: false, status: 404 };
+        });
+
+        const proxy = new XMemoDevProxy({ enabled: true, clientId: 'test-client' }, () => {}, undefined, mockFetch as any);
+        (proxy as any).session = { accessToken: 'valid-token' };
+
+        const req = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'prep_buffer_minutes' }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(409);
+        expect(res.body).toContain('fact does not carry Yori provenance');
+        expect(forgetCalled).toBe(false);
+      });
+
+      it('upstream read failure (500) -> 424, forget tool NEVER called', async () => {
+        let forgetCalled = false;
+        const mockFetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+          const body = JSON.parse(init.body);
+          if (body.params?.name === 'recall') {
+            return { ok: false, status: 500, json: async () => ({ error: 'internal error' }) };
+          }
+          if (body.params?.name === 'forget') {
+            forgetCalled = true;
+            return { ok: true, status: 200, json: async () => ({ result: { success: true } }) };
+          }
+          return { ok: false, status: 404 };
+        });
+
+        const proxy = new XMemoDevProxy({ enabled: true, clientId: 'test-client' }, () => {}, undefined, mockFetch as any);
+        (proxy as any).session = { accessToken: 'valid-token' };
+
+        const req = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'prep_buffer_minutes' }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(424);
+        expect(res.body).toContain('upstream fact pre-read failed');
+        expect(forgetCalled).toBe(false);
+      });
+
+      it('401 during pre-read in owner_key mode clears the mode and returns 401', async () => {
+        let forgetCalled = false;
+        const mockFetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+          const body = JSON.parse(init.body);
+          if (body.params?.name === 'recall') {
+            return { ok: false, status: 401, json: async () => ({ error: 'unauthorized' }) };
+          }
+          if (body.params?.name === 'forget') {
+            forgetCalled = true;
+            return { ok: true, status: 200, json: async () => ({ result: { success: true } }) };
+          }
+          return { ok: false, status: 404 };
+        });
+
+        const proxy = new XMemoDevProxy({ authMode: 'owner_key', ownerKey: MOCK_OWNER_KEY }, () => {}, undefined, mockFetch as any);
+        expect(proxy.isOwnerKeyModeActive()).toBe(true);
+
+        const req = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'prep_buffer_minutes', confirmed: true }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(401);
+        expect(proxy.isOwnerKeyModeActive()).toBe(false);
+        expect(forgetCalled).toBe(false);
+      });
+
+      it('non-loopback Host header -> 403, zero fetch calls', async () => {
+        const mockFetch = vi.fn();
+        const proxy = new XMemoDevProxy({ enabled: true, clientId: 'test-client' }, () => {}, undefined, mockFetch as any);
+        (proxy as any).session = { accessToken: 'valid-token' };
+
+        const req = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json', host: 'attacker.com' },
+          body: JSON.stringify({ key: 'prep_buffer_minutes' }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(403);
+        expect(res.body).toContain('Forbidden: non-local host access is blocked');
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+
+      it('missing confirmation marker in owner_key mode -> 400, zero fetch calls', async () => {
+        const mockFetch = vi.fn();
+        const proxy = new XMemoDevProxy({ authMode: 'owner_key', ownerKey: MOCK_OWNER_KEY }, () => {}, undefined, mockFetch as any);
+
+        const req = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'prep_buffer_minutes' }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body).toContain('owner_key delete requires explicit user confirmation marker');
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+
+      it('OAuth-disabled and owner_key mode off -> 403, zero fetch calls', async () => {
+        const mockFetch = vi.fn();
+        const proxy = new XMemoDevProxy({ enabled: false }, () => {}, undefined, mockFetch as any);
+
+        const req = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'prep_buffer_minutes' }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(403);
+        expect(res.body).toContain('XMemo OAuth disabled');
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('5. Positive Deletion & Secret Hygiene', () => {
+      it('owner_key mode positive: registry key + user confirmation + tagged fact -> exactly one forget call', async () => {
+        let recallCount = 0;
+        let forgetCount = 0;
+        let forgetPayload: any = null;
+        let capturedAuth = '';
+
+        const mockFetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+          capturedAuth = init.headers?.['Authorization'] || init.headers?.['authorization'];
+          const body = JSON.parse(init.body);
+          if (body.params?.name === 'recall') {
+            recallCount++;
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                jsonrpc: '2.0',
+                result: {
+                  facts: [
+                    {
+                      key: 'prep_buffer_minutes',
+                      value: 5,
+                      tag: 'yori:living-context',
+                    },
+                  ],
+                },
+              }),
+            };
+          }
+          if (body.params?.name === 'forget') {
+            forgetCount++;
+            forgetPayload = body;
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({ jsonrpc: '2.0', result: { success: true } }),
+            };
+          }
+          return { ok: false, status: 404 };
+        });
+
+        const logs: string[] = [];
+        const proxy = new XMemoDevProxy(
+          { authMode: 'owner_key', ownerKey: MOCK_OWNER_KEY },
+          msg => logs.push(msg),
+          undefined,
+          mockFetch as any
+        );
+
+        // Support confirmation via header x-yori-confirm: true
+        const req = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json', 'x-yori-confirm': 'true' },
+          body: JSON.stringify({ key: 'prep_buffer_minutes' }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(recallCount).toBe(1);
+        expect(forgetCount).toBe(1);
+        expect(forgetPayload.params.name).toBe('forget');
+        expect(forgetPayload.params.arguments).toEqual({ key: 'prep_buffer_minutes' });
+        expect(capturedAuth).toBe(`Bearer ${MOCK_OWNER_KEY}`);
+
+        // Secret hygiene: key value and tokens never logged
+        for (const log of logs) {
+          expect(log).not.toContain(MOCK_OWNER_KEY);
+          expect(log).not.toContain('1234567890');
+        }
+        expect(res.body).not.toContain(MOCK_OWNER_KEY);
+      });
+
+      it('OAuth mode positive: registry key + tagged fact -> exactly one forget call', async () => {
+        let recallCount = 0;
+        let forgetCount = 0;
+        let forgetPayload: any = null;
+
+        const mockFetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+          const body = JSON.parse(init.body);
+          if (body.params?.name === 'recall') {
+            recallCount++;
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                jsonrpc: '2.0',
+                result: {
+                  facts: [
+                    {
+                      key: 'rain_transport_preference',
+                      value: 'drive_first',
+                      tag: 'yori:living-context',
+                    },
+                  ],
+                },
+              }),
+            };
+          }
+          if (body.params?.name === 'forget') {
+            forgetCount++;
+            forgetPayload = body;
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({ jsonrpc: '2.0', result: { success: true } }),
+            };
+          }
+          return { ok: false, status: 404 };
+        });
+
+        const proxy = new XMemoDevProxy(
+          { enabled: true, clientId: 'test-client' },
+          () => {},
+          undefined,
+          mockFetch as any
+        );
+        (proxy as any).session = { accessToken: 'valid-oauth-token-123' };
+
+        const req = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'rain_transport_preference' }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(200);
+        expect(recallCount).toBe(1);
+        expect(forgetCount).toBe(1);
+        expect(forgetPayload.params.name).toBe('forget');
+        expect(forgetPayload.params.arguments).toEqual({ key: 'rain_transport_preference' });
+      });
+    });
   });
 });

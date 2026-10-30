@@ -50,6 +50,179 @@ export const UNVERIFIED_XMEMO_MCP_MAPPING = {
   deleteKeyArg: 'key',
 } as const;
 
+/**
+ * Closed registry of fact keys that Yori is authorized to write or delete.
+ * Enforced server-side on both write (POST confirmed-facts) and delete (DELETE confirmed-facts).
+ * Anything outside this closed set is rejected with 403 ('Forbidden: not a Yori-managed key')
+ * with zero upstream calls.
+ * Derived from UI confirm/forget flows and humanizeMemoryKey mapping.
+ */
+export const YORI_MANAGED_FACT_KEYS: ReadonlySet<string> = new Set([
+  'prep_buffer_minutes',
+  'prep_duration_minutes',
+  'prep_buffer_preference',
+  'rain_transport_preference',
+  'taste_preference',
+  'taste_preferences',
+  'favorite_cuisine',
+  'suppress_lunch',
+  'suppress_lunch_recommendations',
+]);
+
+/**
+ * Validates whether a key is strictly in the YORI_MANAGED_FACT_KEYS registry.
+ * Rejects non-strings, whitespace variants, casing differences, unicode lookalikes,
+ * and traversal/prefix tricks.
+ */
+export function isYoriManagedFactKey(key: unknown): key is string {
+  if (typeof key !== 'string') return false;
+  return YORI_MANAGED_FACT_KEYS.has(key);
+}
+
+/**
+ * Normalizes candidate facts from MCP JSON-RPC recall responses.
+ * Centralizes shape assumptions for UNVERIFIED_XMEMO_MCP_MAPPING.
+ */
+export function extractCandidateFacts(data: unknown): Array<Record<string, unknown>> | null {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const root = data as Record<string, unknown>;
+  const payload =
+    root.result !== undefined && typeof root.result === 'object' && root.result !== null
+      ? (root.result as Record<string, unknown>)
+      : root;
+
+  // 1. If payload is an array directly
+  if (Array.isArray(payload)) {
+    return payload.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
+  }
+
+  // 2. If payload has facts / memories / items array
+  const directList = payload.facts ?? payload.memories ?? payload.items;
+  if (Array.isArray(directList)) {
+    return directList.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
+  }
+
+  // 3. If payload has MCP content array
+  if (Array.isArray(payload.content)) {
+    const extracted: Array<Record<string, unknown>> = [];
+    for (const c of payload.content) {
+      if (c && typeof c === 'object') {
+        const itemObj = c as Record<string, unknown>;
+        if (typeof itemObj.text === 'string' && itemObj.text.trim()) {
+          try {
+            const parsed = JSON.parse(itemObj.text);
+            if (Array.isArray(parsed)) {
+              for (const p of parsed) {
+                if (p && typeof p === 'object') {
+                  extracted.push(p as Record<string, unknown>);
+                }
+              }
+            } else if (parsed && typeof parsed === 'object') {
+              extracted.push(parsed as Record<string, unknown>);
+            }
+          } catch {
+            // Non-JSON content text
+          }
+        } else if (itemObj.key !== undefined || itemObj.name !== undefined) {
+          extracted.push(itemObj);
+        }
+      }
+    }
+    if (extracted.length > 0) {
+      return extracted;
+    }
+  }
+
+  // 4. Single fact object
+  if (payload.key !== undefined || payload.name !== undefined) {
+    return [payload];
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether a fact record carries the required Yori provenance tag.
+ */
+export function hasYoriProvenance(fact: Record<string, unknown>): boolean {
+  const expectedTag = UNVERIFIED_XMEMO_MCP_MAPPING.writeTagValue; // 'yori:living-context'
+
+  // 1. Direct tag property
+  if (fact.tag === expectedTag) return true;
+  if (Array.isArray(fact.tag) && fact.tag.includes(expectedTag)) return true;
+
+  // 2. Direct tags property
+  if (fact.tags === expectedTag) return true;
+  if (Array.isArray(fact.tags) && fact.tags.includes(expectedTag)) return true;
+
+  // 3. Provenance object
+  if (fact.provenance && typeof fact.provenance === 'object') {
+    const prov = fact.provenance as Record<string, unknown>;
+    if (prov.tag === expectedTag) return true;
+    if (Array.isArray(prov.tags) && prov.tags.includes(expectedTag)) return true;
+    if (prov.source === 'yori' || prov.source === expectedTag) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Verifies that the upstream fact matches targetKey and carries Yori provenance before delete.
+ * Fails closed on missing, ambiguous (multiple matches), untagged, or unknown response shape.
+ */
+export function verifyFactProvenance(
+  data: unknown,
+  targetKey: string
+): { ok: true } | { ok: false; status: 409 | 424; error: string; reason: string } {
+  const candidates = extractCandidateFacts(data);
+  if (candidates === null) {
+    return {
+      ok: false,
+      status: 424,
+      error: 'Cannot delete: unknown upstream read response shape',
+      reason: 'unknown_response_shape',
+    };
+  }
+
+  const matches = candidates.filter(item => {
+    const k = item.key ?? item.name;
+    return k === targetKey;
+  });
+
+  if (matches.length === 0) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'Cannot delete: fact not found or missing Yori provenance',
+      reason: 'fact_not_found',
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'Cannot delete: ambiguous fact matches',
+      reason: 'multiple_matches',
+    };
+  }
+
+  const singleMatch = matches[0];
+  if (!singleMatch || !hasYoriProvenance(singleMatch)) {
+    return {
+      ok: false,
+      status: 409,
+      error: 'Cannot delete: fact does not carry Yori provenance',
+      reason: 'missing_yori_provenance',
+    };
+  }
+
+  return { ok: true };
+}
+
 export interface XMemoProxyConfig {
   readonly enabled: boolean;
   readonly issuer: string;
@@ -1109,6 +1282,19 @@ export class XMemoDevProxy {
       };
     }
 
+    const val = validateEndpointUrl(this.mcpUrl, this.config.issuer);
+    if (!val.valid) {
+      this.logger(`[XMemoProxy] Write fact aborted: ${val.reason}`);
+      return { status: 502, data: { error: `mcpUrl origin invalid: ${val.reason}` } };
+    }
+
+    if (!isYoriManagedFactKey(key)) {
+      return {
+        status: 403,
+        data: { error: 'Forbidden: not a Yori-managed key' },
+      };
+    }
+
     const payload = {
       jsonrpc: '2.0',
       id: Date.now(),
@@ -1125,12 +1311,6 @@ export class XMemoDevProxy {
         },
       },
     };
-
-    const val = validateEndpointUrl(this.mcpUrl, this.config.issuer);
-    if (!val.valid) {
-      this.logger(`[XMemoProxy] Write fact aborted: ${val.reason}`);
-      return { status: 502, data: { error: `mcpUrl origin invalid: ${val.reason}` } };
-    }
 
     try {
       const resp = await fetchFn(this.mcpUrl, {
@@ -1174,11 +1354,26 @@ export class XMemoDevProxy {
   /**
    * Server-built delete fact route.
    * Constructs JSON-RPC call from isolated UNVERIFIED_XMEMO_MCP_MAPPING.
+   * Restricts deletion to closed YORI_MANAGED_FACT_KEYS registry.
+   * Enforces pre-delete provenance check (verifies yori:living-context tag)
+   * and explicit user confirmation in owner_key mode.
    */
   public async deleteFact(
     key: string,
-    fetchFn: typeof fetch = this.fetchFn
+    optionsOrFetchFn?: { userConfirmed?: boolean } | typeof fetch,
+    fetchFn?: typeof fetch
   ): Promise<{ status: number; data: unknown }> {
+    let options: { userConfirmed?: boolean } | undefined;
+    let effectiveFetchFn: typeof fetch;
+
+    if (typeof optionsOrFetchFn === 'function') {
+      effectiveFetchFn = optionsOrFetchFn;
+      options = undefined;
+    } else {
+      options = optionsOrFetchFn;
+      effectiveFetchFn = fetchFn || this.fetchFn;
+    }
+
     if (!this.config.enabled && !this.ownerKeyModeRequested) {
       return { status: 403, data: { error: 'XMemo OAuth disabled (set XMEMO_OAUTH_ENABLED=true or XMEMO_AUTH_MODE=owner_key)' } };
     }
@@ -1187,10 +1382,52 @@ export class XMemoDevProxy {
       return { status: 401, data: { error: 'Not connected to XMemo' } };
     }
 
+    const val = validateEndpointUrl(this.mcpUrl, this.config.issuer);
+    if (!val.valid) {
+      this.logger(`[XMemoProxy] Delete fact aborted: ${val.reason}`);
+      return { status: 502, data: { error: `mcpUrl origin invalid: ${val.reason}` } };
+    }
+
     if (typeof key !== 'string' || !key.trim() || key.length > 100) {
       return {
         status: 400,
         data: { error: 'Bad Request: key must be a non-empty string <= 100 characters' },
+      };
+    }
+
+    if (!isYoriManagedFactKey(key)) {
+      return {
+        status: 403,
+        data: { error: 'Forbidden: not a Yori-managed key' },
+      };
+    }
+
+    if (auth.mode === 'owner_key' && !options?.userConfirmed) {
+      return {
+        status: 400,
+        data: { error: 'Bad Request: owner_key delete requires explicit user confirmation marker' },
+      };
+    }
+
+    // Provenance check before delete (owner_key and oauth): pre-read fact via readPreferences
+    const readResult = await this.readPreferences(key, effectiveFetchFn);
+    if (readResult.status === 401) {
+      return readResult;
+    }
+    if (readResult.status !== 200) {
+      this.logger(`[XMemoProxy] Pre-delete read failed with status ${readResult.status}`);
+      return {
+        status: 424,
+        data: { error: 'Cannot delete: upstream fact pre-read failed' },
+      };
+    }
+
+    const verification = verifyFactProvenance(readResult.data, key);
+    if (!verification.ok) {
+      this.logger(`[XMemoProxy] Pre-delete fact verification failed: ${verification.reason}`);
+      return {
+        status: verification.status,
+        data: { error: verification.error },
       };
     }
 
@@ -1206,14 +1443,8 @@ export class XMemoDevProxy {
       },
     };
 
-    const val = validateEndpointUrl(this.mcpUrl, this.config.issuer);
-    if (!val.valid) {
-      this.logger(`[XMemoProxy] Delete fact aborted: ${val.reason}`);
-      return { status: 502, data: { error: `mcpUrl origin invalid: ${val.reason}` } };
-    }
-
     try {
-      const resp = await fetchFn(this.mcpUrl, {
+      const resp = await effectiveFetchFn(this.mcpUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1535,7 +1766,15 @@ export class XMemoDevProxy {
           return true;
         }
 
-        const deleteResult = await this.deleteFact(key);
+        const confirmHeader = req.headers?.['x-yori-confirm'];
+        const confirmHeaderVal = Array.isArray(confirmHeader) ? confirmHeader[0] : confirmHeader;
+        const userConfirmed =
+          (payload as any)?.confirmed === true ||
+          (payload as any)?.userConfirmed === true ||
+          confirmHeaderVal === 'true' ||
+          confirmHeaderVal === '1';
+
+        const deleteResult = await this.deleteFact(key, { userConfirmed });
         res.statusCode = deleteResult.status;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify(deleteResult.data));
