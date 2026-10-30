@@ -19,6 +19,8 @@
  */
 
 import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
   isLocalHost,
   isLocalOrigin,
@@ -44,6 +46,8 @@ export const UNVERIFIED_XMEMO_MCP_MAPPING = {
   writeStatusArg: 'status',
   writeTagArg: 'tag',
   writeTagValue: 'yori:living-context',
+  deleteTool: 'forget',
+  deleteKeyArg: 'key',
 } as const;
 
 export interface XMemoProxyConfig {
@@ -53,7 +57,9 @@ export interface XMemoProxyConfig {
   readonly tokenUrl: string;
   readonly revokeUrl: string;
   readonly mcpUrl: string;
-  readonly clientId: string;
+  readonly registrationUrl?: string;
+  readonly clientStoragePath?: string;
+  readonly clientId?: string;
   readonly clientSecret?: string;
   readonly redirectUri: string;
   readonly scopes: readonly string[];
@@ -107,7 +113,11 @@ export function resolveXMemoConfig(
   const tokenUrl = env['XMEMO_TOKEN_URL'] || `${issuer}/oauth/token`;
   const revokeUrl = env['XMEMO_REVOKE_URL'] || `${issuer}/oauth/revoke`;
   const mcpUrl = env['XMEMO_MCP_URL'] || `${issuer}/mcp`;
-  const clientId = env['XMEMO_CLIENT_ID'] || 'yori-dev-client';
+  const registrationUrl = env['XMEMO_REGISTRATION_URL'];
+  const clientStoragePath = env['XMEMO_CLIENT_STORAGE_PATH'] || path.resolve(process.cwd(), '.xmemo-client.json');
+
+  // Strict: remove 'yori-dev-client' placeholder fallback
+  const clientId = env['XMEMO_CLIENT_ID'] || undefined;
   const clientSecret = env['XMEMO_CLIENT_SECRET'];
   const redirectUri = env['XMEMO_REDIRECT_URI'] || 'http://127.0.0.1:5173/api/xmemo/callback';
 
@@ -122,6 +132,8 @@ export function resolveXMemoConfig(
     tokenUrl,
     revokeUrl,
     mcpUrl,
+    registrationUrl,
+    clientStoragePath,
     clientId,
     clientSecret,
     redirectUri,
@@ -134,23 +146,260 @@ export class XMemoDevProxy {
   private readonly rateLimiter: RateLimiter;
   private readonly pendingStates = new Map<string, PendingAuthState>();
   private session: XMemoSession = {};
+  private clientId?: string;
+  private clientSecret?: string;
+  private authorizeUrl: string;
+  private tokenUrl: string;
+  private revokeUrl: string;
+  private mcpUrl: string;
+  private registrationError?: string;
+  private registrationPromise?: Promise<{ success: boolean; clientId?: string; error?: string }>;
+  private readonly fetchFn: typeof fetch;
 
   constructor(
     configOverride?: Partial<XMemoProxyConfig>,
     private readonly logger: (msg: string) => void = () => {},
-    rateLimiter?: RateLimiter
+    rateLimiter?: RateLimiter,
+    fetchFn?: typeof fetch
   ) {
     const resolved = resolveXMemoConfig(this.logger);
+    const issuer = configOverride?.issuer ?? resolved.issuer;
+    const authorizeUrl =
+      configOverride?.authorizeUrl ??
+      (configOverride?.issuer ? `${issuer}/oauth/authorize` : resolved.authorizeUrl);
+    const tokenUrl =
+      configOverride?.tokenUrl ??
+      (configOverride?.issuer ? `${issuer}/oauth/token` : resolved.tokenUrl);
+    const revokeUrl =
+      configOverride?.revokeUrl ??
+      (configOverride?.issuer ? `${issuer}/oauth/revoke` : resolved.revokeUrl);
+    const mcpUrl =
+      configOverride?.mcpUrl ??
+      (configOverride?.issuer ? `${issuer}/mcp` : resolved.mcpUrl);
+
     this.config = {
       ...resolved,
       ...configOverride,
+      issuer,
+      authorizeUrl,
+      tokenUrl,
+      revokeUrl,
+      mcpUrl,
       scopes: configOverride?.scopes ?? resolved.scopes,
     };
     this.rateLimiter = rateLimiter ?? new RateLimiter(60, 60_000);
+    this.fetchFn =
+      fetchFn ??
+      (typeof fetch !== 'undefined'
+        ? fetch
+        : (() => Promise.reject(new Error('fetch unavailable'))) as any);
+
+    this.clientId = this.config.clientId;
+    this.clientSecret = this.config.clientSecret;
+    this.authorizeUrl = this.config.authorizeUrl;
+    this.tokenUrl = this.config.tokenUrl;
+    this.revokeUrl = this.config.revokeUrl;
+    this.mcpUrl = this.config.mcpUrl;
+
+    if (this.config.enabled && !this.clientId) {
+      this.tryLoadPersistedClientId();
+    }
+  }
+
+  public resetRegistration(): void {
+    this.clientId = this.config.clientId;
+    this.clientSecret = this.config.clientSecret;
+    this.registrationError = undefined;
+    this.registrationPromise = undefined;
+    if (this.config.enabled && !this.clientId) {
+      this.tryLoadPersistedClientId();
+    }
+  }
+
+  private tryLoadPersistedClientId(): boolean {
+    if (!this.config.clientStoragePath) return false;
+    try {
+      if (fs.existsSync(this.config.clientStoragePath)) {
+        const raw = fs.readFileSync(this.config.clientStoragePath, 'utf-8');
+        const data = JSON.parse(raw);
+        if (typeof data.client_id === 'string' && data.client_id.trim()) {
+          this.clientId = data.client_id.trim();
+          if (typeof data.client_secret === 'string' && data.client_secret.trim()) {
+            this.clientSecret = data.client_secret.trim();
+          }
+          this.logger(`[XMemoProxy] Loaded persisted client_id: ${this.clientId}`);
+          return true;
+        }
+      }
+    } catch (err: unknown) {
+      this.logger(`[XMemoProxy] Failed to load persisted client registration: ${(err as Error).message}`);
+    }
+    return false;
+  }
+
+  private persistRegistration(clientId: string, clientSecret?: string): void {
+    if (!this.config.clientStoragePath) return;
+    try {
+      const dir = path.dirname(this.config.clientStoragePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data: Record<string, string> = {
+        client_id: clientId,
+        issuer: this.config.issuer,
+        registered_at: new Date().toISOString(),
+      };
+      if (clientSecret) {
+        data['client_secret'] = clientSecret;
+      }
+      fs.writeFileSync(this.config.clientStoragePath, JSON.stringify(data, null, 2), {
+        encoding: 'utf-8',
+        mode: 0o600,
+      });
+      try {
+        fs.chmodSync(this.config.clientStoragePath, 0o600);
+      } catch {
+        // Ignore chmod error on unsupported filesystems
+      }
+      this.logger(`[XMemoProxy] Persisted client_id to ${this.config.clientStoragePath}`);
+    } catch (err: unknown) {
+      this.logger(`[XMemoProxy] Failed to persist client credentials: ${(err as Error).message}`);
+    }
+  }
+
+  public async ensureRegistered(
+    fetchFn: typeof fetch = this.fetchFn
+  ): Promise<{ success: boolean; clientId?: string; error?: string }> {
+    if (!this.config.enabled) {
+      return { success: false, error: 'XMemo OAuth disabled' };
+    }
+    if (this.clientId) {
+      return { success: true, clientId: this.clientId };
+    }
+    if (this.registrationError) {
+      return { success: false, error: this.registrationError };
+    }
+    if (this.registrationPromise) {
+      return this.registrationPromise;
+    }
+
+    this.registrationPromise = (async () => {
+      try {
+        let registrationEndpoint = this.config.registrationUrl;
+        if (!registrationEndpoint) {
+          try {
+            const discoveryUrl = `${this.config.issuer}/.well-known/oauth-authorization-server`;
+            const discoRes = await fetchFn(discoveryUrl, {
+              method: 'GET',
+              headers: { Accept: 'application/json' },
+            });
+            if (discoRes.ok) {
+              const discoData = (await discoRes.json()) as any;
+              if (discoData && typeof discoData.registration_endpoint === 'string' && discoData.registration_endpoint.trim()) {
+                registrationEndpoint = discoData.registration_endpoint.trim();
+              }
+              if (discoData && typeof discoData.authorization_endpoint === 'string' && discoData.authorization_endpoint.trim()) {
+                this.authorizeUrl = discoData.authorization_endpoint.trim();
+              }
+              if (discoData && typeof discoData.token_endpoint === 'string' && discoData.token_endpoint.trim()) {
+                this.tokenUrl = discoData.token_endpoint.trim();
+              }
+              if (discoData && typeof discoData.revocation_endpoint === 'string' && discoData.revocation_endpoint.trim()) {
+                this.revokeUrl = discoData.revocation_endpoint.trim();
+              }
+              if (discoData && typeof discoData.mcp_endpoint === 'string' && discoData.mcp_endpoint.trim()) {
+                this.mcpUrl = discoData.mcp_endpoint.trim();
+              }
+            }
+          } catch {
+            // Fall through to default registration endpoint
+          }
+          if (!registrationEndpoint) {
+            registrationEndpoint = `${this.config.issuer}/oauth/register`;
+          }
+        }
+
+        const registrationPayload = {
+          redirect_uris: [this.config.redirectUri],
+          grant_types: ['authorization_code', 'refresh_token'],
+          response_types: ['code'],
+          token_endpoint_auth_method: 'none',
+          scope: this.config.scopes.join(' '),
+          client_name: 'Yori (local dev)',
+        };
+
+        const regRes = await fetchFn(registrationEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify(registrationPayload),
+        });
+
+        if (!regRes.ok) {
+          let errCode = String(regRes.status);
+          try {
+            const errBody = await regRes.json();
+            if (errBody && typeof errBody.error === 'string' && errBody.error.trim()) {
+              errCode = errBody.error.trim();
+            } else if (errBody && typeof errBody.message === 'string' && errBody.message.trim()) {
+              errCode = errBody.message.trim();
+            }
+          } catch {
+            // Body was not JSON
+          }
+          this.registrationError = errCode;
+          this.logger(`[XMemoProxy] Dynamic registration rejected: ${errCode}`);
+          return { success: false, error: errCode };
+        }
+
+        let regData: any;
+        try {
+          regData = await regRes.json();
+        } catch {
+          this.registrationError = 'malformed_response';
+          this.logger('[XMemoProxy] Dynamic registration response malformed');
+          return { success: false, error: 'malformed_response' };
+        }
+
+        if (!regData || typeof regData.client_id !== 'string' || !regData.client_id.trim()) {
+          this.registrationError = 'malformed_response';
+          this.logger('[XMemoProxy] Dynamic registration missing client_id');
+          return { success: false, error: 'malformed_response' };
+        }
+
+        this.clientId = regData.client_id.trim();
+        if (typeof regData.client_secret === 'string' && regData.client_secret.trim()) {
+          this.clientSecret = regData.client_secret.trim();
+        }
+
+        this.persistRegistration(this.clientId!, this.clientSecret);
+        this.logger(`[XMemoProxy] Dynamic registration succeeded. Client ID: ${this.clientId}`);
+        return { success: true, clientId: this.clientId };
+      } catch (err: unknown) {
+        const errCode = 'network_error';
+        this.registrationError = errCode;
+        this.logger(`[XMemoProxy] Dynamic registration network error: ${(err as Error).message}`);
+        return { success: false, error: errCode };
+      } finally {
+        this.registrationPromise = undefined;
+      }
+    })();
+
+    return this.registrationPromise;
   }
 
   public getConfig(): XMemoProxyConfig {
-    return this.config;
+    return {
+      ...this.config,
+      clientId: this.clientId,
+      clientSecret: this.clientSecret,
+      authorizeUrl: this.authorizeUrl,
+      tokenUrl: this.tokenUrl,
+      revokeUrl: this.revokeUrl,
+      mcpUrl: this.mcpUrl,
+    };
   }
 
   public isConnected(): boolean {
@@ -163,6 +412,13 @@ export class XMemoDevProxy {
         enabled: false,
         connected: false,
         statusText: 'XMemo OAuth disabled (default)',
+      };
+    }
+    if (this.registrationError) {
+      return {
+        enabled: true,
+        connected: false,
+        statusText: `registration rejected: ${this.registrationError}`,
       };
     }
     const connected = this.isConnected();
@@ -180,6 +436,12 @@ export class XMemoDevProxy {
   public createAuthUrl(redirectUriOverride?: string): { authUrl: string; state: string } {
     if (!this.config.enabled) {
       throw new Error('XMemo OAuth disabled');
+    }
+    if (this.registrationError) {
+      throw new Error(`registration rejected: ${this.registrationError}`);
+    }
+    if (!this.clientId) {
+      throw new Error('XMemo registration required: no client_id available');
     }
     const { codeVerifier, codeChallenge } = generatePkcePair();
     const state = generateState();
@@ -201,7 +463,7 @@ export class XMemoDevProxy {
 
     const params = new URLSearchParams({
       response_type: 'code',
-      client_id: this.config.clientId,
+      client_id: this.clientId,
       redirect_uri: redirectUri,
       scope: this.config.scopes.join(' '),
       state,
@@ -210,7 +472,7 @@ export class XMemoDevProxy {
     });
 
     return {
-      authUrl: `${this.config.authorizeUrl}?${params.toString()}`,
+      authUrl: `${this.authorizeUrl}?${params.toString()}`,
       state,
     };
   }
@@ -222,7 +484,7 @@ export class XMemoDevProxy {
   public async exchangeCode(
     code: string,
     state: string,
-    fetchFn: typeof fetch = fetch
+    fetchFn: typeof fetch = this.fetchFn
   ): Promise<{ success: boolean; error?: string }> {
     if (!this.config.enabled) {
       return { success: false, error: 'XMemo OAuth disabled' };
@@ -233,19 +495,21 @@ export class XMemoDevProxy {
     }
     this.pendingStates.delete(state);
 
+    const effectiveClientId = this.clientId || this.config.clientId || '';
     const bodyParams: Record<string, string> = {
       grant_type: 'authorization_code',
       code,
       redirect_uri: pending.redirectUri,
-      client_id: this.config.clientId,
+      client_id: effectiveClientId,
       code_verifier: pending.codeVerifier,
     };
-    if (this.config.clientSecret) {
-      bodyParams['client_secret'] = this.config.clientSecret;
+    const effectiveSecret = this.clientSecret || this.config.clientSecret;
+    if (effectiveSecret) {
+      bodyParams['client_secret'] = effectiveSecret;
     }
 
     try {
-      const resp = await fetchFn(this.config.tokenUrl, {
+      const resp = await fetchFn(this.tokenUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -289,17 +553,17 @@ export class XMemoDevProxy {
   /**
    * Revokes token at revocation_endpoint and clears server session.
    */
-  public async disconnect(fetchFn: typeof fetch = fetch): Promise<{ success: boolean }> {
-    if (this.session.accessToken && this.config.revokeUrl) {
+  public async disconnect(fetchFn: typeof fetch = this.fetchFn): Promise<{ success: boolean }> {
+    if (this.session.accessToken && this.revokeUrl) {
       try {
-        await fetchFn(this.config.revokeUrl, {
+        await fetchFn(this.revokeUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
           body: new URLSearchParams({
             token: this.session.accessToken,
-            client_id: this.config.clientId,
+            client_id: this.clientId || this.config.clientId || '',
           }).toString(),
         });
       } catch {
@@ -318,7 +582,7 @@ export class XMemoDevProxy {
    */
   public async readPreferences(
     query?: string,
-    fetchFn: typeof fetch = fetch
+    fetchFn: typeof fetch = this.fetchFn
   ): Promise<{ status: number; data: unknown }> {
     if (!this.config.enabled) {
       return { status: 403, data: { error: 'XMemo OAuth disabled' } };
@@ -341,7 +605,7 @@ export class XMemoDevProxy {
     };
 
     try {
-      const resp = await fetchFn(this.config.mcpUrl, {
+      const resp = await fetchFn(this.mcpUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -381,7 +645,7 @@ export class XMemoDevProxy {
    */
   public async writeConfirmedFact(
     fact: unknown,
-    fetchFn: typeof fetch = fetch
+    fetchFn: typeof fetch = this.fetchFn
   ): Promise<{ status: number; data: unknown }> {
     if (!this.config.enabled) {
       return { status: 403, data: { error: 'XMemo OAuth disabled' } };
@@ -439,7 +703,74 @@ export class XMemoDevProxy {
     };
 
     try {
-      const resp = await fetchFn(this.config.mcpUrl, {
+      const resp = await fetchFn(this.mcpUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.session.accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (resp.status === 401) {
+        this.session = {};
+        this.logger('[XMemoProxy] Upstream 401: access token expired/revoked; session cleared');
+        return {
+          status: 401,
+          data: { error: 'XMemo authorization expired or revoked', disconnected: true },
+        };
+      }
+
+      if (!resp.ok) {
+        return {
+          status: resp.status >= 500 ? 502 : resp.status,
+          data: { error: `Upstream XMemo MCP returned error status ${resp.status}` },
+        };
+      }
+
+      return { status: 200, data: { success: true } };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { status: 502, data: { error: `Failed to connect to XMemo MCP: ${msg}` } };
+    }
+  }
+
+  /**
+   * Server-built delete fact route.
+   * Constructs JSON-RPC call from isolated UNVERIFIED_XMEMO_MCP_MAPPING.
+   */
+  public async deleteFact(
+    key: string,
+    fetchFn: typeof fetch = this.fetchFn
+  ): Promise<{ status: number; data: unknown }> {
+    if (!this.config.enabled) {
+      return { status: 403, data: { error: 'XMemo OAuth disabled' } };
+    }
+    if (!this.session.accessToken) {
+      return { status: 401, data: { error: 'Not connected to XMemo' } };
+    }
+
+    if (typeof key !== 'string' || !key.trim() || key.length > 100) {
+      return {
+        status: 400,
+        data: { error: 'Bad Request: key must be a non-empty string <= 100 characters' },
+      };
+    }
+
+    const payload = {
+      jsonrpc: '2.0',
+      id: Date.now(),
+      method: 'tools/call',
+      params: {
+        name: UNVERIFIED_XMEMO_MCP_MAPPING.deleteTool,
+        arguments: {
+          [UNVERIFIED_XMEMO_MCP_MAPPING.deleteKeyArg]: key,
+        },
+      },
+    };
+
+    try {
+      const resp = await fetchFn(this.mcpUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -580,6 +911,9 @@ export class XMemoDevProxy {
         res.end(JSON.stringify({ error: 'Method Not Allowed' }));
         return true;
       }
+      if (this.config.enabled && !this.clientId && !this.registrationError) {
+        await this.ensureRegistered();
+      }
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Cache-Control', 'no-store');
@@ -611,6 +945,9 @@ export class XMemoDevProxy {
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ error: 'Method Not Allowed' }));
         return true;
+      }
+      if (this.config.enabled && !this.clientId && !this.registrationError) {
+        await this.ensureRegistered();
       }
       try {
         const result = this.createAuthUrl();
@@ -706,19 +1043,35 @@ export class XMemoDevProxy {
       return true;
     }
 
-    // Route: POST /api/xmemo/confirmed-facts (Narrow server-built write route, confirm-only enforced)
+    // Route: POST / DELETE /api/xmemo/confirmed-facts (Narrow server-built write/delete route, confirm-only enforced)
     if (urlPath === '/api/xmemo/confirmed-facts') {
-      if (req.method !== 'POST') {
-        res.statusCode = 405;
+      if (req.method === 'POST') {
+        const writeResult = await this.writeConfirmedFact(payload);
+        res.statusCode = writeResult.status;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        res.end(JSON.stringify(writeResult.data));
         return true;
       }
 
-      const writeResult = await this.writeConfirmedFact(payload);
-      res.statusCode = writeResult.status;
+      if (req.method === 'DELETE') {
+        const key = (payload as any)?.key;
+        if (typeof key !== 'string' || !key.trim() || key.length > 100) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Bad Request: key must be string <= 100 characters' }));
+          return true;
+        }
+
+        const deleteResult = await this.deleteFact(key);
+        res.statusCode = deleteResult.status;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(deleteResult.data));
+        return true;
+      }
+
+      res.statusCode = 405;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify(writeResult.data));
+      res.end(JSON.stringify({ error: 'Method Not Allowed' }));
       return true;
     }
 
@@ -784,6 +1137,10 @@ export class XMemoDevProxy {
 export function createXMemoProxyMiddleware(
   proxy: XMemoDevProxy = new XMemoDevProxy()
 ) {
+  if (proxy.getConfig().enabled && !proxy.getConfig().clientId) {
+    void proxy.ensureRegistered();
+  }
+
   return async (req: any, res: any, next: () => void) => {
     try {
       const handled = await proxy.handleHttpRequest(req, res);

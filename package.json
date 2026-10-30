@@ -15,7 +15,8 @@
     "test:drills": "vitest run tests/integration",
     "test:e2e": "playwright test",
     "verify:production": "node scripts/verify-production-build.ts",
-    "verify:live:spark": "vite-node scripts/live-verify-spark.ts"
+    "verify:live:spark": "vite-node scripts/live-verify-spark.ts",
+    "verify:live:xmemo": "vite-node scripts/live-verify-xmemo.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

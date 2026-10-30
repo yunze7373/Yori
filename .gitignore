@@ -21,6 +21,7 @@ $RECYCLE.BIN/
 *.pfx
 *.keystore
 *.jks
+.xmemo-client.json
 
 # Local progress, scratch files, and logs
 .progress/

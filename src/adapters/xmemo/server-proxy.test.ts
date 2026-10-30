@@ -3,7 +3,10 @@
  * Governed by Architecture Rev3 Section 9.2, AC-203-1, and AC-203-2.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   XMemoDevProxy,
   createXMemoProxyMiddleware,
@@ -690,5 +693,520 @@ describe('XMemoDevProxy: Flag ON', () => {
 
       expect(nextCalled).toBe(true);
     });
+  });
+});
+
+describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
+  let tmpDir: string;
+  let stateFile: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xmemo-proxy-test-'));
+    stateFile = path.join(tmpDir, '.xmemo-client.json');
+  });
+
+  afterEach(() => {
+    try {
+      if (fs.existsSync(tmpDir)) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    } catch {
+      // ignore cleanup error
+    }
+  });
+
+  it('removes yori-dev-client fallback: clientId is undefined when not in env', () => {
+    const config = resolveXMemoConfig(() => {}, { XMEMO_OAUTH_ENABLED: 'true' });
+    expect(config.clientId).toBeUndefined();
+  });
+
+  it('discovers endpoint and registers with exact RFC 7591 request body', async () => {
+    let discoveryCalled = false;
+    let registrationPayload: any = null;
+    let registrationHeaders: any = null;
+
+    const mockFetch = (async (url: string, init?: RequestInit) => {
+      if (url === 'https://xmemo.dev/.well-known/oauth-authorization-server') {
+        discoveryCalled = true;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            registration_endpoint: 'https://xmemo.dev/oauth/register',
+          }),
+        };
+      }
+
+      if (url === 'https://xmemo.dev/oauth/register') {
+        registrationHeaders = init?.headers;
+        registrationPayload = JSON.parse(init?.body as string);
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            client_id: 'dyn-client-test-777',
+            client_name: 'Yori (local dev)',
+          }),
+        };
+      }
+
+      return { ok: false, status: 404 };
+    }) as any;
+
+    const proxy = new XMemoDevProxy(
+      {
+        enabled: true,
+        issuer: 'https://xmemo.dev',
+        redirectUri: 'http://127.0.0.1:5173/api/xmemo/callback',
+        clientStoragePath: stateFile,
+      },
+      () => {},
+      undefined,
+      mockFetch
+    );
+
+    const result = await proxy.ensureRegistered(mockFetch);
+    expect(result.success).toBe(true);
+    expect(result.clientId).toBe('dyn-client-test-777');
+    expect(discoveryCalled).toBe(true);
+
+    // Exact RFC 7591 registration payload check
+    expect(registrationPayload).toEqual({
+      redirect_uris: ['http://127.0.0.1:5173/api/xmemo/callback'],
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      token_endpoint_auth_method: 'none',
+      scope: 'memory:read memory:write',
+      client_name: 'Yori (local dev)',
+    });
+
+    expect(registrationHeaders['Content-Type']).toBe('application/json');
+    expect(registrationHeaders['Accept']).toBe('application/json');
+  });
+
+  it('skips discovery when XMEMO_REGISTRATION_URL override is configured', async () => {
+    let discoveryCalled = false;
+    let registrationUrlCalled = '';
+
+    const mockFetch = (async (url: string, _init?: RequestInit) => {
+      if (url.includes('.well-known')) {
+        discoveryCalled = true;
+        return { ok: true, status: 200, json: async () => ({}) };
+      }
+      if (url === 'https://custom-auth.example.com/register') {
+        registrationUrlCalled = url;
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ client_id: 'custom-reg-id' }),
+        };
+      }
+      return { ok: false, status: 404 };
+    }) as any;
+
+    const proxy = new XMemoDevProxy(
+      {
+        enabled: true,
+        registrationUrl: 'https://custom-auth.example.com/register',
+        clientStoragePath: stateFile,
+      },
+      () => {},
+      undefined,
+      mockFetch
+    );
+
+    const result = await proxy.ensureRegistered(mockFetch);
+    expect(result.success).toBe(true);
+    expect(result.clientId).toBe('custom-reg-id');
+    expect(discoveryCalled).toBe(false);
+    expect(registrationUrlCalled).toBe('https://custom-auth.example.com/register');
+  });
+
+  it('persists client_id to local state file (mode 0600) and reuses across restarts', async () => {
+    let regCallCount = 0;
+    const mockFetch = (async (url: string) => {
+      if (url.includes('.well-known')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+        };
+      }
+      if (url.includes('/oauth/register')) {
+        regCallCount++;
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            client_id: 'persisted-client-id-888',
+            client_secret: 'mock_secret_server_only',
+          }),
+        };
+      }
+      return { ok: false, status: 404 };
+    }) as any;
+
+    // Instance 1: registers and persists
+    const proxy1 = new XMemoDevProxy(
+      { enabled: true, clientStoragePath: stateFile },
+      () => {},
+      undefined,
+      mockFetch
+    );
+    const res1 = await proxy1.ensureRegistered(mockFetch);
+    expect(res1.success).toBe(true);
+    expect(res1.clientId).toBe('persisted-client-id-888');
+    expect(regCallCount).toBe(1);
+
+    // Verify file exists on disk
+    expect(fs.existsSync(stateFile)).toBe(true);
+    const stat = fs.statSync(stateFile);
+    // Mode check (0600)
+    expect(stat.mode & 0o777).toBe(0o600);
+    const content = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    expect(content.client_id).toBe('persisted-client-id-888');
+    expect(content.client_secret).toBe('mock_secret_server_only');
+
+    // Instance 2 (restart simulation): loads from file with 0 registration calls
+    const rejectingFetch = (async () => {
+      throw new Error('Should NOT be called because client_id is persisted');
+    }) as any;
+
+    const proxy2 = new XMemoDevProxy(
+      { enabled: true, clientStoragePath: stateFile },
+      () => {},
+      undefined,
+      rejectingFetch
+    );
+
+    const res2 = await proxy2.ensureRegistered(rejectingFetch);
+    expect(res2.success).toBe(true);
+    expect(res2.clientId).toBe('persisted-client-id-888');
+    expect(regCallCount).toBe(1); // Still 1, no second call!
+  });
+});
+
+describe('Fail-Closed Behavior on Registration Failure', () => {
+  let tmpDir: string;
+  let stateFile: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xmemo-fail-test-'));
+    stateFile = path.join(tmpDir, '.xmemo-client.json');
+  });
+
+  afterEach(() => {
+    try {
+      if (fs.existsSync(tmpDir)) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    } catch {
+      // ignore
+    }
+  });
+
+  it('fails closed when registration returns 400 invalid_redirect_uri', async () => {
+    const mockFetch = (async (url: string) => {
+      if (url.includes('.well-known')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+        };
+      }
+      if (url.includes('/oauth/register')) {
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({
+            error: 'invalid_redirect_uri',
+            error_description: 'Loopback redirect URIs are not allowed',
+          }),
+        };
+      }
+      return { ok: false, status: 404 };
+    }) as any;
+
+    const proxy = new XMemoDevProxy(
+      { enabled: true, clientStoragePath: stateFile },
+      () => {},
+      undefined,
+      mockFetch
+    );
+
+    // 1. GET /api/xmemo/status triggers registration and reports clear rejection status
+    const reqStatus = createMockReq({ url: '/api/xmemo/status', method: 'GET' });
+    const resStatus = createMockRes();
+    await proxy.handleHttpRequest(reqStatus, resStatus);
+
+    expect(resStatus.statusCode).toBe(200);
+    const statusData = JSON.parse(resStatus.body);
+    expect(statusData.enabled).toBe(true);
+    expect(statusData.connected).toBe(false);
+    expect(statusData.statusText).toBe('registration rejected: invalid_redirect_uri');
+
+    // 2. POST /api/xmemo/auth-url refuses to generate authorize URL
+    const reqAuth = createMockReq({ url: '/api/xmemo/auth-url', method: 'POST' });
+    const resAuth = createMockRes();
+    await proxy.handleHttpRequest(reqAuth, resAuth);
+
+    expect(resAuth.statusCode).toBe(500);
+    const authData = JSON.parse(resAuth.body);
+    expect(authData.error).toContain('registration rejected: invalid_redirect_uri');
+    expect(authData.authUrl).toBeUndefined();
+
+    // 3. createAuthUrl() directly throws
+    expect(() => proxy.createAuthUrl()).toThrow(/registration rejected: invalid_redirect_uri/);
+  });
+
+  it('fails closed on network error during registration', async () => {
+    const mockFetch = (async () => {
+      throw new Error('connect ECONNREFUSED 127.0.0.1:9999');
+    }) as any;
+
+    const proxy = new XMemoDevProxy(
+      { enabled: true, clientStoragePath: stateFile },
+      () => {},
+      undefined,
+      mockFetch
+    );
+
+    const reqStatus = createMockReq({ url: '/api/xmemo/status', method: 'GET' });
+    const resStatus = createMockRes();
+    await proxy.handleHttpRequest(reqStatus, resStatus);
+
+    expect(resStatus.statusCode).toBe(200);
+    const statusData = JSON.parse(resStatus.body);
+    expect(statusData.enabled).toBe(true);
+    expect(statusData.connected).toBe(false);
+    expect(statusData.statusText).toBe('registration rejected: network_error');
+
+    expect(() => proxy.createAuthUrl()).toThrow(/registration rejected: network_error/);
+  });
+
+  it('fails closed on malformed response without client_id', async () => {
+    const mockFetch = (async (url: string) => {
+      if (url.includes('.well-known')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+        };
+      }
+      if (url.includes('/oauth/register')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ something_else: 'no client_id here' }),
+        };
+      }
+      return { ok: false, status: 404 };
+    }) as any;
+
+    const proxy = new XMemoDevProxy(
+      { enabled: true, clientStoragePath: stateFile },
+      () => {},
+      undefined,
+      mockFetch
+    );
+
+    const reqStatus = createMockReq({ url: '/api/xmemo/status', method: 'GET' });
+    const resStatus = createMockRes();
+    await proxy.handleHttpRequest(reqStatus, resStatus);
+
+    expect(resStatus.statusCode).toBe(200);
+    const statusData = JSON.parse(resStatus.body);
+    expect(statusData.statusText).toBe('registration rejected: malformed_response');
+  });
+});
+
+describe('Secret Hygiene (Finding 5)', () => {
+  let tmpDir: string;
+  let stateFile: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xmemo-secret-test-'));
+    stateFile = path.join(tmpDir, '.xmemo-client.json');
+  });
+
+  afterEach(() => {
+    try {
+      if (fs.existsSync(tmpDir)) {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    } catch {
+      // ignore
+    }
+  });
+
+  it('sentinel tokens and client_secret never appear in logs, status JSON, browser responses or test output', async () => {
+    const SENTINEL_SECRET = 'sentinel_secret_xyz123_NEVER_LEAK';
+    const SENTINEL_ACCESS = 'sentinel_access_abc789_NEVER_LEAK';
+    const SENTINEL_REFRESH = 'sentinel_refresh_def456_NEVER_LEAK';
+
+    const logs: string[] = [];
+    const logger = (msg: string) => logs.push(msg);
+
+    const mockFetch = (async (url: string) => {
+      if (url.includes('.well-known')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+        };
+      }
+      if (url.includes('/oauth/register')) {
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            client_id: 'sentinel-client-id-001',
+            client_secret: SENTINEL_SECRET,
+          }),
+        };
+      }
+      if (url.includes('/oauth/token')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: SENTINEL_ACCESS,
+            refresh_token: SENTINEL_REFRESH,
+            token_type: 'Bearer',
+            expires_in: 3600,
+          }),
+        };
+      }
+      if (url.includes('/mcp')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            jsonrpc: '2.0',
+            result: { memories: [] },
+          }),
+        };
+      }
+      return { ok: false, status: 404 };
+    }) as any;
+
+    const proxy = new XMemoDevProxy(
+      { enabled: true, clientStoragePath: stateFile },
+      logger,
+      undefined,
+      mockFetch
+    );
+
+    const responseBodies: string[] = [];
+
+    // 1. Status (triggers registration)
+    const req1 = createMockReq({ url: '/api/xmemo/status', method: 'GET' });
+    const res1 = createMockRes();
+    await proxy.handleHttpRequest(req1, res1);
+    responseBodies.push(res1.body);
+
+    // 2. Auth URL
+    const req2 = createMockReq({ url: '/api/xmemo/auth-url', method: 'POST' });
+    const res2 = createMockRes();
+    await proxy.handleHttpRequest(req2, res2);
+    responseBodies.push(res2.body);
+    const authUrlData = JSON.parse(res2.body);
+
+    // 3. Callback token exchange
+    const req3 = createMockReq({
+      url: '/api/xmemo/callback',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: 'mock-code', state: authUrlData.state }),
+    });
+    const res3 = createMockRes();
+    await proxy.handleHttpRequest(req3, res3);
+    responseBodies.push(res3.body);
+
+    // 4. Connected status
+    const req4 = createMockReq({ url: '/api/xmemo/status', method: 'GET' });
+    const res4 = createMockRes();
+    await proxy.handleHttpRequest(req4, res4);
+    responseBodies.push(res4.body);
+
+    // 5. Read preferences
+    const req5 = createMockReq({
+      url: '/api/xmemo/preferences',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'prefs' }),
+    });
+    const res5 = createMockRes();
+    await proxy.handleHttpRequest(req5, res5);
+    responseBodies.push(res5.body);
+
+    // Combine all outputs
+    const allLogs = logs.join('\n');
+    const allBodies = responseBodies.join('\n');
+    const statusJson = JSON.stringify(proxy.getStatus());
+
+    for (const secret of [SENTINEL_SECRET, SENTINEL_ACCESS, SENTINEL_REFRESH]) {
+      expect(allLogs).not.toContain(secret);
+      expect(allBodies).not.toContain(secret);
+      expect(statusJson).not.toContain(secret);
+    }
+  });
+});
+
+describe('DELETE /api/xmemo/confirmed-facts', () => {
+  it('calls MCP forget tool to delete confirmed fact', async () => {
+    let mcpBody: any = null;
+    const mockFetch = (async (url: string, init?: RequestInit) => {
+      if (url.includes('/mcp')) {
+        mcpBody = JSON.parse(init?.body as string);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ jsonrpc: '2.0', result: { content: [{ type: 'text', text: 'deleted' }] } }),
+        };
+      }
+      return { ok: false, status: 404 };
+    }) as any;
+
+    const proxy = new XMemoDevProxy(
+      { enabled: true, clientId: 'test-client' },
+      () => {},
+      undefined,
+      mockFetch
+    );
+    // Set active session
+    (proxy as any).session = { accessToken: 'valid-test-token' };
+
+    const req = createMockReq({
+      url: '/api/xmemo/confirmed-facts',
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'yori:pref:coffee' }),
+    });
+    const res = createMockRes();
+
+    await proxy.handleHttpRequest(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(mcpBody).toBeDefined();
+    expect(mcpBody.method).toBe('tools/call');
+    expect(mcpBody.params.name).toBe('forget');
+    expect(mcpBody.params.arguments).toEqual({ key: 'yori:pref:coffee' });
+  });
+
+  it('rejects DELETE without key or with invalid key with 400', async () => {
+    const proxy = new XMemoDevProxy({ enabled: true, clientId: 'test-client' });
+    (proxy as any).session = { accessToken: 'valid-test-token' };
+
+    const req = createMockReq({
+      url: '/api/xmemo/confirmed-facts',
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const res = createMockRes();
+
+    await proxy.handleHttpRequest(req, res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toContain('Bad Request: key must be string');
   });
 });
