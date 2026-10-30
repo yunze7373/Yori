@@ -162,15 +162,16 @@ Every criterion is mapped strictly to demonstrable, recorded, and verifiable cod
 ### Project Provenance & Development Transparency
 - **Independent Pre-Existing Service (XMemo)**: XMemo is an independent, pre-existing external memory service (owner entity: `[OWNER TO CONFIRM]`). Yori integrates with XMemo as an optional remote vault over standard OAuth 2.0 PKCE and Model Context Protocol (MCP); XMemo itself is not part of the submitted Yori repository.
 - **Concept Origin**: The initial conceptual idea memory for Yori was recorded on 2026-10-14 (documenting the motivation for a calm, proactive assistant).
-- **Commit History & Timeline**: All Yori application code and tests were authored and committed during the hackathon window. The initial repository commit was authored on 2026-10-27T18:56Z (`f7dd63d`).
-- **AI-Agent-Assisted Development**: Application code, tests, and documentation were developed through AI-agent-assisted engineering and test-driven verification, reviewed and directed by the owner, who retains sole ownership and rights over all project deliverables.
+- **Git History & First Commit**: Verifiable git repository history begins with initial scaffolding commit `f7dd63d` at 2026-10-27T18:56Z (2026-10-28 03:56+09:00).
+- **Hackathon Authorship Window**: All Yori application code and tests in this repository were authored during the hackathon period `[OWNER TO CONFIRM]`.
+- **Development & Ownership**: Application code, tests, and documentation were developed through AI-agent-assisted engineering, directed and reviewed by the owner, who holds sole ownership and rights over all project deliverables `[OWNER TO CONFIRM]`.
 
 ### Hackathon Commit Statement
 > **Verified Commit Range (PRE-S1 Closeout Baseline):** `f7dd63d..6d2da2d` (101 commits, verified via `git log --oneline f7dd63d..6d2da2d | wc -l`), with approved closeout report at `9007ccc` (103 commits via `git log --oneline f7dd63d..9007ccc | wc -l`)  
 > **Initial Scaffolding Commit:** `f7dd63de5f74d285f6eef6ae44258d79650004d4` on Wed Oct 28 03:56:28 2026 +0900  
 > **Closeout Baseline Commit:** `6d2da2dd8f80030481f139e7f60f41c8b273bcd9` on Fri Oct 30 02:46:46 2026 +0900  
 > 
-> *All commits in the Yori codebase across `f7dd63d..HEAD` were authored and committed entirely within the Meta Global AI Developer Hackathon period, beginning from initial repository scaffolding through feature implementation, testing, and documentation.*
+> *Attestation that all commits across `f7dd63d..HEAD` were authored and committed within the Meta Global AI Developer Hackathon period: `[OWNER TO CONFIRM]`.*
 
 ### Feature Delta List (Shipped & Approved Slices)
 

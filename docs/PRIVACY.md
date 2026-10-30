@@ -24,7 +24,7 @@ Yori processes only the minimal data strictly necessary to synthesize your **Liv
 - **One-Shot & Consent-Gated**: If enabled, location is captured only upon explicit in-app user consent via `navigator.geolocation.getCurrentPosition`.
 - **Zero Persistent Tracking**: Continuous GPS background tracking (`watchPosition`) is absent across the entire repository (verified by static audit `AC-211-1`, `AC-211-2`).
 - **No Coordinate Leakage**: Raw coordinates are held in volatile client memory only for proximity filtering. Raw latitude and longitude coordinates are **never** logged, persisted to disk, or transmitted to any AI model.
-- **Demo Mode**: In standard demo scenes, only deterministic mock fixtures (e.g. Tokyo demo coordinates) are utilized.
+- **Demo Mode**: In standard demo scenes, only deterministic mock fixtures with fixed city coordinates (San Francisco / Los Angeles) are utilized.
 
 ### B. Personal Memories & Preferences (Confirm-Only)
 - **Confirm-Only Invariant (INV-107)**: Yori separates candidate observations from confirmed facts. Unconfirmed behavioral patterns remain local pending proposals in the **Me** tab.
@@ -61,13 +61,13 @@ Yori enforces strict architectural boundaries isolating external service integra
                  ▼                                ▼
 ┌────────────────────────────────┐  ┌──────────────────────────────┐
 │ Meta Model API (Cloud)         │  │ XMemo Remote Vault (Cloud)   │
-│ https://dev.meta.ai/api/v1     │  │ https://xmemo.dev/mcp        │
+│ https://api.meta.ai/v1         │  │ https://xmemo.dev/mcp        │
 │ (Wording polish & reordering)  │  │ (Confirmed facts only)       │
 └────────────────────────────────┘  └──────────────────────────────┘
 ```
 
 ### A. Meta Model API (`ModelPort` / Muse Spark)
-- **Integration Boundary**: The browser client never communicates with Meta servers directly. Requests pass through the local dev server proxy at `127.0.0.1:5173`.
+- **Integration Boundary**: The browser client never communicates with Meta servers directly. Requests pass through the local dev server proxy at `127.0.0.1:5173`. The default upstream endpoint is `https://api.meta.ai/v1` (configurable via `MODEL_BASE_URL`).
 - **Allowlisted Payload Filtering**: The proxy constructs minimal, constrained prompts containing strictly allowlisted contextual facts (such as departure time windows, rain/clear weather tags, and candidate venue titles).
 - **Zero Coordinate Policy**: Geographic coordinates and raw GPS data are **never** forwarded to the Meta Model API.
 - **Strict Hallucination Guards**: Model responses are restricted to phrasing refinement and candidate ranking. If a model response introduces unlisted times, places, or unverifiable claims, it is discarded in favor of deterministic domain templates.
@@ -86,8 +86,9 @@ You retain full, unencumbered ownership and control over your personal context:
 
 1. **Local Storage Erasure**:
    - You can wipe all locally stored preferences, proposals, and contextual state at any time by triggering **Reset Storage** in the **Me** view.
-2. **Remote Fact Deletion**:
-   - Confirmed facts synchronized to the XMemo remote vault can be selectively deleted using the **Forget** action (which issues a server-side MCP `forget` call) or by tapping **Disconnect** in settings.
+2. **Remote Vault Deletion & Disconnection**:
+   - Confirmed facts synchronized to the XMemo remote vault reside within your external XMemo account and can be managed or deleted directly through XMemo itself. While the dev server proxy exposes a programmatic REST endpoint (`DELETE /api/xmemo/confirmed-facts` utilizing the MCP `forget` tool), the current demo UI release does not expose an in-app individual fact deletion control.
+   - Tapping **Disconnect** revokes the active OAuth token and terminates the local dev-server proxy session memory, but does not wipe remote facts previously written to XMemo.
 3. **Volatile Process Memory**:
    - OAuth access tokens, refresh tokens, and PKCE verifiers reside strictly in volatile dev-server process memory. They are never written to browser `localStorage`, `sessionStorage`, cookies, or repository files.
 4. **Export & Portability**:
