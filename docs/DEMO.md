@@ -224,17 +224,27 @@ OAuth 2.0 PKCE remains the mandatory, production-grade authentication path for a
 
 ### 3. Read-Only Owner-Key Connectivity Check (XMEMO-RO)
 For single-tenant connectivity verification and shape discovery prior to owner-gated release:
+- **Environment Configuration**:
+  Add the owner credentials to `.env.local` (which is gitignored and automatically loaded):
+  ```bash
+  # .env.local
+  XMEMO_AUTH_MODE=owner_key
+  XMEMO_KEY=your-xmemo-owner-key
+  ```
+  > **Security Warning**: NEVER paste `XMEMO_KEY` inline on the command line, as shell history (`~/.zsh_history`) and process inspection tools (`ps aux`) will capture it in plain text. Always configure it in `.env.local`.
+
 - **Exact Owner Command**:
   ```bash
-  XMEMO_AUTH_MODE=owner_key XMEMO_KEY="<xmemo-owner-key>" npm run verify:live:xmemo -- --owner-key --read-only --confirm-live-readonly
+  npm run verify:live:xmemo -- --owner-key --read-only --confirm-live-readonly
   ```
   *(Or safe offline dry-run without external network calls: `npm run verify:live:xmemo -- --owner-key --read-only --dry-run`)*
 - **Prerequisites**:
   1. Explicit owner go-ahead authorization.
   2. Same-window service health check passing (confirming XMemo Postgres connection-slot stability per BACKLOG-20261030-84B8F7).
   3. Non-production environment (`NODE_ENV != production`).
-  4. Both `XMEMO_AUTH_MODE=owner_key` and non-empty `XMEMO_KEY` configured in process environment.
-  5. Explicit CLI flag `--confirm-live-readonly`.
+  4. Both `XMEMO_AUTH_MODE=owner_key` and non-empty `XMEMO_KEY` configured in `.env.local` or environment.
+  5. Target origin pinned strictly to `https://xmemo.dev` (unvalidated origins or non-https strictly refused).
+  6. Explicit CLI flag `--confirm-live-readonly`.
 - **Expected Report Fields** (`docs/evidence/s2-ro/` JSON & MD):
   - `timestampUtc` & `timestampJst`
   - Target `host` and HTTP status per request

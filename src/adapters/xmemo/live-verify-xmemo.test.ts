@@ -9,8 +9,12 @@ import {
   classifyEnvelopeShape,
   formatReportMarkdown,
   assertReportPrivacy,
+  sanitizeFieldName,
+  loadEnvLocal,
+  ALLOWED_LIVE_ORIGIN,
   ReadOnlyVerificationReport,
 } from '../../../scripts/live-verify-xmemo.js';
+import { XMemoRemoteAdapter } from './remote-adapter.js';
 
 describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
   let tmpReportDir: string;
@@ -30,9 +34,9 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
   });
 
   // ==========================================================================
-  // 1. Precondition Checks (Live Refusal)
+  // 1. Precondition Checks & Origin Pinning (Live Refusal)
   // ==========================================================================
-  describe('1. Precondition Checks (Live Refusal)', () => {
+  describe('1. Precondition Checks & Origin Pinning (Live Refusal)', () => {
     it('refuses live run when --confirm-live-readonly is omitted', async () => {
       process.env.XMEMO_AUTH_MODE = 'owner_key';
       process.env.XMEMO_KEY = 'test-owner-key';
@@ -100,13 +104,49 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
       expect(res.refused).toBe(true);
       expect(res.refusalReason).toContain('(production forbidden)');
     });
+
+    it('refuses live run when XMEMO_ISSUER origin differs from pinned origin https://xmemo.dev', async () => {
+      process.env.XMEMO_AUTH_MODE = 'owner_key';
+      process.env.XMEMO_KEY = 'test-owner-key';
+      process.env.NODE_ENV = 'development';
+      process.env.XMEMO_ISSUER = 'https://evil.example.com';
+
+      const res = await runReadOnlyOwnerKey({
+        dryRun: false,
+        confirmLiveReadonly: true,
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.refused).toBe(true);
+      expect(res.refusalReason).toContain(`origin must be pinned to '${ALLOWED_LIVE_ORIGIN}'`);
+    });
+
+    it('refuses live run when XMEMO_ISSUER protocol is insecure http', async () => {
+      process.env.XMEMO_AUTH_MODE = 'owner_key';
+      process.env.XMEMO_KEY = 'test-owner-key';
+      process.env.NODE_ENV = 'development';
+      process.env.XMEMO_ISSUER = 'http://xmemo.dev';
+
+      const res = await runReadOnlyOwnerKey({
+        dryRun: false,
+        confirmLiveReadonly: true,
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.refused).toBe(true);
+      expect(res.refusalReason).toContain(`origin must be pinned to '${ALLOWED_LIVE_ORIGIN}' with https`);
+    });
   });
 
   // ==========================================================================
-  // 2. Hard Cap Enforcement (Max 3 Upstream Requests)
+  // 2. Structural Request Cap & Ground Truth Reconciliation (P1)
   // ==========================================================================
-  describe('2. Hard Cap Enforcement (Max 3 Requests)', () => {
-    it('strictly clamps request execution to at most 3 requests even if more queries provided', async () => {
+  describe('2. Request Cap & Ground Truth Reconciliation (P1)', () => {
+    it('default run: reported totalRequestsDispatched strictly equals mockServer.recallCallCount (3 == 3)', async () => {
       const mockServer = new InProcessMockXMemoServer();
       await mockServer.start();
 
@@ -114,24 +154,24 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
         const res = await runReadOnlyOwnerKey({
           dryRun: true,
           mockServer,
-          maxRequests: 10, // Explicitly request 10
-          queries: ['q1', 'q2', 'q3', 'q4', 'q5'], // 5 queries provided
           reportDir: tmpReportDir,
           logger: () => {},
         });
 
         expect(res.success).toBe(true);
-        expect(res.refused).toBe(false);
         expect(res.report).toBeDefined();
-        // Clamped to 3
+
+        // Structural equality: reported count matches mock ground truth exactly
+        expect(res.report!.totalRequestsDispatched).toBe(mockServer.recallCallCount);
         expect(res.report!.totalRequestsDispatched).toBe(3);
         expect(res.report!.requests).toHaveLength(3);
+        expect(mockServer.recallCallCount).toBeLessThanOrEqual(3);
       } finally {
         await mockServer.stop();
       }
     });
 
-    it('executes fewer than 3 requests when fewer queries are planned', async () => {
+    it('3-query run: reported totalRequestsDispatched strictly equals mockServer.recallCallCount (3 == 3)', async () => {
       const mockServer = new InProcessMockXMemoServer();
       await mockServer.start();
 
@@ -140,12 +180,67 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
           dryRun: true,
           mockServer,
           maxRequests: 3,
+          queries: ['q1', 'q2', 'q3'],
+          reportDir: tmpReportDir,
+          logger: () => {},
+        });
+
+        expect(res.success).toBe(true);
+        expect(res.report).toBeDefined();
+
+        // 3 queries use all 3 slots; roundtrip respects cap and skips extra dispatch
+        expect(res.report!.totalRequestsDispatched).toBe(mockServer.recallCallCount);
+        expect(res.report!.totalRequestsDispatched).toBe(3);
+        expect(res.report!.requests).toHaveLength(3);
+        expect(mockServer.recallCallCount).toBeLessThanOrEqual(3);
+      } finally {
+        await mockServer.stop();
+      }
+    });
+
+    it('5-query run: capped structurally to at most 3 upstream requests (3 == 3)', async () => {
+      const mockServer = new InProcessMockXMemoServer();
+      await mockServer.start();
+
+      try {
+        const res = await runReadOnlyOwnerKey({
+          dryRun: true,
+          mockServer,
+          maxRequests: 99, // Unbounded input option
+          queries: ['q1', 'q2', 'q3', 'q4', 'q5'], // 5 queries provided
+          reportDir: tmpReportDir,
+          logger: () => {},
+        });
+
+        expect(res.success).toBe(true);
+        expect(res.report).toBeDefined();
+
+        // Must clamp structurally to 3
+        expect(res.report!.totalRequestsDispatched).toBe(mockServer.recallCallCount);
+        expect(res.report!.totalRequestsDispatched).toBe(3);
+        expect(res.report!.requests).toHaveLength(3);
+        expect(mockServer.recallCallCount).toBeLessThanOrEqual(3);
+      } finally {
+        await mockServer.stop();
+      }
+    });
+
+    it('1-query run: executes exactly 1 upstream request (1 == 1)', async () => {
+      const mockServer = new InProcessMockXMemoServer();
+      await mockServer.start();
+
+      try {
+        const res = await runReadOnlyOwnerKey({
+          dryRun: true,
+          mockServer,
+          maxRequests: 1,
           queries: ['preferences'],
           reportDir: tmpReportDir,
           logger: () => {},
         });
 
         expect(res.success).toBe(true);
+        expect(res.report!.totalRequestsDispatched).toBe(mockServer.recallCallCount);
         expect(res.report!.totalRequestsDispatched).toBe(1);
         expect(res.report!.requests).toHaveLength(1);
       } finally {
@@ -269,10 +364,57 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
   });
 
   // ==========================================================================
-  // 5. Minimal-Metadata Report & Privacy Redaction Audit
+  // 5. Remote Adapter Security Hardening (P2: No Owner Key in appAuthToken)
   // ==========================================================================
-  describe('5. Minimal-Metadata Report & Privacy Redaction Audit', () => {
-    it('persists report with field names and counts only, never values, PII, or tokens', async () => {
+  describe('5. Remote Adapter Security Hardening (P2)', () => {
+    it('remote adapter constructed during roundtrip does not include owner key in client headers', async () => {
+      const capturedHeaders: Record<string, string>[] = [];
+
+      const mockServer = new InProcessMockXMemoServer();
+      await mockServer.start();
+
+      // Custom mock fetch that captures request headers
+      const trackingFetch: typeof fetch = async (input, init) => {
+        const headers = init?.headers ? (init.headers as Record<string, string>) : {};
+        capturedHeaders.push({ ...headers });
+        return fetch(input, init);
+      };
+
+      try {
+        const res = await runReadOnlyOwnerKey({
+          dryRun: true,
+          mockServer,
+          mockFetch: trackingFetch,
+          reportDir: tmpReportDir,
+          logger: () => {},
+        });
+
+        expect(res.success).toBe(true);
+
+        // Verify that remote adapter roundtrip passes no client Authorization header with activeOwnerKey
+        const adapter = new XMemoRemoteAdapter({
+          proxyEndpoint: '/api/xmemo',
+          fetchFn: async (_url, init) => {
+            const h = (init?.headers as Record<string, string>) || {};
+            expect(h['Authorization']).toBeUndefined();
+            expect(h['authorization']).toBeUndefined();
+            return new Response(JSON.stringify({ result: { memories: [] } }), { status: 200 });
+          },
+        });
+
+        const loaded = await adapter.loadFacts();
+        expect(loaded).toEqual([]);
+      } finally {
+        await mockServer.stop();
+      }
+    });
+  });
+
+  // ==========================================================================
+  // 6. Minimal-Metadata Report & Privacy Redaction Audit (P3)
+  // ==========================================================================
+  describe('6. Minimal-Metadata Report & Privacy Redaction Audit', () => {
+    it('persists report with sanitized field names and counts only, never values, PII, or tokens', async () => {
       const mockServer = new InProcessMockXMemoServer();
       await mockServer.start();
 
@@ -344,6 +486,7 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
           'updatedAt',
           'value',
         ]);
+        expect(parsedReport.privacyAudit.reportContainsValues).toBe('structurally_excluded');
         expect(parsedReport.privacyAudit.rawBodyPersisted).toBe(false);
         expect(parsedReport.privacyAudit.piiValueLeakDetected).toBe(false);
         expect(parsedReport.privacyAudit.tokenLeakDetected).toBe(false);
@@ -354,6 +497,18 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
       } finally {
         await mockServer.stop();
       }
+    });
+
+    it('sanitizeFieldName sanitizes arbitrary/nonconforming property names safely', () => {
+      expect(sanitizeFieldName('valid_key_name')).toBe('valid_key_name');
+      expect(sanitizeFieldName('camelCaseKey')).toBe('camelCaseKey');
+      expect(sanitizeFieldName('key123')).toBe('key123');
+
+      // Nonconforming property names containing spaces, punctuation, or injection characters
+      expect(sanitizeFieldName('illegal space')).toBe('<nonconforming len=13>');
+      expect(sanitizeFieldName('{"injected":"json"}')).toBe('<nonconforming len=19>');
+      expect(sanitizeFieldName('tool:call/arg')).toBe('<nonconforming len=13>');
+      expect(sanitizeFieldName('a'.repeat(45))).toBe('<nonconforming len=45>');
     });
 
     it('assertReportPrivacy throws immediately if a forbidden snippet appears', () => {
@@ -396,6 +551,7 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
           mappedShape: 'MemoryFact[]',
         },
         privacyAudit: {
+          reportContainsValues: 'structurally_excluded',
           rawBodyPersisted: false,
           piiValueLeakDetected: false,
           tokenLeakDetected: false,
@@ -405,14 +561,15 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
       const md = formatReportMarkdown(sampleReport);
       expect(md).toContain('# XMemo Read-Only Owner-Key Connectivity Verification Report');
       expect(md).toContain('| 1 | `preferences` | 200 | 10ms | `result.memories[]` | 2 | 2 | 2 | `key, status, value` |');
+      expect(md).toContain('**Report Contains Values**: `structurally_excluded`');
       expect(md).toContain('**Loaded Facts Count**: 2');
     });
   });
 
   // ==========================================================================
-  // 6. Envelope Shape Classification
+  // 7. Envelope Shape Classification
   // ==========================================================================
-  describe('6. Envelope Shape Classification', () => {
+  describe('7. Envelope Shape Classification', () => {
     it('classifies result.facts[] correctly', () => {
       expect(classifyEnvelopeShape({ result: { facts: [{ key: 'k' }] } })).toBe('result.facts[]');
     });
@@ -463,9 +620,38 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
   });
 
   // ==========================================================================
-  // 7. MemoryPort Read-Side Roundtrip Robustness
+  // 8. .env.local Loading Helper (P2)
   // ==========================================================================
-  describe('7. MemoryPort Read-Side Roundtrip', () => {
+  describe('8. .env.local Loading Helper (P2)', () => {
+    it('loadEnvLocal loads variables from .env.local when not in test runner', () => {
+      const envDir = path.join(tmpReportDir, 'env-test');
+      fs.mkdirSync(envDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(envDir, '.env.local'),
+        'XMEMO_AUTH_MODE=owner_key\nXMEMO_KEY=test-owner-key-from-file\n',
+        'utf-8'
+      );
+
+      delete process.env.XMEMO_AUTH_MODE;
+      delete process.env.XMEMO_KEY;
+      delete process.env.VITEST;
+      delete process.env.NODE_ENV;
+
+      try {
+        loadEnvLocal(envDir);
+        expect(process.env.XMEMO_AUTH_MODE).toBe('owner_key');
+        expect(process.env.XMEMO_KEY).toBe('test-owner-key-from-file');
+      } finally {
+        process.env.VITEST = 'true';
+        process.env.NODE_ENV = 'test';
+      }
+    });
+  });
+
+  // ==========================================================================
+  // 9. MemoryPort Read-Side Roundtrip Robustness
+  // ==========================================================================
+  describe('9. MemoryPort Read-Side Roundtrip Robustness', () => {
     it('successfully maps upstream facts to MemoryFact[] in MemoryPort roundtrip', async () => {
       const mockServer = new InProcessMockXMemoServer();
       await mockServer.start();
@@ -511,9 +697,9 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
   });
 
   // ==========================================================================
-  // 8. Zero Model Involvement & Production Ledger Immutability
+  // 10. Zero Model Involvement & Production Ledger Immutability
   // ==========================================================================
-  describe('8. Zero Model Involvement & Ledger Immutability', () => {
+  describe('10. Zero Model Involvement & Ledger Immutability', () => {
     it('verifies live-verify-xmemo script does not invoke or import model proxy', () => {
       const scriptPath = path.resolve(__dirname, '../../../scripts/live-verify-xmemo.ts');
       const scriptContent = fs.readFileSync(scriptPath, 'utf-8');

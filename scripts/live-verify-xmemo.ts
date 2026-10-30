@@ -610,6 +610,53 @@ async function runDryRun(): Promise<void> {
   }
 }
 
+export const ALLOWED_LIVE_ORIGIN = 'https://xmemo.dev';
+
+/**
+ * Loads .env.local variables into process.env if present.
+ * In test runners (Vitest / NODE_ENV=test), environment variables are controlled by the test harness.
+ */
+export function loadEnvLocal(baseDir: string = path.resolve(__dirname, '..')): void {
+  if (process.env.VITEST || process.env.NODE_ENV === 'test') {
+    return;
+  }
+  const envPath = path.join(baseDir, '.env.local');
+  if (fs.existsSync(envPath)) {
+    try {
+      const content = fs.readFileSync(envPath, 'utf-8');
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) {
+          continue;
+        }
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx > 0) {
+          const key = trimmed.slice(0, eqIdx).trim();
+          let val = trimmed.slice(eqIdx + 1).trim();
+          if (
+            (val.startsWith('"') && val.endsWith('"')) ||
+            (val.startsWith("'") && val.endsWith("'"))
+          ) {
+            val = val.slice(1, -1);
+          }
+          if (!process.env[key]) {
+            process.env[key] = val;
+          }
+        }
+      }
+    } catch {
+      // ignore read error
+    }
+  }
+}
+
+export function sanitizeFieldName(name: string): string {
+  if (/^[A-Za-z_][A-Za-z0-9_]{0,39}$/.test(name)) {
+    return name;
+  }
+  return `<nonconforming len=${name.length}>`;
+}
+
 export type EnvelopeShapeClassification =
   | 'result.facts[]'
   | 'result.memories[]'
@@ -652,6 +699,7 @@ export interface ReadOnlyVerificationReport {
   readonly requests: readonly ReadOnlyRequestRecord[];
   readonly memoryPortRoundtrip: MemoryPortRoundtripResult;
   readonly privacyAudit: {
+    readonly reportContainsValues: 'structurally_excluded';
     readonly rawBodyPersisted: false;
     readonly piiValueLeakDetected: false;
     readonly tokenLeakDetected: false;
@@ -734,9 +782,10 @@ export function formatReportMarkdown(report: ReadOnlyVerificationReport): string
   lines.push('');
   lines.push('## 🛡️ Privacy & Secret Hygiene Audit');
   lines.push('');
+  lines.push(`- **Report Contains Values**: \`${report.privacyAudit.reportContainsValues}\` (field names and counts only)`);
   lines.push(`- **Raw Body Persisted**: \`${report.privacyAudit.rawBodyPersisted}\` (0 bytes stored)`);
-  lines.push(`- **PII / Content Leak Detected**: \`${report.privacyAudit.piiValueLeakDetected}\` (0 content strings)`);
-  lines.push(`- **Token Leak Detected**: \`${report.privacyAudit.tokenLeakDetected}\` (0 credentials in report or logs)`);
+  lines.push(`- **PII / Content Leak Detected**: \`${report.privacyAudit.piiValueLeakDetected}\` (zero forbidden values in report)`);
+  lines.push(`- **Token Leak Detected**: \`${report.privacyAudit.tokenLeakDetected}\` (zero credentials in report or logs)`);
   lines.push('');
 
   return lines.join('\n');
@@ -783,6 +832,7 @@ export async function runReadOnlyOwnerKey(
 
   // Preconditions for live run
   if (!isDryRun) {
+    loadEnvLocal();
     const authMode = process.env.XMEMO_AUTH_MODE;
     const ownerKey = process.env.XMEMO_KEY;
     const confirmLive = options.confirmLiveReadonly;
@@ -795,6 +845,22 @@ export async function runReadOnlyOwnerKey(
         `XMEMO_KEY=${ownerKey ? 'present' : 'missing'}, ` +
         `--confirm-live-readonly=${confirmLive ? 'present' : 'missing'}, ` +
         `NODE_ENV=${process.env.NODE_ENV || 'development'} ${isProd ? '(production forbidden)' : '(ok)'}`;
+      logger(`❌ Refusing live read-only run:\n   ${reason}`);
+      return { success: false, refused: true, refusalReason: reason };
+    }
+
+    const issuerUrlRaw = process.env.XMEMO_ISSUER || ALLOWED_LIVE_ORIGIN;
+    let parsedIssuer: URL;
+    try {
+      parsedIssuer = new URL(issuerUrlRaw);
+    } catch {
+      const reason = `Precondition check failed: XMEMO_ISSUER '${issuerUrlRaw}' is not a valid URL`;
+      logger(`❌ Refusing live read-only run:\n   ${reason}`);
+      return { success: false, refused: true, refusalReason: reason };
+    }
+
+    if (parsedIssuer.origin !== ALLOWED_LIVE_ORIGIN || parsedIssuer.protocol !== 'https:') {
+      const reason = `Precondition check failed: XMEMO_ISSUER '${issuerUrlRaw}' origin must be pinned to '${ALLOWED_LIVE_ORIGIN}' with https`;
       logger(`❌ Refusing live read-only run:\n   ${reason}`);
       return { success: false, refused: true, refusalReason: reason };
     }
@@ -843,15 +909,54 @@ export async function runReadOnlyOwnerKey(
       });
     }
   } else {
-    issuerUrl = process.env.XMEMO_ISSUER || 'https://xmemo.dev';
+    issuerUrl = (process.env.XMEMO_ISSUER || ALLOWED_LIVE_ORIGIN).replace(/\/$/, '');
     activeOwnerKey = process.env.XMEMO_KEY!;
   }
 
+  const expectedOrigin = new URL(issuerUrl).origin;
   const expectedHost = new URL(issuerUrl).host;
   const maxRequests = Math.min(options.maxRequests || 3, 3);
+  let upstreamDispatchCount = 0;
   const records: ReadOnlyRequestRecord[] = [];
   let executionStatus: 'success' | 'hard_stop' = 'success';
   let hardStopReason: string | undefined;
+
+  const baseFetch = options.mockFetch || fetch;
+
+  const countingFetch: typeof fetch = async (input, init) => {
+    const urlStr =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+        ? input.toString()
+        : (input as Request).url;
+    const targetUrl = new URL(urlStr);
+
+    // Live mode origin pinning & dry-run origin validation
+    if (!isDryRun) {
+      if (targetUrl.origin !== ALLOWED_LIVE_ORIGIN || targetUrl.protocol !== 'https:') {
+        throw new Error(
+          `Target origin forbidden: ${targetUrl.origin} (pinned strictly to ${ALLOWED_LIVE_ORIGIN})`
+        );
+      }
+    } else {
+      if (targetUrl.origin !== expectedOrigin) {
+        throw new Error(
+          `Target origin forbidden: ${targetUrl.origin} (expected mock origin ${expectedOrigin})`
+        );
+      }
+    }
+
+    // Structural Request Cap Check: refuse before dispatch if cap reached
+    if (upstreamDispatchCount >= maxRequests) {
+      throw new Error(
+        `Upstream request hard cap reached: cannot exceed ${maxRequests} requests per run`
+      );
+    }
+
+    upstreamDispatchCount++;
+    return baseFetch(input, init);
+  };
 
   const proxy = new XMemoDevProxy(
     {
@@ -862,13 +967,19 @@ export async function runReadOnlyOwnerKey(
     },
     options.mockFetch ? undefined : msg => logger(`   ${msg}`),
     undefined,
-    options.mockFetch
+    countingFetch
   );
 
   const plannedQueries = options.queries || ['preferences', 'prep_buffer_minutes'];
 
   try {
-    for (let i = 0; i < plannedQueries.length && i < maxRequests; i++) {
+    for (
+      let i = 0;
+      i < plannedQueries.length &&
+      upstreamDispatchCount < maxRequests &&
+      executionStatus === 'success';
+      i++
+    ) {
       const q = plannedQueries[i] ?? '';
       const start = Date.now();
       const readRes = await proxy.readPreferences(q);
@@ -879,7 +990,7 @@ export async function runReadOnlyOwnerKey(
         executionStatus = 'hard_stop';
         hardStopReason = `Target host mismatch: expected ${expectedHost}, got ${targetHost}`;
         records.push({
-          requestIndex: i + 1,
+          requestIndex: records.length + 1,
           query: q,
           httpStatus: readRes.status,
           latencyMs,
@@ -907,13 +1018,13 @@ export async function runReadOnlyOwnerKey(
           if (isYoriManagedFactKey(k)) managedCount++;
           if (hasYoriProvenance(item)) taggedCount++;
           for (const fn of Object.keys(item)) {
-            fieldNamesSet.add(fn);
+            fieldNamesSet.add(sanitizeFieldName(fn));
           }
         }
       }
 
       records.push({
-        requestIndex: i + 1,
+        requestIndex: records.length + 1,
         query: q,
         httpStatus: readRes.status,
         latencyMs,
@@ -922,7 +1033,7 @@ export async function runReadOnlyOwnerKey(
         itemCount,
         yoriManagedKeyCount: managedCount,
         yoriTaggedCount: taggedCount,
-        itemFieldNames: Array.from(fieldNamesSet).sort(),
+        itemFieldNames: Array.from(fieldNamesSet).sort().slice(0, 20),
       });
 
       // Hard stop on 401/403/5xx
@@ -941,15 +1052,25 @@ export async function runReadOnlyOwnerKey(
       mappedShape: 'none',
     };
 
-    if (executionStatus === 'success') {
+    if (executionStatus === 'success' && upstreamDispatchCount < maxRequests) {
+      const startRoundtrip = Date.now();
+      let roundtripReadRes: { status: number; data: unknown } | undefined;
+
       try {
         const remoteAdapter = new XMemoRemoteAdapter({
           proxyEndpoint: '/api/xmemo',
-          appAuthToken: activeOwnerKey,
+          // Notice: appAuthToken is omitted so client headers NEVER carry the server-side owner key
           fetchFn: async (_url: URL | RequestInfo, init?: RequestInit) => {
+            const authHeader =
+              (init?.headers as Record<string, string> | undefined)?.['Authorization'] ||
+              (init?.headers as Record<string, string> | undefined)?.['authorization'];
+            if (authHeader && authHeader.includes(activeOwnerKey)) {
+              throw new Error('SECURITY VIOLATION: Remote adapter client headers contain owner key');
+            }
             const parsed = init?.body ? JSON.parse(init.body as string) : {};
             const q = parsed.query;
             const res = await proxy.readPreferences(q);
+            roundtripReadRes = res;
             return {
               ok: res.status === 200,
               status: res.status,
@@ -959,6 +1080,51 @@ export async function runReadOnlyOwnerKey(
         });
 
         const loaded = await remoteAdapter.loadFacts();
+        const latencyMs = Date.now() - startRoundtrip;
+
+        if (roundtripReadRes) {
+          const shape = classifyEnvelopeShape(roundtripReadRes.data);
+          const candidates = extractCandidateFacts(roundtripReadRes.data);
+          const itemCount = candidates ? candidates.length : 0;
+
+          let managedCount = 0;
+          let taggedCount = 0;
+          const fieldNamesSet = new Set<string>();
+
+          if (candidates) {
+            for (const item of candidates) {
+              const k = item.key ?? item.name;
+              if (isYoriManagedFactKey(k)) managedCount++;
+              if (hasYoriProvenance(item)) taggedCount++;
+              for (const fn of Object.keys(item)) {
+                fieldNamesSet.add(sanitizeFieldName(fn));
+              }
+            }
+          }
+
+          records.push({
+            requestIndex: records.length + 1,
+            query: 'roundtrip:preferences',
+            httpStatus: roundtripReadRes.status,
+            latencyMs,
+            targetHost: expectedHost,
+            shapeClassification: shape,
+            itemCount,
+            yoriManagedKeyCount: managedCount,
+            yoriTaggedCount: taggedCount,
+            itemFieldNames: Array.from(fieldNamesSet).sort().slice(0, 20),
+          });
+
+          if (
+            roundtripReadRes.status === 401 ||
+            roundtripReadRes.status === 403 ||
+            roundtripReadRes.status >= 500
+          ) {
+            executionStatus = 'hard_stop';
+            hardStopReason = `Upstream error HTTP ${roundtripReadRes.status}`;
+          }
+        }
+
         roundtripResult = {
           executed: true,
           success: true,
@@ -997,10 +1163,11 @@ export async function runReadOnlyOwnerKey(
       targetHost: expectedHost,
       executionStatus,
       hardStopReason,
-      totalRequestsDispatched: records.length,
+      totalRequestsDispatched: upstreamDispatchCount,
       requests: records,
       memoryPortRoundtrip: roundtripResult,
       privacyAudit: {
+        reportContainsValues: 'structurally_excluded',
         rawBodyPersisted: false,
         piiValueLeakDetected: false,
         tokenLeakDetected: false,
@@ -1045,6 +1212,7 @@ export async function runReadOnlyOwnerKey(
 }
 
 async function main(): Promise<void> {
+  loadEnvLocal();
   const args = process.argv.slice(2);
 
   const isOwnerKeyMode = args.includes('--owner-key');

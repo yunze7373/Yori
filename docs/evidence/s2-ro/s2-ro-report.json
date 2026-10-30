@@ -1,18 +1,18 @@
 {
   "schemaVersion": "1.0.0",
-  "timestampUtc": "2026-10-30T20:05:06.349Z",
-  "timestampJst": "2026/10/31 05:05:06 JST",
+  "timestampUtc": "2026-10-30T20:16:21.008Z",
+  "timestampJst": "2026/10/31 05:16:21 JST",
   "runMode": "offline_mock",
-  "targetHost": "127.0.0.1:52075",
+  "targetHost": "127.0.0.1:52607",
   "executionStatus": "success",
-  "totalRequestsDispatched": 2,
+  "totalRequestsDispatched": 3,
   "requests": [
     {
       "requestIndex": 1,
       "query": "preferences",
       "httpStatus": 200,
-      "latencyMs": 15,
-      "targetHost": "127.0.0.1:52075",
+      "latencyMs": 10,
+      "targetHost": "127.0.0.1:52607",
       "shapeClassification": "result.memories[]",
       "itemCount": 3,
       "yoriManagedKeyCount": 2,
@@ -31,11 +31,30 @@
       "query": "prep_buffer_minutes",
       "httpStatus": 200,
       "latencyMs": 2,
-      "targetHost": "127.0.0.1:52075",
+      "targetHost": "127.0.0.1:52607",
       "shapeClassification": "result.memories[]",
       "itemCount": 1,
       "yoriManagedKeyCount": 1,
       "yoriTaggedCount": 1,
+      "itemFieldNames": [
+        "key",
+        "provenance",
+        "status",
+        "tag",
+        "updatedAt",
+        "value"
+      ]
+    },
+    {
+      "requestIndex": 3,
+      "query": "roundtrip:preferences",
+      "httpStatus": 200,
+      "latencyMs": 1,
+      "targetHost": "127.0.0.1:52607",
+      "shapeClassification": "result.memories[]",
+      "itemCount": 3,
+      "yoriManagedKeyCount": 2,
+      "yoriTaggedCount": 2,
       "itemFieldNames": [
         "key",
         "provenance",
@@ -53,6 +72,7 @@
     "mappedShape": "MemoryFact[]"
   },
   "privacyAudit": {
+    "reportContainsValues": "structurally_excluded",
     "rawBodyPersisted": false,
     "piiValueLeakDetected": false,
     "tokenLeakDetected": false
