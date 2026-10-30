@@ -76,6 +76,7 @@ export interface ModelProxyConfig {
   readonly modelName: string;
   readonly liveEnabled: boolean;
   readonly maxCalls: number;
+  readonly lifetimeMaxCalls: number;
   readonly timeoutMs: number;
   readonly maxTokensOverride?: number;
   readonly reasoningEffort?: ReasoningEffort;
@@ -114,6 +115,20 @@ export function resolveMaxCalls(env: Record<string, string | undefined> = proces
 }
 
 /**
+ * Resolves MODEL_LIFETIME_MAX_CALLS from environment.
+ * Defaults to MODEL_LIFETIME_MAX_CALLS (50) when unset or empty.
+ */
+export function resolveLifetimeMaxCalls(
+  env: Record<string, string | undefined> = process.env
+): number {
+  const raw = env['MODEL_LIFETIME_MAX_CALLS'];
+  if (raw === undefined || raw.trim() === '') return MODEL_LIFETIME_MAX_CALLS;
+  const parsed = parseInt(raw, 10);
+  if (isNaN(parsed) || parsed < 0) return MODEL_LIFETIME_MAX_CALLS;
+  return parsed;
+}
+
+/**
  * Resolves MODEL_TIMEOUT_MS with strict clamp [500, 20000].
  * Default: 2000 ms. NaN/negative/empty -> 2000.
  */
@@ -127,9 +142,10 @@ export function resolveTimeoutMs(env: Record<string, string | undefined> = proce
 
 /**
  * Operational maximum completion token ceiling for Meta Model API (api.meta.ai).
- * Context window: 1M tokens (1,048,576) [UNVERIFIED on public docs page; cited in release notes].
- * Llama 3.1 architecture limit: up to 131,072 context tokens (https://llama.meta.com/docs/model-cards-and-prompt-formats/llama3_1/, retrieved Oct 2026; "Context length: up to 128k tokens").
- * For muse-spark-1.3 Chat Completions, maximum completion ceiling is [UNVERIFIED on public endpoint without auth];
+ * Context window is cited in release marketing as up to 1M tokens [UNVERIFIED on public docs page].
+ * Note: Llama 3.1 architecture documentation defines a 128k context window, but that is
+ * an architecture context metric for a different model, not an operational completion ceiling.
+ * Maximum completion ceiling for muse-spark-1.3 is [UNVERIFIED on public endpoints without auth];
  * safely bounded operationally at MAX_TOKENS_CEILING = 8192.
  * Pricing reference: ~$2.00 per 1M completion tokens ($0.000002/token) [UNVERIFIED estimate used for worst-case budget bounds].
  */
@@ -152,8 +168,7 @@ export function resolveMaxTokensOverride(
 
 /**
  * Resolves MODEL_REASONING_EFFORT from environment.
- * Meta Model API documentation (https://api.meta.ai/v1, retrieved Oct 2026) specifies supported values:
- * 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'.
+ * Supported values in ecosystem documentation: 'minimal', 'low', 'medium', 'high', 'xhigh', 'max' [UNVERIFIED on live endpoint].
  * Note: 'none' is documented to cause HTTP 400 on reasoning endpoints [UNVERIFIED on live endpoint].
  * Unset or unrecognized values return undefined (omitted from payload to eliminate HTTP 400 risk).
  */
@@ -470,6 +485,7 @@ export function resolveModelConfig(
   const modelName = process.env['MODEL_NAME'] || 'muse-spark-1.3';
   const liveEnabled = process.env['MODEL_LIVE_ENABLED'] === '1';
   const maxCalls = resolveMaxCalls(process.env);
+  const lifetimeMaxCalls = resolveLifetimeMaxCalls(process.env);
   const timeoutMs = resolveTimeoutMs(process.env);
   const maxTokensOverride = resolveMaxTokensOverride(process.env);
   const reasoningEffort = resolveReasoningEffort(process.env);
@@ -482,6 +498,7 @@ export function resolveModelConfig(
     modelName,
     liveEnabled,
     maxCalls,
+    lifetimeMaxCalls,
     timeoutMs,
     maxTokensOverride,
     reasoningEffort,
@@ -716,6 +733,8 @@ export class ModelDevProxy {
           ? Math.min(Math.max(0, customConfig.maxCalls), MODEL_PER_RUN_MAX_CALLS)
           : resolved.maxCalls;
 
+      const lifetimeMaxCalls = customConfig.lifetimeMaxCalls ?? resolved.lifetimeMaxCalls;
+
       const timeoutMs =
         customConfig.timeoutMs !== undefined
           ? Math.max(500, Math.min(20000, customConfig.timeoutMs))
@@ -740,6 +759,7 @@ export class ModelDevProxy {
         modelName: customConfig.modelName ?? resolved.modelName,
         liveEnabled,
         maxCalls,
+        lifetimeMaxCalls,
         timeoutMs,
         maxTokensOverride,
         reasoningEffort,
@@ -824,11 +844,11 @@ export class ModelDevProxy {
       };
     }
 
-    if (ledgerState.callCount >= MODEL_LIFETIME_MAX_CALLS) {
+    if (ledgerState.callCount >= this.config.lifetimeMaxCalls) {
       return {
         ...baseDiag,
         status: 'disabled',
-        message: `model: lifetime call cap reached (${ledgerState.callCount}/${MODEL_LIFETIME_MAX_CALLS}), falling back to deterministic`,
+        message: `model: lifetime call cap reached (${ledgerState.callCount}/${this.config.lifetimeMaxCalls}), falling back to deterministic`,
         keySource: this.config.keySource,
       };
     }
@@ -1249,9 +1269,20 @@ export class ModelDevProxy {
       };
     }
 
+    const preState = readLedgerState(this.config.ledgerPath);
+    if (preState.status === 'ok' && preState.callCount >= this.config.lifetimeMaxCalls) {
+      this.logger(
+        `[ModelProxy] Lifetime call cap reached (${preState.callCount}/${this.config.lifetimeMaxCalls}): falling back to deterministic`
+      );
+      return {
+        wording: fallbackWording,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+
     if (this.runStartLedgerCount === undefined) {
-      const state = readLedgerState(this.config.ledgerPath);
-      this.runStartLedgerCount = state.status === 'ok' ? state.callCount : 0;
+      this.runStartLedgerCount = preState.status === 'ok' ? preState.callCount : 0;
     }
 
     const reservation = await reserveLedgerSlot(
@@ -1259,7 +1290,7 @@ export class ModelDevProxy {
       this.config.maxCalls,
       'refine',
       this.logger,
-      MODEL_LIFETIME_MAX_CALLS,
+      this.config.lifetimeMaxCalls,
       this.runStartLedgerCount
     );
     if (!reservation.success) {
@@ -1272,7 +1303,7 @@ export class ModelDevProxy {
         fallbackReason: 'disabled',
       };
     }
-    processLiveCallCount = Math.max(processLiveCallCount + 1, reservation.callCount);
+    processLiveCallCount += 1;
 
     try {
       const controller = new AbortController();
@@ -1469,9 +1500,20 @@ export class ModelDevProxy {
       };
     }
 
+    const preState = readLedgerState(this.config.ledgerPath);
+    if (preState.status === 'ok' && preState.callCount >= this.config.lifetimeMaxCalls) {
+      this.logger(
+        `[ModelProxy] Lifetime call cap reached (${preState.callCount}/${this.config.lifetimeMaxCalls}): falling back to deterministic`
+      );
+      return {
+        result: fallback,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+
     if (this.runStartLedgerCount === undefined) {
-      const state = readLedgerState(this.config.ledgerPath);
-      this.runStartLedgerCount = state.status === 'ok' ? state.callCount : 0;
+      this.runStartLedgerCount = preState.status === 'ok' ? preState.callCount : 0;
     }
 
     const reservation = await reserveLedgerSlot(
@@ -1479,7 +1521,7 @@ export class ModelDevProxy {
       this.config.maxCalls,
       'reason_rank',
       this.logger,
-      MODEL_LIFETIME_MAX_CALLS,
+      this.config.lifetimeMaxCalls,
       this.runStartLedgerCount
     );
     if (!reservation.success) {
@@ -1492,7 +1534,7 @@ export class ModelDevProxy {
         fallbackReason: 'disabled',
       };
     }
-    processLiveCallCount = Math.max(processLiveCallCount + 1, reservation.callCount);
+    processLiveCallCount += 1;
 
     try {
       const controller = new AbortController();
@@ -1662,9 +1704,20 @@ export class ModelDevProxy {
       };
     }
 
+    const preState = readLedgerState(this.config.ledgerPath);
+    if (preState.status === 'ok' && preState.callCount >= this.config.lifetimeMaxCalls) {
+      this.logger(
+        `[ModelProxy] Lifetime call cap reached (${preState.callCount}/${this.config.lifetimeMaxCalls}): falling back to deterministic`
+      );
+      return {
+        result: null,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+
     if (this.runStartLedgerCount === undefined) {
-      const state = readLedgerState(this.config.ledgerPath);
-      this.runStartLedgerCount = state.status === 'ok' ? state.callCount : 0;
+      this.runStartLedgerCount = preState.status === 'ok' ? preState.callCount : 0;
     }
 
     const reservation = await reserveLedgerSlot(
@@ -1672,7 +1725,7 @@ export class ModelDevProxy {
       this.config.maxCalls,
       'decision_command',
       this.logger,
-      MODEL_LIFETIME_MAX_CALLS,
+      this.config.lifetimeMaxCalls,
       this.runStartLedgerCount
     );
     if (!reservation.success) {
@@ -1685,7 +1738,7 @@ export class ModelDevProxy {
         fallbackReason: 'disabled',
       };
     }
-    processLiveCallCount = Math.max(processLiveCallCount + 1, reservation.callCount);
+    processLiveCallCount += 1;
 
     try {
       const controller = new AbortController();

@@ -881,6 +881,8 @@ export interface LiveVerificationReport {
   readonly lifetimeCap: number;
   readonly totalCallsDispatched: number;
   readonly ledgerCallCount: number;
+  readonly ledgerDelta: number;
+  readonly ledgerReconciled: boolean;
   readonly ledgerPath: string;
   readonly executionStatus: 'completed' | 'hard_stop';
   readonly hardStopReason?: string;
@@ -905,6 +907,8 @@ function generateMarkdownReport(report: LiveVerificationReport): string {
   lines.push(`| **Lifetime Remaining** | \`${report.lifetimeRemaining}\` |`);
   lines.push(`| **Total Calls Dispatched** | \`${report.totalCallsDispatched}\` |`);
   lines.push(`| **Durable Ledger Count** | \`${report.ledgerCallCount} / ${report.lifetimeCap}\` |`);
+  lines.push(`| **Ledger Delta** | \`${report.ledgerDelta}\` |`);
+  lines.push(`| **Ledger Reconciled** | \`${report.ledgerReconciled ? 'MATCH (dispatched == ledger delta) ✅' : 'MISMATCH ❌'}\` |`);
   lines.push(`| **Durable Ledger File** | \`${report.ledgerPath}\` |`);
   lines.push(`| **Execution Status** | \`${report.executionStatus === 'completed' ? 'COMPLETED' : `HARD STOP (${report.hardStopReason ?? 'error'})`}\` |`);
   lines.push(`| **Target Host Compliance** | \`${report.hostList.every(h => h === 'api.meta.ai') ? 'api.meta.ai ONLY ✅' : 'NON-COMPLIANT HOST DETECTED ❌'}\` |`);
@@ -1035,12 +1039,14 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
 
   let hardStopTriggered = false;
   let hardStopMessage: string | undefined;
+  let liveFetchDispatchedCount = 0;
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
     const parsedUrl = new URL(urlStr);
     const host = parsedUrl.hostname;
     hostsSeen.add(host);
+    liveFetchDispatchedCount++;
 
     if (host !== 'api.meta.ai') {
       hardStopTriggered = true;
@@ -1121,18 +1127,28 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
 
   const results: LiveVerificationCallRecord[] = [];
   const proxy = new ModelDevProxy();
-  const maxTokensConfig = proxy.getConfig().maxTokensOverride ?? 'endpoint defaults (150/250/300)';
+  const maxTokensOverride = proxy.getConfig().maxTokensOverride;
+  const isDefaultTokens = maxTokensOverride === undefined;
+  const maxTokensConfig = maxTokensOverride ?? 300;
+  const maxTokensDisplay = isDefaultTokens ? 'endpoint defaults (150/250/300; max 300)' : `${maxTokensConfig}`;
+
+  // Runtime spend bounds: best-case (3 accepted calls) vs worst-case (effectiveCap dispatches @ maxTokensConfig)
+  const effectiveCap = Math.min(10, rawMax);
+  const bestCaseTokens = isDefaultTokens ? (150 + 250 + 300) : (3 * maxTokensConfig);
+  const bestCaseSpend = (bestCaseTokens * 0.000002).toFixed(4);
+  const worstCaseTokens = effectiveCap * maxTokensConfig;
+  const worstCaseSpend = (worstCaseTokens * 0.000002).toFixed(4);
 
   console.log('----------------------------------------------------------------------');
   console.log('📋 PRE-DISPATCH BUDGET & SAFETY SUMMARY');
   console.log('----------------------------------------------------------------------');
-  console.log(`Planned Objectives:     refine, reason, command (up to 1 accepted per objective)`);
+  console.log(`Planned Calls:          ${effectiveCap} (up to 3 accepted, 1 per objective)`);
   console.log(`Per-Run Call Cap:       ${rawMax} (valid 1..${MODEL_PER_RUN_MAX_CALLS})`);
   console.log(`Lifetime Cap:           ${MODEL_LIFETIME_MAX_CALLS}`);
   console.log(`Lifetime Calls Used:    ${lifetimeUsed}`);
   console.log(`Lifetime Remaining:     ${lifetimeRemaining}`);
-  console.log(`Per-Call max_tokens:    ${maxTokensConfig}`);
-  console.log(`Worst-Case Spend Range: $0.003 - $0.025 (assumes ~$2.00/1M tokens, 1000-4096 tokens/call)`);
+  console.log(`Per-Call max_tokens:    ${maxTokensDisplay}`);
+  console.log(`Spend Range Estimate:   $${bestCaseSpend} - $${worstCaseSpend} (assumes ~$2.00/1M tokens [$0.000002/tok] [UNVERIFIED], best-case 3 accepts to worst-case ${effectiveCap} dispatches @ up to ${maxTokensConfig} tok/call)`);
   console.log('----------------------------------------------------------------------\n');
 
   // 4. Planned Call Definitions
@@ -1315,9 +1331,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
       }
 
       // Check per-run cap before executing
-      const currentRunCount = results.length;
-      if (currentRunCount >= rawMax) {
-        console.log(`\n🛑 Per-run call cap reached (${currentRunCount}/${rawMax}). Stopping planned calls.`);
+      if (liveFetchDispatchedCount >= rawMax) {
+        console.log(`\n🛑 Per-run call cap reached (${liveFetchDispatchedCount}/${rawMax}). Stopping planned calls.`);
         break;
       }
 
@@ -1341,26 +1356,36 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         callResult = { usedFallback: true, fallbackReason: 'error' };
       }
 
+      // If no fetch occurred (e.g. proxy blocked reservation or disabled fallback):
+      if (!lastFetchMeta) {
+        console.log(`  [SKIP/BLOCKED] Planned call #${callIndex} [${callDef.endpoint.toUpperCase()}]: No fetch dispatched (reason: ${callResult.fallbackReason ?? 'unknown'}).`);
+        if (callResult.fallbackReason === 'disabled') {
+          console.log(`\n🛑 Proxy refused call (disabled / cap exceeded). Halting.`);
+          break;
+        }
+        continue;
+      }
+
       // HARD STOP on truncated or extraction_fault
       if (callResult.fallbackReason === 'truncated' || callResult.fallbackReason === 'extraction_fault') {
         hardStopTriggered = true;
         hardStopMessage = `fallbackReason: ${callResult.fallbackReason}`;
       }
 
-      const meta = lastFetchMeta || {
-        host: expectedHost,
-        status: 0,
-        latencyMs: 0,
-        promptTokens: undefined,
-        completionTokens: undefined,
-        totalTokens: undefined,
-        reasoningTokens: undefined,
-        finishReason: undefined,
-        error: 'No fetch recorded',
+      const meta = lastFetchMeta as {
+        host: string;
+        status: number;
+        latencyMs: number;
+        promptTokens?: number;
+        completionTokens?: number;
+        totalTokens?: number;
+        reasoningTokens?: number;
+        finishReason?: string;
+        error?: string;
       };
 
       const record: LiveVerificationCallRecord = {
-        index: callIndex,
+        index: liveFetchDispatchedCount,
         endpoint: callDef.endpoint,
         description: callDef.description,
         httpStatus: meta.status,
@@ -1378,7 +1403,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
 
       results.push(record);
       const outcomeTag = record.factCheckOutcome === 'accepted' ? 'ACCEPTED ✅' : `DISCARDED (${record.fallbackReason ?? 'fallback'})`;
-      console.log(`  Call #${callIndex.toString().padStart(2, ' ')} [${callDef.endpoint.toUpperCase()}]: HTTP ${record.httpStatus} (${record.latencyMs}ms) — ${outcomeTag} — ${callDef.description}`);
+      console.log(`  Call #${liveFetchDispatchedCount.toString().padStart(2, ' ')} [${callDef.endpoint.toUpperCase()}]: HTTP ${record.httpStatus} (${record.latencyMs}ms) — ${outcomeTag} — ${callDef.description}`);
 
       if (record.factCheckOutcome === 'accepted') {
         acceptedObjectives.add(callDef.endpoint);
@@ -1389,7 +1414,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
       }
 
       if (hardStopTriggered) {
-        console.log(`\n🛑 HARD STOP triggered after call #${callIndex}: ${hardStopMessage}. Halting.`);
+        console.log(`\n🛑 HARD STOP triggered after call #${liveFetchDispatchedCount}: ${hardStopMessage}. Halting.`);
         break;
       }
     }
@@ -1403,15 +1428,24 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   }
 
   const finalLedger = readLedgerState(ledgerPath);
-  const totalCalls = results.length;
-  const ledgerCount = finalLedger.status === 'ok' ? finalLedger.callCount : totalCalls;
+  const totalCalls = liveFetchDispatchedCount;
+  const ledgerCallCount = finalLedger.status === 'ok' ? finalLedger.callCount : lifetimeUsed + totalCalls;
+  const ledgerDelta = ledgerCallCount - lifetimeUsed;
+  const ledgerReconciled = (totalCalls === ledgerDelta);
+
+  if (!ledgerReconciled) {
+    console.warn(`\n⚠️ LEDGER RECONCILIATION MISMATCH: dispatched (${totalCalls}) != ledger delta (${ledgerDelta})`);
+  }
 
   // Print Summary
   console.log('\n======================================================================');
   console.log('📊 S1-LIVE EXECUTION SUMMARY');
   console.log('======================================================================');
   console.log(`Total Calls Dispatched:  ${totalCalls}`);
-  console.log(`Durable Ledger Count:    ${ledgerCount} / ${MODEL_LIFETIME_MAX_CALLS} (lifetime)`);
+  console.log(`Pre-Run Ledger Count:    ${lifetimeUsed}`);
+  console.log(`Post-Run Ledger Count:   ${ledgerCallCount} / ${MODEL_LIFETIME_MAX_CALLS} (lifetime)`);
+  console.log(`Ledger Delta:            ${ledgerDelta}`);
+  console.log(`Ledger Reconciliation:   ${ledgerReconciled ? 'MATCH (dispatched == ledger delta) ✅' : 'MISMATCH ❌'}`);
   console.log(`Execution Status:        ${hardStopTriggered ? `HARD STOP (${hardStopMessage})` : 'COMPLETED'}`);
   console.log(`Target Host:             ${expectedHost}`);
   console.log(`Dispatched Hosts:        ${Array.from(hostsSeen).join(', ') || expectedHost}`);
@@ -1434,13 +1468,15 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     modelName,
     authorizedCap: rawMax,
     preRunLedgerCount: lifetimeUsed,
-    lifetimeRemaining: Math.max(0, MODEL_LIFETIME_MAX_CALLS - ledgerCount),
+    lifetimeRemaining: Math.max(0, MODEL_LIFETIME_MAX_CALLS - ledgerCallCount),
     lifetimeCap: MODEL_LIFETIME_MAX_CALLS,
     totalCallsDispatched: totalCalls,
-    ledgerCallCount: ledgerCount,
+    ledgerCallCount,
+    ledgerDelta,
+    ledgerReconciled,
     ledgerPath: path.relative(root, ledgerPath),
     executionStatus: hardStopTriggered ? 'hard_stop' : 'completed',
-    hardStopReason: hardStopMessage,
+    hardStopReason: hardStopTriggered ? hardStopMessage : undefined,
     hostList: Array.from(hostsSeen),
     calls: results,
     keyOccurrenceCount: 0,

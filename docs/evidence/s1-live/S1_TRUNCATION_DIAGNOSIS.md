@@ -115,21 +115,21 @@ Investigation of public Meta Model API documentation and OpenAI-compatible speci
 Per the review scope amendment (coordinator `msg_c311c286` / `msg_ec85a729`), the proxy and test harness were hardened with the following four mechanisms:
 
 1. **Configurable Output Budget Ceiling (`MAX_TOKENS_CEILING = 8192`)**:
-   - Evaluated ceilings 4096 vs 8192 against public Meta Model API documentation (`https://api.meta.ai/v1`, retrieved Oct 2026). While model marketing notes describe a 1M token context capacity `[UNVERIFIED on public docs page]` and Llama 3.1 architecture documentation defines a context limit of up to 131,072 tokens (`https://llama.meta.com/docs/model-cards-and-prompt-formats/llama3_1/`, retrieved Oct 2026; "Context length: up to 128k tokens"), the maximum completion ceiling for `muse-spark-1.3` on `api.meta.ai` is `[UNVERIFIED in live production]`. Therefore, an operational clamp of **8192** was established as an upper ceiling.
+   - Evaluated ceilings 4096 vs 8192 against public Meta Model API documentation (`https://api.meta.ai/v1`, retrieved Oct 2026). While model release notes describe a 1M token context capacity `[UNVERIFIED on public docs page]`, and maximum completion ceiling for `muse-spark-1.3` on `api.meta.ai` is `[UNVERIFIED in live production]`, an operational clamp of **8192** was established as an upper completion ceiling (note: general Llama architecture context metrics are unrelated context).
    - `MODEL_MAX_TOKENS` values exceeding 8192 are clamped to 8192.
    - Values of `0`, negative numbers, or non-numeric strings fall back to `undefined`, preserving per-endpoint defaults (150 for refine, 250 for reason, 300 for command).
-   - **Cost Implication**: Standard pricing estimate for `muse-spark-1.3` is ~\$2.00 per 1M completion tokens (\$0.000002/token) `[UNVERIFIED estimate; used for worst-case budget bounds]`. At endpoint defaults (150–300 tokens), cost is ~\$0.0003–\$0.0006 per call. With a generous 2048-token override, a complete run of 3 calls costs ~\$0.009–\$0.012 total.
+   - **Cost Implication**: Standard pricing estimate for `muse-spark-1.3` is ~\$2.00 per 1M completion tokens (\$0.000002/token) `[UNVERIFIED estimate; used for worst-case budget bounds]`. At endpoint defaults (150–300 tokens), cost is ~\$0.0003–\$0.0006 per call. With a generous 2048-token override, a complete run of 3 calls costs ~\$0.0123 total.
 
 2. **Reasoning Effort Configuration (`MODEL_REASONING_EFFORT`)**:
-   - Added env-configurable `resolveReasoningEffort()`. Supported values in ecosystem documentation: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`.
+   - Added env-configurable `resolveReasoningEffort()`. Supported values in ecosystem documentation: `minimal`, `low`, `medium`, `high`, `xhigh`, `max` `[UNVERIFIED on live endpoint]`.
    - Meta Model API documentation notes that reasoning cannot be turned off (`reasoning_effort: "none"` returns HTTP 400 `[UNVERIFIED on live endpoint]`). When unset, empty, or set to unsupported values (e.g. `none`), `reasoning_effort` is safely omitted from the payload to avoid API rejection.
    - Injected into Chat Completions fetch body only when explicitly set via environment variable.
 
 3. **Visible-Answer Validation (Three Distinct Fallback Reasons)**:
    - Added `parseMessageContent()` to classify failure modes into three distinct fallback reason codes:
-     - **`truncated`**: `finish_reason === 'length'` or empty/whitespace visible content (token budget exhausted).
-     - **`extraction_fault`**: Content delivered in an unexpected shape (e.g. non-array object, malformed part objects, or content missing while alternative fields exist).
-     - **`schema_invalid`**: Complete visible content successfully extracted, but JSON parse failed or output violated schema invariants (missing required keys, syntax error).
+     - **`truncated`**: `finish_reason === 'length'` (token budget exhausted).
+     - **`extraction_fault`**: Content delivered in an unexpected shape (e.g. non-array object, malformed part objects, or content missing while reasoning fields exist).
+     - **`schema_invalid`**: Complete visible content successfully extracted but JSON parse failed or output violated schema invariants (missing required keys, syntax error), or content is empty with `finish_reason: "stop"`.
    - All three cases preserve fail-closed fallback to deterministic templates with 100% D1–D6 byte-identity.
 
 4. **Telemetry Capture Without Content Leakage**:
@@ -164,11 +164,18 @@ When authorized by owner, S1-LIVE-2 should be executed with the following bounde
    - **Planned Dispatches**: 3 planned calls (1 refine, 1 reason, 1 command).
    - **Stop-on-First-Accepted Safeguard**: The runner automatically halts at the first fact-checked accepted output per planned objective (`refine`, `reason`, `command`), preventing unnecessary token and call consumption.
    - **Hard Stop Safeguard**: Immediate halt on first 4xx, non-api.meta.ai host, or fallbackReason `truncated` / `extraction_fault`.
-   - **Per-Run Spend Estimate (Range)**:
-     - Assumes ~$2.00 per 1M completion tokens ($0.000002/token) and 1000–4096 tokens per call.
-     - At 1000 tokens/call: 3 calls $\times$ 1,000 $\times$ \$0.000002 $\approx$ **\$0.006 total**.
-     - At 4096 tokens/call (maximum budget): 3 calls $\times$ 4,096 $\times$ \$0.000002 $\approx$ **\$0.0246 total**.
-     - Worst-case spend range: **\$0.006 to \$0.025 total** (less than 3 cents).
+   - **Per-Run Spend Estimate (Dynamic Formula & Assumptions)**:
+     - Pricing assumption: ~\$2.00 per 1M completion tokens (\$0.000002/token) `[UNVERIFIED estimate]`.
+     - **Best-Case (Stop-on-Accepted at 3 Calls)**:
+       - Endpoint defaults (700 tokens total): $700 \times \$0.000002 \approx \mathbf{\$0.0014}$.
+       - Override `max_tokens=2048` ($3 \times 2,048 = 6,144$ tokens): $6,144 \times \$0.000002 \approx \mathbf{\$0.0123}$.
+       - Override `max_tokens=4096` ($3 \times 4,096 = 12,288$ tokens): $12,288 \times \$0.000002 \approx \mathbf{\$0.0246}$.
+     - **Worst-Case (All 10 Calls Dispatched up to Cap)**:
+       - Endpoint defaults (max 300 tokens/call, 3,000 tokens): $3,000 \times \$0.000002 \approx \mathbf{\$0.0060}$.
+       - Override `max_tokens=2048` ($10 \times 2,048 = 20,480$ tokens): $20,480 \times \$0.000002 \approx \mathbf{\$0.0410}$.
+       - Override `max_tokens=4096` ($10 \times 4,096 = 40,960$ tokens): $40,960 \times \$0.000002 \approx \mathbf{\$0.0819}$.
+       - Ceiling `max_tokens=8192` ($10 \times 8,192 = 81,920$ tokens): $81,920 \times \$0.000002 \approx \mathbf{\$0.1638}$.
+     - Overall expected spend under stop-on-accepted is **~\$0.012 to \$0.025** (well under 3 cents), with absolute worst-case ceiling at \$0.082 (for 4096) or \$0.164 (for 8192).
 4. **Acceptance Criteria**:
    - At least 1 fact-checked **ACCEPTED** output ($0$ fallbacks on valid grounded facts).
    - Telemetry confirms `finish_reason == "stop"` (no `"length"` truncation) and records `reasoning_tokens`.

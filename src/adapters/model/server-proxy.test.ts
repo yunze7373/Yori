@@ -748,6 +748,7 @@ describe('S1-PREP-PROVIDER: Durable Pre-Fetch Attempt Ledger', () => {
     process.env.MODEL_API_KEY = 'sk-mock-restart-key';
     process.env.MODEL_LIVE_ENABLED = '1';
     process.env.MODEL_LIVE_MAX_CALLS = '4';
+    process.env.MODEL_LIFETIME_MAX_CALLS = '4';
 
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
@@ -801,6 +802,7 @@ describe('S1-PREP-PROVIDER: Durable Pre-Fetch Attempt Ledger', () => {
       expect(fetchSpy).toHaveBeenCalledTimes(4); // NO 5th fetch
     } finally {
       globalThis.fetch = originalFetch;
+      delete process.env.MODEL_LIFETIME_MAX_CALLS;
     }
   });
 
@@ -2382,10 +2384,214 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     expect(report.preRunLedgerCount).toBe(0);
     expect(report.lifetimeCap).toBe(50);
     expect(report.lifetimeRemaining).toBe(47);
+    expect(report.ledgerDelta).toBe(3);
+    expect(report.totalCallsDispatched).toBe(report.ledgerDelta);
+    expect(report.ledgerReconciled).toBe(true);
 
     delete process.env.MODEL_LIVE_ENABLED;
     delete process.env.MODEL_LIVE_MAX_CALLS;
     delete process.env.MODEL_API_KEY;
+  });
+
+  it('seeded ledger (10) with per-run cap 10 allows 10 dispatches through ModelDevProxy, 11th blocked', async () => {
+    // Seed ledger with 10 existing calls
+    fs.writeFileSync(
+      cap50Ledger,
+      JSON.stringify({
+        call_count: 10,
+        reservations: Array.from({ length: 10 }, (_, i) => ({
+          call_index: i + 1,
+          endpoint: 'refine',
+          timestamp: new Date().toISOString(),
+        })),
+      }),
+      'utf-8'
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"wording": "Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM"}' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({
+      ledgerPath: cap50Ledger,
+      apiKey: 'sk-test-seed-key',
+      liveEnabled: true,
+      maxCalls: 10,
+    });
+
+    // All 10 calls in this run should succeed and reach fetch
+    for (let i = 1; i <= 10; i++) {
+      const res = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+      });
+      expect(res.usedFallback).toBe(false);
+      expect(proxy.getCallCount()).toBe(i);
+    }
+
+    // Ledger count has moved from 10 to 20
+    const stateAfter10 = readLedgerState(cap50Ledger);
+    expect(stateAfter10.callCount).toBe(20);
+
+    // 11th call in this run is blocked locally by per-run cap (falls back to deterministic)
+    const call11 = await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+    });
+    expect(call11.usedFallback).toBe(true);
+    expect(call11.fallbackReason).toBe('disabled');
+    expect(readLedgerState(cap50Ledger).callCount).toBe(20);
+  });
+
+  it('runLiveVerification on seeded ledger (10) reconciles dispatched == ledgerDelta (10 -> 13)', async () => {
+    // Seed ledger with 10 existing calls
+    fs.writeFileSync(
+      cap50Ledger,
+      JSON.stringify({
+        call_count: 10,
+        reservations: Array.from({ length: 10 }, (_, i) => ({
+          call_index: i + 1,
+          endpoint: 'refine',
+          timestamp: new Date().toISOString(),
+        })),
+      }),
+      'utf-8'
+    );
+
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '10';
+    process.env.MODEL_API_KEY = 'sk-mock-seeded-runner-key';
+
+    let fetchCount = 0;
+    const mockFetch = vi.fn().mockImplementation(async (_input: any, init: any) => {
+      fetchCount++;
+      const body = JSON.parse(init.body);
+      const isReason = body.messages.some((m: any) => m.content?.includes('plan-1'));
+      const isCommand = body.messages.some((m: any) => m.content?.includes('Can I leave later'));
+
+      let contentStr = '';
+      if (isCommand) {
+        contentStr = JSON.stringify({
+          intent: 'LEAVE_LATER',
+          slots: { deltaMinutes: 20 },
+          citedSignalIds: ['weather:2026-10-28T11:30:00Z'],
+          citedFactKeys: ['habit_rain_transit'],
+          reasonCodes: ['weather_adjusted'],
+          explanation: 'Leaving later by 20 minutes.',
+        });
+      } else if (isReason) {
+        contentStr = JSON.stringify({
+          orderedPlanIds: ['plan-1', 'plan-2'],
+          rationale: [{ planId: 'plan-1', citedSignalIds: ['weather:2026-10-28T11:30:00Z'], citedFactKeys: ['habit_rain_transit'], reasonCodes: ['weather_adjusted'], text: 'Piano Studio prepare at 2:10 PM.' }],
+        });
+      } else {
+        contentStr = JSON.stringify({ wording: 'Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM' });
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        clone: () => ({
+          json: async () => ({
+            choices: [{ message: { content: contentStr }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        }),
+        json: async () => ({
+          choices: [{ message: { content: contentStr }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+        }),
+      } as any;
+    });
+
+    const reportPath = path.join(cap50Dir, 'test-seeded-reconcile-report.md');
+    const jsonReportPath = path.join(cap50Dir, 'test-seeded-reconcile-report.json');
+
+    const { ok, report } = await runLiveVerification({
+      confirmBilled: true,
+      skipPreconditions: true,
+      tempLedgerPath: cap50Ledger,
+      mockFetch: mockFetch as any,
+      reportPath,
+      jsonReportPath,
+    });
+
+    expect(ok).toBe(true);
+    expect(fetchCount).toBe(3);
+    expect(report.totalCallsDispatched).toBe(3);
+    expect(report.preRunLedgerCount).toBe(10);
+    expect(report.ledgerCallCount).toBe(13);
+    expect(report.ledgerDelta).toBe(3);
+    expect(report.totalCallsDispatched).toBe(report.ledgerDelta);
+    expect(report.ledgerReconciled).toBe(true);
+    expect(report.lifetimeRemaining).toBe(37);
+    expect(report.calls).toHaveLength(3);
+
+    const finalState = readLedgerState(cap50Ledger);
+    expect(finalState.callCount).toBe(13);
+
+    delete process.env.MODEL_LIVE_ENABLED;
+    delete process.env.MODEL_LIVE_MAX_CALLS;
+    delete process.env.MODEL_API_KEY;
+  });
+
+  it('seeded ledger (45) with per-run cap 5 allows exactly 5 dispatches (ledger 45->50), 6th blocked by lifetime cap', async () => {
+    // Seed ledger with 45 calls (5 remaining under lifetime cap 50)
+    fs.writeFileSync(
+      cap50Ledger,
+      JSON.stringify({
+        call_count: 45,
+        reservations: Array.from({ length: 45 }, (_, i) => ({
+          call_index: i + 1,
+          endpoint: 'refine',
+          timestamp: new Date().toISOString(),
+        })),
+      }),
+      'utf-8'
+    );
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"wording": "Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM"}' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({
+      ledgerPath: cap50Ledger,
+      apiKey: 'sk-test-seed-45-key',
+      liveEnabled: true,
+      maxCalls: 5,
+    });
+
+    // 5 calls succeed
+    for (let i = 1; i <= 5; i++) {
+      const res = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+      });
+      expect(res.usedFallback).toBe(false);
+      expect(proxy.getCallCount()).toBe(i);
+    }
+
+    // Ledger reaches exactly 50
+    expect(readLedgerState(cap50Ledger).callCount).toBe(50);
+
+    // 6th call blocked by lifetime cap (50/50)
+    const call6 = await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+    });
+    expect(call6.usedFallback).toBe(true);
+    expect(call6.fallbackReason).toBe('disabled');
+    expect(readLedgerState(cap50Ledger).callCount).toBe(50);
   });
 
   it('hard stop on truncated: runner halts immediately when response is truncated', async () => {
