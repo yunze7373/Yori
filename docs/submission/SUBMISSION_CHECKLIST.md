@@ -87,8 +87,8 @@
 The underlying codebase has passed all required automated verification suites for Phase Closeout:
 - ✅ **AC-EXT-1 Core Diff Invariant**: `src/core/` diff vs baseline `f43c6c1d74c4bc1159300fed9d62aec9447b886e` is **100% EMPTY** (0 files, 0 lines changed).
 - ✅ **TypeScript Strict Mode**: `tsc --noEmit` exits 0 with zero errors.
-- ✅ **Unit & Mock Integration**: 454/454 tests passing (`npm test`).
+- ✅ **Unit & Mock Integration**: 756/756 tests passing across 31 files (`npm test`).
 - ✅ **Golden Scenario Harness**: 18/18 scenarios passing byte-identically (`npm run test:golden`).
-- ✅ **Degradation Drills**: 53/53 fault injection invariance tests passing (`npm run test:drills`).
-- ✅ **Playwright E2E**: 128/128 end-to-end tests passing (`npm run test:e2e`).
+- ✅ **Degradation Drills**: 56/56 fault injection invariance tests passing (`npm run test:drills`).
+- ✅ **Playwright E2E**: 268/268 end-to-end tests passing across 21 files (`npx playwright test`).
 - ✅ **Static Secret Scan**: Zero tokens or keys in `src/`, `dist/`, or browser storage APIs.
