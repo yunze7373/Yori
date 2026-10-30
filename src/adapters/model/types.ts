@@ -27,7 +27,9 @@ export type FallbackReason =
   | 'timeout'
   | 'error'
   | 'schema_invalid'
-  | 'unlisted_fact_token';
+  | 'unlisted_fact_token'
+  | 'truncated'
+  | 'extraction_fault';
 
 export interface ModelPortResponse {
   readonly wording: string;

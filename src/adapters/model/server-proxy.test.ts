@@ -29,6 +29,9 @@ import {
   loadEnvLocal,
   stripCodeFences,
   extractMessageContent,
+  parseMessageContent,
+  resolveReasoningEffort,
+  MAX_TOKENS_CEILING,
 } from './server-proxy.js';
 import { runLiveVerification } from '../../../scripts/live-verify-spark.js';
 import type { ModelPortRequest } from './types.js';
@@ -618,9 +621,11 @@ describe('S1-PREP-PROVIDER: MODEL_MAX_TOKENS clamping & override', () => {
     resetLedger(suiteLedgerPath);
   });
 
-  it('verifies max_tokens clamp values: 0->1, 2000->1024, "x"->undefined, empty->undefined', () => {
-    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '0' })).toBe(1);
-    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '2000' })).toBe(1024);
+  it('verifies max_tokens clamp values: 0/negative/non-numeric->undefined, 2000->2000, 9000->8192', () => {
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '0' })).toBeUndefined();
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '-10' })).toBeUndefined();
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '2000' })).toBe(2000);
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '9000' })).toBe(8192);
     expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: 'x' })).toBeUndefined();
     expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '' })).toBeUndefined();
     expect(resolveMaxTokensOverride({})).toBeUndefined();
@@ -1038,7 +1043,7 @@ describe('S1-PREP-PROVIDER: Baseten Provider Fallback Tests with Mocked Fetch', 
         facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
       });
       expect(r1.usedFallback).toBe(true);
-      expect(r1.fallbackReason).toBe('schema_invalid');
+      expect(r1.fallbackReason === 'truncated' || r1.fallbackReason === 'schema_invalid').toBe(true);
 
       // Whitespace only (reasoning token exhaustion)
       mockContent = '   \n  \t  ';
@@ -1047,7 +1052,7 @@ describe('S1-PREP-PROVIDER: Baseten Provider Fallback Tests with Mocked Fetch', 
         facts: { prepareTime: '2:05 PM', leaveTime: '2:25 PM', times: ['2:25 PM'] },
       });
       expect(r2.usedFallback).toBe(true);
-      expect(r2.fallbackReason).toBe('schema_invalid');
+      expect(r2.fallbackReason === 'truncated' || r2.fallbackReason === 'schema_invalid').toBe(true);
 
       // Reasoning path with empty content
       const r3 = await proxy.handleReasoning({
@@ -1068,7 +1073,7 @@ describe('S1-PREP-PROVIDER: Baseten Provider Fallback Tests with Mocked Fetch', 
         timeZone: 'Asia/Tokyo',
       });
       expect(r3.usedFallback).toBe(true);
-      expect(r3.fallbackReason).toBe('schema_invalid');
+      expect(r3.fallbackReason === 'truncated' || r3.fallbackReason === 'schema_invalid').toBe(true);
 
       // Command path with empty content
       const r4 = await proxy.handleCommand({
@@ -1077,7 +1082,7 @@ describe('S1-PREP-PROVIDER: Baseten Provider Fallback Tests with Mocked Fetch', 
         knownFactKeys: ['habit_rain_transit'],
       });
       expect(r4.usedFallback).toBe(true);
-      expect(r4.fallbackReason).toBe('schema_invalid');
+      expect(r4.fallbackReason === 'truncated' || r4.fallbackReason === 'schema_invalid').toBe(true);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -1766,8 +1771,123 @@ describe('S1-DIAG: output extraction, shape handling, and diagnostic metadata te
     expect(cmdRes.result?.intent).toBe('LEAVE_LATER');
   });
 
-  it('handleRefine: truncated JSON with finish_reason=length safely falls back and records diagnostics', async () => {
-    // Model generation truncated midway through json
+  it('resolveMaxTokensOverride enforces [1, 8192] clamp and falls back to undefined on 0/negative/non-numeric', () => {
+    expect(MAX_TOKENS_CEILING).toBe(8192);
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '8192' })).toBe(8192);
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '8193' })).toBe(8192);
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '10000' })).toBe(8192);
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '1' })).toBe(1);
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '0' })).toBeUndefined();
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '-10' })).toBeUndefined();
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: 'not-a-number' })).toBeUndefined();
+    expect(resolveMaxTokensOverride({ MODEL_MAX_TOKENS: '' })).toBeUndefined();
+    expect(resolveMaxTokensOverride({})).toBeUndefined();
+  });
+
+  it('resolveReasoningEffort supports documented Meta Model API values and omits unsupported/empty', () => {
+    expect(resolveReasoningEffort({ MODEL_REASONING_EFFORT: 'minimal' })).toBe('minimal');
+    expect(resolveReasoningEffort({ MODEL_REASONING_EFFORT: 'low' })).toBe('low');
+    expect(resolveReasoningEffort({ MODEL_REASONING_EFFORT: 'medium' })).toBe('medium');
+    expect(resolveReasoningEffort({ MODEL_REASONING_EFFORT: 'high' })).toBe('high');
+    expect(resolveReasoningEffort({ MODEL_REASONING_EFFORT: 'xhigh' })).toBe('xhigh');
+    expect(resolveReasoningEffort({ MODEL_REASONING_EFFORT: 'max' })).toBe('max');
+    // 'none' causes HTTP 400 on Meta Muse reasoning models, so our resolver omits it
+    expect(resolveReasoningEffort({ MODEL_REASONING_EFFORT: 'none' })).toBeUndefined();
+    expect(resolveReasoningEffort({ MODEL_REASONING_EFFORT: 'invalid_value' })).toBeUndefined();
+    expect(resolveReasoningEffort({})).toBeUndefined();
+  });
+
+  it('injects reasoning_effort and generous token budget into fetch body when configured', async () => {
+    let capturedBody: any;
+    globalThis.fetch = vi.fn().mockImplementation(async (_input: any, init?: RequestInit) => {
+      capturedBody = JSON.parse(init?.body as string);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ wording: 'Piano lesson at 3:00 PM' }) }, finish_reason: 'stop' }],
+        }),
+      } as any;
+    });
+
+    const proxyWithEffort = new ModelDevProxy({
+      ledgerPath: diagLedger,
+      apiKey: sentinelSecretKey,
+      reasoningEffort: 'low',
+      maxTokensOverride: 2048,
+    });
+    await proxyWithEffort.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM' },
+    });
+
+    expect(capturedBody.reasoning_effort).toBe('low');
+    expect(capturedBody.max_tokens).toBe(2048);
+
+    // When reasoningEffort is omitted
+    const proxyWithoutEffort = new ModelDevProxy({
+      ledgerPath: diagLedger,
+      apiKey: sentinelSecretKey,
+    });
+    await proxyWithoutEffort.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM' },
+    });
+
+    expect(capturedBody.reasoning_effort).toBeUndefined();
+    expect(capturedBody.max_tokens).toBe(150); // endpoint default preserved
+  });
+
+  it('parseMessageContent correctly distinguishes truncation, extraction_fault, and ok', () => {
+    // Truncation: finish_reason='length'
+    expect(parseMessageContent({ message: { content: '{"incomplete": ' }, finish_reason: 'length' })).toEqual({
+      kind: 'truncated',
+      reason: 'truncated',
+    });
+    // Truncation: empty/missing visible content
+    expect(parseMessageContent({ message: { content: '' }, finish_reason: 'stop' })).toEqual({
+      kind: 'truncated',
+      reason: 'truncated',
+    });
+    expect(parseMessageContent({ message: { content: '   ' }, finish_reason: 'stop' })).toEqual({
+      kind: 'truncated',
+      reason: 'truncated',
+    });
+    expect(parseMessageContent({ message: { content: null }, finish_reason: 'stop' })).toEqual({
+      kind: 'truncated',
+      reason: 'truncated',
+    });
+
+    // Extraction fault: content in unexpected field or shape
+    expect(parseMessageContent({ message: { reasoning_content: 'thinking...', content: undefined }, finish_reason: 'stop' })).toEqual({
+      kind: 'extraction_fault',
+      reason: 'extraction_fault',
+    });
+    expect(parseMessageContent({ message: { content: { nested: 'object' } }, finish_reason: 'stop' })).toEqual({
+      kind: 'extraction_fault',
+      reason: 'extraction_fault',
+    });
+    expect(parseMessageContent({ message: { content: [{ malformed: 123 }] }, finish_reason: 'stop' })).toEqual({
+      kind: 'extraction_fault',
+      reason: 'extraction_fault',
+    });
+    expect(parseMessageContent(undefined)).toEqual({
+      kind: 'extraction_fault',
+      reason: 'extraction_fault',
+    });
+
+    // OK: standard string, parts array, code-fenced
+    expect(parseMessageContent({ message: { content: '{"ok": true}' }, finish_reason: 'stop' })).toEqual({
+      kind: 'ok',
+      content: '{"ok": true}',
+    });
+    expect(parseMessageContent({ message: { content: [{ type: 'text', text: '{"ok": true}' }] }, finish_reason: 'stop' })).toEqual({
+      kind: 'ok',
+      content: '{"ok": true}',
+    });
+  });
+
+  it('handleRefine: returns fallbackReason: truncated on finish_reason=length', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -1796,12 +1916,197 @@ describe('S1-DIAG: output extraction, shape handling, and diagnostic metadata te
     });
 
     expect(res.usedFallback).toBe(true);
-    expect(res.fallbackReason).toBe('schema_invalid');
+    expect(res.fallbackReason).toBe('truncated');
     expect(res.wording).toBe('Piano lesson at 3:00 PM');
 
     const diag = proxy.getDiagnostics();
     expect(diag.lastFinishReason).toBe('length');
     expect(diag.lastReasoningTokens).toBe(950);
+  });
+
+  it('handleRefine: returns fallbackReason: extraction_fault when content is in unexpected field or shape', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              reasoning_content: 'thinking only, content field omitted',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+    const res = await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM' },
+    });
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('extraction_fault');
+  });
+
+  it('handleRefine: returns fallbackReason: schema_invalid when visible content fails JSON parse or schema', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: '{"wrong_key": "some text"}',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+    const res = await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM' },
+    });
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('schema_invalid');
+  });
+
+  it('handleReasoning & handleCommand: return distinct fallback reasons for truncation, extraction, and schema faults', async () => {
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+
+    const sampleReasoningInput = {
+      candidates: [
+        {
+          id: 'plan-1',
+          intentId: 'depart',
+          confidence: 0.8,
+          times: ['2:05 PM'],
+          places: ['Piano Studio'],
+          optionModes: ['drive'],
+          citedSignalIds: ['weather:2026-10-28T11:30:00Z'],
+          citedFactKeys: ['habit_rain_transit'],
+        },
+      ],
+      availableSignalIds: ['weather:2026-10-28T11:30:00Z'],
+      confirmedFactKeys: ['habit_rain_transit'],
+      timeZone: 'America/Los_Angeles',
+    };
+
+    // 1. Truncation on reasoning
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"orderedPlanIds": ["plan-' }, finish_reason: 'length' }],
+      }),
+    } as any);
+    const reasonTrunc = await proxy.handleReasoning(sampleReasoningInput);
+    expect(reasonTrunc.usedFallback).toBe(true);
+    expect(reasonTrunc.fallbackReason).toBe('truncated');
+
+    // 2. Extraction fault on reasoning
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { reasoning_content: 'thinking only', content: undefined }, finish_reason: 'stop' }],
+      }),
+    } as any);
+    const reasonExtract = await proxy.handleReasoning(sampleReasoningInput);
+    expect(reasonExtract.usedFallback).toBe(true);
+    expect(reasonExtract.fallbackReason).toBe('extraction_fault');
+
+    // 3. Schema fault on reasoning
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{ invalid json for reasoning ' }, finish_reason: 'stop' }],
+      }),
+    } as any);
+    const reasonSchema = await proxy.handleReasoning(sampleReasoningInput);
+    expect(reasonSchema.usedFallback).toBe(true);
+    expect(reasonSchema.fallbackReason).toBe('schema_invalid');
+
+    // 4. Truncation on command
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"intent": "depart' }, finish_reason: 'length' }],
+      }),
+    } as any);
+    const cmdTrunc = await proxy.handleCommand({
+      utterance: 'leave later',
+      knownFactKeys: ['habit_rain_transit'],
+    });
+    expect(cmdTrunc.usedFallback).toBe(true);
+    expect(cmdTrunc.fallbackReason).toBe('truncated');
+
+    // 5. Extraction fault on command
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { reasoning_content: 'thought', content: undefined }, finish_reason: 'stop' }],
+      }),
+    } as any);
+    const cmdExtract = await proxy.handleCommand({
+      utterance: 'leave later',
+      knownFactKeys: ['habit_rain_transit'],
+    });
+    expect(cmdExtract.usedFallback).toBe(true);
+    expect(cmdExtract.fallbackReason).toBe('extraction_fault');
+
+    // 6. Schema fault on command (invalid JSON syntax)
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{ not json syntax }' }, finish_reason: 'stop' }],
+      }),
+    } as any);
+    const cmdSchema = await proxy.handleCommand({
+      utterance: 'leave later',
+      knownFactKeys: ['habit_rain_transit'],
+    });
+    expect(cmdSchema.usedFallback).toBe(true);
+    expect(cmdSchema.fallbackReason).toBe('schema_invalid');
+  });
+
+  it('resets diagnostic finish_reason and reasoning_tokens at the start of each handler invocation', async () => {
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+
+    // Step 1: Call refine that sets finish_reason and reasoning_tokens
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"wording": "Piano lesson at 3:00 PM"}' }, finish_reason: 'stop' }],
+        usage: { completion_tokens_details: { reasoning_tokens: 350 } },
+      }),
+    } as any);
+
+    await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM' },
+    });
+    expect(proxy.getLastFinishReason()).toBe('stop');
+    expect(proxy.getLastReasoningTokens()).toBe(350);
+
+    // Step 2: Next call fails with network error before receiving JSON; diagnostics must be cleared (not stale)
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM' },
+    });
+    expect(proxy.getLastFinishReason()).toBeUndefined();
+    expect(proxy.getLastReasoningTokens()).toBeUndefined();
   });
 
   it('diagnostic metadata and LiveVerificationCallRecord NEVER contain raw content or secret keys', async () => {

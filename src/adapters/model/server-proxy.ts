@@ -50,7 +50,9 @@ export interface ModelCommandResponse {
     | 'unconfirmed_fact_used'
     | 'invalid_reason_code'
     | 'out_of_set_intent'
-    | 'unlisted_fact_token';
+    | 'unlisted_fact_token'
+    | 'truncated'
+    | 'extraction_fault';
 }
 
 export interface ModelReasoningResponse {
@@ -60,8 +62,12 @@ export interface ModelReasoningResponse {
     | 'disabled'
     | 'timeout'
     | 'error'
+    | 'truncated'
+    | 'extraction_fault'
     | ReasoningValidationFailureReason;
 }
+
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface ModelProxyConfig {
   readonly apiKey?: string;
@@ -72,6 +78,7 @@ export interface ModelProxyConfig {
   readonly maxCalls: number;
   readonly timeoutMs: number;
   readonly maxTokensOverride?: number;
+  readonly reasoningEffort?: ReasoningEffort;
   readonly ledgerPath: string;
 }
 
@@ -106,8 +113,16 @@ export function resolveTimeoutMs(env: Record<string, string | undefined> = proce
 }
 
 /**
- * Resolves MODEL_MAX_TOKENS with clamp [1, 1024].
- * Unset / empty / non-numeric -> undefined (path defaults 150/250/300 preserved).
+ * Documented maximum completion token ceiling for Meta Model API (api.meta.ai).
+ * Context window is 1M tokens; max completion token ceiling is safely bounded at 8192.
+ * Reference: https://api.meta.ai/v1 & Meta Model API documentation.
+ */
+export const MAX_TOKENS_CEILING = 8192;
+
+/**
+ * Resolves MODEL_MAX_TOKENS with clamp [1, 8192].
+ * Unset / empty / non-numeric / 0 / negative -> undefined (path defaults 150/250/300 preserved).
+ * Values exceeding MAX_TOKENS_CEILING (8192) are clamped to 8192.
  */
 export function resolveMaxTokensOverride(
   env: Record<string, string | undefined> = process.env
@@ -115,8 +130,33 @@ export function resolveMaxTokensOverride(
   const raw = env['MODEL_MAX_TOKENS'];
   if (raw === undefined || raw.trim() === '') return undefined;
   const parsed = parseInt(raw, 10);
-  if (isNaN(parsed)) return undefined;
-  return Math.max(1, Math.min(1024, parsed));
+  if (isNaN(parsed) || parsed <= 0) return undefined;
+  return Math.min(MAX_TOKENS_CEILING, parsed);
+}
+
+/**
+ * Resolves MODEL_REASONING_EFFORT from environment.
+ * Meta Model API documentation (api.meta.ai) specifies supported values:
+ * 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'.
+ * Note: 'none' is explicitly unsupported on reasoning models and causes HTTP 400.
+ * Unset or unrecognized values return undefined (omitted from payload).
+ */
+export function resolveReasoningEffort(
+  env: Record<string, string | undefined> = process.env
+): ReasoningEffort | undefined {
+  const raw = env['MODEL_REASONING_EFFORT']?.trim().toLowerCase();
+  if (!raw) return undefined;
+  if (
+    raw === 'minimal' ||
+    raw === 'low' ||
+    raw === 'medium' ||
+    raw === 'high' ||
+    raw === 'xhigh' ||
+    raw === 'max'
+  ) {
+    return raw;
+  }
+  return undefined;
 }
 
 /**
@@ -407,6 +447,7 @@ export function resolveModelConfig(
   const maxCalls = resolveMaxCalls(process.env);
   const timeoutMs = resolveTimeoutMs(process.env);
   const maxTokensOverride = resolveMaxTokensOverride(process.env);
+  const reasoningEffort = resolveReasoningEffort(process.env);
   const ledgerPath = resolveLedgerPath(process.env);
 
   return {
@@ -418,6 +459,7 @@ export function resolveModelConfig(
     maxCalls,
     timeoutMs,
     maxTokensOverride,
+    reasoningEffort,
     ledgerPath,
   };
 }
@@ -495,34 +537,93 @@ export function stripCodeFences(text: string): string {
   return fenceMatch ? fenceMatch[1]!.trim() : trimmed;
 }
 
-/**
- * Extracts raw textual content from an OpenAI-compatible message object.
- * Handles:
- * - standard string content (message.content = "...")
- * - content as array of parts (message.content = [{ type: 'text', text: '...' }])
- * Strips code fences if present.
- * Does NOT treat reasoning_content or reasoning as output content.
- */
-export function extractMessageContent(message: unknown): string | undefined {
-  if (!message || typeof message !== 'object') return undefined;
-  const msg = message as {
-    content?: string | Array<{ type?: string; text?: string }>;
-  };
+export type ContentExtractionResult =
+  | { readonly kind: 'ok'; readonly content: string }
+  | { readonly kind: 'truncated'; readonly reason: 'truncated' }
+  | { readonly kind: 'extraction_fault'; readonly reason: 'extraction_fault' };
 
-  let raw: string | undefined;
-  if (typeof msg.content === 'string') {
-    raw = msg.content;
-  } else if (Array.isArray(msg.content)) {
-    const textParts = msg.content
-      .filter(part => typeof part === 'object' && part !== null && typeof part.text === 'string')
-      .map(part => part.text!);
-    if (textParts.length > 0) {
-      raw = textParts.join('');
-    }
+/**
+ * Parses visible output content from an OpenAI-compatible choice object and
+ * classifies outcomes into three distinct failure modes per S1-DIAG:
+ * - 'truncated': finish_reason='length' or empty visible content (budget exhausted)
+ * - 'extraction_fault': content in unexpected field or shape (e.g. non-array object, malformed parts, or missing content while alternative fields exist)
+ * - 'ok': visible content successfully extracted and code fences stripped
+ */
+export function parseMessageContent(
+  choice?: {
+    message?: {
+      content?: unknown;
+      reasoning_content?: unknown;
+      reasoning?: unknown;
+    };
+    finish_reason?: string;
+  }
+): ContentExtractionResult {
+  if (!choice) {
+    return { kind: 'extraction_fault', reason: 'extraction_fault' };
   }
 
-  if (raw === undefined || !raw.trim()) return undefined;
-  return stripCodeFences(raw);
+  // 1. Truncation: finish_reason='length' always signals truncation
+  if (choice.finish_reason === 'length') {
+    return { kind: 'truncated', reason: 'truncated' };
+  }
+
+  const msg = choice.message;
+  if (!msg || typeof msg !== 'object') {
+    return { kind: 'extraction_fault', reason: 'extraction_fault' };
+  }
+
+  // 2. Extraction fault: content in unexpected field or shape
+  if (
+    msg.content !== undefined &&
+    msg.content !== null &&
+    typeof msg.content === 'object' &&
+    !Array.isArray(msg.content)
+  ) {
+    return { kind: 'extraction_fault', reason: 'extraction_fault' };
+  }
+
+  // 3. Extraction fault or truncation when content is missing
+  if (msg.content === undefined || msg.content === null) {
+    if (msg.reasoning_content !== undefined || msg.reasoning !== undefined || (msg as any).parts !== undefined) {
+      return { kind: 'extraction_fault', reason: 'extraction_fault' };
+    }
+    return { kind: 'truncated', reason: 'truncated' };
+  }
+
+  // 4. Extract raw text from string or well-formed parts array
+  let rawText: string | undefined;
+  if (typeof msg.content === 'string') {
+    rawText = msg.content;
+  } else if (Array.isArray(msg.content)) {
+    const isWellFormedParts = msg.content.every(
+      p => typeof p === 'object' && p !== null && ('text' in p || 'type' in p)
+    );
+    if (!isWellFormedParts) {
+      return { kind: 'extraction_fault', reason: 'extraction_fault' };
+    }
+    const textParts = msg.content
+      .filter((p: any) => typeof p?.text === 'string')
+      .map((p: any) => p.text as string);
+    rawText = textParts.join('');
+  } else {
+    return { kind: 'extraction_fault', reason: 'extraction_fault' };
+  }
+
+  if (!rawText || !rawText.trim()) {
+    return { kind: 'truncated', reason: 'truncated' };
+  }
+
+  return { kind: 'ok', content: stripCodeFences(rawText) };
+}
+
+/**
+ * Extracts raw textual content from an OpenAI-compatible message object.
+ * Returns stripped content when ok, otherwise undefined.
+ */
+export function extractMessageContent(message: unknown, finishReason?: string): string | undefined {
+  const res = parseMessageContent({ message: message as any, finish_reason: finishReason });
+  return res.kind === 'ok' ? res.content : undefined;
 }
 
 /**
@@ -580,8 +681,13 @@ export class ModelDevProxy {
 
       const maxTokensOverride =
         customConfig.maxTokensOverride !== undefined
-          ? Math.max(1, Math.min(1024, customConfig.maxTokensOverride))
+          ? Math.max(1, Math.min(MAX_TOKENS_CEILING, customConfig.maxTokensOverride))
           : resolved.maxTokensOverride;
+
+      const reasoningEffort =
+        customConfig.reasoningEffort !== undefined
+          ? customConfig.reasoningEffort
+          : resolved.reasoningEffort;
 
       const ledgerPath = customConfig.ledgerPath ?? resolved.ledgerPath;
 
@@ -594,6 +700,7 @@ export class ModelDevProxy {
         maxCalls,
         timeoutMs,
         maxTokensOverride,
+        reasoningEffort,
         ledgerPath,
       };
     } else {
@@ -1027,6 +1134,7 @@ export class ModelDevProxy {
     requestOrTemplate: ModelPortRequest | ServerTemplate | string,
     factsArg?: Record<string, unknown>
   ): Promise<ModelPortResponse> {
+    this.resetDiagnosticsMetadata();
     let tmpl: ServerTemplate | undefined;
     let actualFacts: Record<string, unknown> = {};
 
@@ -1123,6 +1231,7 @@ export class ModelDevProxy {
         body: JSON.stringify({
           model: this.config.modelName,
           max_tokens: this.config.maxTokensOverride ?? 150,
+          ...(this.config.reasoningEffort ? { reasoning_effort: this.config.reasoningEffort } : {}),
           messages: [
             {
               role: 'system',
@@ -1150,9 +1259,9 @@ export class ModelDevProxy {
       const json = (await response.json()) as {
         choices?: Array<{
           message?: {
-            content?: string | Array<{ type?: string; text?: string }>;
-            reasoning_content?: string;
-            reasoning?: string;
+            content?: unknown;
+            reasoning_content?: unknown;
+            reasoning?: unknown;
           };
           finish_reason?: string;
         }>;
@@ -1172,17 +1281,18 @@ export class ModelDevProxy {
         json.usage?.completion_tokens_details?.reasoning_tokens ??
         json.usage?.reasoning_tokens;
 
-      const content = extractMessageContent(json.choices?.[0]?.message);
-      if (!content || !content.trim()) {
+      const extraction = parseMessageContent(json.choices?.[0]);
+      if (extraction.kind !== 'ok') {
         return {
           wording: fallbackWording,
           usedFallback: true,
-          fallbackReason: 'schema_invalid',
+          fallbackReason: extraction.reason,
         };
       }
 
+      const content = extraction.content;
       let parsedWording = '';
-      if (content.trim().startsWith('{') || this.lastFinishReason === 'length') {
+      if (content.trim().startsWith('{')) {
         try {
           const parsed = JSON.parse(content) as { wording?: string };
           parsedWording = parsed.wording || '';
@@ -1248,6 +1358,7 @@ export class ModelDevProxy {
   public async handleReasoning(
     rawInput: unknown
   ): Promise<ModelReasoningResponse> {
+    this.resetDiagnosticsMetadata();
     const inputValidation = validateReasoningInputSchema(rawInput);
     if (!inputValidation.valid) {
       const fallback = deterministicReasoningFallback(
@@ -1332,6 +1443,7 @@ export class ModelDevProxy {
         body: JSON.stringify({
           model: this.config.modelName,
           max_tokens: this.config.maxTokensOverride ?? 250,
+          ...(this.config.reasoningEffort ? { reasoning_effort: this.config.reasoningEffort } : {}),
           messages: [
             {
               role: 'system',
@@ -1359,9 +1471,9 @@ export class ModelDevProxy {
       const json = (await response.json()) as {
         choices?: Array<{
           message?: {
-            content?: string | Array<{ type?: string; text?: string }>;
-            reasoning_content?: string;
-            reasoning?: string;
+            content?: unknown;
+            reasoning_content?: unknown;
+            reasoning?: unknown;
           };
           finish_reason?: string;
         }>;
@@ -1381,15 +1493,16 @@ export class ModelDevProxy {
         json.usage?.completion_tokens_details?.reasoning_tokens ??
         json.usage?.reasoning_tokens;
 
-      const content = extractMessageContent(json.choices?.[0]?.message);
-      if (!content || !content.trim()) {
+      const extraction = parseMessageContent(json.choices?.[0]);
+      if (extraction.kind !== 'ok') {
         return {
           result: fallback,
           usedFallback: true,
-          fallbackReason: 'schema_invalid',
+          fallbackReason: extraction.reason,
         };
       }
 
+      const content = extraction.content;
       let parsed: unknown;
       try {
         parsed = JSON.parse(content);
@@ -1435,6 +1548,7 @@ export class ModelDevProxy {
   public async handleCommand(
     facts: Record<string, unknown>
   ): Promise<ModelCommandResponse> {
+    this.resetDiagnosticsMetadata();
     const tmpl = getTemplate('decision_command');
     if (!tmpl) {
       return {
@@ -1515,6 +1629,7 @@ export class ModelDevProxy {
         body: JSON.stringify({
           model: this.config.modelName,
           max_tokens: this.config.maxTokensOverride ?? 300,
+          ...(this.config.reasoningEffort ? { reasoning_effort: this.config.reasoningEffort } : {}),
           messages: [
             {
               role: 'system',
@@ -1542,9 +1657,9 @@ export class ModelDevProxy {
       const json = (await response.json()) as {
         choices?: Array<{
           message?: {
-            content?: string | Array<{ type?: string; text?: string }>;
-            reasoning_content?: string;
-            reasoning?: string;
+            content?: unknown;
+            reasoning_content?: unknown;
+            reasoning?: unknown;
           };
           finish_reason?: string;
         }>;
@@ -1564,15 +1679,16 @@ export class ModelDevProxy {
         json.usage?.completion_tokens_details?.reasoning_tokens ??
         json.usage?.reasoning_tokens;
 
-      const content = extractMessageContent(json.choices?.[0]?.message);
-      if (!content || !content.trim()) {
+      const extraction = parseMessageContent(json.choices?.[0]);
+      if (extraction.kind !== 'ok') {
         return {
           result: null,
           usedFallback: true,
-          fallbackReason: 'schema_invalid',
+          fallbackReason: extraction.reason,
         };
       }
 
+      const content = extraction.content;
       let parsed: unknown;
       try {
         parsed = JSON.parse(content);

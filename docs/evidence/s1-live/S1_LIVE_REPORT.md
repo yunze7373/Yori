@@ -64,7 +64,7 @@ This discrepancy is fully reconciled by pre-run test pollution:
 2. **Model Truncation & Schema Invalidation**:
    - All 5 responses returned `completion_tokens == 1024`, hitting the inline clamp ceiling `MODEL_MAX_TOKENS=1024`.
    - The model output was cut off before closing valid JSON, resulting in `schema_invalid` fallback on all 5 calls (0/5 accepted).
-   - This finding was formally diagnosed in offline investigation slice S1-DIAG (see [`docs/evidence/s1-live/S1_TRUNCATION_DIAGNOSIS.md`](./S1_TRUNCATION_DIAGNOSIS.md)): Meta `muse-spark-1.3` is an internal reasoning model where `completion_tokens` counts both chain-of-thought tokens and visible output. Without `reasoning_effort` throttling, internal reasoning tokens consumed the full 1,024-token budget before JSON completion, resulting in `finish_reason='length'`. Future live verification parameters and proposals are specified in S1-DIAG.
+   - Truncation analysis: leading hypothesis per S1-DIAG; finish_reason and reasoning_tokens were not captured in S1-LIVE (see [`docs/evidence/s1-live/S1_TRUNCATION_DIAGNOSIS.md`](./S1_TRUNCATION_DIAGNOSIS.md)). Telemetry in future owner-authorized verification will confirm or refute.
 3. **Fail-Closed Fallback Integrity**:
    - In 100% of cases, the proxy's strict fact-checker and schema validator caught the malformed/truncated output and seamlessly engaged deterministic fallbacks.
    - Post-live D1–D6 fixture evaluation confirms **6/6 byte-identical outputs** with live disabled, proving complete user-facing resilience.
