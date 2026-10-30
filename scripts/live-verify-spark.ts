@@ -823,6 +823,8 @@ export interface LiveVerificationCallRecord {
   readonly promptTokens?: number;
   readonly completionTokens?: number;
   readonly totalTokens?: number;
+  readonly reasoningTokens?: number;
+  readonly finishReason?: string;
   readonly usedFallback: boolean;
   readonly fallbackReason?: string;
   readonly factCheckOutcome: 'accepted' | 'discarded';
@@ -864,17 +866,19 @@ function generateMarkdownReport(report: LiveVerificationReport): string {
   lines.push(`| **Key Occurrence Audit** | \`${report.keyOccurrenceCount} occurrences in output files ✅\` |\n`);
 
   lines.push('## 2. Call-by-Call Breakdown\n');
-  lines.push('| # | Endpoint | Description | HTTP Status | Latency (ms) | Usage Tokens (Prompt / Compl / Total) | Fallback Used | Reason Code | Fact-Check Outcome |');
-  lines.push('|---|---|---|---|---|---|---|---|---|');
+  lines.push('| # | Endpoint | Description | HTTP Status | Latency (ms) | Usage Tokens (Prompt / Compl / Total) | Reasoning Tokens | Finish Reason | Fallback Used | Reason Code | Fact-Check Outcome |');
+  lines.push('|---|---|---|---|---|---|---|---|---|---|---|');
 
   for (const c of report.calls) {
     const tokens = c.promptTokens !== undefined
       ? `${c.promptTokens} / ${c.completionTokens ?? 0} / ${c.totalTokens ?? 0}`
       : 'N/A';
+    const reasoningTag = c.reasoningTokens !== undefined ? `${c.reasoningTokens}` : '-';
+    const finishTag = c.finishReason ? `\`${c.finishReason}\`` : '-';
     const fallbackTag = c.usedFallback ? 'Yes' : 'No';
     const reasonTag = c.fallbackReason ?? '-';
     const outcome = c.factCheckOutcome === 'accepted' ? 'ACCEPTED ✅' : 'DISCARDED ❌';
-    lines.push(`| ${c.index} | \`${c.endpoint}\` | ${c.description} | ${c.httpStatus} | ${c.latencyMs} | ${tokens} | ${fallbackTag} | \`${reasonTag}\` | ${outcome} |`);
+    lines.push(`| ${c.index} | \`${c.endpoint}\` | ${c.description} | ${c.httpStatus} | ${c.latencyMs} | ${tokens} | ${reasoningTag} | ${finishTag} | ${fallbackTag} | \`${reasonTag}\` | ${outcome} |`);
   }
   lines.push('');
 
@@ -971,6 +975,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     promptTokens?: number;
     completionTokens?: number;
     totalTokens?: number;
+    reasoningTokens?: number;
+    finishReason?: string;
     error?: string;
   } | null = null;
 
@@ -1010,6 +1016,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     let promptTokens: number | undefined;
     let completionTokens: number | undefined;
     let totalTokens: number | undefined;
+    let reasoningTokens: number | undefined;
+    let finishReason: string | undefined;
     let errorDetail: string | undefined;
 
     try {
@@ -1020,6 +1028,12 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
           promptTokens = body.usage.prompt_tokens;
           completionTokens = body.usage.completion_tokens;
           totalTokens = body.usage.total_tokens;
+          reasoningTokens =
+            body.usage.completion_tokens_details?.reasoning_tokens ??
+            body.usage.reasoning_tokens;
+        }
+        if (body.choices?.[0]?.finish_reason) {
+          finishReason = body.choices[0].finish_reason;
         }
         if (body.error) {
           const errObj = body.error;
@@ -1039,6 +1053,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
       promptTokens,
       completionTokens,
       totalTokens,
+      reasoningTokens,
+      finishReason,
       error: errorDetail,
     };
 
@@ -1251,6 +1267,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         promptTokens: undefined,
         completionTokens: undefined,
         totalTokens: undefined,
+        reasoningTokens: undefined,
+        finishReason: undefined,
         error: 'No fetch recorded',
       };
 
@@ -1263,6 +1281,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         promptTokens: meta.promptTokens,
         completionTokens: meta.completionTokens,
         totalTokens: meta.totalTokens,
+        reasoningTokens: meta.reasoningTokens,
+        finishReason: meta.finishReason,
         usedFallback: callResult.usedFallback,
         fallbackReason: callResult.fallbackReason,
         factCheckOutcome: callResult.usedFallback ? 'discarded' : 'accepted',

@@ -39,7 +39,7 @@
       "schema_invalid": 5
     },
     "truncationCount": 5,
-    "truncationAnalysis": "All 5 live calls returned completion_tokens == 1024 (hitting MODEL_MAX_TOKENS=1024 clamp). muse-spark-1.3 reasoning tokens exceeded clamp before emitting closing JSON structure, triggering schema_invalid fallback.",
+    "truncationAnalysis": "Hypothesis confirmed by S1-DIAG offline investigation: All 5 live calls returned completion_tokens == 1024, exhausting the MODEL_MAX_TOKENS=1024 clamp. Meta muse-spark-1.3 reasoning tokens (unconstrained by default reasoning_effort) exhausted the token ceiling before emitting complete JSON, triggering schema_invalid fallback. See docs/evidence/s1-live/S1_TRUNCATION_DIAGNOSIS.md.",
     "fallbackPreserved": true,
     "d1ToD6ParityPass": true
   },

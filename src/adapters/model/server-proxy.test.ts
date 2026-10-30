@@ -27,6 +27,8 @@ import {
   getProcessLiveCallCount,
   resetLedger,
   loadEnvLocal,
+  stripCodeFences,
+  extractMessageContent,
 } from './server-proxy.js';
 import { runLiveVerification } from '../../../scripts/live-verify-spark.js';
 import type { ModelPortRequest } from './types.js';
@@ -1446,6 +1448,401 @@ describe('S1-LIVE: runLiveVerification unit tests (mocked)', () => {
     expect(result.report.ledgerCallCount).toBe(3);
     const ledger = readLedgerState(testLedger);
     expect(ledger.callCount).toBe(3);
+  });
+});
+
+describe('S1-DIAG: output extraction, shape handling, and diagnostic metadata tests', () => {
+  const diagTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-diag-suite-'));
+  const diagLedger = path.join(diagTempDir, 'model-live-ledger.json');
+  const sentinelSecretKey = 'sk-meta-muse-spark-secret-sentinel-xyz123';
+  const originalFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    resetLedger(diagLedger);
+    resetProcessLiveCallCount();
+    process.env.MODEL_LIVE_LEDGER_PATH = diagLedger;
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '10';
+    process.env.MODEL_API_KEY = sentinelSecretKey;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    delete process.env.MODEL_LIVE_LEDGER_PATH;
+    delete process.env.MODEL_LIVE_ENABLED;
+    delete process.env.MODEL_LIVE_MAX_CALLS;
+    delete process.env.MODEL_API_KEY;
+    resetProcessLiveCallCount();
+  });
+
+  afterAll(() => {
+    try {
+      resetLedger(diagLedger);
+      if (fs.existsSync(diagTempDir)) {
+        fs.rmSync(diagTempDir, { recursive: true, force: true });
+      }
+    } catch {}
+  });
+
+  it('stripCodeFences correctly extracts inner content from json and generic code fences', () => {
+    expect(stripCodeFences('{"a": 1}')).toBe('{"a": 1}');
+    expect(stripCodeFences('```json\n{"a": 1}\n```')).toBe('{"a": 1}');
+    expect(stripCodeFences('```\n{"a": 1}\n```')).toBe('{"a": 1}');
+    expect(stripCodeFences('  ```JSON\n  {"a": 1}\n  ```  ')).toBe('{"a": 1}');
+  });
+
+  it('extractMessageContent extracts text from string and array-of-parts representations', () => {
+    expect(extractMessageContent({ content: '{"wording": "test"}' })).toBe('{"wording": "test"}');
+    expect(
+      extractMessageContent({
+        content: [
+          { type: 'text', text: '{"word' },
+          { type: 'text', text: 'ing": "test"}' },
+        ],
+      })
+    ).toBe('{"wording": "test"}');
+    expect(extractMessageContent({ content: '```json\n{"wording": "test"}\n```' })).toBe('{"wording": "test"}');
+    expect(extractMessageContent({ reasoning_content: 'thinking...', content: '' })).toBeUndefined();
+    expect(extractMessageContent({ content: undefined })).toBeUndefined();
+    expect(extractMessageContent(null)).toBeUndefined();
+  });
+
+  it('handleRefine: accepts standard string JSON response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                wording: 'Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM',
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 110,
+          completion_tokens: 25,
+          total_tokens: 135,
+          completion_tokens_details: { reasoning_tokens: 10 },
+        },
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+    const res = await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+    });
+
+    expect(res.usedFallback).toBe(false);
+    expect(res.wording).toContain('Piano lesson at 3:00 PM');
+    const diag = proxy.getDiagnostics();
+    expect(diag.lastFinishReason).toBe('stop');
+    expect(diag.lastReasoningTokens).toBe(10);
+  });
+
+  it('handleRefine: accepts content formatted as an array of parts', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    wording: 'Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM',
+                  }),
+                },
+              ],
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 110,
+          completion_tokens: 28,
+          total_tokens: 138,
+          reasoning_tokens: 12,
+        },
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+    const res = await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+    });
+
+    expect(res.usedFallback).toBe(false);
+    expect(res.wording).toContain('Piano lesson at 3:00 PM');
+    expect(proxy.getDiagnostics().lastFinishReason).toBe('stop');
+    expect(proxy.getDiagnostics().lastReasoningTokens).toBe(12);
+  });
+
+  it('handleRefine: accepts separate reasoning_content field without leaking reasoning into output', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              reasoning_content: 'Step 1: Check facts. The piano lesson is at 3:00 PM. Invented time 9:99 PM.',
+              content: JSON.stringify({
+                wording: 'Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM',
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 110,
+          completion_tokens: 65,
+          total_tokens: 175,
+          completion_tokens_details: { reasoning_tokens: 40 },
+        },
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+    const res = await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+    });
+
+    expect(res.usedFallback).toBe(false);
+    expect(res.wording).toContain('Piano lesson at 3:00 PM');
+    expect(res.wording).not.toContain('Step 1');
+    expect(res.wording).not.toContain('9:99');
+    expect(proxy.getDiagnostics().lastFinishReason).toBe('stop');
+    expect(proxy.getDiagnostics().lastReasoningTokens).toBe(40);
+  });
+
+  it('handleRefine: strips markdown code fences from JSON output cleanly', async () => {
+    const rawJson = JSON.stringify({
+      wording: 'Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM',
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: `\`\`\`json\n${rawJson}\n\`\`\``,
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 110,
+          completion_tokens: 30,
+          total_tokens: 140,
+        },
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+    const res = await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+    });
+
+    expect(res.usedFallback).toBe(false);
+    expect(res.wording).toContain('Piano lesson at 3:00 PM');
+  });
+
+  it('handleReasoning & handleCommand: strip code fences and parse structured JSON', async () => {
+    const reasoningJson = JSON.stringify({
+      orderedPlanIds: ['plan-1', 'plan-2'],
+      rationale: [
+        {
+          planId: 'plan-1',
+          citedSignalIds: ['weather:2026-10-28T11:30:00Z'],
+          citedFactKeys: ['habit_rain_transit'],
+          reasonCodes: ['weather_adjusted'],
+          text: 'Piano Studio leave at 2:25 PM.',
+        },
+      ],
+    });
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: `\`\`\`json\n${reasoningJson}\n\`\`\``,
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 200,
+          completion_tokens: 50,
+          total_tokens: 250,
+        },
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+    const reasonRes = await proxy.handleReasoning({
+      candidates: [
+        {
+          id: 'plan-1',
+          intentId: 'depart',
+          confidence: 0.8,
+          times: ['2:05 PM', '2:25 PM'],
+          places: ['Piano Studio'],
+          optionModes: ['drive', 'bus'],
+          citedSignalIds: ['weather:2026-10-28T11:30:00Z'],
+          citedFactKeys: ['habit_rain_transit'],
+        },
+        {
+          id: 'plan-2',
+          intentId: 'lunch',
+          confidence: 0.7,
+          times: ['12:15 PM'],
+          places: ['Green Bowl'],
+          optionModes: ['walk'],
+          citedSignalIds: ['calendar:2026-10-28T09:00:00Z'],
+          citedFactKeys: ['taste_lunch_japanese'],
+        },
+      ],
+      availableSignalIds: ['weather:2026-10-28T11:30:00Z', 'calendar:2026-10-28T09:00:00Z'],
+      confirmedFactKeys: ['habit_rain_transit', 'taste_lunch_japanese'],
+      timeZone: 'America/Los_Angeles',
+    });
+
+    expect(reasonRes.usedFallback).toBe(false);
+    expect(reasonRes.result.orderedPlanIds).toEqual(['plan-1', 'plan-2']);
+
+    const commandJson = JSON.stringify({
+      intent: 'LEAVE_LATER',
+      slots: { deltaMinutes: 20 },
+      citedSignalIds: ['weather:2026-10-28T11:30:00Z'],
+      citedFactKeys: ['habit_rain_transit'],
+      reasonCodes: ['weather_adjusted'],
+      explanation: 'Adjusted departure time later by 20 minutes.',
+    });
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: `\`\`\`json\n${commandJson}\n\`\`\``,
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 150,
+          completion_tokens: 40,
+          total_tokens: 190,
+        },
+      }),
+    } as any);
+
+    const cmdRes = await proxy.handleCommand({
+      utterance: 'Can I leave later?',
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit'],
+      confirmedFactKeys: ['habit_rain_transit'],
+      availableSignalIds: ['weather:2026-10-28T11:30:00Z'],
+      validTimes: ['2:45 PM', '2:50 PM'],
+    });
+
+    expect(cmdRes.usedFallback).toBe(false);
+    expect(cmdRes.result?.intent).toBe('LEAVE_LATER');
+  });
+
+  it('handleRefine: truncated JSON with finish_reason=length safely falls back and records diagnostics', async () => {
+    // Model generation truncated midway through json
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: '{"wording": "Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by',
+            },
+            finish_reason: 'length',
+          },
+        ],
+        usage: {
+          prompt_tokens: 114,
+          completion_tokens: 1024,
+          total_tokens: 1138,
+          completion_tokens_details: { reasoning_tokens: 950 },
+        },
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+    const res = await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+    });
+
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('schema_invalid');
+    expect(res.wording).toBe('Piano lesson at 3:00 PM');
+
+    const diag = proxy.getDiagnostics();
+    expect(diag.lastFinishReason).toBe('length');
+    expect(diag.lastReasoningTokens).toBe(950);
+  });
+
+  it('diagnostic metadata and LiveVerificationCallRecord NEVER contain raw content or secret keys', async () => {
+    const rawSecretMessageContent = 'RAW MODEL SECRET THINKING AND PRIVATE OUTPUT TEXT 987654321';
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              reasoning_content: rawSecretMessageContent,
+              content: '{"wording": "Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM"}',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: {
+          prompt_tokens: 110,
+          completion_tokens: 1024,
+          total_tokens: 1134,
+          completion_tokens_details: { reasoning_tokens: 888 },
+        },
+      }),
+    } as any);
+
+    const proxy = new ModelDevProxy({ ledgerPath: diagLedger, apiKey: sentinelSecretKey });
+    await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+    });
+
+    const diag = proxy.getDiagnostics();
+    const serializedDiag = JSON.stringify(diag);
+
+    // Assert key hygiene and zero raw content leakage
+    expect(serializedDiag).not.toContain(sentinelSecretKey);
+    expect(serializedDiag).not.toContain(rawSecretMessageContent);
+    expect(serializedDiag).not.toContain('987654321');
+    expect(diag.lastFinishReason).toBe('stop');
+    expect(diag.lastReasoningTokens).toBe(888);
   });
 });
 

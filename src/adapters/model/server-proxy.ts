@@ -487,6 +487,45 @@ export function resolveBindHost(env: Record<string, string | undefined> = proces
 }
 
 /**
+ * Strips optional markdown code fences (```json ... ``` or ``` ... ```) from output text.
+ */
+export function stripCodeFences(text: string): string {
+  const trimmed = text.trim();
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return fenceMatch ? fenceMatch[1]!.trim() : trimmed;
+}
+
+/**
+ * Extracts raw textual content from an OpenAI-compatible message object.
+ * Handles:
+ * - standard string content (message.content = "...")
+ * - content as array of parts (message.content = [{ type: 'text', text: '...' }])
+ * Strips code fences if present.
+ * Does NOT treat reasoning_content or reasoning as output content.
+ */
+export function extractMessageContent(message: unknown): string | undefined {
+  if (!message || typeof message !== 'object') return undefined;
+  const msg = message as {
+    content?: string | Array<{ type?: string; text?: string }>;
+  };
+
+  let raw: string | undefined;
+  if (typeof msg.content === 'string') {
+    raw = msg.content;
+  } else if (Array.isArray(msg.content)) {
+    const textParts = msg.content
+      .filter(part => typeof part === 'object' && part !== null && typeof part.text === 'string')
+      .map(part => part.text!);
+    if (textParts.length > 0) {
+      raw = textParts.join('');
+    }
+  }
+
+  if (raw === undefined || !raw.trim()) return undefined;
+  return stripCodeFences(raw);
+}
+
+/**
  * Creates Vite / Connect development server middleware for the ModelDevProxy.
  */
 export function createModelProxyMiddleware(
@@ -507,6 +546,8 @@ export function createModelProxyMiddleware(
 export class ModelDevProxy {
   private config: ModelProxyConfig;
   private readonly rateLimiter: RateLimiter;
+  private lastFinishReason?: string;
+  private lastReasoningTokens?: number;
 
   constructor(
     customConfig?: Partial<ModelProxyConfig>,
@@ -577,6 +618,19 @@ export class ModelDevProxy {
     return this.rateLimiter;
   }
 
+  public getLastFinishReason(): string | undefined {
+    return this.lastFinishReason;
+  }
+
+  public getLastReasoningTokens(): number | undefined {
+    return this.lastReasoningTokens;
+  }
+
+  public resetDiagnosticsMetadata(): void {
+    this.lastFinishReason = undefined;
+    this.lastReasoningTokens = undefined;
+  }
+
   public getDiagnostics(): ModelPortDiagnostics {
     let providerHost: string | undefined;
     try {
@@ -585,54 +639,56 @@ export class ModelDevProxy {
       providerHost = undefined;
     }
 
+    const baseDiag = {
+      modelName: this.config.modelName,
+      providerHost,
+      lastFinishReason: this.lastFinishReason,
+      lastReasoningTokens: this.lastReasoningTokens,
+    };
+
     if (!this.config.apiKey) {
       return {
+        ...baseDiag,
         status: 'disabled',
         message: 'model: disabled (no MODEL_API_KEY)',
-        modelName: this.config.modelName,
         keySource: 'none',
-        providerHost,
       };
     }
 
     if (!this.config.liveEnabled) {
       return {
+        ...baseDiag,
         status: 'disabled',
         message: 'model: key present, live disabled (MODEL_LIVE_ENABLED!=1)',
-        modelName: this.config.modelName,
         keySource: this.config.keySource,
-        providerHost,
       };
     }
 
     const ledgerState = readLedgerState(this.config.ledgerPath);
     if (ledgerState.status === 'corrupt') {
       return {
+        ...baseDiag,
         status: 'disabled',
         message: 'model: persistent ledger corrupt or unreadable, falling back to deterministic',
-        modelName: this.config.modelName,
         keySource: this.config.keySource,
-        providerHost,
       };
     }
 
     const effectiveCallCount = Math.max(processLiveCallCount, ledgerState.callCount);
     if (effectiveCallCount >= this.config.maxCalls) {
       return {
+        ...baseDiag,
         status: 'disabled',
         message: `model: live call cap reached (${effectiveCallCount}/${this.config.maxCalls}), falling back to deterministic`,
-        modelName: this.config.modelName,
         keySource: this.config.keySource,
-        providerHost,
       };
     }
 
     return {
+      ...baseDiag,
       status: 'enabled',
       message: `model: enabled (${this.config.modelName} via ${this.config.keySource})`,
-      modelName: this.config.modelName,
       keySource: this.config.keySource,
-      providerHost,
     };
   }
 
@@ -1092,9 +1148,31 @@ export class ModelDevProxy {
       }
 
       const json = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
+        choices?: Array<{
+          message?: {
+            content?: string | Array<{ type?: string; text?: string }>;
+            reasoning_content?: string;
+            reasoning?: string;
+          };
+          finish_reason?: string;
+        }>;
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          completion_tokens_details?: {
+            reasoning_tokens?: number;
+          };
+          reasoning_tokens?: number;
+        };
       };
-      const content = json.choices?.[0]?.message?.content;
+
+      this.lastFinishReason = json.choices?.[0]?.finish_reason;
+      this.lastReasoningTokens =
+        json.usage?.completion_tokens_details?.reasoning_tokens ??
+        json.usage?.reasoning_tokens;
+
+      const content = extractMessageContent(json.choices?.[0]?.message);
       if (!content || !content.trim()) {
         return {
           wording: fallbackWording,
@@ -1104,11 +1182,24 @@ export class ModelDevProxy {
       }
 
       let parsedWording = '';
-      try {
-        const parsed = JSON.parse(content) as { wording?: string };
-        parsedWording = parsed.wording || '';
-      } catch {
-        parsedWording = content.trim();
+      if (content.trim().startsWith('{') || this.lastFinishReason === 'length') {
+        try {
+          const parsed = JSON.parse(content) as { wording?: string };
+          parsedWording = parsed.wording || '';
+        } catch {
+          return {
+            wording: fallbackWording,
+            usedFallback: true,
+            fallbackReason: 'schema_invalid',
+          };
+        }
+      } else {
+        try {
+          const parsed = JSON.parse(content) as { wording?: string };
+          parsedWording = parsed.wording || '';
+        } catch {
+          parsedWording = content.trim();
+        }
       }
 
       if (!parsedWording) {
@@ -1266,9 +1357,31 @@ export class ModelDevProxy {
       }
 
       const json = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
+        choices?: Array<{
+          message?: {
+            content?: string | Array<{ type?: string; text?: string }>;
+            reasoning_content?: string;
+            reasoning?: string;
+          };
+          finish_reason?: string;
+        }>;
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          completion_tokens_details?: {
+            reasoning_tokens?: number;
+          };
+          reasoning_tokens?: number;
+        };
       };
-      const content = json.choices?.[0]?.message?.content;
+
+      this.lastFinishReason = json.choices?.[0]?.finish_reason;
+      this.lastReasoningTokens =
+        json.usage?.completion_tokens_details?.reasoning_tokens ??
+        json.usage?.reasoning_tokens;
+
+      const content = extractMessageContent(json.choices?.[0]?.message);
       if (!content || !content.trim()) {
         return {
           result: fallback,
@@ -1427,9 +1540,31 @@ export class ModelDevProxy {
       }
 
       const json = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
+        choices?: Array<{
+          message?: {
+            content?: string | Array<{ type?: string; text?: string }>;
+            reasoning_content?: string;
+            reasoning?: string;
+          };
+          finish_reason?: string;
+        }>;
+        usage?: {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          completion_tokens_details?: {
+            reasoning_tokens?: number;
+          };
+          reasoning_tokens?: number;
+        };
       };
-      const content = json.choices?.[0]?.message?.content;
+
+      this.lastFinishReason = json.choices?.[0]?.finish_reason;
+      this.lastReasoningTokens =
+        json.usage?.completion_tokens_details?.reasoning_tokens ??
+        json.usage?.reasoning_tokens;
+
+      const content = extractMessageContent(json.choices?.[0]?.message);
       if (!content || !content.trim()) {
         return {
           result: null,

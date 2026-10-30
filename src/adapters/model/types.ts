@@ -41,6 +41,8 @@ export interface ModelPortDiagnostics {
   readonly modelName: string;
   readonly keySource: 'MODEL_API_KEY' | 'META_API_KEY' | 'none';
   readonly providerHost?: string;
+  readonly lastFinishReason?: string;
+  readonly lastReasoningTokens?: number;
 }
 
 export interface ModelPort {
