@@ -12,8 +12,9 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
+import { getEvidenceDir } from './helpers/evidence-dir.js';
 
-const EVIDENCE_DIR = path.resolve(process.cwd(), 'docs/evidence/ui-font');
+const EVIDENCE_DIR = getEvidenceDir('ui-font');
 
 test.describe('UIFONT: Self-Hosted Font Integrity & Network Isolation', () => {
   test.beforeAll(() => {
@@ -127,7 +128,7 @@ test.describe('UIFONT: Self-Hosted Font Integrity & Network Isolation', () => {
     const whyBackdrop = page.locator('#why-sheet-backdrop');
     await expect(whyBackdrop).toBeVisible();
     await page.waitForSelector('#why-sheet-backdrop .modal-card');
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(350);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `why-sheet-${viewName}-${suffix}.png`),
       fullPage: false,

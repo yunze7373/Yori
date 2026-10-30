@@ -3,9 +3,10 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { getEvidenceDir } from './helpers/evidence-dir.js';
 
-const RECORDINGS_DIR = path.resolve(process.cwd(), 'docs/evidence/v4/recordings');
-const DUMPS_DIR = path.resolve(process.cwd(), 'docs/evidence/v4/dumps');
+const RECORDINGS_DIR = getEvidenceDir('v4/recordings');
+const DUMPS_DIR = getEvidenceDir('v4/dumps');
 const shouldPersist = Boolean(process.env.V4_RECORD);
 const TEMP_RECORD_DIR = path.join(os.tmpdir(), 'yori-v4-recordings');
 

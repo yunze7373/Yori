@@ -62,7 +62,7 @@ Screenshots captured at Mobile (390×844) and Desktop (1280×800) under both Goo
 | `home-rain-desktop-before.png` | Home (Rain) | Desktop (1280×800) | Before (Google Fonts CDN) | `01de938f9dca20e3b861f1ce4ef008ab86a1606ed1741c82b5e6d1a50c04035e` |
 | `home-rain-desktop-after.png` | Home (Rain) | Desktop (1280×800) | After (Self-Hosted) | `7761776be189ec78735b23e9c0dc7d93b46e368ab7802a57f12ab5ba70767381` |
 | `why-sheet-mobile-before.png` | Why Sheet Dialog | Mobile (390×844) | Before (Google Fonts CDN) | `f4c3b6c894493712164cafc441bf959ac7abd7187b7184bd5c45949237d4cbcf` |
-| `why-sheet-mobile-after.png` | Why Sheet Dialog | Mobile (390×844) | After (Self-Hosted) | `dbb849323c4605eac50266b38f46a07cc250bdde2bd1c07c8e297ccaabe16429` |
+| `why-sheet-mobile-after.png` | Why Sheet Dialog | Mobile (390×844) | After (Self-Hosted) | `ab1fc9eb59bc1f194c71b35cc48d8e789e95d38fe580613b59ec8bdcadcb9b43` |
 | `why-sheet-desktop-before.png` | Why Sheet Dialog | Desktop (1280×800) | Before (Google Fonts CDN) | `03e482cd643d0dce89927b1164ed7aa31e5b2aa16048d88b63922e3c1915f754` |
 | `why-sheet-desktop-after.png` | Why Sheet Dialog | Desktop (1280×800) | After (Self-Hosted) | `854cd1242e9989d8c4e1d03505b50cf55a8653f868dcccc51cf2e9aeb14a3ed1` |
 | `for-you-mobile-before.png` | For You View | Mobile (390×844) | Before (Google Fonts CDN) | `a64881a565d94f4750f24991076ff4ce287b449b5fbdc40c69dcfd8a3b1fcb4a` |

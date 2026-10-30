@@ -2,8 +2,9 @@ import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
+import { getEvidenceDir } from './helpers/evidence-dir.js';
 
-const EVIDENCE_DIR = path.resolve(process.cwd(), 'docs/evidence/ui-demo-fy');
+const EVIDENCE_DIR = getEvidenceDir('ui-demo-fy');
 
 async function checkAxeWcag(page: Page, contextName: string) {
   const axeResults = await new AxeBuilder({ page })

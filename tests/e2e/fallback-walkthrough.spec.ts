@@ -24,8 +24,9 @@ import { test, expect, Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import path from 'node:path';
 import fs from 'node:fs';
+import { getEvidenceDir } from './helpers/evidence-dir.js';
 
-const EVIDENCE_DIR = path.resolve('docs/evidence/submit-fallback');
+const EVIDENCE_DIR = getEvidenceDir('submit-fallback');
 
 test.beforeAll(() => {
   if (!fs.existsSync(EVIDENCE_DIR)) {

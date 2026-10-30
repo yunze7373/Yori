@@ -24,7 +24,7 @@
 - **Confirm**:
   - Clicking `Confirm` promotes the proposal to `status: 'confirmed'` and writes back through `MemoryPort.writeBack()` using `LocalMemoryAdapter`.
   - Persists to `sharedStorage` / `localStorage`.
-  - Proposal is removed from **For You** (which displays the calm empty state) and appears on the **Me** tab under `#confirmed-facts-list` as `Departure prep & buffer routine` with badge `Confirmed` and metadata `Source: you confirmed`.
+  - Proposal is removed from **For You** (which displays the calm empty state) and appears on the **Me** tab under `#confirmed-facts-list` as `Preparation buffer habit` with badge `Confirmed` and metadata `Source: you confirmed`.
 - **Not true**:
   - Clicking `Not true` updates the fact to `status: 'rejected'` (`source: 'user_feedback'`, note: `'Declined by user'`).
   - Persists to `sharedStorage` / `localStorage`.

@@ -56,12 +56,12 @@ function renderMapSvg(map: MapVM): string {
         ${
           map.weatherCallout
             ? `
-          <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 73}, ${map.weatherCallout.y - 18})">
-            <rect width="146" height="38" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
-            <text x="73" y="13" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutText" data-slot="domain">
+          <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 94}, ${map.weatherCallout.y - 18})">
+            <rect width="188" height="38" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
+            <text x="94" y="14" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutText" data-slot="domain">
               ${escapeHtml(map.weatherCallout.text)}
             </text>
-            <text x="73" y="29" fill="#E2EAE5" font-size="12" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutSubtext" data-slot="domain">
+            <text x="94" y="30" fill="#E2EAE5" font-size="12" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutSubtext" data-slot="domain">
               ${escapeHtml(map.weatherCallout.subtext || '')}
             </text>
           </g>

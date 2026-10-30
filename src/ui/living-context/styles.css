@@ -877,6 +877,18 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   gap: 12px;
 }
 
+@media (max-width: 480px) {
+  .why-item-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .why-item-row .card-badge {
+    order: -1;
+    margin-bottom: 2px;
+  }
+}
+
 .why-item-main {
   display: flex;
   flex-direction: column;
@@ -1199,7 +1211,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 
 @media (min-width: 1024px) {
   .app-layout[data-ui-version="v2"] .main-container {
-    padding-bottom: 100px;
+    padding-bottom: 180px;
   }
 }
 
@@ -2165,7 +2177,8 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 .v2-candidate-tags {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
 }
 
 .v2-cuisine-chip {
@@ -2191,6 +2204,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 .v2-distance-chip {
   font-size: 0.75rem;
   color: #354540;
+  white-space: nowrap;
 }
 
 .v2-candidate-basis {
@@ -2757,6 +2771,15 @@ button.v2-view-detail-link:focus-visible {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 6px;
+}
+
+@media (max-width: 480px) {
+  .v2-plan-item-header,
+  .v2-proposal-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
 }
 
 .v2-plan-headline,

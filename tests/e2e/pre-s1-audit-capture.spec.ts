@@ -16,8 +16,9 @@
 import { test, expect, type Page } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
+import { getEvidenceDir } from './helpers/evidence-dir.js';
 
-const EVIDENCE_DIR = path.resolve(process.cwd(), 'docs/evidence/pre-s1');
+const EVIDENCE_DIR = getEvidenceDir('pre-s1');
 const DUMPS_DIR = path.resolve(EVIDENCE_DIR, 'dumps');
 const shouldPersist = Boolean(process.env.PRE_S1_RECORD);
 

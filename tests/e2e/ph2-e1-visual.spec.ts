@@ -30,8 +30,9 @@ import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import path from 'node:path';
 import fs from 'node:fs';
+import { getEvidenceDir } from './helpers/evidence-dir.js';
 
-const EVIDENCE_DIR = path.resolve('docs/evidence/ph2-e1');
+const EVIDENCE_DIR = getEvidenceDir('ph2-e1');
 
 test.beforeAll(() => {
   if (!fs.existsSync(EVIDENCE_DIR)) {
