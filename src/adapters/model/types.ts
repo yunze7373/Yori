@@ -37,6 +37,11 @@ export interface ModelPortResponse {
   readonly fallbackReason?: FallbackReason;
 }
 
+export interface RejectedReasonCodeTelemetry {
+  readonly field: string;
+  readonly code: string;
+}
+
 export interface ModelPortDiagnostics {
   readonly status: 'enabled' | 'disabled';
   readonly message: string;
@@ -45,6 +50,7 @@ export interface ModelPortDiagnostics {
   readonly providerHost?: string;
   readonly lastFinishReason?: string;
   readonly lastReasoningTokens?: number;
+  readonly lastRejectedReasonCodes?: readonly RejectedReasonCodeTelemetry[];
 }
 
 export interface ModelPort {

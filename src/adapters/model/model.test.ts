@@ -17,13 +17,15 @@ import {
   resetProcessLiveCallCount,
   resetLedger,
 } from './server-proxy.js';
-import { SERVER_TEMPLATES, validateTemplateRequest } from './template-registry.js';
+import { SERVER_TEMPLATES, validateTemplateRequest, DECISION_COMMAND_VALID_REASON_CODES_LIST } from './template-registry.js';
 import {
   buildReasoningInput,
   reorderPlansWithReasoning,
   createModelIntentCandidate,
   validateReasoningOutput,
   validateDecisionCommandOutput,
+  VALID_REASON_CODES,
+  sanitizeReasonCodeForTelemetry,
 } from './reasoning.js';
 import { ModelCommandInterpreter } from '../../ui/conversation/model-interpreter.js';
 import {
@@ -2891,6 +2893,484 @@ describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpr
         expect(result.usedFallback).toBe(true);
         expect(result.fallbackReason).toBe('schema_invalid');
         expect(fetchSpy).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('S1-CMD-RC: Decision Command Reason Code Alignment, Fail-Closed Validation, & Telemetry (BACKLOG-20261031-S1CMD)', () => {
+    const validSignalId = 'weather:2026-10-28T20:35:00.000Z';
+    const validFactKey = 'habit_rain_transit';
+    const baseContext = {
+      availableModes: ['drive', 'bus'],
+      availableSignalIds: [validSignalId],
+      knownFactKeys: [validFactKey],
+      confirmedFactKeys: [validFactKey],
+      validTimes: ['2:45 PM'],
+      validPlaces: ['Piano Studio'],
+    };
+
+    describe('Scope (1): Prompt / Schema Alignment', () => {
+      it('decision_command systemPrompt and promptInstruction explicitly enumerate all 5 reason codes from VALID_REASON_CODES', () => {
+        const tmpl = SERVER_TEMPLATES.decision_command!;
+        expect(tmpl).toBeDefined();
+
+        expect(VALID_REASON_CODES.size).toBe(5);
+        for (const code of VALID_REASON_CODES) {
+          expect(tmpl.systemPrompt).toContain(code);
+          expect(tmpl.promptInstruction).toContain(code);
+        }
+
+        expect(tmpl.systemPrompt).toContain(DECISION_COMMAND_VALID_REASON_CODES_LIST);
+      });
+
+      it('fails if prompt text diverges from VALID_REASON_CODES', () => {
+        const tmpl = SERVER_TEMPLATES.decision_command!;
+        const promptCodes = Array.from(VALID_REASON_CODES);
+        for (const code of promptCodes) {
+          expect(tmpl.systemPrompt).toContain(code);
+        }
+        // Negative proof: a non-existent code must NOT be present
+        expect(tmpl.systemPrompt).not.toContain('non_existent_fake_reason_code_123');
+      });
+
+      it('decision_command prompt explicitly specifies exact situationAttribution shape, optionality, and closed sets', () => {
+        const tmpl = SERVER_TEMPLATES.decision_command!;
+        expect(tmpl.systemPrompt).toContain('situationAttribution shape: {"signalId": "...", "reasonCode": "...", "explanation": "...", "citedFactKeys": [...]}');
+        expect(tmpl.systemPrompt).toContain('reasonCodes may be [] and situationAttribution may be omitted when no code applies');
+        expect(tmpl.systemPrompt).toContain('Closed slots: modes drive|bus, filters quieter|vegetarian|nearer, deltaMinutes 1..240');
+        expect(tmpl.systemPrompt).toContain('Output compact schema-validated JSON only. No prose.');
+      });
+    });
+
+    describe('Scope (2) & (4): Positive acceptance across all 5 reason codes & optionality', () => {
+      it.each(Array.from(VALID_REASON_CODES))('accepts valid response with reason code: %s', (code) => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: { deltaMinutes: 15 },
+          citedSignalIds: [validSignalId],
+          citedFactKeys: [validFactKey],
+          reasonCodes: [code],
+          situationAttribution: {
+            signalId: validSignalId,
+            reasonCode: code,
+            explanation: 'Piano Studio depart at 2:45 PM',
+            citedFactKeys: [validFactKey],
+          },
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(true);
+        if (result.valid) {
+          expect(result.data.reasonCodes).toEqual([code]);
+          expect(result.data.situationAttribution?.reasonCode).toBe(code);
+        }
+      });
+
+      it('accepts empty reasonCodes [] and omitted situationAttribution when no code applies', () => {
+        const output = {
+          intent: 'UNDO',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: [],
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(true);
+        if (result.valid) {
+          expect(result.data.reasonCodes).toEqual([]);
+          expect(result.data.situationAttribution).toBeUndefined();
+        }
+      });
+    });
+
+    describe('Scope (2) & (4): Fail-closed negative validation (no relaxation, aliasing, or case-folding)', () => {
+      it('rejects unknown code with invalid_reason_code and captures telemetry', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: ['unknown_custom_reason'],
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('invalid_reason_code');
+          expect(result.rejectedReasonCodes).toEqual([
+            { field: 'reasonCodes[0]', code: 'unknown_custom_reason' },
+          ]);
+        }
+      });
+
+      it('rejects uppercase variant with invalid_reason_code (no case-folding)', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: ['WEATHER_ADJUSTED'],
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('invalid_reason_code');
+          expect(result.rejectedReasonCodes).toEqual([
+            { field: 'reasonCodes[0]', code: '<nonconforming len=16>' },
+          ]);
+        }
+      });
+
+      it('rejects code with whitespace (no relaxation / trim)', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: ['weather adjusted '],
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('invalid_reason_code');
+          expect(result.rejectedReasonCodes).toEqual([
+            { field: 'reasonCodes[0]', code: '<nonconforming len=17>' },
+          ]);
+        }
+      });
+
+      it('rejects near-miss code like weather_adjust (no fuzzy mapping)', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: ['weather_adjust'],
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('invalid_reason_code');
+          expect(result.rejectedReasonCodes).toEqual([
+            { field: 'reasonCodes[0]', code: 'weather_adjust' },
+          ]);
+        }
+      });
+
+      it('rejects non-string code (number / object)', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: [12345 as any],
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('invalid_reason_code');
+          expect(result.rejectedReasonCodes).toEqual([
+            { field: 'reasonCodes[0]', code: '<nonconforming len=5>' },
+          ]);
+        }
+      });
+
+      it('rejects 41-character reason code', () => {
+        const longCode = 'a'.repeat(41);
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: [longCode],
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('invalid_reason_code');
+          expect(result.rejectedReasonCodes).toEqual([
+            { field: 'reasonCodes[0]', code: '<nonconforming len=41>' },
+          ]);
+        }
+      });
+
+      it('rejects injection-looking code with special characters', () => {
+        const injection = 'time_critical"; DROP TABLE logs;--';
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: [injection],
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('invalid_reason_code');
+          expect(result.rejectedReasonCodes).toEqual([
+            { field: 'reasonCodes[0]', code: `<nonconforming len=${injection.length}>` },
+          ]);
+        }
+      });
+
+      it('rejects situationAttribution with bad reasonCode', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [validSignalId],
+          citedFactKeys: [],
+          reasonCodes: ['time_critical'],
+          situationAttribution: {
+            signalId: validSignalId,
+            reasonCode: 'bad_sa_reason',
+          },
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('invalid_reason_code');
+          expect(result.rejectedReasonCodes).toEqual([
+            { field: 'situationAttribution.reasonCode', code: 'bad_sa_reason' },
+          ]);
+        }
+      });
+
+      it('rejects situationAttribution with unknown signalId', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: ['time_critical'],
+          situationAttribution: {
+            signalId: 'unknown:signal:999',
+            reasonCode: 'time_critical',
+          },
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('unknown_signal_id');
+        }
+      });
+    });
+
+    describe('Scope (4): Fake / hostile response rejection', () => {
+      it('rejects top-level extra keys with extra_keys', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: [],
+          hostilePayload: 'drop tables',
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('extra_keys');
+        }
+      });
+
+      it('rejects slot extra keys with extra_keys', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: { unknownSlot: 'foo' },
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: [],
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('extra_keys');
+        }
+      });
+
+      it('rejects situationAttribution extra keys with extra_keys', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [validSignalId],
+          citedFactKeys: [],
+          reasonCodes: ['time_critical'],
+          situationAttribution: {
+            signalId: validSignalId,
+            reasonCode: 'time_critical',
+            unexpectedField: 'bar',
+          },
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('extra_keys');
+        }
+      });
+
+      it('rejects invented time in explanation text', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: [],
+          explanation: 'Departure time moved to 8:30 PM for lunch', // 8:30 PM not in validTimes
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('unlisted_fact_token');
+        }
+      });
+
+      it('rejects invented place in explanation text', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: [],
+          explanation: 'Meet at Central Park at 2:45 PM', // Central Park not in validPlaces
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.reason).toBe('unlisted_fact_token');
+        }
+      });
+    });
+
+    describe('Scope (3): Telemetry sanitization and capping', () => {
+      it('sanitizeReasonCodeForTelemetry preserves valid code strings', () => {
+        expect(sanitizeReasonCodeForTelemetry('matches_confirmed_preference')).toBe('matches_confirmed_preference');
+        expect(sanitizeReasonCodeForTelemetry('time_critical')).toBe('time_critical');
+        expect(sanitizeReasonCodeForTelemetry('weather_adjust')).toBe('weather_adjust');
+        expect(sanitizeReasonCodeForTelemetry('a')).toBe('a');
+        expect(sanitizeReasonCodeForTelemetry('z_0_9_ok')).toBe('z_0_9_ok');
+      });
+
+      it('sanitizeReasonCodeForTelemetry redacts non-conforming inputs to length indicators', () => {
+        expect(sanitizeReasonCodeForTelemetry('UPPERCASE')).toBe('<nonconforming len=9>');
+        expect(sanitizeReasonCodeForTelemetry('with spaces')).toBe('<nonconforming len=11>');
+        expect(sanitizeReasonCodeForTelemetry('1starts_with_digit')).toBe('<nonconforming len=18>');
+        expect(sanitizeReasonCodeForTelemetry('a'.repeat(41))).toBe('<nonconforming len=41>');
+        expect(sanitizeReasonCodeForTelemetry(null)).toBe('<nonconforming len=4>');
+        expect(sanitizeReasonCodeForTelemetry(undefined)).toBe('<nonconforming len=0>');
+        expect(sanitizeReasonCodeForTelemetry(42)).toBe('<nonconforming len=2>');
+      });
+
+      it('caps rejectedReasonCodes telemetry at 10 items per call', () => {
+        const output = {
+          intent: 'LEAVE_LATER',
+          slots: {},
+          citedSignalIds: [validSignalId],
+          citedFactKeys: [],
+          reasonCodes: Array.from({ length: 15 }, (_, i) => `bad_code_${i}`),
+          situationAttribution: {
+            signalId: validSignalId,
+            reasonCode: 'bad_sa_code',
+          },
+        };
+
+        const result = validateDecisionCommandOutput(output, baseContext);
+        expect(result.valid).toBe(false);
+        if (!result.valid) {
+          expect(result.rejectedReasonCodes).toBeDefined();
+          expect(result.rejectedReasonCodes?.length).toBe(10);
+        }
+      });
+    });
+
+    describe('Scope (2): Parity between server validator and client interpreter', () => {
+      const clientInterpreter = new ModelCommandInterpreter({ mode: 'scripted_fixture' });
+
+      it.each([
+        {
+          name: 'valid output with time_critical',
+          output: {
+            intent: 'LEAVE_LATER',
+            slots: { deltaMinutes: 15 },
+            citedSignalIds: [validSignalId],
+            citedFactKeys: [],
+            reasonCodes: ['time_critical'],
+          },
+          expectedValid: true,
+        },
+        {
+          name: 'unknown reason code',
+          output: {
+            intent: 'LEAVE_LATER',
+            slots: {},
+            citedSignalIds: [],
+            citedFactKeys: [],
+            reasonCodes: ['invented_code'],
+          },
+          expectedValid: false,
+          expectedReason: 'invalid_reason_code',
+        },
+        {
+          name: 'extra top-level keys',
+          output: {
+            intent: 'LEAVE_LATER',
+            slots: {},
+            citedSignalIds: [],
+            citedFactKeys: [],
+            reasonCodes: [],
+            bogusKey: 123,
+          },
+          expectedValid: false,
+          expectedReason: 'extra_keys',
+        },
+        {
+          name: 'extra slot keys',
+          output: {
+            intent: 'LEAVE_LATER',
+            slots: { extraSlot: true },
+            citedSignalIds: [],
+            citedFactKeys: [],
+            reasonCodes: [],
+          },
+          expectedValid: false,
+          expectedReason: 'extra_keys',
+        },
+        {
+          name: 'unlisted time in explanation',
+          output: {
+            intent: 'LEAVE_LATER',
+            slots: {},
+            citedSignalIds: [],
+            citedFactKeys: [],
+            reasonCodes: [],
+            explanation: 'Depart at 9:00 AM',
+          },
+          expectedValid: false,
+          expectedReason: 'unlisted_fact_token',
+        },
+      ])('maintains parity for: $name', ({ output, expectedValid, expectedReason }) => {
+        const serverRes = validateDecisionCommandOutput(output, baseContext);
+        const clientRes = clientInterpreter.validateDecisionOutput(output, baseContext);
+
+        expect(serverRes.valid).toBe(expectedValid);
+        expect(clientRes.valid).toBe(expectedValid);
+
+        if (!expectedValid) {
+          expect((serverRes as any).reason).toBe(expectedReason);
+          expect((clientRes as any).reason).toBe(expectedReason);
+        }
       });
     });
   });

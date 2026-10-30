@@ -25,6 +25,11 @@ import {
 } from '../../adapters/model/decision-log.js';
 import {
   VALID_REASON_CODES,
+  sanitizeReasonCodeForTelemetry,
+  type RejectedReasonCodeTelemetry,
+  ALLOWED_DECISION_COMMAND_TOP_KEYS,
+  ALLOWED_DECISION_COMMAND_SLOT_KEYS,
+  ALLOWED_SITUATION_ATTRIBUTION_KEYS,
 } from '../../adapters/model/reasoning.js';
 import { validateFactsInWording } from '../../adapters/model/fact-checker.js';
 import {
@@ -155,12 +160,30 @@ export class ModelCommandInterpreter implements CommandInterpreter {
   public validateDecisionOutput(
     raw: unknown,
     context?: CommandInterpretationContext
-  ): { valid: true; output: ModelCommandDecisionOutput } | { valid: false; reason: string; error: string } {
+  ):
+    | { valid: true; output: ModelCommandDecisionOutput }
+    | {
+        valid: false;
+        reason: string;
+        error: string;
+        rejectedReasonCodes?: readonly RejectedReasonCodeTelemetry[];
+      } {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
       return { valid: false, reason: 'schema_invalid', error: 'Output must be a non-null JSON object' };
     }
 
     const obj = raw as Record<string, unknown>;
+
+    // Check top-level extra keys
+    for (const k of Object.keys(obj)) {
+      if (!ALLOWED_DECISION_COMMAND_TOP_KEYS.has(k)) {
+        return {
+          valid: false,
+          reason: 'extra_keys',
+          error: `Unauthorized top-level key '${k}' in decision command output`,
+        };
+      }
+    }
 
     // 1. Intent must be in the closed set
     if (typeof obj.intent !== 'string' || !CLOSED_INTENTS.has(obj.intent)) {
@@ -176,6 +199,15 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       return { valid: false, reason: 'schema_invalid', error: "'slots' must be an object" };
     }
     const slots = obj.slots as Record<string, unknown>;
+    for (const k of Object.keys(slots)) {
+      if (!ALLOWED_DECISION_COMMAND_SLOT_KEYS.has(k)) {
+        return {
+          valid: false,
+          reason: 'extra_keys',
+          error: `Unauthorized key '${k}' in slots`,
+        };
+      }
+    }
     if (slots.mode !== undefined) {
       if (slots.mode !== 'drive' && slots.mode !== 'bus') {
         return { valid: false, reason: 'schema_invalid', error: `Unsupported mode '${String(slots.mode)}'` };
@@ -201,17 +233,21 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       }
     }
 
-    // 3. Validate reasonCodes array early
+    // 3. Validate reasonCodes array and situationAttribution reasonCode
+    const rejectedReasonCodes: RejectedReasonCodeTelemetry[] = [];
+
     if (!Array.isArray(obj.reasonCodes)) {
       return { valid: false, reason: 'schema_invalid', error: "'reasonCodes' must be an array" };
     }
-    for (const code of obj.reasonCodes) {
+    for (let i = 0; i < obj.reasonCodes.length; i++) {
+      const code = obj.reasonCodes[i];
       if (typeof code !== 'string' || !VALID_REASON_CODES.has(code)) {
-        return {
-          valid: false,
-          reason: 'invalid_reason_code',
-          error: `Reason code '${String(code)}' is not in VALID_REASON_CODES`,
-        };
+        if (rejectedReasonCodes.length < 10) {
+          rejectedReasonCodes.push({
+            field: `reasonCodes[${i}]`,
+            code: sanitizeReasonCodeForTelemetry(code),
+          });
+        }
       }
     }
 
@@ -225,13 +261,33 @@ export class ModelCommandInterpreter implements CommandInterpreter {
         return { valid: false, reason: 'schema_invalid', error: "'situationAttribution' must be an object" };
       }
       const saObj = obj.situationAttribution as Record<string, unknown>;
-      if (typeof saObj.reasonCode !== 'string' || !VALID_REASON_CODES.has(saObj.reasonCode)) {
-        return {
-          valid: false,
-          reason: 'invalid_reason_code',
-          error: `situationAttribution reasonCode '${String(saObj.reasonCode)}' is not valid`,
-        };
+      for (const k of Object.keys(saObj)) {
+        if (!ALLOWED_SITUATION_ATTRIBUTION_KEYS.has(k)) {
+          return {
+            valid: false,
+            reason: 'extra_keys',
+            error: `Unauthorized key '${k}' in situationAttribution`,
+          };
+        }
       }
+      if (typeof saObj.reasonCode !== 'string' || !VALID_REASON_CODES.has(saObj.reasonCode)) {
+        if (rejectedReasonCodes.length < 10) {
+          rejectedReasonCodes.push({
+            field: 'situationAttribution.reasonCode',
+            code: sanitizeReasonCodeForTelemetry(saObj.reasonCode),
+          });
+        }
+      }
+    }
+
+    if (rejectedReasonCodes.length > 0) {
+      const capped = rejectedReasonCodes.slice(0, 10);
+      return {
+        valid: false,
+        reason: 'invalid_reason_code',
+        error: `Invalid reason code(s): ${capped.map(r => `${r.field}=${r.code}`).join(', ')}`,
+        rejectedReasonCodes: capped,
+      };
     }
 
     // 5. Fact check on explanation text (defense in depth)

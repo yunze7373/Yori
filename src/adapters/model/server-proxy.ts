@@ -19,6 +19,7 @@ import type {
   ModelPortRequest,
   ModelPortResponse,
   ModelPortDiagnostics,
+  RejectedReasonCodeTelemetry,
 } from './types.js';
 import { validateFactsInWording } from './fact-checker.js';
 import {
@@ -52,7 +53,9 @@ export interface ModelCommandResponse {
     | 'out_of_set_intent'
     | 'unlisted_fact_token'
     | 'truncated'
-    | 'extraction_fault';
+    | 'extraction_fault'
+    | 'extra_keys';
+  readonly rejectedReasonCodes?: readonly RejectedReasonCodeTelemetry[];
 }
 
 export interface ModelReasoningResponse {
@@ -714,6 +717,7 @@ export class ModelDevProxy {
   private readonly rateLimiter: RateLimiter;
   private lastFinishReason?: string;
   private lastReasoningTokens?: number;
+  private lastRejectedReasonCodes?: readonly RejectedReasonCodeTelemetry[];
   private runStartLedgerCount?: number;
 
   constructor(
@@ -806,9 +810,14 @@ export class ModelDevProxy {
     return this.lastReasoningTokens;
   }
 
+  public getLastRejectedReasonCodes(): readonly RejectedReasonCodeTelemetry[] | undefined {
+    return this.lastRejectedReasonCodes;
+  }
+
   public resetDiagnosticsMetadata(): void {
     this.lastFinishReason = undefined;
     this.lastReasoningTokens = undefined;
+    this.lastRejectedReasonCodes = undefined;
   }
 
   public getDiagnostics(): ModelPortDiagnostics {
@@ -824,6 +833,7 @@ export class ModelDevProxy {
       providerHost,
       lastFinishReason: this.lastFinishReason,
       lastReasoningTokens: this.lastReasoningTokens,
+      lastRejectedReasonCodes: this.lastRejectedReasonCodes,
     };
 
     if (!this.config.apiKey) {
@@ -1850,6 +1860,7 @@ export class ModelDevProxy {
       });
 
       if (!validation.valid) {
+        this.lastRejectedReasonCodes = validation.rejectedReasonCodes;
         this.logger(
           `[ModelProxy] Discarding command decision output due to validation failure (${validation.reason}): ${validation.error}`
         );
@@ -1857,6 +1868,7 @@ export class ModelDevProxy {
           result: null,
           usedFallback: true,
           fallbackReason: (validation.reason as any) || 'schema_invalid',
+          rejectedReasonCodes: validation.rejectedReasonCodes,
         };
       }
 

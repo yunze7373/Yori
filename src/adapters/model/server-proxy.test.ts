@@ -2744,6 +2744,198 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     expect(res.fallbackReason).toBe('disabled');
     expect(readLedgerState(cap50Ledger).callCount).toBe(50);
   });
+
+  describe('S1-CMD-RC: handleCommand reason code telemetry & LiveVerification runner integration', () => {
+    const s1cmdDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-s1cmd-proxy-'));
+    const s1cmdLedger = path.join(s1cmdDir, 's1cmd-ledger.json');
+
+    beforeEach(() => {
+      resetLedger(s1cmdLedger);
+    });
+
+    afterEach(() => {
+      try {
+        resetLedger(s1cmdLedger);
+      } catch {}
+    });
+
+    afterAll(() => {
+      try {
+        if (fs.existsSync(s1cmdDir)) {
+          fs.rmSync(s1cmdDir, { recursive: true, force: true });
+        }
+      } catch {}
+    });
+
+    it('handleCommand records rejectedReasonCodes on validation failure and preserves them in diagnostics', async () => {
+      const fetchSpy = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  intent: 'LEAVE_LATER',
+                  slots: { deltaMinutes: 15 },
+                  citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+                  citedFactKeys: ['habit_rain_transit'],
+                  reasonCodes: ['custom_nonexistent_code', 'UPPERCASE_CODE'],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 30, total_tokens: 80 },
+        }),
+      });
+      globalThis.fetch = fetchSpy as any;
+
+      const proxy = new ModelDevProxy({
+        ledgerPath: s1cmdLedger,
+        apiKey: 'sk-test-s1cmd-key',
+        liveEnabled: true,
+        maxCalls: 10,
+      });
+
+      const res = await proxy.handleCommand({
+        utterance: 'Can I leave later?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:45 PM'],
+      });
+
+      expect(res.usedFallback).toBe(true);
+      expect(res.fallbackReason).toBe('invalid_reason_code');
+      expect(res.rejectedReasonCodes).toEqual([
+        { field: 'reasonCodes[0]', code: 'custom_nonexistent_code' },
+        { field: 'reasonCodes[1]', code: '<nonconforming len=14>' },
+      ]);
+
+      expect(proxy.getLastRejectedReasonCodes()).toEqual(res.rejectedReasonCodes);
+      const diag = proxy.getDiagnostics();
+      expect(diag.lastRejectedReasonCodes).toEqual(res.rejectedReasonCodes);
+    });
+
+    it('handleCommand preserves fallbackReason=truncated when finish_reason=length', async () => {
+      const fetchSpy = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [
+            {
+              message: { content: '{"intent": "LEAVE_LATER", "slots":' },
+              finish_reason: 'length',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 2048, total_tokens: 2098 },
+        }),
+      });
+      globalThis.fetch = fetchSpy as any;
+
+      const proxy = new ModelDevProxy({
+        ledgerPath: s1cmdLedger,
+        apiKey: 'sk-test-s1cmd-key',
+        liveEnabled: true,
+        maxCalls: 10,
+      });
+
+      const res = await proxy.handleCommand({
+        utterance: 'Can I leave later?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+      });
+
+      expect(res.usedFallback).toBe(true);
+      expect(res.fallbackReason).toBe('truncated');
+      expect(proxy.getLastFinishReason()).toBe('length');
+    });
+
+    it('runLiveVerification records rejectedReasonCodes in LiveVerificationCallRecord and report MD/JSON', async () => {
+      const testReportMd = path.join(s1cmdDir, 'test-s1cmd-report.md');
+      const testReportJson = path.join(s1cmdDir, 'test-s1cmd-report.json');
+
+      process.env.MODEL_API_KEY = 'sk-mock-s1cmd-key';
+      process.env.MODEL_LIVE_ENABLED = '1';
+      process.env.MODEL_LIVE_MAX_CALLS = '10';
+
+      const mockFetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+        const body = JSON.parse(init.body);
+        const isCommand = body.messages.some((m: any) => m.content && m.content.includes('decision_command'));
+
+        if (isCommand) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      intent: 'LEAVE_LATER',
+                      slots: { deltaMinutes: 15 },
+                      citedSignalIds: ['weather:2026-10-28T11:30:00Z'],
+                      citedFactKeys: ['habit_rain_transit'],
+                      reasonCodes: ['novel_reason_code_abc'],
+                    }),
+                  },
+                  finish_reason: 'stop',
+                },
+              ],
+              usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+            }),
+          } as any;
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ wording: 'Piano lesson at 3:00 PM' }) }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        } as any;
+      });
+
+      const { ok, report } = await runLiveVerification({
+        confirmBilled: true,
+        skipPreconditions: true,
+        tempLedgerPath: s1cmdLedger,
+        mockFetch: mockFetch as any,
+        reportPath: testReportMd,
+        jsonReportPath: testReportJson,
+      });
+
+      expect(ok).toBe(true);
+      const commandCall = report.calls.find(c => c.endpoint === 'command');
+      expect(commandCall).toBeDefined();
+      expect(commandCall?.fallbackReason).toBe('invalid_reason_code');
+      expect(commandCall?.rejectedReasonCodes).toEqual([
+        { field: 'reasonCodes[0]', code: 'novel_reason_code_abc' },
+      ]);
+
+      // Check written JSON
+      const writtenJson = JSON.parse(fs.readFileSync(testReportJson, 'utf-8'));
+      const jsonCommandCall = writtenJson.calls.find((c: any) => c.endpoint === 'command');
+      expect(jsonCommandCall.rejectedReasonCodes).toEqual([
+        { field: 'reasonCodes[0]', code: 'novel_reason_code_abc' },
+      ]);
+
+      // Check written Markdown
+      const writtenMd = fs.readFileSync(testReportMd, 'utf-8');
+      expect(writtenMd).toContain('### Rejected Reason Codes Telemetry');
+      expect(writtenMd).toContain('`reasonCodes[0]`');
+      expect(writtenMd).toContain('`novel_reason_code_abc`');
+
+      delete process.env.MODEL_API_KEY;
+      delete process.env.MODEL_LIVE_ENABLED;
+      delete process.env.MODEL_LIVE_MAX_CALLS;
+    });
+  });
 });
 
 afterAll(() => {

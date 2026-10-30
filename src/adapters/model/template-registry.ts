@@ -12,6 +12,10 @@
  * 6. Deterministic fallback rendering produces byte-identical D1-D6 outputs when model is disabled.
  */
 
+import { VALID_REASON_CODES } from './reasoning.js';
+
+export const DECISION_COMMAND_VALID_REASON_CODES_LIST = Array.from(VALID_REASON_CODES).join(', ');
+
 export interface FactFieldRule {
   readonly type: 'string' | 'number' | 'boolean' | 'string_array';
   readonly required?: boolean;
@@ -335,9 +339,9 @@ export const SERVER_TEMPLATES: Readonly<Record<string, ServerTemplate>> = Object
     id: 'decision_command',
     description: 'Muse Spark constrained command interpreter and situation attribution',
     systemPrompt:
-      'You are Muse Spark, a constrained decision engine for Yori. Map the user utterance strictly to closed intent set (LEAVE_LATER, CHANGE_ROUTE, WHY, ACCEPT, UNDO, UNSUPPORTED). Attribute situation with enumerated reason codes citing valid signals. Output schema-validated JSON only. Never originate unlisted facts, times, or places.',
+      `You are Muse Spark, a constrained decision engine for Yori. Map user utterance strictly to closed intents: LEAVE_LATER, CHANGE_ROUTE, FIND_LUNCH, WHY, ACCEPT, UNDO, UNSUPPORTED. Closed slots: modes drive|bus, filters quieter|vegetarian|nearer, deltaMinutes 1..240. Reason codes MUST be chosen ONLY from: ${DECISION_COMMAND_VALID_REASON_CODES_LIST}. reasonCodes may be [] and situationAttribution may be omitted when no code applies. situationAttribution shape: {"signalId": "...", "reasonCode": "...", "explanation": "...", "citedFactKeys": [...]}, where signalId must be one of availableSignalIds, and reasonCode must be one of the allowed reason codes (${DECISION_COMMAND_VALID_REASON_CODES_LIST}). Output compact schema-validated JSON only. No prose. Never originate unlisted facts, times, or places.`,
     promptInstruction:
-      'Evaluate utterance under available signals, modes, and confirmed facts. Output JSON: {"intent": "...", "slots": {...}, "situationAttribution": {...}, "recommendedOptionDelta": ..., "citedSignalIds": [...], "citedFactKeys": [...], "reasonCodes": [...]}',
+      `Evaluate utterance under available signals, modes, and confirmed facts. Output compact JSON: {"intent": "...", "slots": {...}, "situationAttribution": {"signalId": "...", "reasonCode": "..."}, "citedSignalIds": [...], "citedFactKeys": [...], "reasonCodes": [...]}. Allowed reason codes: ${DECISION_COMMAND_VALID_REASON_CODES_LIST}. reasonCodes may be [] and situationAttribution may be omitted when no code applies. No prose.`,
     allowedFactRules: Object.freeze<Record<string, FactFieldRule>>({
       utterance: { type: 'string', required: true, maxLength: 200 },
       availableModes: { type: 'string_array', maxItems: 10, itemMaxLength: 20 },

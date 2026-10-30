@@ -78,6 +78,7 @@ import {
   MODEL_LIFETIME_MAX_CALLS,
   MODEL_PER_RUN_MAX_CALLS,
 } from '../src/adapters/model/server-proxy.js';
+import type { RejectedReasonCodeTelemetry } from '../src/adapters/model/types.js';
 import { runPipeline } from '../src/core/pipeline/index.js';
 import {
   createScenarioPlayer,
@@ -868,6 +869,7 @@ export interface LiveVerificationCallRecord {
   readonly usedFallback: boolean;
   readonly fallbackReason?: string;
   readonly factCheckOutcome: 'accepted' | 'discarded';
+  readonly rejectedReasonCodes?: readonly RejectedReasonCodeTelemetry[];
   readonly error?: string;
 }
 
@@ -931,6 +933,21 @@ function generateMarkdownReport(report: LiveVerificationReport): string {
     lines.push(`| ${c.index} | \`${c.endpoint}\` | ${c.description} | ${c.httpStatus} | ${c.latencyMs} | ${tokens} | ${reasoningTag} | ${finishTag} | ${fallbackTag} | \`${reasonTag}\` | ${outcome} |`);
   }
   lines.push('');
+
+  const callsWithRejectedCodes = report.calls.filter(
+    c => c.rejectedReasonCodes && c.rejectedReasonCodes.length > 0
+  );
+  if (callsWithRejectedCodes.length > 0) {
+    lines.push('### Rejected Reason Codes Telemetry\n');
+    lines.push('| Call # | Endpoint | Field | Rejected Code |');
+    lines.push('|---|---|---|---|');
+    for (const c of callsWithRejectedCodes) {
+      for (const r of c.rejectedReasonCodes!) {
+        lines.push(`| ${c.index} | \`${c.endpoint}\` | \`${r.field}\` | \`${r.code}\` |`);
+      }
+    }
+    lines.push('');
+  }
 
   if (report.hardStopReason) {
     lines.push('## 3. Hard Stop / Availability Note\n');
@@ -1384,6 +1401,9 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         error?: string;
       };
 
+      const rejectedCodes =
+        (callResult as any).rejectedReasonCodes ?? proxy.getLastRejectedReasonCodes();
+
       const record: LiveVerificationCallRecord = {
         index: liveFetchDispatchedCount,
         endpoint: callDef.endpoint,
@@ -1398,6 +1418,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         usedFallback: callResult.usedFallback,
         fallbackReason: callResult.fallbackReason,
         factCheckOutcome: callResult.usedFallback ? 'discarded' : 'accepted',
+        ...(rejectedCodes && rejectedCodes.length > 0 ? { rejectedReasonCodes: rejectedCodes } : {}),
         error: meta.error,
       };
 

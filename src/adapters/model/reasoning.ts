@@ -22,6 +22,20 @@ import type {
   IntentCandidate,
 } from '../../core/contracts/index.js';
 import { validateFactsInWording, parseTimeToMinutes } from './fact-checker.js';
+import type { RejectedReasonCodeTelemetry } from './types.js';
+
+export { type RejectedReasonCodeTelemetry };
+
+export function sanitizeReasonCodeForTelemetry(raw: unknown): string {
+  if (typeof raw !== 'string') {
+    const len = typeof raw === 'undefined' ? 0 : String(raw).length;
+    return `<nonconforming len=${len}>`;
+  }
+  if (/^[a-z][a-z0-9_]{0,39}$/.test(raw)) {
+    return raw;
+  }
+  return `<nonconforming len=${raw.length}>`;
+}
 
 export const REGISTERED_INTENTS: ReadonlySet<string> = new Set([
   'depart',
@@ -872,6 +886,30 @@ export interface DecisionCommandValidationContext {
   readonly evidenceBundle?: { getRecord(id: string): unknown; hasRecord?(id: string): boolean } | null;
 }
 
+export const ALLOWED_DECISION_COMMAND_TOP_KEYS: ReadonlySet<string> = new Set([
+  'intent',
+  'slots',
+  'situationAttribution',
+  'recommendedOptionDelta',
+  'citedSignalIds',
+  'citedFactKeys',
+  'reasonCodes',
+  'explanation',
+]);
+
+export const ALLOWED_DECISION_COMMAND_SLOT_KEYS: ReadonlySet<string> = new Set([
+  'deltaMinutes',
+  'mode',
+  'filters',
+]);
+
+export const ALLOWED_SITUATION_ATTRIBUTION_KEYS: ReadonlySet<string> = new Set([
+  'signalId',
+  'reasonCode',
+  'explanation',
+  'citedFactKeys',
+]);
+
 /**
  * Validates Muse Spark Decision Engine output against strict schema, closed intents, and citations.
  * Discards any uncited claims, out-of-set intents, or unlisted tokens.
@@ -879,12 +917,30 @@ export interface DecisionCommandValidationContext {
 export function validateDecisionCommandOutput(
   raw: unknown,
   context?: DecisionCommandValidationContext
-): { readonly valid: true; readonly data: DecisionCommandOutput } | { readonly valid: false; readonly reason: string; readonly error: string } {
+):
+  | { readonly valid: true; readonly data: DecisionCommandOutput }
+  | {
+      readonly valid: false;
+      readonly reason: string;
+      readonly error: string;
+      readonly rejectedReasonCodes?: readonly RejectedReasonCodeTelemetry[];
+    } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return { valid: false, reason: 'schema_invalid', error: 'Output must be a non-null JSON object' };
   }
 
   const obj = raw as Record<string, unknown>;
+
+  // Check top-level extra keys
+  for (const k of Object.keys(obj)) {
+    if (!ALLOWED_DECISION_COMMAND_TOP_KEYS.has(k)) {
+      return {
+        valid: false,
+        reason: 'extra_keys',
+        error: `Unauthorized top-level key '${k}' in decision command output`,
+      };
+    }
+  }
 
   // 1. Intent must be in the closed set
   if (typeof obj.intent !== 'string' || !CLOSED_DECISION_INTENTS.has(obj.intent)) {
@@ -900,6 +956,15 @@ export function validateDecisionCommandOutput(
     return { valid: false, reason: 'schema_invalid', error: "'slots' must be an object" };
   }
   const slots = obj.slots as Record<string, unknown>;
+  for (const k of Object.keys(slots)) {
+    if (!ALLOWED_DECISION_COMMAND_SLOT_KEYS.has(k)) {
+      return {
+        valid: false,
+        reason: 'extra_keys',
+        error: `Unauthorized key '${k}' in slots`,
+      };
+    }
+  }
   if (slots.mode !== undefined) {
     if (slots.mode !== 'drive' && slots.mode !== 'bus') {
       return { valid: false, reason: 'schema_invalid', error: `Unsupported mode '${String(slots.mode)}'` };
@@ -925,17 +990,21 @@ export function validateDecisionCommandOutput(
     }
   }
 
-  // 3. Validate reasonCodes array early
+  // 3. Validate reasonCodes array and situationAttribution reasonCode
+  const rejectedReasonCodes: RejectedReasonCodeTelemetry[] = [];
+
   if (!Array.isArray(obj.reasonCodes)) {
     return { valid: false, reason: 'schema_invalid', error: "'reasonCodes' must be an array" };
   }
-  for (const code of obj.reasonCodes) {
+  for (let i = 0; i < obj.reasonCodes.length; i++) {
+    const code = obj.reasonCodes[i];
     if (typeof code !== 'string' || !VALID_REASON_CODES.has(code)) {
-      return {
-        valid: false,
-        reason: 'invalid_reason_code',
-        error: `Reason code '${String(code)}' is not in VALID_REASON_CODES`,
-      };
+      if (rejectedReasonCodes.length < 10) {
+        rejectedReasonCodes.push({
+          field: `reasonCodes[${i}]`,
+          code: sanitizeReasonCodeForTelemetry(code),
+        });
+      }
     }
   }
 
@@ -949,13 +1018,33 @@ export function validateDecisionCommandOutput(
       return { valid: false, reason: 'schema_invalid', error: "'situationAttribution' must be an object" };
     }
     const saObj = obj.situationAttribution as Record<string, unknown>;
-    if (typeof saObj.reasonCode !== 'string' || !VALID_REASON_CODES.has(saObj.reasonCode)) {
-      return {
-        valid: false,
-        reason: 'invalid_reason_code',
-        error: `situationAttribution reasonCode '${String(saObj.reasonCode)}' is not valid`,
-      };
+    for (const k of Object.keys(saObj)) {
+      if (!ALLOWED_SITUATION_ATTRIBUTION_KEYS.has(k)) {
+        return {
+          valid: false,
+          reason: 'extra_keys',
+          error: `Unauthorized key '${k}' in situationAttribution`,
+        };
+      }
     }
+    if (typeof saObj.reasonCode !== 'string' || !VALID_REASON_CODES.has(saObj.reasonCode)) {
+      if (rejectedReasonCodes.length < 10) {
+        rejectedReasonCodes.push({
+          field: 'situationAttribution.reasonCode',
+          code: sanitizeReasonCodeForTelemetry(saObj.reasonCode),
+        });
+      }
+    }
+  }
+
+  if (rejectedReasonCodes.length > 0) {
+    const capped = rejectedReasonCodes.slice(0, 10);
+    return {
+      valid: false,
+      reason: 'invalid_reason_code',
+      error: `Invalid reason code(s): ${capped.map(r => `${r.field}=${r.code}`).join(', ')}`,
+      rejectedReasonCodes: capped,
+    };
   }
 
   // 5. Fact check on explanation text (defense in depth)
