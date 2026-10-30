@@ -1,0 +1,80 @@
+{
+  "timestamp": "2026-10-30T17:55:51.866Z",
+  "providerHost": "api.meta.ai",
+  "modelName": "muse-spark-1.3",
+  "authorizedCap": 10,
+  "preRunLedgerCount": 13,
+  "lifetimeRemaining": 33,
+  "lifetimeCap": 50,
+  "totalCallsDispatched": 4,
+  "ledgerCallCount": 17,
+  "ledgerDelta": 4,
+  "ledgerReconciled": true,
+  "ledgerPath": ".yori-runtime/model-live-ledger.json",
+  "executionStatus": "completed",
+  "hostList": [
+    "api.meta.ai"
+  ],
+  "calls": [
+    {
+      "index": 1,
+      "endpoint": "refine",
+      "description": "Refine depart template (Piano lesson)",
+      "httpStatus": 200,
+      "latencyMs": 7074,
+      "promptTokens": 114,
+      "completionTokens": 1045,
+      "totalTokens": 1159,
+      "reasoningTokens": 996,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted"
+    },
+    {
+      "index": 2,
+      "endpoint": "reason",
+      "description": "Reasoning plan ranking (rain vs lunch)",
+      "httpStatus": 200,
+      "latencyMs": 12216,
+      "promptTokens": 374,
+      "completionTokens": 2136,
+      "totalTokens": 2510,
+      "reasoningTokens": 1940,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted"
+    },
+    {
+      "index": 3,
+      "endpoint": "command",
+      "description": "Command interpret (\"Can I leave later?\")",
+      "httpStatus": 200,
+      "latencyMs": 9646,
+      "promptTokens": 228,
+      "completionTokens": 1577,
+      "totalTokens": 1805,
+      "reasoningTokens": 1531,
+      "finishReason": "stop",
+      "usedFallback": true,
+      "fallbackReason": "invalid_reason_code",
+      "factCheckOutcome": "discarded"
+    },
+    {
+      "index": 4,
+      "endpoint": "command",
+      "description": "Command interpret (\"Leave 15 minutes earlier\")",
+      "httpStatus": 200,
+      "latencyMs": 10389,
+      "promptTokens": 221,
+      "completionTokens": 1864,
+      "totalTokens": 2085,
+      "reasoningTokens": 1818,
+      "finishReason": "stop",
+      "usedFallback": true,
+      "fallbackReason": "invalid_reason_code",
+      "factCheckOutcome": "discarded"
+    }
+  ],
+  "keyOccurrenceCount": 0,
+  "d1ToD6ParityPass": true
+}
