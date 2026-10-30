@@ -21,6 +21,11 @@
  * ----------------------------------------------------------------------------
  * 2. FLAGS TO LEAVE OFF DURING NORMAL DEVELOPMENT & CI
  * ----------------------------------------------------------------------------
+ * - Never put `MODEL_LIVE_ENABLED` in `.env.local`. Pass it inline to the script only:
+ *     MODEL_LIVE_ENABLED=1 npm run verify:live:spark -- --confirm-billed
+ *   Putting `MODEL_LIVE_ENABLED=1` in `.env.local` causes running Vite dev servers
+ *   and Playwright preview servers (ports 4173, 4174) to consume live model calls
+ *   up to their per-process cap.
  * - Keep `MODEL_LIVE_ENABLED` unset (or "0") during standard runs.
  *   When `MODEL_LIVE_ENABLED !== "1"`, 0 outbound fetch requests are dispatched.
  *   The system runs 100% deterministically from engine templates and fixtures.
@@ -59,6 +64,9 @@
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   ModelDevProxy,
   resetProcessLiveCallCount,
@@ -88,6 +96,112 @@ import {
   D6_EVALUATION_CLOCK,
 } from '../tests/fixtures/index.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '..');
+
+interface PreconditionRequirement {
+  readonly key: string;
+  readonly expectedPrefix: string;
+  readonly canonicalTitle: string;
+  readonly summaryTag: string;
+}
+
+export const REQUIRED_PRECONDITIONS: readonly PreconditionRequirement[] = [
+  {
+    key: 'G3-PARITY',
+    expectedPrefix: '41d052f0',
+    canonicalTitle: 'Server/client decision command fact-key parity & known-fact guard',
+    summaryTag: 'G3-PARITY',
+  },
+  {
+    key: 'PRE-S1-A',
+    expectedPrefix: '8b279ba5',
+    canonicalTitle: 'Memory evidence from MemoryPort + stored keys & provenance classes',
+    summaryTag: 'PRE-S1-A',
+  },
+  {
+    key: 'PRE-S1-B',
+    expectedPrefix: '738751af',
+    canonicalTitle: 'Slot-aware grounding audit & per-slot verification',
+    summaryTag: 'PRE-S1-B',
+  },
+];
+
+export function loadReviewDecisions(outboxPath?: string): Map<string, any> {
+  const filePath = outboxPath ?? path.resolve(projectRoot, '.progress/review/REVIEW_OUTBOX.jsonl');
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Review outbox file not found at: ${filePath}`);
+  }
+  const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
+  const decisions = new Map<string, any>();
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const record = JSON.parse(trimmed);
+      if (record && record.type === 'review_decision' && record.id) {
+        decisions.set(record.id, record);
+      }
+    } catch {
+      // skip invalid lines
+    }
+  }
+  return decisions;
+}
+
+export function verifyPreconditions(
+  decisions: Map<string, any>,
+  idOverrides?: Record<string, string>
+): boolean {
+  console.log('----------------------------------------------------------------------');
+  console.log('📋 PRECONDITIONS SATISFACTION RECORD (VERIFIED FROM REVIEW_OUTBOX)');
+  console.log('----------------------------------------------------------------------');
+
+  let allPassed = true;
+
+  for (const req of REQUIRED_PRECONDITIONS) {
+    const targetIdPrefix = idOverrides?.[req.key] ?? req.expectedPrefix;
+    let matchedRecord: any = null;
+
+    for (const [id, rec] of decisions.entries()) {
+      if (id.startsWith(targetIdPrefix) || targetIdPrefix.startsWith(id)) {
+        matchedRecord = rec;
+        break;
+      }
+    }
+
+    if (!matchedRecord) {
+      console.error(`❌ [FAIL] ${req.key}: ${targetIdPrefix} — NOT FOUND in .progress/review/REVIEW_OUTBOX.jsonl`);
+      allPassed = false;
+      continue;
+    }
+
+    if (matchedRecord.decision !== 'approved') {
+      console.error(
+        `❌ [FAIL] ${req.key}: ${matchedRecord.id} — Status is '${matchedRecord.decision}', expected 'approved'`
+      );
+      allPassed = false;
+      continue;
+    }
+
+    const summary = typeof matchedRecord.summary === 'string' ? matchedRecord.summary : '';
+    if (!summary.includes(req.summaryTag)) {
+      console.error(
+        `❌ [FAIL] ${req.key}: ${matchedRecord.id} — Summary does not contain expected tag '${req.summaryTag}'`
+      );
+      allPassed = false;
+      continue;
+    }
+
+    const shortId = matchedRecord.id.slice(0, 8);
+    console.log(`[PASS] ${req.key}: ${shortId} (${matchedRecord.id}) — ${req.canonicalTitle}`);
+  }
+
+  console.log('');
+  return allPassed;
+}
+
 interface FactCheckCallResult {
   index: number;
   endpoint: 'refine' | 'reason' | 'command';
@@ -108,13 +222,13 @@ async function runDryRunAudit(): Promise<boolean> {
   console.log('🚀 YORI LIVING CONTEXT — LIVE VERIFICATION DRY RUN (SPARK / META)');
   console.log('======================================================================\n');
 
-  // 1. Record satisfied preconditions
-  console.log('----------------------------------------------------------------------');
-  console.log('📋 PRECONDITIONS SATISFACTION RECORD');
-  console.log('----------------------------------------------------------------------');
-  console.log('[PASS] G3-PARITY: 41d052f0 — Schema validation & fallback parity across refine, reason, command');
-  console.log('[PASS] PRE-S1-A:  8b279ba5 — Pure domain core zero-diff (src/core vs f43c6c1d) & manifest audit');
-  console.log('[PASS] PRE-S1-B:  738751af — Bounded token budget enforced (max_tokens <= 300 across all routes)\n');
+  // 1. Verify and record satisfied preconditions from REVIEW_OUTBOX
+  const decisions = loadReviewDecisions();
+  const preconditionsOk = verifyPreconditions(decisions);
+  if (!preconditionsOk) {
+    console.error('❌ Dry run aborted: One or more required preconditions failed verification.');
+    return false;
+  }
 
   // 2. Set up mock environment with <= 10 planned calls
   resetProcessLiveCallCount();
@@ -670,6 +784,23 @@ async function runDryRunAudit(): Promise<boolean> {
 async function main(): Promise<void> {
   const isDryRun = process.argv.includes('--dry-run');
   const isConfirmedBilled = process.argv.includes('--confirm-billed');
+  const isNegativePreconditionTest =
+    process.argv.includes('--test-negative-precondition') ||
+    process.argv.includes('--bogus-precondition');
+
+  if (isNegativePreconditionTest) {
+    console.log('======================================================================');
+    console.log('🧪 NEGATIVE PRECONDITION VERIFICATION TEST');
+    console.log('======================================================================');
+    const decisions = loadReviewDecisions();
+    const ok = verifyPreconditions(decisions, { 'PRE-S1-B': 'bogus-id-deadbeef' });
+    if (!ok) {
+      console.log('\n✅ Negative test PASSED: Bogus precondition ID was correctly rejected.');
+      process.exit(1); // Non-zero exit proving rejection
+    }
+    console.error('\n❌ Negative test FAILED: Bogus precondition ID was unexpectedly accepted.');
+    process.exit(0);
+  }
 
   if (isDryRun) {
     const success = await runDryRunAudit();
@@ -708,10 +839,9 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log('⚠️ LIVE EXECUTION AUTHORIZED (GATE-S1 cleared by owner)');
-  console.log('   Running live model verification against upstream endpoint...');
-  // Note: Actual live execution is gated pending owner's real key in GATE-S1.
-  process.exit(0);
+  console.log('ℹ️ Live run not implemented in GATE-S1-PREP (S1-LIVE pending owner budget).');
+  console.log('   GATE-S1-PREP provides the safety switch, hard cap, and dry-run audit only.');
+  process.exit(2);
 }
 
 main().catch(err => {
