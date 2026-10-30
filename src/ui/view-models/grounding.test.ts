@@ -233,6 +233,35 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       expect(normalizeFieldValue('distanceMinutes', '5m away', tz)).toBe(5);
       expect(normalizeFieldValue('distanceMinutes', 5, tz)).toBe(5);
 
+      // PROV-INTEGRITY: Positive duration / minutes normalization
+      expect(normalizeFieldValue('lateMinutes', 10, tz)).toBe(10);
+      expect(normalizeFieldValue('lateMinutes', '10', tz)).toBe(10);
+      expect(normalizeFieldValue('lateMinutes', '10m', tz)).toBe(10);
+      expect(normalizeFieldValue('lateMinutes', '10 min', tz)).toBe(10);
+      expect(normalizeFieldValue('lateMinutes', 'Late by 10m', tz)).toBe(10);
+      expect(normalizeFieldValue('lateMinutes', 'late by 10m', tz)).toBe(10);
+      expect(normalizeFieldValue('bufferMinutes', 5, tz)).toBe(5);
+      expect(normalizeFieldValue('bufferMinutes', '5m buffer', tz)).toBe(5);
+      expect(normalizeFieldValue('bufferMinutes', 'On time · 5m buffer', tz)).toBe(5);
+      expect(normalizeFieldValue('marginMinutes', 5, tz)).toBe(5);
+      expect(normalizeFieldValue('marginMinutes', '5m margin', tz)).toBe(5);
+      expect(normalizeFieldValue('travelMinutes', 'Drive · 25 min', tz)).toBe(25);
+      expect(normalizeFieldValue('travelMinutes', '25 min drive', tz)).toBe(25);
+      expect(normalizeFieldValue('travelMinutes', '25 min drive + 5m margin', tz)).toBe(25);
+
+      // PROV-INTEGRITY: Negative duration normalization (anchoring prevents accepting extra free-text)
+      expect(normalizeFieldValue('lateMinutes', 'Drive · 25 min (free parking)', tz)).toBeUndefined();
+      expect(normalizeFieldValue('lateMinutes', '25 min (free parking)', tz)).toBeUndefined();
+      expect(normalizeFieldValue('travelMinutes', 'Drive · 25 min (free parking)', tz)).toBeUndefined();
+      expect(normalizeFieldValue('travelMinutes', '25 min (free parking)', tz)).toBeUndefined();
+      expect(normalizeFieldValue('bufferMinutes', '5m buffer with extra text', tz)).toBeUndefined();
+
+      // PROV-INTEGRITY: Negative matching (field names merely CONTAINING 'late' without being duration fields do NOT parse as integers)
+      expect(normalizeFieldValue('template', 'Drive · 25 min (free parking)', tz)).toBe('Drive · 25 min (free parking)');
+      expect(normalizeFieldValue('latestUpdate', '25 min (free parking)', tz)).toBe('25 min (free parking)');
+      expect(normalizeFieldValue('collateNotes', 'Late by 10m', tz)).toBe('Late by 10m');
+      expect(normalizeFieldValue('plateNumber', '25', tz)).toBe('25');
+
       // Name & cuisine normalization
       expect(normalizeFieldValue('name', '  Ramen Ichiko  ', tz)).toBe('Ramen Ichiko');
       expect(normalizeFieldValue('cuisine', 'Japanese', tz)).toBe('japanese');
@@ -1196,6 +1225,56 @@ describe('G12-CORE: Grounded Recommendation Verification & Evidence Bundles', ()
       const res = GroundedRecommendationVerifier.verifyCandidateCard(tamperedCandidate, bundle);
       expect(res.valid).toBe(false);
       expect(res.reason).toBe('tampered_value');
+    });
+
+    it('verifies map-vm fuel branch checks destinationName against bundle and falls back to "unknown" on tamper (Scope 4)', () => {
+      const bundle = createFuelEvidenceBundle({
+        originCoords: { lat: 37.7749, lng: -122.4194 },
+        places: sfPlaces,
+      });
+
+      const fuelPlan: PreparedPlan = {
+        id: 'plan-fuel-test',
+        intentId: 'fuel',
+        headline: 'Low fuel warning',
+        requiresConfirmation: false,
+        createdAt: '2026-10-28T19:10:00.000Z',
+        optionsOrSteps: [
+          {
+            id: 'fuel-sf-1',
+            label: 'Metro Gas & Go',
+            name: 'Metro Gas & Go',
+            requiresConfirmation: false,
+          },
+        ],
+        why: {
+          evidenceSignals: [],
+          memoryFactsUsed: [],
+          derivation: 'Nearby fuel',
+        },
+      };
+
+      // Untampered map
+      const validMap = deriveMapVM(fuelPlan, null, 'compact', { evidenceBundle: bundle });
+      expect(validMap?.destinationName).toBe('Metro Gas & Go');
+      expect(validMap?.markers[1]?.label).toBe('Metro Gas & Go');
+
+      // Tampered plan with fabricated name
+      const tamperedFuelPlan: PreparedPlan = {
+        ...fuelPlan,
+        optionsOrSteps: [
+          {
+            id: 'fuel-sf-1',
+            label: 'Fabricated Fuel Express',
+            name: 'Fabricated Fuel Express',
+            requiresConfirmation: false,
+          },
+        ],
+      };
+
+      const tamperedMap = deriveMapVM(tamperedFuelPlan, null, 'compact', { evidenceBundle: bundle });
+      expect(tamperedMap?.destinationName).toBe('unknown');
+      expect(tamperedMap?.markers[1]?.label).toBe('unknown');
     });
 
     it('verifies provider failure and empty results yield explicit quiet states in buildHomeComposition (AC-212-2)', () => {

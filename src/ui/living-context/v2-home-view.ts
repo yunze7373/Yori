@@ -480,19 +480,19 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   .map(
                     opt => {
                       const optTitleRef = opt.fieldSourceRefs?.leaveTime
-                        ? `${opt.fieldSourceRefs.leaveTime.recordId}.${opt.fieldSourceRefs.leaveTime.field}`
+                        ? `${escapeHtml(opt.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(opt.fieldSourceRefs.leaveTime.field)}`
                         : opt.sourceRef
-                          ? `${opt.sourceRef.recordId}.${opt.sourceRef.field}`
+                          ? `${escapeHtml(opt.sourceRef.recordId)}.${escapeHtml(opt.sourceRef.field)}`
                           : '';
                       const optMetaRef = opt.fieldSourceRefs?.travelMinutes
-                        ? `${opt.fieldSourceRefs.travelMinutes.recordId}.${opt.fieldSourceRefs.travelMinutes.field}`
+                        ? `${escapeHtml(opt.fieldSourceRefs.travelMinutes.recordId)}.${escapeHtml(opt.fieldSourceRefs.travelMinutes.field)}`
                         : '';
                       const optBasisRef = opt.fieldSourceRefs?.rankingBasis
-                        ? `${opt.fieldSourceRefs.rankingBasis.recordId}.${opt.fieldSourceRefs.rankingBasis.field}`
-                        : 'rain_transport_preference.rankingBasis';
+                        ? `${escapeHtml(opt.fieldSourceRefs.rankingBasis.recordId)}.${escapeHtml(opt.fieldSourceRefs.rankingBasis.field)}`
+                        : '';
                       const optLateRef = opt.fieldSourceRefs?.lateMinutes
-                        ? `${opt.fieldSourceRefs.lateMinutes.recordId}.${opt.fieldSourceRefs.lateMinutes.field}`
-                        : 'user_override_timing.lateMinutes';
+                        ? `${escapeHtml(opt.fieldSourceRefs.lateMinutes.recordId)}.${escapeHtml(opt.fieldSourceRefs.lateMinutes.field)}`
+                        : '';
                       const modeLabel = opt.mode ? opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1) : (opt.title.startsWith('Bus') ? 'Bus' : 'Drive');
                       const leaveTimeVal = opt.leaveTime || (opt.title.includes('leave ') ? opt.title.split('leave ')[1] : '');
                       let detailHtml = '';
@@ -501,21 +501,21 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                           const splitIdx = opt.detail.indexOf(' · ');
                           const travelPart = splitIdx >= 0 ? opt.detail.slice(0, splitIdx) : opt.detail;
                           const latePart = splitIdx >= 0 ? opt.detail.slice(splitIdx + 3) : '';
-                          detailHtml = `<div class="v2-option-meta"><span ${optMetaRef ? `data-source-ref="${escapeHtml(optMetaRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(travelPart)}</span><span data-slot="chrome" data-slot-reason="Option late connector"> · </span><span data-source-ref="${escapeHtml(optLateRef)}" data-slot="domain">${escapeHtml(latePart)}</span></div>`;
+                          detailHtml = `<div class="v2-option-meta"><span ${optMetaRef ? `data-source-ref="${optMetaRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(travelPart)}</span><span data-slot="chrome" data-slot-reason="Option late connector"> · </span><span ${optLateRef ? `data-source-ref="${optLateRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option late meta"`}>${escapeHtml(latePart)}</span></div>`;
                         } else {
-                          detailHtml = `<div class="v2-option-meta" ${optMetaRef ? `data-source-ref="${escapeHtml(optMetaRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(opt.detail)}</div>`;
+                          detailHtml = `<div class="v2-option-meta" ${optMetaRef ? `data-source-ref="${optMetaRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(opt.detail)}</div>`;
                         }
                       }
                       return `
                   <div class="v2-option-card ${opt.isSelected ? 'selected' : ''}">
                     <div class="v2-option-top">
                       <span class="v2-option-label">
-                        <span data-slot="chrome" data-slot-reason="Option mode label">${escapeHtml(modeLabel)} · leave </span><span class="v2-option-leave-time" ${optTitleRef ? `data-source-ref="${escapeHtml(optTitleRef)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option leave time"`}>${escapeHtml(leaveTimeVal || opt.title)}</span>
+                        <span data-slot="chrome" data-slot-reason="Option mode label">${escapeHtml(modeLabel)} · leave </span><span class="v2-option-leave-time" ${optTitleRef ? `data-source-ref="${optTitleRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option leave time"`}>${escapeHtml(leaveTimeVal || opt.title)}</span>
                       </span>
                       ${opt.badge ? `<span class="v2-option-badge ${opt.isRecommended ? 'recommended' : ''}" data-slot="chrome" data-slot-reason="Option recommendation badge">${escapeHtml(opt.badge)}</span>` : ''}
                     </div>
                     ${detailHtml}
-                    ${opt.rankingBasis ? `<div class="v2-option-basis" data-source-ref="${optBasisRef}" data-slot="domain">${escapeHtml(opt.rankingBasis)}</div>` : ''}
+                    ${opt.rankingBasis ? `<div class="v2-option-basis" ${optBasisRef ? `data-source-ref="${optBasisRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option ranking basis"`}>${escapeHtml(opt.rankingBasis)}</div>` : ''}
                   </div>
                 `;
                     }
@@ -606,8 +606,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 c => `
               <div
                 class="v2-candidate-card ${c.isSelected ? 'selected' : ''}"
-                id="candidate-${c.id}"
-                data-candidate-id="${c.id}"
+                id="candidate-${escapeHtml(c.id)}"
+                data-candidate-id="${escapeHtml(c.id)}"
               >
                 <div class="v2-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
                   ${c.photo.svgMarkup}
@@ -630,8 +630,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     <button
                       type="button"
                       class="btn btn-outline v2-directions-btn"
-                      id="btn-navigate-${c.id}"
-                      data-candidate-id="${c.id}"
+                      id="btn-navigate-${escapeHtml(c.id)}"
+                      data-candidate-id="${escapeHtml(c.id)}"
                       data-slot="chrome"
                       data-slot-reason="Navigation trigger button"
                       aria-label="Directions to ${escapeHtml(c.name)}"
@@ -641,8 +641,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     <button
                       type="button"
                       class="btn v2-view-detail-link"
-                      id="btn-detail-${c.id}"
-                      data-candidate-id="${c.id}"
+                      id="btn-detail-${escapeHtml(c.id)}"
+                      data-candidate-id="${escapeHtml(c.id)}"
                       data-slot="chrome"
                       data-slot-reason="View details button"
                       aria-label="View details for ${escapeHtml(c.name)}"
@@ -674,20 +674,22 @@ export function renderV2Home(vm: HomeCompositionVM): string {
 }
 
 function renderCollapsibleSecondary(vm: HomeCompositionVM): string {
+  const ahead = vm.aheadItems || [];
+  const proposals = vm.proposals || [];
   // If both are empty, collapse completely! Zero empty placeholder cards!
-  if (vm.aheadItems.length === 0 && vm.proposals.length === 0) {
+  if (ahead.length === 0 && proposals.length === 0) {
     return '';
   }
 
   return `
     <div class="secondary-grid v2-secondary">
       ${
-        vm.aheadItems.length > 0
+        ahead.length > 0
           ? `
         <section aria-label="${escapeHtml(STRINGS.sections.ahead)}">
           <h2 class="section-label" data-slot="chrome" data-slot-reason="Secondary section label">${escapeHtml(STRINGS.sections.ahead)}</h2>
           <div class="ahead-list">
-            ${vm.aheadItems
+            ${ahead
               .map(
                 item => `
               <div class="card ahead-card" data-ahead-id="${escapeHtml(item.id)}" data-slot="chrome" data-slot-reason="Ahead card container">
@@ -704,12 +706,12 @@ function renderCollapsibleSecondary(vm: HomeCompositionVM): string {
       }
 
       ${
-        vm.proposals.length > 0
+        proposals.length > 0
           ? `
         <section aria-label="${escapeHtml(STRINGS.sections.forYou)}">
           <h2 class="section-label" data-slot="chrome" data-slot-reason="Secondary section label">${escapeHtml(STRINGS.sections.forYou)}</h2>
           <div class="for-you-list">
-            ${vm.proposals
+            ${proposals
               .map(
                 prop => `
               <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-slot="chrome" data-slot-reason="Proposal card container">

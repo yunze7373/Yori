@@ -6,6 +6,8 @@ import {
   formatTime,
   humanizeProposalTitle,
 } from './presentation.js';
+import { renderV2Home } from './v2-home-view.js';
+import type { HomeCompositionVM } from '../view-models/types.js';
 import { STRINGS } from './strings.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
 
@@ -304,6 +306,133 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
       expect(humanizeProposalTitle('grocery_store_preference')).toBe('Remember preferred grocery store?');
       expect(humanizeProposalTitle('preferred_grocery_store')).toBe('Remember preferred grocery store?');
       expect(humanizeProposalTitle('custom_unknown_routine')).toBe('Remember preference for custom unknown routine?');
+    });
+  });
+
+  describe('PROV-INTEGRITY: Attribute Escaping and Inert Rendering (Scope 1 & 2)', () => {
+    it('renders data-source-ref, data-candidate-id, and buttons inert when recordId contains quotes and event handlers', () => {
+      const maliciousId = 'cand" onmouseover=alert(1)';
+      const maliciousRecordId = 'rec" onmouseover=alert(1)';
+
+      // 1. Test candidate cards layout
+      const candVM: HomeCompositionVM = {
+        layoutKind: 'candidates',
+        title: 'Lunch',
+        headline: 'Lunch options',
+        basis: 'Based on location',
+        isRain: false,
+        options: [],
+        candidateCards: [
+          {
+            id: maliciousId,
+            name: 'Malicious Place',
+            cuisine: 'Bistro',
+            distanceText: '100m away',
+            basis: 'Top rated',
+            isSelected: false,
+            photo: {
+              id: 'photo-1',
+              label: 'Photo label',
+              category: 'restaurant',
+              svgMarkup: '<svg></svg>',
+              altText: 'Photo',
+              simulatedBadge: 'Simulated',
+            },
+            fieldSourceRefs: {
+              name: { recordId: maliciousRecordId, field: 'name' },
+              cuisine: { recordId: maliciousRecordId, field: 'cuisine' },
+              distanceText: { recordId: maliciousRecordId, field: 'distanceText' },
+              basis: { recordId: maliciousRecordId, field: 'basis' },
+            },
+          },
+        ],
+        isAccepted: false,
+        actions: [],
+        aheadItems: [],
+        proposals: [],
+      };
+
+      const candHtml = renderV2Home(candVM);
+      expect(candHtml).toContain('data-candidate-id="cand&quot; onmouseover=alert(1)"');
+      expect(candHtml).toContain('id="candidate-cand&quot; onmouseover=alert(1)"');
+      expect(candHtml).toContain('id="btn-navigate-cand&quot; onmouseover=alert(1)"');
+      expect(candHtml).toContain('id="btn-detail-cand&quot; onmouseover=alert(1)"');
+      expect(candHtml).toContain('data-source-ref="rec&quot; onmouseover=alert(1).name"');
+      expect(candHtml).not.toMatch(/" onmouseover=alert\(1\)/);
+
+      // 2. Test journey layout transit option cards
+      const journeyVM: HomeCompositionVM = {
+        layoutKind: 'journey',
+        title: 'Depart',
+        headline: 'Leave for lesson',
+        basis: 'Standard schedule',
+        isRain: true,
+        options: [
+          {
+            id: 'opt1',
+            label: 'Option 1',
+            title: 'Bus · leave 2:30 PM',
+            mode: 'bus',
+            isSelected: true,
+            isRecommended: true,
+            detail: '40 min bus · late by 10m',
+            rankingBasis: 'Rain habit',
+            fieldSourceRefs: {
+              leaveTime: { recordId: 'leave" onmouseover=x', field: 'leaveTime' },
+              travelMinutes: { recordId: 'travel" onmouseover=x', field: 'travelMinutes' },
+              rankingBasis: { recordId: 'basis" onmouseover=x', field: 'rankingBasis' },
+              lateMinutes: { recordId: 'late" onmouseover=x', field: 'lateMinutes' },
+            },
+          },
+        ],
+        isAccepted: false,
+        actions: [],
+        aheadItems: [],
+        proposals: [],
+      };
+
+      const journeyHtml = renderV2Home(journeyVM);
+      expect(journeyHtml).toContain('data-source-ref="leave&quot; onmouseover=x.leaveTime"');
+      expect(journeyHtml).toContain('data-source-ref="travel&quot; onmouseover=x.travelMinutes"');
+      expect(journeyHtml).toContain('data-source-ref="basis&quot; onmouseover=x.rankingBasis"');
+      expect(journeyHtml).toContain('data-source-ref="late&quot; onmouseover=x.lateMinutes"');
+      expect(journeyHtml).not.toMatch(/" onmouseover=x/);
+    });
+
+    it('omits data-source-ref when fieldSourceRefs is missing instead of inventing literal fallbacks', () => {
+      const vm: HomeCompositionVM = {
+        layoutKind: 'journey',
+        title: 'Depart',
+        headline: 'Departure plan',
+        basis: 'Standard schedule',
+        isRain: false,
+        options: [
+          {
+            id: 'opt-no-refs',
+            label: 'Option No Refs',
+            title: 'Drive · leave 2:30 PM',
+            mode: 'drive',
+            isSelected: true,
+            isRecommended: false,
+            detail: '25 min drive · late by 10m',
+            rankingBasis: 'Alternative route',
+            // fieldSourceRefs intentionally empty/undefined
+          },
+        ],
+        isAccepted: false,
+        actions: [],
+        aheadItems: [],
+        proposals: [],
+      };
+
+      const html = renderV2Home(vm);
+
+      // Verify no invented literal provenance fallbacks are emitted
+      expect(html).not.toContain('rain_transport_preference.rankingBasis');
+      expect(html).not.toContain('user_override_timing.lateMinutes');
+      // Instead, slot is marked as chrome or omitted
+      expect(html).toContain('data-slot="chrome" data-slot-reason="Option ranking basis"');
+      expect(html).toContain('data-slot="chrome" data-slot-reason="Option late meta"');
     });
   });
 });

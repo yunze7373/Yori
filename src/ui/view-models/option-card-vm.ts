@@ -134,6 +134,15 @@ export function deriveOptionCardVMs(
         fieldSourceRefs.rankingBasis = { recordId: 'habit-rain-transport', field: 'rankingBasis' };
       }
 
+      let lateMinutes: number | undefined;
+      if (hasOverride && opt.details?.includes('late by')) {
+        const lateMatch = opt.details.match(/late\s+by\s+(\d+)/i);
+        if (lateMatch) {
+          lateMinutes = parseInt(lateMatch[1]!, 10);
+          fieldSourceRefs.lateMinutes = { recordId: 'user_override_timing', field: 'lateMinutes' };
+        }
+      }
+
       const card: OptionCardVM = {
         id: opt.id || `opt-mode-${mode || i}`,
         label: opt.label || title,
@@ -142,6 +151,7 @@ export function deriveOptionCardVMs(
         travelMinutes: travelMins,
         leaveTime: displayLeaveTime,
         bufferMinutes,
+        lateMinutes,
         badge: isFirst ? 'Recommended' : 'Alternative',
         detail: detail || undefined,
         rankingBasis,

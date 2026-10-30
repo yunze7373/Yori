@@ -95,6 +95,55 @@ export function createEvidenceBundle(
  * - distances: integer minutes/metres
  * - places: canonical trimmed name
  */
+const DURATION_MINUTE_FIELDS: ReadonlySet<string> = new Set([
+  'lateminutes',
+  'bufferminutes',
+  'durationminutes',
+  'marginminutes',
+  'travelminutes',
+  'driveminutes',
+  'busminutes',
+  'prepminutes',
+  'deltaminutes',
+  'distanceminutes',
+  'estimatedminutes',
+  'drivetravelminutes',
+  'bustravelminutes',
+  'duration',
+  'buffer',
+  'margin',
+]);
+
+function extractDurationMinutes(val: string): number | undefined {
+  const trimmed = val.trim();
+  // 1. Pure duration (e.g. "25", "25m", "25 min", "25 minutes", "+10m")
+  const m1 = trimmed.match(/^(?:[+-]\s*)?(\d+)\s*(?:m|min|mins|minute|minutes)?$/i);
+  if (m1) {
+    return parseInt(m1[1]!, 10);
+  }
+  // 2. Late offset (e.g. "late by 10m", "Late by 10 min")
+  const m2 = trimmed.match(/^late\s+by\s+(\d+)\s*(?:m|min|mins|minute|minutes)?$/i);
+  if (m2) {
+    return parseInt(m2[1]!, 10);
+  }
+  // 3. Prep / buffer / margin / away suffix (e.g. "20m prep", "5m buffer", "5m margin", "5m away")
+  const m3 = trimmed.match(/^(\d+)\s*(?:m|min|mins|minute|minutes)?\s+(?:prep|buffer|margin|away)$/i);
+  if (m3) {
+    return parseInt(m3[1]!, 10);
+  }
+  // 4. Mode / status prefix with optional suffix (e.g. "Drive · 25 min", "On time · 5m buffer", "Bus · 40m")
+  const m4 = trimmed.match(/^(?:drive|bus|walk|transit|on\s+time)\s*[·•\-]\s*(\d+)\s*(?:m|min|mins|minute|minutes)?(?:\s+(?:buffer|margin))?$/i);
+  if (m4) {
+    return parseInt(m4[1]!, 10);
+  }
+  // 5. Mode suffix with optional margin (e.g. "25 min drive", "25 min drive + 5m margin")
+  const m5 = trimmed.match(/^(\d+)\s*(?:m|min|mins|minute|minutes)?\s+(?:drive|bus|walk|transit)(?:\s*\+\s*\d+\s*(?:m|min|mins|minute|minutes)?\s*margin)?$/i);
+  if (m5) {
+    return parseInt(m5[1]!, 10);
+  }
+  return undefined;
+}
+
 export function normalizeFieldValue(
   field: string,
   val: unknown,
@@ -105,6 +154,7 @@ export function normalizeFieldValue(
   }
 
   const fieldLower = field.toLowerCase();
+  const fieldClean = fieldLower.replace(/[-_]/g, '');
 
   // 1. Time normalization
   if (
@@ -150,26 +200,17 @@ export function normalizeFieldValue(
   }
 
   // 2. Duration / buffer / margin / late normalization (integer minutes)
-  if (
-    fieldLower.includes('minute') ||
-    fieldLower.includes('duration') ||
-    fieldLower.includes('buffer') ||
-    fieldLower.includes('margin') ||
-    fieldLower.includes('late')
-  ) {
+  if (DURATION_MINUTE_FIELDS.has(fieldClean)) {
     if (typeof val === 'number') {
       return Number.isFinite(val) ? Math.round(val) : undefined;
     }
     if (typeof val === 'string') {
-      const match = val.match(/\b(\d+)\s*(m|min|minutes)?\b/i);
-      if (match) {
-        return parseInt(match[1]!, 10);
-      }
+      return extractDurationMinutes(val);
     }
   }
 
   // 3. Distance normalization (integer minutes or metres)
-  if (fieldLower.includes('distance')) {
+  if (fieldLower.includes('distance') && !DURATION_MINUTE_FIELDS.has(fieldClean)) {
     if (typeof val === 'number') {
       return Number.isFinite(val) ? Math.round(val) : undefined;
     }
@@ -951,6 +992,7 @@ export function createLunchEvidenceBundle(options?: {
   isConfirmedTaste?: boolean;
   userConfirmedKeys?: ReadonlySet<string>;
   memory?: readonly (MemoryFact | FactLike)[];
+  memoryFacts?: readonly (MemoryFact | FactLike)[];
 }): EvidenceBundle {
   const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T19:10:00.000Z';
   const timezone = options?.timezone ?? options?.snapshot?.timezone ?? 'America/Los_Angeles';
@@ -1068,7 +1110,7 @@ export function createLunchEvidenceBundle(options?: {
   }
 
   // Habit / taste preference record(s) dynamically built from MemoryPort / combinedMemory facts passed in
-  const memoryFacts = options?.memory ?? (options as any)?.memoryFacts;
+  const memoryFacts = options?.memory ?? options?.memoryFacts;
   if (Array.isArray(memoryFacts) && memoryFacts.length > 0) {
     const tasteFacts = memoryFacts.filter(
       f =>
@@ -1259,6 +1301,7 @@ export function createLunchPlacesEvidenceBundle(options?: {
   userConfirmedKeys?: ReadonlySet<string>;
   isConfirmedTaste?: boolean;
   memory?: readonly (MemoryFact | FactLike)[];
+  memoryFacts?: readonly (MemoryFact | FactLike)[];
 }): EvidenceBundle {
   const sceneClockIso = options?.sceneClockIso ?? options?.snapshot?.asOf ?? '2026-10-28T19:10:00.000Z';
   const timezone = options?.timezone ?? options?.snapshot?.timezone ?? 'America/Los_Angeles';
@@ -1368,7 +1411,7 @@ export function createLunchPlacesEvidenceBundle(options?: {
   }
 
   // Habit / taste preference record(s) dynamically built from MemoryPort / combinedMemory facts passed in
-  const memoryFacts = options?.memory ?? (options as any)?.memoryFacts;
+  const memoryFacts = options?.memory ?? options?.memoryFacts;
   if (Array.isArray(memoryFacts) && memoryFacts.length > 0) {
     const tasteFacts = memoryFacts.filter(
       f =>

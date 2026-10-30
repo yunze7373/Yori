@@ -44,6 +44,7 @@ export interface OptionCardVM {
   readonly leaveTime?: string;
   readonly arrivalTime?: string;
   readonly bufferMinutes?: number;
+  readonly lateMinutes?: number;
   readonly badge?: string; // e.g. "Recommended" or "Alternative"
   readonly detail?: string;
   readonly rankingBasis?: string;

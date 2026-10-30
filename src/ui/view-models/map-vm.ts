@@ -325,15 +325,28 @@ export function deriveMapVM(
     const topOption = plan.optionsOrSteps?.[0] as any;
     const recId = topOption?.id || topOption?.placeId || 'fuel-sf-1';
     const destName = String(topOption?.name || 'Fuel Station');
+
+    let verifiedDestName = destName;
+    if (options?.evidenceBundle && destName) {
+      const vDest = GroundedRecommendationVerifier.verifyField(
+        { recordId: recId, field: 'name' },
+        verifiedDestName,
+        options.evidenceBundle
+      );
+      if (!vDest.valid) {
+        verifiedDestName = 'unknown';
+      }
+    }
+
     return {
       id: `map-fuel-${plan.id}`,
       label: 'Spatial Context Map',
       simulatedBadge: 'Schematic · simulated',
       sizeHint: 'compact',
-      destinationName: destName,
+      destinationName: verifiedDestName,
       markers: Object.freeze([
         { id: 'm-orig', x: 50, y: 100, label: 'Current Location', type: 'origin' },
-        { id: 'm-dest', x: 250, y: 50, label: destName, type: 'destination', isHighlight: true },
+        { id: 'm-dest', x: 250, y: 50, label: verifiedDestName, type: 'destination', isHighlight: true },
       ]),
       polylines: Object.freeze([
         {
@@ -346,7 +359,7 @@ export function deriveMapVM(
           strokeDasharray: '6 3',
         },
       ]),
-      ariaDescription: `Schematic simulated map showing destination ${destName}`,
+      ariaDescription: `Schematic simulated map showing destination ${verifiedDestName}`,
       sourceRef: { recordId: recId, field: 'name' },
       fieldSourceRefs: {
         destinationName: { recordId: recId, field: 'name' },
