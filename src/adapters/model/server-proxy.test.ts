@@ -33,6 +33,7 @@ import {
   resolveReasoningEffort,
   MAX_TOKENS_CEILING,
   MODEL_LIFETIME_MAX_CALLS,
+  resolveLifetimeMaxCalls,
   reserveLedgerSlot,
 } from './server-proxy.js';
 import { runLiveVerification } from '../../../scripts/live-verify-spark.js';
@@ -252,6 +253,18 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
     expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '999' })).toBe(10);
     expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '0' })).toBe(0);
     expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: 'invalid' })).toBe(10);
+  });
+
+  it('defaults lifetime cap to 50, clamps any higher value to at most 50, and allows lowering', () => {
+    expect(resolveLifetimeMaxCalls({})).toBe(50);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '' })).toBe(50);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '4' })).toBe(4);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '25' })).toBe(25);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '50' })).toBe(50);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '60' })).toBe(50);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '100' })).toBe(50);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '-1' })).toBe(50);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: 'invalid' })).toBe(50);
   });
 
   it('exhausting call cap causes proxy to fall back to deterministic and reports cap in diagnostics', async () => {
@@ -2637,6 +2650,99 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     delete process.env.MODEL_LIVE_ENABLED;
     delete process.env.MODEL_LIVE_MAX_CALLS;
     delete process.env.MODEL_API_KEY;
+  });
+
+  it('env MODEL_LIFETIME_MAX_CALLS=60 cannot raise cap above 50 (ledger at 50 blocks fetches, ledger stays 50)', async () => {
+    // Seed ledger with 50 calls
+    fs.writeFileSync(
+      cap50Ledger,
+      JSON.stringify({
+        version: 1,
+        call_count: 50,
+        reservations: Array.from({ length: 50 }, (_, i) => ({
+          call_index: i + 1,
+          endpoint: 'refine',
+          timestamp: new Date().toISOString(),
+        })),
+      }),
+      'utf-8'
+    );
+
+    process.env.MODEL_API_KEY = 'sk-test-env-60';
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '10';
+    process.env.MODEL_LIFETIME_MAX_CALLS = '60';
+
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"wording": "Piano lesson at 3:00 PM"}' }, finish_reason: 'stop' }],
+      }),
+    });
+    globalThis.fetch = fetchSpy as any;
+
+    try {
+      const proxy = new ModelDevProxy({ ledgerPath: cap50Ledger });
+      const res = await proxy.handleRefine({
+        templateId: 'depart',
+        facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+      });
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(res.usedFallback).toBe(true);
+      expect(res.fallbackReason).toBe('disabled');
+      expect(readLedgerState(cap50Ledger).callCount).toBe(50);
+    } finally {
+      delete process.env.MODEL_API_KEY;
+      delete process.env.MODEL_LIVE_ENABLED;
+      delete process.env.MODEL_LIVE_MAX_CALLS;
+      delete process.env.MODEL_LIFETIME_MAX_CALLS;
+    }
+  });
+
+  it('customConfig.lifetimeMaxCalls=60 cannot raise cap above 50 (ledger at 50 -> blocked, 0 fetches, ledger stays 50)', async () => {
+    // Seed ledger with 50 calls
+    fs.writeFileSync(
+      cap50Ledger,
+      JSON.stringify({
+        version: 1,
+        call_count: 50,
+        reservations: Array.from({ length: 50 }, (_, i) => ({
+          call_index: i + 1,
+          endpoint: 'refine',
+          timestamp: new Date().toISOString(),
+        })),
+      }),
+      'utf-8'
+    );
+
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: '{"wording": "Piano lesson at 3:00 PM"}' }, finish_reason: 'stop' }],
+      }),
+    });
+    globalThis.fetch = fetchSpy as any;
+
+    const proxy = new ModelDevProxy({
+      ledgerPath: cap50Ledger,
+      apiKey: 'sk-test-custom-60',
+      liveEnabled: true,
+      maxCalls: 10,
+      lifetimeMaxCalls: 60,
+    });
+
+    const res = await proxy.handleRefine({
+      templateId: 'depart',
+      facts: { headline: 'Piano lesson at 3:00 PM', times: ['2:05 PM', '2:25 PM', '3:00 PM'], places: ['Piano Studio'] },
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(res.usedFallback).toBe(true);
+    expect(res.fallbackReason).toBe('disabled');
+    expect(readLedgerState(cap50Ledger).callCount).toBe(50);
   });
 });
 

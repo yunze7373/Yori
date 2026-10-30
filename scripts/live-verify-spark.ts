@@ -1133,7 +1133,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   const maxTokensDisplay = isDefaultTokens ? 'endpoint defaults (150/250/300; max 300)' : `${maxTokensConfig}`;
 
   // Runtime spend bounds: best-case (3 accepted calls) vs worst-case (effectiveCap dispatches @ maxTokensConfig)
-  const effectiveCap = Math.min(10, rawMax);
+  const effectiveCap = Math.min(MODEL_PER_RUN_MAX_CALLS, rawMax);
   const bestCaseTokens = isDefaultTokens ? (150 + 250 + 300) : (3 * maxTokensConfig);
   const bestCaseSpend = (bestCaseTokens * 0.000002).toFixed(4);
   const worstCaseTokens = effectiveCap * maxTokensConfig;

@@ -116,7 +116,8 @@ export function resolveMaxCalls(env: Record<string, string | undefined> = proces
 
 /**
  * Resolves MODEL_LIFETIME_MAX_CALLS from environment.
- * Defaults to MODEL_LIFETIME_MAX_CALLS (50) when unset or empty.
+ * Strictly clamped to <= MODEL_LIFETIME_MAX_CALLS (50). It can only be lowered for tests, never raised above 50.
+ * Defaults to MODEL_LIFETIME_MAX_CALLS (50) when unset, empty, non-numeric, 0, or negative.
  */
 export function resolveLifetimeMaxCalls(
   env: Record<string, string | undefined> = process.env
@@ -125,7 +126,7 @@ export function resolveLifetimeMaxCalls(
   if (raw === undefined || raw.trim() === '') return MODEL_LIFETIME_MAX_CALLS;
   const parsed = parseInt(raw, 10);
   if (isNaN(parsed) || parsed < 0) return MODEL_LIFETIME_MAX_CALLS;
-  return parsed;
+  return Math.min(parsed, MODEL_LIFETIME_MAX_CALLS);
 }
 
 /**
@@ -372,8 +373,14 @@ export async function reserveLedgerSlot(
       }
     }
 
-    // 1. Check lifetime cap (50 calls total across all runs)
-    if (data.call_count >= lifetimeMaxCalls) {
+    // 1. Check lifetime cap (50 calls total across all runs; strictly <= 50, lowering only)
+    const effectiveLifetimeCap = Math.min(
+      typeof lifetimeMaxCalls === 'number' && !isNaN(lifetimeMaxCalls) && lifetimeMaxCalls >= 0
+        ? lifetimeMaxCalls
+        : MODEL_LIFETIME_MAX_CALLS,
+      MODEL_LIFETIME_MAX_CALLS
+    );
+    if (data.call_count >= effectiveLifetimeCap) {
       return { success: false, callCount: data.call_count, maxCalls, error: 'cap_exceeded' };
     }
 
@@ -733,7 +740,10 @@ export class ModelDevProxy {
           ? Math.min(Math.max(0, customConfig.maxCalls), MODEL_PER_RUN_MAX_CALLS)
           : resolved.maxCalls;
 
-      const lifetimeMaxCalls = customConfig.lifetimeMaxCalls ?? resolved.lifetimeMaxCalls;
+      const lifetimeMaxCalls =
+        customConfig.lifetimeMaxCalls !== undefined && !isNaN(customConfig.lifetimeMaxCalls) && customConfig.lifetimeMaxCalls >= 0
+          ? Math.min(customConfig.lifetimeMaxCalls, MODEL_LIFETIME_MAX_CALLS)
+          : resolved.lifetimeMaxCalls;
 
       const timeoutMs =
         customConfig.timeoutMs !== undefined
