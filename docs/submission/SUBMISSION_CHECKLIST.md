@@ -1,7 +1,7 @@
 # Yori (ヨリ) — Hackathon Submission Checklist
 
 > **Governed by Plan:** `yori_ph002_001` (Slice PH-002 E2, AC-205-2)  
-> **Submission Deadline:** 2026-11-05 11:00 JST  
+> **Submission Deadline:** 2026-11-04 21:00 EST = 2026-11-05 11:00 JST  
 > **Status:** READY FOR OWNER REVIEW — OWNER GATED  
 
 ---
@@ -19,7 +19,7 @@
 > - No licenses applied without owner approval.
 > - No new paid cloud resources created.
 >
-> **Owner Responsibility**: Owner creates the remote repository, confirms the licence, makes it public and submits. Nothing is published or changed autonomously.
+> **Owner Responsibility**: Owner creates the remote repository, confirms the license, sets visibility (whether public repo is required: UNKNOWN — confirm on logged-in submit form: https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit), and submits. Nothing is published or changed autonomously.
 > Every step below requires explicit human action by the project owner (Han).
 
 ---
@@ -37,7 +37,7 @@
 
 ### 3. Video Recording & Editing
 - [ ] **Review Video Script**: Inspect [`VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md).
-- [ ] **Record Walkthrough (~3 minutes)**:
+- [ ] **Record Walkthrough (duration: UNKNOWN — confirm on logged-in submit form; prepared script ~3 minutes)**:
   - Start local dev server (`npm run dev`) or preview (`npm run preview`).
   - Record desktop (1280×800) or mobile (390×844) viewport following the timed timestamps in `VIDEO_SCRIPT.md`.
   - Capture scenes D1, D2, D3, D4, the Why sheet, Adjust dialog, Me tab (budget & confirm proposal), and terminal verification tests.
@@ -61,19 +61,19 @@
   ```
 
 ### 5. Remote Repository Creation & Visibility
-- [ ] **Create Remote & Set Public**: Owner creates the remote repository, confirms the licence, makes it public and submits. Nothing is published or made public by AI.
+- [ ] **Create Remote & Set Visibility**: Owner creates the remote repository, confirms the license, sets visibility (whether public repo is required: UNKNOWN — confirm on logged-in submit form: https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit), and submits. Nothing is published or made public by AI.
 
 ### 6. Hackathon Submission Form
-- [ ] **Fill Submission Form**: Complete required fields on the hackathon submission portal:
+- [ ] **Fill Submission Form**: Complete required fields on the hackathon submission portal (https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit):
   - Event: `Meta Global AI Developer Hackathon`
   - Theme: `Build for Your World`
   - Track: `Startup Track` [OWNER TO CONFIRM]
   - Project Title: `Yori`
   - Short Tagline: `A calm, proactive context-aware assistant. A little ahead. By your side.`
-  - Video Demonstration Link: *(Insert recorded 3-minute video URL)*
-  - Public GitHub Repository URL: [OWNER TO CHOOSE]
+  - Video Demonstration Link: *(Insert recorded video URL — duration requirement: UNKNOWN — confirm on logged-in submit form)*
+  - Repository URL (Public vs Private: UNKNOWN — confirm on logged-in submit form): [OWNER TO CHOOSE]
   - Description: *(Copy approved copy from `PROJECT_DESCRIPTION.md`)*
-- [ ] **Submit Form**: Owner submits before the official deadline: **2026-11-05 11:00 JST**. Nothing is submitted by AI.
+- [ ] **Submit Form**: Owner submits before the official deadline: **2026-11-04 21:00 EST = 2026-11-05 11:00 JST**. Nothing is submitted by AI.
 
 ### 7. Provider Commercial Terms & Non-Commercial Qualification (AC-204-2)
 - [ ] **Review Open-Meteo API Terms**: Inspect [`PROVIDERS.md`](../architecture/PROVIDERS.md).

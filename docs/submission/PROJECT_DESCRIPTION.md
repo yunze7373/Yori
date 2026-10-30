@@ -4,7 +4,7 @@
 > **Theme:** Build for Your World  
 > **Track:** Startup Track [OWNER TO CONFIRM]  
 > **Governed by Plan:** `yori_ph002_001` (Slice PH-002 E2, AC-205-2)  
-> **Author:** DevFlow Resident Project Executor AI  
+> **Author:** [OWNER TO CONFIRM]  
 
 ---
 
@@ -146,19 +146,24 @@ Every integration's live/off status is stated truthfully exactly as classified i
 
 ## 8. Hackathon Evaluation Rubric Mapping
 
-Every criterion is mapped strictly to demonstrable, recorded, and verifiable code evidence—with zero aspirational claims:
+Every criterion is mapped strictly to demonstrable, recorded, and verifiable code evidence—using official hackathon criteria names and weights verbatim:
 
-| Evaluation Criterion | Weight | Demonstrable & Recorded Evidence |
+| Evaluation Criterion | Weight | Demonstrable & Verifiable Evidence |
 |---|---|---|
-| **Impact & Value** | **30 pts** | • Solves real-world cognitive overload: replaces passive chat prompting and noisy notification feeds with a proactive, calm Living Context.<br>• At most one actionable NOW card with clear travel and preparation windows.<br>• Calm Quiet State (*"Nothing needs your attention right now."*) respects user peace of mind.<br>• Proactive prompt budget (max 3/day) prevents notification fatigue.<br>• Accessibility-first: 0 Axe violations across WCAG contrast, touch targets (≥44px), and reduced-motion instant duration collapse. |
-| **Meta Tooling Integration** | **25 pts** | • Architecture designed around Meta Muse Spark 1.3 (`muse-spark-1.3`) for contextual ranking and conversational natural language command interpretation.<br>• Server-side dev proxy implements factual hallucination filtering, input schema validation, and closed decision intents.<br>• Strict fact-key parity (G3-PARITY): validates citations against confirmed memory keys, preventing synthetic fact invention.<br>• Transparent UI engine badge: displays truthful `'Offline fallback · deterministic'` and `'Scripted model fixture · not a live model call'` rather than faking live model connectivity. |
-| **Quality of Demo & Presentation** | **25 pts** | • Fully synchronized 3-minute video demonstration script ([`docs/submission/VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md)) with every on-screen string and flow sequence asserted verbatim by automated Playwright E2E tests.<br>• Two comprehensive interactive user loops: Rain Re-Plan (transit adaptation + umbrella) and Away Lunch (candidate cards + local illustrations + dietary filters).<br>• Fully explainable review loop: Why Sheet displays plain-language evidence derivations without raw timestamps or technical jargon.<br>• Sovereign Me tab demonstrates explicit Confirm-Only memory (INV-107) and live timing recomputation. |
-| **Technical Execution & Architecture** | **20 pts** | • Layered architecture with pure domain core (`src/core/`) frozen with zero diffs (`git diff --stat f43c6c1d HEAD -- src/core` 100% empty).<br>• Test-driven rigor: 540 unit & integration tests, 18 golden acceptance fixtures, 56 degradation drills, 192 Playwright E2E tests across full suite from the point-in-time PRE-S1 closeout verification matrix ([`docs/evidence/pre-s1/CLOSEOUT_PRE_S1.md`](../evidence/pre-s1/CLOSEOUT_PRE_S1.md) @ `6d2da2d` / `9007ccc`).<br>• Deterministic replay: core domain has zero ambient clock calls (`Date.now()`) and zero network imports.<br>• Storage envelope with corruption detection, recovery reset, and raw JSON export.<br>• Strict design token system verified by Playwright pixel sampler (10/10 PASS). |
-| **Best Agentic Workflow (Bonus)** | **Bonus** | • Autonomous agentic loop: proactive context synthesis -> habit-informed candidate ranking -> conversational command adjustment -> user proposal generation -> confirm-only promotion -> deterministic re-planning.<br>• Full-page conversational shell (Ask Yori) seamlessly integrates natural language commands with structured Living Context cards.<br>• Complete user sovereignty: AI suggests, user controls, memory only learns on explicit confirmation. |
+| **Impact** | **30%** | • Solves real-world cognitive overload: replaces passive chat prompting and noisy notification feeds with a proactive, calm Living Context.<br>• At most one actionable NOW card with clear travel and preparation windows.<br>• Calm Quiet State (*"Nothing needs your attention right now."*) respects user peace of mind.<br>• Proactive prompt budget (max 3/day) prevents notification fatigue.<br>• Accessibility-first: 0 Axe violations across WCAG contrast, touch targets (≥44px), and reduced-motion instant duration collapse. |
+| **Use of Meta AI Tooling** | **25%** | • Architecture designed around Meta Muse Spark 1.3 (`muse-spark-1.3`) for contextual ranking and conversational natural language command interpretation.<br>• Server-side dev proxy implements factual hallucination filtering, input schema validation, and closed decision intents.<br>• Strict fact-key parity (G3-PARITY): validates citations against confirmed memory keys, preventing synthetic fact invention.<br>• Transparent UI engine badge: displays truthful `'Offline fallback · deterministic'` and `'Scripted model fixture · not a live model call'` rather than faking live model connectivity. |
+| **Technical Depth & Execution** | **20%** | • Layered architecture with pure domain core (`src/core/`) frozen with zero diffs (`git diff --stat f43c6c1d HEAD -- src/core` 100% empty).<br>• Test-driven rigor: 586 unit & integration tests, 18 golden acceptance fixtures, 56 degradation drills, and full Playwright E2E coverage.<br>• Deterministic replay: core domain has zero ambient clock calls (`Date.now()`) and zero network imports.<br>• Storage envelope with corruption detection, recovery reset, and raw JSON export.<br>• Strict design token system verified by Playwright pixel sampler (10/10 PASS). |
+| **Demo** | **25%** | • Fully synchronized video demonstration script ([`docs/submission/VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md)) with every on-screen string and flow sequence asserted verbatim by automated Playwright E2E tests.<br>• Two comprehensive interactive user loops: Rain Re-Plan (transit adaptation + umbrella) and Away Lunch (candidate cards + local illustrations + dietary filters).<br>• Fully explainable review loop: Why Sheet displays plain-language evidence derivations without raw timestamps or technical jargon.<br>• Sovereign Me tab demonstrates explicit Confirm-Only memory (INV-107) and live timing recomputation. |
 
 ---
 
-## 9. Built During the Hackathon Statement & Feature Delta
+## 9. Built During the Hackathon Statement, Provenance & Feature Delta
+
+### Project Provenance & Development Transparency
+- **Independent Pre-Existing Service (XMemo)**: XMemo is an independent, pre-existing external memory service (owner entity: `[OWNER TO CONFIRM]`). Yori integrates with XMemo as an optional remote vault over standard OAuth 2.0 PKCE and Model Context Protocol (MCP); XMemo itself is not part of the submitted Yori repository.
+- **Concept Origin**: The initial conceptual idea memory for Yori was recorded on 2026-10-14 (documenting the motivation for a calm, proactive assistant).
+- **Commit History & Timeline**: All Yori application code and tests were authored and committed during the hackathon window. The initial repository commit was authored on 2026-10-27T18:56Z (`f7dd63d`).
+- **AI-Agent-Assisted Development**: Application code, tests, and documentation were developed through AI-agent-assisted engineering and test-driven verification, reviewed and directed by the owner, who retains sole ownership and rights over all project deliverables.
 
 ### Hackathon Commit Statement
 > **Verified Commit Range (PRE-S1 Closeout Baseline):** `f7dd63d..6d2da2d` (101 commits, verified via `git log --oneline f7dd63d..6d2da2d | wc -l`), with approved closeout report at `9007ccc` (103 commits via `git log --oneline f7dd63d..9007ccc | wc -l`)  

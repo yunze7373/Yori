@@ -106,6 +106,7 @@ Use the **Demo Scenes** selector at the top-right of the navigation bar to test 
 
 ## 🔒 Privacy & Safety Model
 
+- **[Privacy Policy & Platform Disclosures](docs/PRIVACY.md)**: Transparently documents data collection (consented one-shot geolocation default OFF, confirmed memories), data flows (Meta Model API receives only template-allowlisted facts, never coordinates), retention/deletion controls (Reset Storage, XMemo forget), 18+ use statement, and AI output limitation disclosures in compliance with Meta Model API Terms of Service (§6.2, §10.1) and AUP.
 - **No Tracking or Cloud Keys in Client**: All credentials reside solely in local dev-server process memory; zero keys or tokens exist in browser storage (`localStorage`, `sessionStorage`, cookies), client bundles (`dist/`), or git history.
 - **Simulated Provider Data (INV-102)**: Calendar events, weather forecasts, location coordinates, routes, and venue names in demo scenes are mock fixtures. No real device GPS coordinates are transmitted.
 - **Confirm-Only Write-Back (INV-107)**: Invariant enforced both client-side and server-side: only facts explicitly confirmed by the user can be persisted to long-term memory or synced to remote vaults.
@@ -115,6 +116,7 @@ Use the **Demo Scenes** selector at the top-right of the navigation bar to test 
 
 ## 📖 Documentation & Submission Resources
 
+- **[Privacy Policy & Disclosures](docs/PRIVACY.md)**: Complete privacy policy, data flows, 18+ statement, and AI limitation disclosures.
 - **[Living Context Demo Guide](docs/DEMO.md)**: Comprehensive tour of scenes, review loops, and architecture.
 - **[3-Minute Video Script](docs/submission/VIDEO_SCRIPT.md)**: Timed demonstration script walking the North Star loop.
 - **[Project Description](docs/submission/PROJECT_DESCRIPTION.md)**: Hackathon overview, problem statement, and technical architecture.
