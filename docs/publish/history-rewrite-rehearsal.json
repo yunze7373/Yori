@@ -1,0 +1,42 @@
+{
+  "taskId": "INBOX-20261030-7E07D1",
+  "taskName": "PUBLISH-PREP-REHEARSAL",
+  "timestamp": "2026-10-30T23:25:08Z",
+  "filterRepoVersion": "a40bce548d2c",
+  "verification": {
+    "commitCountBefore": 138,
+    "commitCountAfter": 138,
+    "timestampsIdentical": true,
+    "oldEmailOccurrencesBefore": 115,
+    "oldEmailOccurrencesAfter": 0,
+    "canonicalEmailOccurrencesAfter": 138,
+    "localPathOccurrencesBefore": 6,
+    "localPathOccurrencesAfter": 0,
+    "headTreeShaOriginal": "3ca498e53e424dbe70ebac9b20e0906baa7d84ec",
+    "headTreeShaRewritten": "3ca498e53e424dbe70ebac9b20e0906baa7d84ec",
+    "headTreesIdentical": true,
+    "allPassed": true
+  },
+  "baselineMappings": {
+    "ph001Baseline": {
+      "originalSha": "f43c6c1d74c4bc1159300fed9d62aec9447b886e",
+      "rewrittenSha": "123a1972bc1d5beda466e34887104b82c3afa844"
+    },
+    "chapterBaseline": {
+      "originalSha": "f3f2175f099b5c76832ecff8e7657356f0bb89e5",
+      "rewrittenSha": "b60c1e9cba7befbb9b2f18bed0ec1b08c0fe28bf"
+    },
+    "uiApprovedTagCommit": {
+      "originalSha": "908abee8822d71a34ace358a3a1f995788d66e51",
+      "rewrittenSha": "5719f9d9ae09eb5a64c426670c4c62fe30eeec0a"
+    },
+    "uiApprovedTagObject": {
+      "originalSha": "d68acc2a8c8f8de4cd77cff6829ea527ee896ada",
+      "rewrittenSha": "8203e8f410a9ab9a836b8ffc18417169e49be824"
+    },
+    "rehearsalHead": {
+      "originalSha": "62ef8248a1a3afb2652d9aafdeddddb45139e0d0",
+      "rewrittenSha": "5de76baa4920548245f9d1c3cb1402599a1fe5a7"
+    }
+  }
+}
