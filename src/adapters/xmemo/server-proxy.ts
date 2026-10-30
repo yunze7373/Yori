@@ -63,6 +63,7 @@ export interface XMemoProxyConfig {
   readonly clientSecret?: string;
   readonly redirectUri: string;
   readonly scopes: readonly string[];
+  readonly networkRetryIntervalMs?: number;
 }
 
 export interface XMemoProxyStatus {
@@ -83,6 +84,93 @@ interface XMemoSession {
   tokenType?: string;
   scope?: string;
   expiresAt?: number;
+}
+
+/**
+ * Normalizes an issuer URL by stripping trailing slashes.
+ * RFC 8414 §3.3 requires exact comparison between discovered issuer and configured issuer,
+ * with trailing-slash normalization.
+ */
+export function normalizeIssuer(urlStr: string): string {
+  try {
+    const u = new URL(urlStr);
+    let p = u.pathname;
+    while (p.endsWith('/') && p.length > 1) {
+      p = p.slice(0, -1);
+    }
+    u.pathname = p;
+    const res = u.toString();
+    return res.endsWith('/') ? res.slice(0, -1) : res;
+  } catch {
+    return urlStr.trim().replace(/\/+$/, '');
+  }
+}
+
+/**
+ * Checks if a hostname belongs to a local loopback interface.
+ */
+export function isLoopbackHost(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    hostname.endsWith('.localhost')
+  );
+}
+
+/**
+ * Validates that an endpoint URL matches the origin and protocol requirements of the configured issuer.
+ *
+ * Requirements (GATE-X1-HARDEN):
+ * 1. Must be a valid absolute URL.
+ * 2. Origin (scheme + host + port) must strictly match configured issuer origin.
+ * 3. Protocol:
+ *    - If configured issuer is HTTPS, endpoint MUST be HTTPS.
+ *    - If configured issuer is HTTP on a loopback host (127.0.0.1, localhost, ::1),
+ *      HTTP is allowed on that exact loopback host.
+ *    - Any non-loopback HTTP is strictly forbidden.
+ */
+export function validateEndpointUrl(
+  endpointUrl: string,
+  configuredIssuer: string
+): { valid: boolean; reason?: string } {
+  try {
+    const endpoint = new URL(endpointUrl);
+    const issuer = new URL(configuredIssuer);
+
+    // Origin check (scheme + hostname + port)
+    if (endpoint.origin !== issuer.origin) {
+      return {
+        valid: false,
+        reason: `Endpoint origin '${endpoint.origin}' does not match configured issuer origin '${issuer.origin}'`,
+      };
+    }
+
+    // Protocol check
+    if (issuer.protocol === 'https:' && endpoint.protocol !== 'https:') {
+      return {
+        valid: false,
+        reason: `Endpoint protocol '${endpoint.protocol}' is not HTTPS`,
+      };
+    }
+
+    if (issuer.protocol === 'http:') {
+      if (!isLoopbackHost(issuer.hostname)) {
+        return {
+          valid: false,
+          reason: `HTTP is only permitted for loopback issuer, but issuer host is '${issuer.hostname}'`,
+        };
+      }
+    }
+
+    return { valid: true };
+  } catch (err: unknown) {
+    return {
+      valid: false,
+      reason: `Malformed URL: ${(err as Error).message}`,
+    };
+  }
 }
 
 export function generatePkcePair(): { codeVerifier: string; codeChallenge: string } {
@@ -155,6 +243,8 @@ export class XMemoDevProxy {
   private registrationError?: string;
   private registrationPromise?: Promise<{ success: boolean; clientId?: string; error?: string }>;
   private readonly fetchFn: typeof fetch;
+  private lastNetworkErrorTime = 0;
+  private readonly networkRetryIntervalMs: number;
 
   constructor(
     configOverride?: Partial<XMemoProxyConfig>,
@@ -195,8 +285,10 @@ export class XMemoDevProxy {
       mcpUrl,
       clientStoragePath,
       scopes: configOverride?.scopes ?? resolved.scopes,
+      networkRetryIntervalMs: configOverride?.networkRetryIntervalMs ?? 500,
     };
     this.rateLimiter = rateLimiter ?? new RateLimiter(60, 60_000);
+    this.networkRetryIntervalMs = this.config.networkRetryIntervalMs ?? 500;
     this.fetchFn =
       fetchFn ??
       (typeof fetch !== 'undefined'
@@ -210,7 +302,29 @@ export class XMemoDevProxy {
     this.revokeUrl = this.config.revokeUrl;
     this.mcpUrl = this.config.mcpUrl;
 
-    if (this.config.enabled && !this.clientId) {
+    // Validate configured endpoint origins against issuer origin (GATE-X1-HARDEN)
+    if (this.config.enabled) {
+      const endpointsToValidate: Array<{ name: string; url: string }> = [
+        { name: 'authorizeUrl', url: this.authorizeUrl },
+        { name: 'tokenUrl', url: this.tokenUrl },
+        { name: 'revokeUrl', url: this.revokeUrl },
+        { name: 'mcpUrl', url: this.mcpUrl },
+      ];
+      if (this.config.registrationUrl) {
+        endpointsToValidate.push({ name: 'registrationUrl', url: this.config.registrationUrl });
+      }
+
+      for (const ep of endpointsToValidate) {
+        const val = validateEndpointUrl(ep.url, this.config.issuer);
+        if (!val.valid) {
+          this.registrationError = 'invalid_endpoint_origin';
+          this.logger(`[XMemoProxy] Configured ${ep.name} has invalid origin: ${val.reason}`);
+          break;
+        }
+      }
+    }
+
+    if (this.config.enabled && !this.clientId && !this.registrationError) {
       this.tryLoadPersistedClientId();
     }
   }
@@ -220,6 +334,7 @@ export class XMemoDevProxy {
     this.clientSecret = this.config.clientSecret;
     this.registrationError = undefined;
     this.registrationPromise = undefined;
+    this.lastNetworkErrorTime = 0;
     if (this.config.enabled && !this.clientId) {
       this.tryLoadPersistedClientId();
     }
@@ -232,8 +347,8 @@ export class XMemoDevProxy {
         const raw = fs.readFileSync(this.config.clientStoragePath, 'utf-8');
         const data = JSON.parse(raw);
         if (typeof data.client_id === 'string' && data.client_id.trim()) {
-          // Validate issuer matches configured issuer
-          if (data.issuer !== this.config.issuer) {
+          // Validate issuer matches configured issuer (trailing slash normalized)
+          if (normalizeIssuer(data.issuer) !== normalizeIssuer(this.config.issuer)) {
             this.logger(
               `[XMemoProxy] Persisted client registration issuer mismatch: stored '${data.issuer}' != configured '${this.config.issuer}'. Ignoring persisted registration.`
             );
@@ -319,7 +434,18 @@ export class XMemoDevProxy {
       return { success: true, clientId: this.clientId };
     }
     if (this.registrationError) {
-      return { success: false, error: this.registrationError };
+      if (this.registrationError === 'network_error') {
+        const elapsed = Date.now() - this.lastNetworkErrorTime;
+        if (elapsed < this.networkRetryIntervalMs) {
+          return { success: false, error: 'network_error' };
+        }
+        // Minimum interval elapsed: clear transient error and retry!
+        this.registrationError = undefined;
+        this.logger('[XMemoProxy] Retrying registration after transient network error');
+      } else {
+        // Non-transient errors (4xx invalid_redirect_uri, issuer_mismatch, invalid_endpoint_origin, malformed_response) stick!
+        return { success: false, error: this.registrationError };
+      }
     }
     if (this.registrationPromise) {
       return this.registrationPromise;
@@ -337,27 +463,143 @@ export class XMemoDevProxy {
             });
             if (discoRes.ok) {
               const discoData = (await discoRes.json()) as any;
-              if (discoData && typeof discoData.registration_endpoint === 'string' && discoData.registration_endpoint.trim()) {
-                registrationEndpoint = discoData.registration_endpoint.trim();
+
+              // 1. RFC 8414 §3.3: Validate discovered issuer matches configured issuer exactly
+              // Trailing-slash normalization applies; mismatch fails closed with 'issuer_mismatch'.
+              if (
+                !discoData ||
+                typeof discoData.issuer !== 'string' ||
+                normalizeIssuer(discoData.issuer) !== normalizeIssuer(this.config.issuer)
+              ) {
+                const discoIssuer =
+                  discoData && typeof discoData.issuer === 'string' ? discoData.issuer : 'missing';
+                this.registrationError = 'issuer_mismatch';
+                this.logger(
+                  `[XMemoProxy] Discovery issuer mismatch: metadata issuer '${discoIssuer}' != configured '${this.config.issuer}'. Failing closed.`
+                );
+                return { success: false, error: 'issuer_mismatch' };
               }
-              if (discoData && typeof discoData.authorization_endpoint === 'string' && discoData.authorization_endpoint.trim()) {
-                this.authorizeUrl = discoData.authorization_endpoint.trim();
+
+              // 2. Validate endpoint origins against configured issuer origin (GATE-X1-HARDEN)
+              if (discoData.registration_endpoint) {
+                if (
+                  typeof discoData.registration_endpoint === 'string' &&
+                  discoData.registration_endpoint.trim()
+                ) {
+                  const regVal = validateEndpointUrl(
+                    discoData.registration_endpoint.trim(),
+                    this.config.issuer
+                  );
+                  if (!regVal.valid) {
+                    this.registrationError = 'invalid_endpoint_origin';
+                    this.logger(
+                      `[XMemoProxy] Discovered registration_endpoint invalid: ${regVal.reason}`
+                    );
+                    return { success: false, error: 'invalid_endpoint_origin' };
+                  }
+                  registrationEndpoint = discoData.registration_endpoint.trim();
+                }
               }
-              if (discoData && typeof discoData.token_endpoint === 'string' && discoData.token_endpoint.trim()) {
-                this.tokenUrl = discoData.token_endpoint.trim();
+
+              if (discoData.authorization_endpoint) {
+                if (
+                  typeof discoData.authorization_endpoint === 'string' &&
+                  discoData.authorization_endpoint.trim()
+                ) {
+                  const authVal = validateEndpointUrl(
+                    discoData.authorization_endpoint.trim(),
+                    this.config.issuer
+                  );
+                  if (!authVal.valid) {
+                    this.registrationError = 'invalid_endpoint_origin';
+                    this.logger(
+                      `[XMemoProxy] Discovered authorization_endpoint invalid: ${authVal.reason}`
+                    );
+                    return { success: false, error: 'invalid_endpoint_origin' };
+                  }
+                  this.authorizeUrl = discoData.authorization_endpoint.trim();
+                }
               }
-              if (discoData && typeof discoData.revocation_endpoint === 'string' && discoData.revocation_endpoint.trim()) {
-                this.revokeUrl = discoData.revocation_endpoint.trim();
+
+              if (discoData.token_endpoint) {
+                if (
+                  typeof discoData.token_endpoint === 'string' &&
+                  discoData.token_endpoint.trim()
+                ) {
+                  const tokVal = validateEndpointUrl(
+                    discoData.token_endpoint.trim(),
+                    this.config.issuer
+                  );
+                  if (!tokVal.valid) {
+                    this.registrationError = 'invalid_endpoint_origin';
+                    this.logger(
+                      `[XMemoProxy] Discovered token_endpoint invalid: ${tokVal.reason}`
+                    );
+                    return { success: false, error: 'invalid_endpoint_origin' };
+                  }
+                  this.tokenUrl = discoData.token_endpoint.trim();
+                }
               }
-              if (discoData && typeof discoData.mcp_endpoint === 'string' && discoData.mcp_endpoint.trim()) {
-                this.mcpUrl = discoData.mcp_endpoint.trim();
+
+              if (discoData.revocation_endpoint) {
+                if (
+                  typeof discoData.revocation_endpoint === 'string' &&
+                  discoData.revocation_endpoint.trim()
+                ) {
+                  const revVal = validateEndpointUrl(
+                    discoData.revocation_endpoint.trim(),
+                    this.config.issuer
+                  );
+                  if (!revVal.valid) {
+                    this.registrationError = 'invalid_endpoint_origin';
+                    this.logger(
+                      `[XMemoProxy] Discovered revocation_endpoint invalid: ${revVal.reason}`
+                    );
+                    return { success: false, error: 'invalid_endpoint_origin' };
+                  }
+                  this.revokeUrl = discoData.revocation_endpoint.trim();
+                }
+              }
+
+              // Non-standard mcp_endpoint: ignore unless it passes the same origin check
+              if (
+                discoData.mcp_endpoint &&
+                typeof discoData.mcp_endpoint === 'string' &&
+                discoData.mcp_endpoint.trim()
+              ) {
+                const mcpVal = validateEndpointUrl(
+                  discoData.mcp_endpoint.trim(),
+                  this.config.issuer
+                );
+                if (mcpVal.valid) {
+                  this.mcpUrl = discoData.mcp_endpoint.trim();
+                } else {
+                  this.logger(
+                    `[XMemoProxy] Ignoring discovered mcp_endpoint with non-matching origin: ${mcpVal.reason}. Retaining default: ${this.mcpUrl}`
+                  );
+                }
               }
             }
-          } catch {
-            // Fall through to default registration endpoint
+          } catch (err: unknown) {
+            // Discovery fetch error (e.g. network failure)
+            const errCode = 'network_error';
+            this.registrationError = errCode;
+            this.lastNetworkErrorTime = Date.now();
+            this.logger(`[XMemoProxy] Discovery network error: ${(err as Error).message}`);
+            return { success: false, error: errCode };
           }
           if (!registrationEndpoint) {
             registrationEndpoint = `${this.config.issuer}/oauth/register`;
+          }
+        } else {
+          // Explicit registrationUrl override: validate origin against issuer
+          const regVal = validateEndpointUrl(registrationEndpoint, this.config.issuer);
+          if (!regVal.valid) {
+            this.registrationError = 'invalid_endpoint_origin';
+            this.logger(
+              `[XMemoProxy] Configured registrationUrl invalid: ${regVal.reason}`
+            );
+            return { success: false, error: 'invalid_endpoint_origin' };
           }
         }
 
@@ -422,6 +664,7 @@ export class XMemoDevProxy {
       } catch (err: unknown) {
         const errCode = 'network_error';
         this.registrationError = errCode;
+        this.lastNetworkErrorTime = Date.now();
         this.logger(`[XMemoProxy] Dynamic registration network error: ${(err as Error).message}`);
         return { success: false, error: errCode };
       } finally {
@@ -484,6 +727,10 @@ export class XMemoDevProxy {
     }
     if (!this.clientId) {
       throw new Error('XMemo registration required: no client_id available');
+    }
+    const val = validateEndpointUrl(this.authorizeUrl, this.config.issuer);
+    if (!val.valid) {
+      throw new Error(`Cannot create auth URL: authorizeUrl origin invalid (${val.reason})`);
     }
     const { codeVerifier, codeChallenge } = generatePkcePair();
     const state = generateState();
@@ -550,6 +797,12 @@ export class XMemoDevProxy {
       bodyParams['client_secret'] = effectiveSecret;
     }
 
+    const val = validateEndpointUrl(this.tokenUrl, this.config.issuer);
+    if (!val.valid) {
+      this.logger(`[XMemoProxy] Token exchange aborted: ${val.reason}`);
+      return { success: false, error: `tokenUrl origin invalid: ${val.reason}` };
+    }
+
     try {
       const resp = await fetchFn(this.tokenUrl, {
         method: 'POST',
@@ -597,19 +850,24 @@ export class XMemoDevProxy {
    */
   public async disconnect(fetchFn: typeof fetch = this.fetchFn): Promise<{ success: boolean }> {
     if (this.session.accessToken && this.revokeUrl) {
-      try {
-        await fetchFn(this.revokeUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: new URLSearchParams({
-            token: this.session.accessToken,
-            client_id: this.clientId || this.config.clientId || '',
-          }).toString(),
-        });
-      } catch {
-        // Silently clear local session even if remote revocation fails
+      const val = validateEndpointUrl(this.revokeUrl, this.config.issuer);
+      if (!val.valid) {
+        this.logger(`[XMemoProxy] Revoke skipped: revokeUrl origin invalid (${val.reason})`);
+      } else {
+        try {
+          await fetchFn(this.revokeUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              token: this.session.accessToken,
+              client_id: this.clientId || this.config.clientId || '',
+            }).toString(),
+          });
+        } catch {
+          // Silently clear local session even if remote revocation fails
+        }
       }
     }
     this.session = {};
@@ -645,6 +903,12 @@ export class XMemoDevProxy {
         },
       },
     };
+
+    const val = validateEndpointUrl(this.mcpUrl, this.config.issuer);
+    if (!val.valid) {
+      this.logger(`[XMemoProxy] Read preferences aborted: ${val.reason}`);
+      return { status: 502, data: { error: `mcpUrl origin invalid: ${val.reason}` } };
+    }
 
     try {
       const resp = await fetchFn(this.mcpUrl, {
@@ -744,6 +1008,12 @@ export class XMemoDevProxy {
       },
     };
 
+    const val = validateEndpointUrl(this.mcpUrl, this.config.issuer);
+    if (!val.valid) {
+      this.logger(`[XMemoProxy] Write fact aborted: ${val.reason}`);
+      return { status: 502, data: { error: `mcpUrl origin invalid: ${val.reason}` } };
+    }
+
     try {
       const resp = await fetchFn(this.mcpUrl, {
         method: 'POST',
@@ -810,6 +1080,12 @@ export class XMemoDevProxy {
         },
       },
     };
+
+    const val = validateEndpointUrl(this.mcpUrl, this.config.issuer);
+    if (!val.valid) {
+      this.logger(`[XMemoProxy] Delete fact aborted: ${val.reason}`);
+      return { status: 502, data: { error: `mcpUrl origin invalid: ${val.reason}` } };
+    }
 
     try {
       const resp = await fetchFn(this.mcpUrl, {
@@ -953,7 +1229,13 @@ export class XMemoDevProxy {
         res.end(JSON.stringify({ error: 'Method Not Allowed' }));
         return true;
       }
-      if (this.config.enabled && !this.clientId && !this.registrationError) {
+      if (
+        this.config.enabled &&
+        !this.clientId &&
+        (!this.registrationError ||
+          (this.registrationError === 'network_error' &&
+            Date.now() - this.lastNetworkErrorTime >= this.networkRetryIntervalMs))
+      ) {
         await this.ensureRegistered();
       }
       res.statusCode = 200;
@@ -988,7 +1270,13 @@ export class XMemoDevProxy {
         res.end(JSON.stringify({ error: 'Method Not Allowed' }));
         return true;
       }
-      if (this.config.enabled && !this.clientId && !this.registrationError) {
+      if (
+        this.config.enabled &&
+        !this.clientId &&
+        (!this.registrationError ||
+          (this.registrationError === 'network_error' &&
+            Date.now() - this.lastNetworkErrorTime >= this.networkRetryIntervalMs))
+      ) {
         await this.ensureRegistered();
       }
       try {

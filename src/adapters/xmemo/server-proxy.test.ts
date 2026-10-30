@@ -14,6 +14,9 @@ import {
   generateState,
   resolveXMemoConfig,
   UNVERIFIED_XMEMO_MCP_MAPPING,
+  normalizeIssuer,
+  isLoopbackHost,
+  validateEndpointUrl,
 } from './server-proxy.js';
 import { RateLimiter } from '../model/server-proxy.js';
 
@@ -736,6 +739,7 @@ describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
           ok: true,
           status: 200,
           json: async () => ({
+            issuer: 'https://xmemo.dev',
             registration_endpoint: 'https://xmemo.dev/oauth/register',
           }),
         };
@@ -811,6 +815,7 @@ describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
     const proxy = new XMemoDevProxy(
       {
         enabled: true,
+        issuer: 'https://custom-auth.example.com',
         registrationUrl: 'https://custom-auth.example.com/register',
         clientStoragePath: stateFile,
       },
@@ -833,7 +838,10 @@ describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+          json: async () => ({
+            issuer: 'https://xmemo.dev',
+            registration_endpoint: 'https://xmemo.dev/oauth/register',
+          }),
         };
       }
       if (url.includes('/oauth/register')) {
@@ -920,7 +928,10 @@ describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+          json: async () => ({
+            issuer: 'https://xmemo.dev',
+            registration_endpoint: 'https://xmemo.dev/oauth/register',
+          }),
         };
       }
       if (url.includes('/oauth/register')) {
@@ -976,7 +987,10 @@ describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ registration_endpoint: 'http://127.0.0.1:9999/oauth/register' }),
+          json: async () => ({
+            issuer: 'http://127.0.0.1:9999',
+            registration_endpoint: 'http://127.0.0.1:9999/oauth/register',
+          }),
         };
       }
       if (url.includes('/oauth/register')) {
@@ -1032,7 +1046,10 @@ describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+          json: async () => ({
+            issuer: 'https://xmemo.dev',
+            registration_endpoint: 'https://xmemo.dev/oauth/register',
+          }),
         };
       }
       if (url.includes('/oauth/register')) {
@@ -1094,7 +1111,10 @@ describe('Fail-Closed Behavior on Registration Failure', () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+          json: async () => ({
+            issuer: 'https://xmemo.dev',
+            registration_endpoint: 'https://xmemo.dev/oauth/register',
+          }),
         };
       }
       if (url.includes('/oauth/register')) {
@@ -1173,7 +1193,10 @@ describe('Fail-Closed Behavior on Registration Failure', () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+          json: async () => ({
+            issuer: 'https://xmemo.dev',
+            registration_endpoint: 'https://xmemo.dev/oauth/register',
+          }),
         };
       }
       if (url.includes('/oauth/register')) {
@@ -1200,6 +1223,652 @@ describe('Fail-Closed Behavior on Registration Failure', () => {
     expect(resStatus.statusCode).toBe(200);
     const statusData = JSON.parse(resStatus.body);
     expect(statusData.statusText).toBe('registration rejected: malformed_response');
+  });
+});
+
+describe('RFC 8414 §3.3 Issuer Normalization & Endpoint Origin Allowlist (GATE-X1-HARDEN)', () => {
+  it('normalizes issuer URLs by stripping trailing slashes without modifying path', () => {
+    expect(normalizeIssuer('https://xmemo.dev')).toBe('https://xmemo.dev');
+    expect(normalizeIssuer('https://xmemo.dev/')).toBe('https://xmemo.dev');
+    expect(normalizeIssuer('https://xmemo.dev///')).toBe('https://xmemo.dev');
+    expect(normalizeIssuer('https://xmemo.dev/oauth/')).toBe('https://xmemo.dev/oauth');
+    expect(normalizeIssuer('https://xmemo.dev/oauth')).toBe('https://xmemo.dev/oauth');
+    expect(normalizeIssuer('http://127.0.0.1:9999/')).toBe('http://127.0.0.1:9999');
+  });
+
+  it('validates loopback host detection correctly', () => {
+    expect(isLoopbackHost('localhost')).toBe(true);
+    expect(isLoopbackHost('127.0.0.1')).toBe(true);
+    expect(isLoopbackHost('::1')).toBe(true);
+    expect(isLoopbackHost('[::1]')).toBe(true);
+    expect(isLoopbackHost('sub.localhost')).toBe(true);
+    expect(isLoopbackHost('xmemo.dev')).toBe(false);
+    expect(isLoopbackHost('evil.example')).toBe(false);
+  });
+
+  it('validates endpoint URLs against issuer origin and scheme rules', () => {
+    // Valid HTTPS matching origin
+    expect(validateEndpointUrl('https://xmemo.dev/oauth/token', 'https://xmemo.dev').valid).toBe(true);
+    expect(validateEndpointUrl('https://xmemo.dev/mcp', 'https://xmemo.dev').valid).toBe(true);
+
+    // Foreign origin (different host)
+    const foreignHost = validateEndpointUrl('https://evil.example/token', 'https://xmemo.dev');
+    expect(foreignHost.valid).toBe(false);
+    expect(foreignHost.reason).toContain('Endpoint origin');
+
+    // Foreign origin (different port)
+    const foreignPort = validateEndpointUrl('https://xmemo.dev:8443/token', 'https://xmemo.dev');
+    expect(foreignPort.valid).toBe(false);
+    expect(foreignPort.reason).toContain('Endpoint origin');
+
+    // Protocol downgrade on non-loopback issuer
+    const downgrade = validateEndpointUrl('http://xmemo.dev/oauth/token', 'https://xmemo.dev');
+    expect(downgrade.valid).toBe(false);
+
+    // Valid loopback HTTP
+    expect(validateEndpointUrl('http://127.0.0.1:9999/oauth/token', 'http://127.0.0.1:9999').valid).toBe(true);
+    expect(validateEndpointUrl('http://localhost:5173/mcp', 'http://localhost:5173').valid).toBe(true);
+
+    // Loopback HTTP port mismatch
+    const portMismatch = validateEndpointUrl('http://127.0.0.1:8888/token', 'http://127.0.0.1:9999');
+    expect(portMismatch.valid).toBe(false);
+
+    // Non-loopback HTTP issuer is rejected
+    const nonLoopbackHttp = validateEndpointUrl('http://insecure.example/token', 'http://insecure.example');
+    expect(nonLoopbackHttp.valid).toBe(false);
+    expect(nonLoopbackHttp.reason).toContain('HTTP is only permitted for loopback issuer');
+
+    // Malformed URL
+    const malformed = validateEndpointUrl('not-a-valid-url', 'https://xmemo.dev');
+    expect(malformed.valid).toBe(false);
+    expect(malformed.reason).toContain('Malformed URL');
+  });
+
+  describe('Discovery Hardening & No Tokens to Foreign Origin (AC-1, AC-2, AC-3)', () => {
+    let tmpDir: string;
+    let stateFile: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xmemo-harden-test-'));
+      stateFile = path.join(tmpDir, '.xmemo-client.json');
+    });
+
+    afterEach(() => {
+      try {
+        if (fs.existsSync(tmpDir)) {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+      } catch {
+        // ignore
+      }
+    });
+
+    it('fails closed when discovery document is missing issuer field', async () => {
+      const fetchedUrls: string[] = [];
+      const mockFetch = (async (url: string) => {
+        fetchedUrls.push(url);
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              // Missing issuer field
+              registration_endpoint: 'https://xmemo.dev/oauth/register',
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        { enabled: true, clientStoragePath: stateFile },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      const res = await proxy.ensureRegistered(mockFetch);
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('issuer_mismatch');
+      expect(proxy.getStatus().statusText).toBe('registration rejected: issuer_mismatch');
+      expect(() => proxy.createAuthUrl()).toThrow(/registration rejected: issuer_mismatch/);
+    });
+
+    it('fails closed when discovery issuer does not match configured issuer', async () => {
+      const fetchedUrls: string[] = [];
+      const mockFetch = (async (url: string) => {
+        fetchedUrls.push(url);
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              issuer: 'https://evil.example',
+              registration_endpoint: 'https://xmemo.dev/oauth/register',
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        { enabled: true, issuer: 'https://xmemo.dev', clientStoragePath: stateFile },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      const res = await proxy.ensureRegistered(mockFetch);
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('issuer_mismatch');
+      expect(proxy.getStatus().statusText).toBe('registration rejected: issuer_mismatch');
+      expect(() => proxy.createAuthUrl()).toThrow(/registration rejected: issuer_mismatch/);
+    });
+
+    it('succeeds when discovery issuer matches configured issuer with trailing slash normalization', async () => {
+      const mockFetch = (async (url: string) => {
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              issuer: 'https://xmemo.dev/', // Trailing slash
+              registration_endpoint: 'https://xmemo.dev/oauth/register',
+            }),
+          };
+        }
+        if (url.includes('/oauth/register')) {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({ client_id: 'client-with-trailing-slash-issuer' }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        { enabled: true, issuer: 'https://xmemo.dev', clientStoragePath: stateFile },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      const res = await proxy.ensureRegistered(mockFetch);
+      expect(res.success).toBe(true);
+      expect(res.clientId).toBe('client-with-trailing-slash-issuer');
+    });
+
+    it('rejects foreign registration_endpoint and NEVER sends registration payload to foreign host', async () => {
+      const fetchedUrls: string[] = [];
+      const mockFetch = (async (url: string) => {
+        fetchedUrls.push(url);
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              issuer: 'https://xmemo.dev',
+              registration_endpoint: 'https://evil.example/register',
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        { enabled: true, issuer: 'https://xmemo.dev', clientStoragePath: stateFile },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      const res = await proxy.ensureRegistered(mockFetch);
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('invalid_endpoint_origin');
+      expect(proxy.getStatus().statusText).toBe('registration rejected: invalid_endpoint_origin');
+
+      // Assert fetch was NEVER called with evil host
+      expect(fetchedUrls.some((u) => u.includes('evil.example'))).toBe(false);
+    });
+
+    it('rejects foreign authorization_endpoint and createAuthUrl NEVER points to foreign host', async () => {
+      const mockFetch = (async (url: string) => {
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              issuer: 'https://xmemo.dev',
+              authorization_endpoint: 'https://evil.example/oauth/authorize',
+              registration_endpoint: 'https://xmemo.dev/oauth/register',
+            }),
+          };
+        }
+        if (url.includes('/oauth/register')) {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({ client_id: 'client-123' }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        { enabled: true, issuer: 'https://xmemo.dev', clientStoragePath: stateFile },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      const res = await proxy.ensureRegistered(mockFetch);
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('invalid_endpoint_origin');
+      expect(() => proxy.createAuthUrl()).toThrow(/registration rejected: invalid_endpoint_origin/);
+    });
+
+    it('rejects foreign token_endpoint and NEVER sends code or verifier to foreign host', async () => {
+      const fetchedUrls: string[] = [];
+      const mockFetch = (async (url: string) => {
+        fetchedUrls.push(url);
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              issuer: 'https://xmemo.dev',
+              token_endpoint: 'https://evil.example/oauth/token',
+              registration_endpoint: 'https://xmemo.dev/oauth/register',
+            }),
+          };
+        }
+        if (url.includes('/oauth/register')) {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({ client_id: 'client-123' }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        { enabled: true, issuer: 'https://xmemo.dev', clientStoragePath: stateFile },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      const res = await proxy.ensureRegistered(mockFetch);
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('invalid_endpoint_origin');
+      expect(proxy.getStatus().statusText).toBe('registration rejected: invalid_endpoint_origin');
+      expect(fetchedUrls.some((u) => u.includes('evil.example'))).toBe(false);
+    });
+
+    it('rejects foreign revocation_endpoint in discovery', async () => {
+      const mockFetch = (async (url: string) => {
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              issuer: 'https://xmemo.dev',
+              revocation_endpoint: 'https://evil.example/oauth/revoke',
+              registration_endpoint: 'https://xmemo.dev/oauth/register',
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        { enabled: true, issuer: 'https://xmemo.dev', clientStoragePath: stateFile },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      const res = await proxy.ensureRegistered(mockFetch);
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('invalid_endpoint_origin');
+    });
+
+    it('rejects HTTP downgrade endpoint on non-loopback issuer', async () => {
+      const mockFetch = (async (url: string) => {
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              issuer: 'https://xmemo.dev',
+              token_endpoint: 'http://xmemo.dev/oauth/token', // HTTP downgrade!
+              registration_endpoint: 'https://xmemo.dev/oauth/register',
+            }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        { enabled: true, issuer: 'https://xmemo.dev', clientStoragePath: stateFile },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      const res = await proxy.ensureRegistered(mockFetch);
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('invalid_endpoint_origin');
+    });
+
+    it('ignores foreign mcp_endpoint from discovery and retains default issuer origin', async () => {
+      const fetchedUrls: string[] = [];
+      const mockFetch = (async (url: string) => {
+        fetchedUrls.push(url);
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              issuer: 'https://xmemo.dev',
+              registration_endpoint: 'https://xmemo.dev/oauth/register',
+              authorization_endpoint: 'https://xmemo.dev/oauth/authorize',
+              token_endpoint: 'https://xmemo.dev/oauth/token',
+              revocation_endpoint: 'https://xmemo.dev/oauth/revoke',
+              mcp_endpoint: 'https://evil.example/mcp', // Malicious foreign MCP!
+            }),
+          };
+        }
+        if (url.includes('/oauth/register')) {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({ client_id: 'client-mcp-test' }),
+          };
+        }
+        if (url.includes('/mcp')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ jsonrpc: '2.0', result: { memories: [] } }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const logs: string[] = [];
+      const proxy = new XMemoDevProxy(
+        { enabled: true, issuer: 'https://xmemo.dev', clientStoragePath: stateFile },
+        (msg) => logs.push(msg),
+        undefined,
+        mockFetch
+      );
+
+      const res = await proxy.ensureRegistered(mockFetch);
+      expect(res.success).toBe(true);
+
+      // Warning logged about ignoring foreign mcp_endpoint
+      expect(logs.some((l) => l.includes('Ignoring discovered mcp_endpoint'))).toBe(true);
+
+      // MCP URL retained default issuer origin
+      const cfg = proxy.getConfig();
+      expect(cfg.mcpUrl).toBe('https://xmemo.dev/mcp');
+
+      // Set session to test MCP read/write calls
+      (proxy as any).session = { accessToken: 'valid-test-token' };
+
+      await proxy.readPreferences('test', mockFetch);
+      await proxy.writeConfirmedFact(
+        {
+          key: 'test:key',
+          value: 'val',
+          status: 'confirmed',
+          provenance: { source: 'user', timestamp: new Date().toISOString() },
+        },
+        mockFetch
+      );
+      await proxy.deleteFact('test:key', mockFetch);
+
+      // Assert evil host was NEVER fetched
+      expect(fetchedUrls.some((u) => u.includes('evil.example'))).toBe(false);
+      // Assert all MCP calls targeted https://xmemo.dev/mcp
+      const mcpCalls = fetchedUrls.filter((u) => u.includes('/mcp'));
+      expect(mcpCalls.length).toBe(3);
+      for (const callUrl of mcpCalls) {
+        expect(callUrl).toBe('https://xmemo.dev/mcp');
+      }
+    });
+
+    it('rejects configured foreign endpoints in constructor', () => {
+      const logs: string[] = [];
+      const proxy = new XMemoDevProxy(
+        {
+          enabled: true,
+          issuer: 'https://xmemo.dev',
+          tokenUrl: 'https://evil.example/oauth/token',
+        },
+        (msg) => logs.push(msg)
+      );
+
+      expect(proxy.getStatus().statusText).toBe('registration rejected: invalid_endpoint_origin');
+      expect(() => proxy.createAuthUrl()).toThrow(/registration rejected: invalid_endpoint_origin/);
+      expect(logs.some((l) => l.includes('Configured tokenUrl has invalid origin'))).toBe(true);
+    });
+
+    it('aborts exchangeCode and MCP calls if endpoint origin is invalid', async () => {
+      const fetchedUrls: string[] = [];
+      const mockFetch = (async (url: string) => {
+        fetchedUrls.push(url);
+        return { ok: true, status: 200, json: async () => ({}) };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        {
+          enabled: true,
+          issuer: 'https://xmemo.dev',
+          clientId: 'valid-client',
+        },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      // Mutate endpoint URLs to simulate bypass attempt
+      (proxy as any).tokenUrl = 'https://evil.example/token';
+      (proxy as any).mcpUrl = 'https://evil.example/mcp';
+      (proxy as any).revokeUrl = 'https://evil.example/revoke';
+      (proxy as any).pendingStates.set('valid-state', {
+        codeVerifier: 'verifier',
+        redirectUri: 'http://127.0.0.1:5173/api/xmemo/callback',
+        createdAt: Date.now(),
+      });
+      (proxy as any).session = { accessToken: 'token' };
+
+      // exchangeCode fails closed
+      const exRes = await proxy.exchangeCode('code', 'valid-state', mockFetch);
+      expect(exRes.success).toBe(false);
+      expect(exRes.error).toContain('tokenUrl origin invalid');
+
+      // readPreferences fails closed
+      const readRes = await proxy.readPreferences('test', mockFetch);
+      expect(readRes.status).toBe(502);
+      expect((readRes.data as any).error).toContain('mcpUrl origin invalid');
+
+      // writeConfirmedFact fails closed
+      const writeRes = await proxy.writeConfirmedFact(
+        {
+          key: 'k',
+          value: 'v',
+          status: 'confirmed',
+          provenance: { source: 'u', timestamp: new Date().toISOString() },
+        },
+        mockFetch
+      );
+      expect(writeRes.status).toBe(502);
+      expect((writeRes.data as any).error).toContain('mcpUrl origin invalid');
+
+      // deleteFact fails closed
+      const delRes = await proxy.deleteFact('k', mockFetch);
+      expect(delRes.status).toBe(502);
+      expect((delRes.data as any).error).toContain('mcpUrl origin invalid');
+
+      // disconnect skips foreign revokeUrl
+      await proxy.disconnect(mockFetch);
+
+      // ZERO fetch calls made to evil host
+      expect(fetchedUrls.length).toBe(0);
+    });
+  });
+
+  describe('Transient Network Error Retry vs Sticky 4xx (AC-4)', () => {
+    let tmpDir: string;
+    let stateFile: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xmemo-retry-test-'));
+      stateFile = path.join(tmpDir, '.xmemo-client.json');
+    });
+
+    afterEach(() => {
+      try {
+        if (fs.existsSync(tmpDir)) {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+      } catch {
+        // ignore
+      }
+    });
+
+    it('retries registration on next Connect after networkRetryIntervalMs elapses', async () => {
+      let callCount = 0;
+      let networkDown = true;
+
+      const mockFetch = (async (url: string) => {
+        callCount++;
+        if (networkDown) {
+          throw new Error('connect ECONNREFUSED 127.0.0.1:9999');
+        }
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              issuer: 'https://xmemo.dev',
+              registration_endpoint: 'https://xmemo.dev/oauth/register',
+            }),
+          };
+        }
+        if (url.includes('/oauth/register')) {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({ client_id: 'recovered-client-id' }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        {
+          enabled: true,
+          clientStoragePath: stateFile,
+          networkRetryIntervalMs: 50, // 50ms interval for fast test execution
+        },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      // 1. Initial attempt fails with network_error
+      const req1 = createMockReq({ url: '/api/xmemo/status', method: 'GET' });
+      const res1 = createMockRes();
+      await proxy.handleHttpRequest(req1, res1);
+      expect(JSON.parse(res1.body).statusText).toBe('registration rejected: network_error');
+      expect(callCount).toBe(1);
+
+      // 2. Immediate subsequent request (<50ms): throttled, returns cached error without fetch
+      const req2 = createMockReq({ url: '/api/xmemo/auth-url', method: 'POST' });
+      const res2 = createMockRes();
+      await proxy.handleHttpRequest(req2, res2);
+      expect(res2.statusCode).toBe(500);
+      expect(JSON.parse(res2.body).error).toContain('registration rejected: network_error');
+      expect(callCount).toBe(1); // Call count unchanged!
+
+      // 3. Network recovers
+      networkDown = false;
+
+      // 4. Wait for networkRetryIntervalMs to elapse
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      // 5. Next Connect request (POST /api/xmemo/auth-url) retries registration and succeeds!
+      const req3 = createMockReq({ url: '/api/xmemo/auth-url', method: 'POST' });
+      const res3 = createMockRes();
+      await proxy.handleHttpRequest(req3, res3);
+      expect(res3.statusCode).toBe(200);
+      const authData = JSON.parse(res3.body);
+      expect(authData.authUrl).toContain('https://xmemo.dev/oauth/authorize');
+      expect(authData.authUrl).toContain('client_id=recovered-client-id');
+      expect(callCount).toBe(3); // 1 initial fail + 1 discovery retry + 1 register call = 3
+
+      // Status is now ready
+      expect(proxy.getStatus().statusText).toBe('XMemo OAuth enabled (disconnected)');
+    });
+
+    it('4xx rejection sticks permanently and is NEVER retried even after interval elapses', async () => {
+      let callCount = 0;
+      const mockFetch = (async (url: string) => {
+        callCount++;
+        if (url.includes('.well-known')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              issuer: 'https://xmemo.dev',
+              registration_endpoint: 'https://xmemo.dev/oauth/register',
+            }),
+          };
+        }
+        if (url.includes('/oauth/register')) {
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ error: 'invalid_redirect_uri' }),
+          };
+        }
+        return { ok: false, status: 404 };
+      }) as any;
+
+      const proxy = new XMemoDevProxy(
+        {
+          enabled: true,
+          clientStoragePath: stateFile,
+          networkRetryIntervalMs: 50,
+        },
+        () => {},
+        undefined,
+        mockFetch
+      );
+
+      // Initial call fails with 400 invalid_redirect_uri
+      const req1 = createMockReq({ url: '/api/xmemo/status', method: 'GET' });
+      const res1 = createMockRes();
+      await proxy.handleHttpRequest(req1, res1);
+      expect(JSON.parse(res1.body).statusText).toBe('registration rejected: invalid_redirect_uri');
+      expect(callCount).toBe(2); // 1 discovery + 1 register
+
+      // Wait past the retry interval
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      // Subsequent call: does NOT retry, error sticks!
+      const req2 = createMockReq({ url: '/api/xmemo/auth-url', method: 'POST' });
+      const res2 = createMockRes();
+      await proxy.handleHttpRequest(req2, res2);
+      expect(res2.statusCode).toBe(500);
+      expect(JSON.parse(res2.body).error).toContain('registration rejected: invalid_redirect_uri');
+      expect(callCount).toBe(2); // No extra calls made!
+    });
   });
 });
 
@@ -1235,7 +1904,10 @@ describe('Secret Hygiene (Finding 5)', () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ registration_endpoint: 'https://xmemo.dev/oauth/register' }),
+          json: async () => ({
+            issuer: 'https://xmemo.dev',
+            registration_endpoint: 'https://xmemo.dev/oauth/register',
+          }),
         };
       }
       if (url.includes('/oauth/register')) {
