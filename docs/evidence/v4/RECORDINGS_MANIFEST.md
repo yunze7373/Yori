@@ -17,7 +17,7 @@
 | **Away Lunch Loop** | 390×844 Mobile | `v4-lunch-recording-390x844.webm` | 1.5 MB (1,569,805 B) | 24.48 s | `e537911214d113356064be0def2467bdac575a658b232f65c01ed41e4a7d212c` |
 | **Away Lunch Loop** | 1280×800 Desktop | `v4-lunch-recording-1280x800.webm` | 2.4 MB (2,485,541 B) | 24.56 s | `02af48a82c8be92ae6c2268b72a703a628ca5bb1e53f69ec71087b508ba2408b` |
 
-**Local File Directory:** `<repo-root>/docs/evidence/v4/recordings/`
+**Local File Directory:** `docs/evidence/v4/recordings/`
 
 ### Verbatim `ffprobe` Technical Stream Metadata
 
