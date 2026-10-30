@@ -200,6 +200,30 @@ If you wish to test live AI phrasing refinement via Meta Muse Spark:
 
 ---
 
+## 🧠 XMemo Memory Integration (MemoryPort)
+
+By default, Yori runs with sovereign local browser storage as the source of truth (`XMEMO_OAUTH_ENABLED=false`).
+
+### 1. Owner-Key Demo Mode (XKEY01)
+For single-tenant developer evaluation and testing without completing interactive browser OAuth redirects, an opt-in server-only owner key mode is available:
+- **Activation**: Activates only when **both** `XMEMO_AUTH_MODE=owner_key` and `XMEMO_KEY` are configured in `.env.local`.
+- **Server-Only Security**: `XMEMO_KEY` is strictly server-side (never `VITE_`-prefixed, never bundled into client `dist/`, never logged).
+- **Production Refusal**: Refuses to enable when `NODE_ENV=production`.
+- **Loopback Enforcement**: Requests from non-loopback host headers receive **HTTP 403 Forbidden**.
+- **Confirm-Only Vault Invariant (INV-107)**: Reads go through `/api/xmemo/preferences`; writes through `/api/xmemo/confirmed-facts` only permit confirmed facts (unconfirmed writes rejected with 400).
+- **Process Disconnect & Upstream 401**: Calling `POST /api/xmemo/disconnect` disables the mode for the process; any upstream 401 clears the mode immediately.
+- **Status Reporting**: `/api/xmemo/status` reports `mode="owner_key_demo"` with zero token, length, or prefix, and is never represented as per-user OAuth consent.
+
+### 2. Owner OAuth 2.0 PKCE Fallback Steps
+OAuth 2.0 PKCE remains the mandatory, production-grade authentication path for any public or multi-user build:
+1. Ensure `XMEMO_OAUTH_ENABLED=true` in `.env.local` (and omit or unset `XMEMO_AUTH_MODE=owner_key`).
+2. Open Yori at `http://127.0.0.1:5173`, navigate to the **Me** tab, and locate the **XMemo Sync** section.
+3. Click **Connect XMemo** to initiate PKCE authorization code exchange with RFC 8414 discovered endpoints (`https://xmemo.dev/oauth/authorize` and `/oauth/token`).
+4. Tokens remain in server process memory (zero browser credentials).
+5. **Deterministic Precedence**: If both an active OAuth session and an owner key are configured, the OAuth session takes deterministic precedence, suppressing the owner key to respect user authorization.
+
+---
+
 ## 🔗 Submission Documents
 
 For hackathon judges and evaluators:

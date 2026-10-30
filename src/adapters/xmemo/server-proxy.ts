@@ -64,12 +64,16 @@ export interface XMemoProxyConfig {
   readonly redirectUri: string;
   readonly scopes: readonly string[];
   readonly networkRetryIntervalMs?: number;
+  readonly authMode?: string;
+  readonly ownerKey?: string;
+  readonly isProduction?: boolean;
 }
 
 export interface XMemoProxyStatus {
   readonly enabled: boolean;
   readonly connected: boolean;
   readonly statusText: string;
+  readonly mode?: 'oauth' | 'owner_key_demo';
 }
 
 interface PendingAuthState {
@@ -209,6 +213,12 @@ export function resolveXMemoConfig(
   const clientSecret = env['XMEMO_CLIENT_SECRET'];
   const redirectUri = env['XMEMO_REDIRECT_URI'] || 'http://127.0.0.1:5173/api/xmemo/callback';
 
+  // XKEY01: Server-only owner-key demo mode configuration
+  const authMode = env['XMEMO_AUTH_MODE'] || 'oauth';
+  const rawOwnerKey = env['XMEMO_KEY'];
+  const ownerKey = rawOwnerKey && rawOwnerKey.trim() !== '' ? rawOwnerKey.trim() : undefined;
+  const isProduction = env['NODE_ENV'] === 'production';
+
   if (enabled) {
     logger(`[XMemoProxy] XMemo OAuth enabled. Target issuer: ${issuer}`);
   }
@@ -226,6 +236,9 @@ export function resolveXMemoConfig(
     clientSecret,
     redirectUri,
     scopes: ['memory:read', 'memory:write'],
+    authMode,
+    ownerKey,
+    isProduction,
   };
 }
 
@@ -245,6 +258,11 @@ export class XMemoDevProxy {
   private readonly fetchFn: typeof fetch;
   private lastNetworkErrorTime = 0;
   private readonly networkRetryIntervalMs: number;
+
+  // XKEY01: Server-only owner-key demo mode state
+  private readonly ownerKeyModeRequested: boolean;
+  private ownerKeyDisabled: boolean = false;
+  private ownerKey?: string;
 
   constructor(
     configOverride?: Partial<XMemoProxyConfig>,
@@ -301,6 +319,29 @@ export class XMemoDevProxy {
     this.tokenUrl = this.config.tokenUrl;
     this.revokeUrl = this.config.revokeUrl;
     this.mcpUrl = this.config.mcpUrl;
+
+    // XKEY01: Evaluate opt-in server-only owner-key demo mode
+    const authMode = this.config.authMode;
+    const rawKey = this.config.ownerKey;
+    const isProduction =
+      this.config.isProduction !== undefined
+        ? this.config.isProduction
+        : process.env.NODE_ENV === 'production';
+
+    if (authMode === 'owner_key' && rawKey) {
+      if (isProduction) {
+        this.logger('[XMemoProxy] Refusing owner-key demo mode: NODE_ENV=production');
+        this.ownerKeyModeRequested = false;
+        this.ownerKey = undefined;
+      } else {
+        this.ownerKeyModeRequested = true;
+        this.ownerKey = rawKey;
+        this.logger('[XMemoProxy] Opt-in server-only owner-key demo mode configured');
+      }
+    } else {
+      this.ownerKeyModeRequested = false;
+      this.ownerKey = undefined;
+    }
 
     // Validate configured endpoint origins against issuer origin (GATE-X1-HARDEN)
     if (this.config.enabled) {
@@ -687,30 +728,90 @@ export class XMemoDevProxy {
     };
   }
 
+  /**
+   * Returns true if owner-key demo mode is active.
+   * Deterministic conflict resolution: If an OAuth session is active (accessToken present),
+   * owner-key demo mode is suppressed in favor of the OAuth session.
+   */
+  public isOwnerKeyModeActive(): boolean {
+    if (this.session.accessToken) {
+      return false; // OAuth session takes deterministic precedence
+    }
+    return this.ownerKeyModeRequested && !this.ownerKeyDisabled && Boolean(this.ownerKey);
+  }
+
+  /**
+   * Resolves effective bearer token for MCP calls.
+   * Deterministic precedence: OAuth session > owner key demo mode.
+   */
+  private getEffectiveBearerToken(): { token?: string; mode: 'oauth' | 'owner_key' | 'none' } {
+    if (this.session.accessToken) {
+      return { token: this.session.accessToken, mode: 'oauth' };
+    }
+    if (this.isOwnerKeyModeActive()) {
+      return { token: this.ownerKey, mode: 'owner_key' };
+    }
+    return { mode: 'none' };
+  }
+
   public isConnected(): boolean {
-    return Boolean(this.session.accessToken);
+    return Boolean(this.session.accessToken) || this.isOwnerKeyModeActive();
   }
 
   public getStatus(): XMemoProxyStatus {
-    if (!this.config.enabled) {
+    // 1. If active OAuth session exists
+    if (this.session.accessToken) {
       return {
-        enabled: false,
-        connected: false,
-        statusText: 'XMemo OAuth disabled (default)',
+        enabled: true,
+        connected: true,
+        statusText: 'XMemo connected',
+        mode: 'oauth',
       };
     }
-    if (this.registrationError) {
+
+    // 2. If Owner-Key demo mode is active
+    if (this.isOwnerKeyModeActive()) {
+      return {
+        enabled: true,
+        connected: true,
+        statusText: 'XMemo connected (owner-key demo mode)',
+        mode: 'owner_key_demo',
+      };
+    }
+
+    // 3. If Owner-Key was configured but was disconnected / cleared
+    if (this.ownerKeyModeRequested && this.ownerKeyDisabled) {
       return {
         enabled: true,
         connected: false,
-        statusText: `registration rejected: ${this.registrationError}`,
+        statusText: 'XMemo owner key disconnected',
+        mode: 'owner_key_demo',
       };
     }
-    const connected = this.isConnected();
+
+    // 4. If OAuth is enabled
+    if (this.config.enabled) {
+      if (this.registrationError) {
+        return {
+          enabled: true,
+          connected: false,
+          statusText: `registration rejected: ${this.registrationError}`,
+          mode: 'oauth',
+        };
+      }
+      return {
+        enabled: true,
+        connected: false,
+        statusText: 'XMemo OAuth enabled (disconnected)',
+        mode: 'oauth',
+      };
+    }
+
+    // 5. Disabled (default)
     return {
-      enabled: true,
-      connected,
-      statusText: connected ? 'XMemo connected' : 'XMemo OAuth enabled (disconnected)',
+      enabled: false,
+      connected: false,
+      statusText: 'XMemo OAuth disabled (default)',
     };
   }
 
@@ -847,8 +948,17 @@ export class XMemoDevProxy {
 
   /**
    * Revokes token at revocation_endpoint and clears server session.
+   * Also disables owner-key demo mode for the process.
    */
-  public async disconnect(fetchFn: typeof fetch = this.fetchFn): Promise<{ success: boolean }> {
+  public async disconnect(
+    fetchFn: typeof fetch = this.fetchFn
+  ): Promise<{ success: boolean; disconnected?: boolean }> {
+    if (this.ownerKeyModeRequested) {
+      this.ownerKeyDisabled = true;
+      this.ownerKey = undefined;
+      this.logger('[XMemoProxy] Disconnect: owner-key demo mode disabled for process');
+    }
+
     if (this.session.accessToken && this.revokeUrl) {
       const val = validateEndpointUrl(this.revokeUrl, this.config.issuer);
       if (!val.valid) {
@@ -884,10 +994,11 @@ export class XMemoDevProxy {
     query?: string,
     fetchFn: typeof fetch = this.fetchFn
   ): Promise<{ status: number; data: unknown }> {
-    if (!this.config.enabled) {
-      return { status: 403, data: { error: 'XMemo OAuth disabled' } };
+    if (!this.config.enabled && !this.ownerKeyModeRequested) {
+      return { status: 403, data: { error: 'XMemo OAuth disabled (set XMEMO_OAUTH_ENABLED=true or XMEMO_AUTH_MODE=owner_key)' } };
     }
-    if (!this.session.accessToken) {
+    const auth = this.getEffectiveBearerToken();
+    if (auth.mode === 'none' || !auth.token) {
       return { status: 401, data: { error: 'Not connected to XMemo' } };
     }
 
@@ -915,14 +1026,20 @@ export class XMemoDevProxy {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.session.accessToken}`,
+          Authorization: `Bearer ${auth.token}`,
         },
         body: JSON.stringify(payload),
       });
 
       if (resp.status === 401) {
-        this.session = {};
-        this.logger('[XMemoProxy] Upstream 401: access token expired/revoked; session cleared');
+        if (auth.mode === 'owner_key') {
+          this.ownerKeyDisabled = true;
+          this.ownerKey = undefined;
+          this.logger('[XMemoProxy] Upstream 401: owner key unauthorized or revoked; owner-key mode cleared');
+        } else {
+          this.session = {};
+          this.logger('[XMemoProxy] Upstream 401: access token expired/revoked; session cleared');
+        }
         return {
           status: 401,
           data: { error: 'XMemo authorization expired or revoked', disconnected: true },
@@ -953,10 +1070,11 @@ export class XMemoDevProxy {
     fact: unknown,
     fetchFn: typeof fetch = this.fetchFn
   ): Promise<{ status: number; data: unknown }> {
-    if (!this.config.enabled) {
-      return { status: 403, data: { error: 'XMemo OAuth disabled' } };
+    if (!this.config.enabled && !this.ownerKeyModeRequested) {
+      return { status: 403, data: { error: 'XMemo OAuth disabled (set XMEMO_OAUTH_ENABLED=true or XMEMO_AUTH_MODE=owner_key)' } };
     }
-    if (!this.session.accessToken) {
+    const auth = this.getEffectiveBearerToken();
+    if (auth.mode === 'none' || !auth.token) {
       return { status: 401, data: { error: 'Not connected to XMemo' } };
     }
 
@@ -1019,14 +1137,20 @@ export class XMemoDevProxy {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.session.accessToken}`,
+          Authorization: `Bearer ${auth.token}`,
         },
         body: JSON.stringify(payload),
       });
 
       if (resp.status === 401) {
-        this.session = {};
-        this.logger('[XMemoProxy] Upstream 401: access token expired/revoked; session cleared');
+        if (auth.mode === 'owner_key') {
+          this.ownerKeyDisabled = true;
+          this.ownerKey = undefined;
+          this.logger('[XMemoProxy] Upstream 401: owner key unauthorized or revoked; owner-key mode cleared');
+        } else {
+          this.session = {};
+          this.logger('[XMemoProxy] Upstream 401: access token expired/revoked; session cleared');
+        }
         return {
           status: 401,
           data: { error: 'XMemo authorization expired or revoked', disconnected: true },
@@ -1055,10 +1179,11 @@ export class XMemoDevProxy {
     key: string,
     fetchFn: typeof fetch = this.fetchFn
   ): Promise<{ status: number; data: unknown }> {
-    if (!this.config.enabled) {
-      return { status: 403, data: { error: 'XMemo OAuth disabled' } };
+    if (!this.config.enabled && !this.ownerKeyModeRequested) {
+      return { status: 403, data: { error: 'XMemo OAuth disabled (set XMEMO_OAUTH_ENABLED=true or XMEMO_AUTH_MODE=owner_key)' } };
     }
-    if (!this.session.accessToken) {
+    const auth = this.getEffectiveBearerToken();
+    if (auth.mode === 'none' || !auth.token) {
       return { status: 401, data: { error: 'Not connected to XMemo' } };
     }
 
@@ -1092,14 +1217,20 @@ export class XMemoDevProxy {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.session.accessToken}`,
+          Authorization: `Bearer ${auth.token}`,
         },
         body: JSON.stringify(payload),
       });
 
       if (resp.status === 401) {
-        this.session = {};
-        this.logger('[XMemoProxy] Upstream 401: access token expired/revoked; session cleared');
+        if (auth.mode === 'owner_key') {
+          this.ownerKeyDisabled = true;
+          this.ownerKey = undefined;
+          this.logger('[XMemoProxy] Upstream 401: owner key unauthorized or revoked; owner-key mode cleared');
+        } else {
+          this.session = {};
+          this.logger('[XMemoProxy] Upstream 401: access token expired/revoked; session cleared');
+        }
         return {
           status: 401,
           data: { error: 'XMemo authorization expired or revoked', disconnected: true },
@@ -1246,10 +1377,10 @@ export class XMemoDevProxy {
     }
 
     // If disabled, all other operational endpoints return 403 Forbidden
-    if (!this.config.enabled) {
+    if (!this.config.enabled && !this.ownerKeyModeRequested) {
       res.statusCode = 403;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ error: 'XMemo OAuth disabled (set XMEMO_OAUTH_ENABLED=true)' }));
+      res.end(JSON.stringify({ error: 'XMemo OAuth disabled (set XMEMO_OAUTH_ENABLED=true or XMEMO_AUTH_MODE=owner_key)' }));
       return true;
     }
 
@@ -1264,6 +1395,12 @@ export class XMemoDevProxy {
 
     // Route: POST /api/xmemo/auth-url
     if (urlPath === '/api/xmemo/auth-url') {
+      if (!this.config.enabled) {
+        res.statusCode = 403;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'XMemo OAuth disabled' }));
+        return true;
+      }
       if (req.method !== 'POST') {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
@@ -1328,6 +1465,12 @@ export class XMemoDevProxy {
 
     // Route: POST /api/xmemo/callback (Programmatic / API test flow)
     if (urlPath === '/api/xmemo/callback') {
+      if (!this.config.enabled) {
+        res.statusCode = 403;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'XMemo OAuth disabled' }));
+        return true;
+      }
       if (req.method !== 'POST') {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');

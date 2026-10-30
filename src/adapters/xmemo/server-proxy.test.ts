@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   XMemoDevProxy,
   createXMemoProxyMiddleware,
@@ -2078,5 +2078,379 @@ describe('NetGuard external call interceptor (setup-netguard.ts)', () => {
     await expect(globalThis.fetch('http://127.0.0.1:19999/test-health')).rejects.not.toThrow(
       /\[NETGUARD\] Blocked/
     );
+  });
+});
+
+describe('XKEY01: Server-only owner-key demo mode', () => {
+  const MOCK_OWNER_KEY = 'xmemo_live_secret_key_1234567890';
+
+  it('activates only when BOTH XMEMO_AUTH_MODE=owner_key AND XMEMO_KEY are set', async () => {
+    // Both set: mode is active
+    const proxy = new XMemoDevProxy({
+      authMode: 'owner_key',
+      ownerKey: MOCK_OWNER_KEY,
+    });
+    expect(proxy.isOwnerKeyModeActive()).toBe(true);
+    const status = proxy.getStatus();
+    expect(status.enabled).toBe(true);
+    expect(status.connected).toBe(true);
+    expect(status.mode).toBe('owner_key_demo');
+  });
+
+  it('refuses activation without explicit XMEMO_AUTH_MODE=owner_key flag', async () => {
+    // Only key set, mode unset
+    const proxy1 = new XMemoDevProxy({
+      ownerKey: MOCK_OWNER_KEY,
+    });
+    expect(proxy1.isOwnerKeyModeActive()).toBe(false);
+    expect(proxy1.getStatus().mode).toBeUndefined();
+    expect(proxy1.getStatus().enabled).toBe(false);
+
+    // Operational route returns 403
+    const req = createMockReq({ url: '/api/xmemo/preferences', method: 'POST', body: '{}' });
+    const res = createMockRes();
+    await proxy1.handleHttpRequest(req, res);
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('XMemo OAuth disabled');
+
+    // authMode set to other string
+    const proxy2 = new XMemoDevProxy({
+      authMode: 'oauth',
+      ownerKey: MOCK_OWNER_KEY,
+    });
+    expect(proxy2.isOwnerKeyModeActive()).toBe(false);
+  });
+
+  it('refuses activation when XMEMO_KEY is missing or empty', async () => {
+    const proxy = new XMemoDevProxy({
+      authMode: 'owner_key',
+      ownerKey: '',
+    });
+    expect(proxy.isOwnerKeyModeActive()).toBe(false);
+    expect(proxy.getStatus().mode).toBeUndefined();
+  });
+
+  it('refuses to enable the mode when NODE_ENV=production', async () => {
+    const logSpy = vi.fn();
+    const proxy = new XMemoDevProxy(
+      {
+        authMode: 'owner_key',
+        ownerKey: MOCK_OWNER_KEY,
+        isProduction: true,
+      },
+      logSpy
+    );
+
+    expect(proxy.isOwnerKeyModeActive()).toBe(false);
+    expect(proxy.getStatus().mode).toBeUndefined();
+    expect(proxy.getStatus().enabled).toBe(false);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Refusing owner-key demo mode: NODE_ENV=production'));
+
+    // Operational route returns 403
+    const req = createMockReq({ url: '/api/xmemo/preferences', method: 'POST', body: '{}' });
+    const res = createMockRes();
+    await proxy.handleHttpRequest(req, res);
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('rejects non-loopback host requests with 403 Forbidden', async () => {
+    const proxy = new XMemoDevProxy({
+      authMode: 'owner_key',
+      ownerKey: MOCK_OWNER_KEY,
+    });
+
+    const req = createMockReq({
+      url: '/api/xmemo/status',
+      method: 'GET',
+      headers: { host: 'evil.external-domain.com' },
+    });
+    const res = createMockRes();
+    await proxy.handleHttpRequest(req, res);
+    expect(res.statusCode).toBe(403);
+    expect(res.body).toContain('Forbidden: non-local host access is blocked');
+  });
+
+  it('/api/xmemo/status reports mode=owner_key_demo with no token, length or prefix', async () => {
+    const proxy = new XMemoDevProxy({
+      authMode: 'owner_key',
+      ownerKey: MOCK_OWNER_KEY,
+    });
+
+    const req = createMockReq({ url: '/api/xmemo/status', method: 'GET' });
+    const res = createMockRes();
+    await proxy.handleHttpRequest(req, res);
+
+    expect(res.statusCode).toBe(200);
+    const parsed = JSON.parse(res.body);
+    expect(parsed.mode).toBe('owner_key_demo');
+    expect(parsed.enabled).toBe(true);
+    expect(parsed.connected).toBe(true);
+    expect(parsed.statusText).toContain('owner-key demo mode');
+
+    // Strict leak checks: key, token, prefix, length must never appear
+    expect(res.body).not.toContain(MOCK_OWNER_KEY);
+    expect(res.body).not.toContain('xmemo_live');
+    expect(parsed.token).toBeUndefined();
+    expect(parsed.key).toBeUndefined();
+    expect(parsed.tokenLength).toBeUndefined();
+    expect(parsed.keyLength).toBeUndefined();
+    expect(parsed.prefix).toBeUndefined();
+
+    // Mode is never represented as per-user OAuth consent
+    expect(res.body.toLowerCase()).not.toContain('consent');
+    expect(res.body.toLowerCase()).not.toContain('user granted');
+  });
+
+  it('key never appears in logs or error responses', async () => {
+    const logs: string[] = [];
+    const proxy = new XMemoDevProxy(
+      {
+        authMode: 'owner_key',
+        ownerKey: MOCK_OWNER_KEY,
+      },
+      msg => logs.push(msg)
+    );
+
+    // Verify constructor logger
+    for (const log of logs) {
+      expect(log).not.toContain(MOCK_OWNER_KEY);
+      expect(log).not.toContain('1234567890');
+    }
+
+    // Call preferences with upstream error
+    const mockFetch = vi.fn().mockRejectedValue(new Error('upstream connection failed'));
+    const res = await proxy.readPreferences('test', mockFetch as any);
+    expect(JSON.stringify(res)).not.toContain(MOCK_OWNER_KEY);
+    for (const log of logs) {
+      expect(log).not.toContain(MOCK_OWNER_KEY);
+    }
+  });
+
+  it('read preferences passes Authorization: Bearer XMEMO_KEY upstream', async () => {
+    let capturedAuth = '';
+    let capturedBody: any = null;
+    const mockFetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+      capturedAuth = init.headers?.['Authorization'] || init.headers?.['authorization'];
+      capturedBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ result: { facts: [{ key: 'habit_rain_transit', value: 'drive' }] } }),
+      };
+    });
+
+    const proxy = new XMemoDevProxy({
+      authMode: 'owner_key',
+      ownerKey: MOCK_OWNER_KEY,
+    });
+
+    const req = createMockReq({
+      url: '/api/xmemo/preferences',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'preferences' }),
+    });
+    const res = createMockRes();
+    (proxy as any).fetchFn = mockFetch;
+
+    await proxy.handleHttpRequest(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(capturedAuth).toBe(`Bearer ${MOCK_OWNER_KEY}`);
+    expect(capturedBody.method).toBe('tools/call');
+    expect(capturedBody.params.name).toBe('recall');
+  });
+
+  it('rejects unconfirmed writes with 400 (INV-107 confirm-only invariant)', async () => {
+    const mockFetch = vi.fn();
+    const proxy = new XMemoDevProxy({
+      authMode: 'owner_key',
+      ownerKey: MOCK_OWNER_KEY,
+    });
+    (proxy as any).fetchFn = mockFetch;
+
+    // 1. Pending fact rejected
+    const reqPending = createMockReq({
+      url: '/api/xmemo/confirmed-facts',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        key: 'habit_coffee',
+        value: 'espresso',
+        status: 'pending',
+        provenance: { source: 'user_action' },
+      }),
+    });
+    const resPending = createMockRes();
+    await proxy.handleHttpRequest(reqPending, resPending);
+    expect(resPending.statusCode).toBe(400);
+    expect(resPending.body).toContain('Server invariant violation (INV-107)');
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    // 2. Rejected fact rejected
+    const reqRejected = createMockReq({
+      url: '/api/xmemo/confirmed-facts',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        key: 'habit_coffee',
+        value: 'espresso',
+        status: 'rejected',
+        provenance: { source: 'user_action' },
+      }),
+    });
+    const resRejected = createMockRes();
+    await proxy.handleHttpRequest(reqRejected, resRejected);
+    expect(resRejected.statusCode).toBe(400);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('allows confirmed write and passes Bearer key upstream', async () => {
+    let capturedAuth = '';
+    let capturedBody: any = null;
+    const mockFetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+      capturedAuth = init.headers?.['Authorization'] || init.headers?.['authorization'];
+      capturedBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      };
+    });
+
+    const proxy = new XMemoDevProxy({
+      authMode: 'owner_key',
+      ownerKey: MOCK_OWNER_KEY,
+    });
+    (proxy as any).fetchFn = mockFetch;
+
+    const req = createMockReq({
+      url: '/api/xmemo/confirmed-facts',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        key: 'habit_coffee',
+        value: 'espresso',
+        status: 'confirmed',
+        provenance: { source: 'user_explicit' },
+      }),
+    });
+    const res = createMockRes();
+    await proxy.handleHttpRequest(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(capturedAuth).toBe(`Bearer ${MOCK_OWNER_KEY}`);
+    expect(capturedBody.params.name).toBe('remember');
+    expect(capturedBody.params.arguments.status).toBe('confirmed');
+  });
+
+  it('POST /api/xmemo/disconnect disables owner-key demo mode for the process', async () => {
+    const proxy = new XMemoDevProxy({
+      authMode: 'owner_key',
+      ownerKey: MOCK_OWNER_KEY,
+    });
+
+    // 1. Initially connected
+    expect(proxy.isOwnerKeyModeActive()).toBe(true);
+    expect(proxy.getStatus().connected).toBe(true);
+
+    // 2. Disconnect
+    const reqDisc = createMockReq({ url: '/api/xmemo/disconnect', method: 'POST' });
+    const resDisc = createMockRes();
+    await proxy.handleHttpRequest(reqDisc, resDisc);
+    expect(resDisc.statusCode).toBe(200);
+    expect(proxy.isOwnerKeyModeActive()).toBe(false);
+
+    // 3. Status reports disconnected
+    const status = proxy.getStatus();
+    expect(status.connected).toBe(false);
+    expect(status.statusText).toContain('owner key disconnected');
+
+    // 4. Subsequent operational call returns 401
+    const reqRead = createMockReq({
+      url: '/api/xmemo/preferences',
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    const resRead = createMockRes();
+    await proxy.handleHttpRequest(reqRead, resRead);
+    expect(resRead.statusCode).toBe(401);
+    expect(resRead.body).toContain('Not connected to XMemo');
+  });
+
+  it('upstream 401 response clears the owner-key demo mode immediately', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Unauthorized' }),
+    });
+
+    const proxy = new XMemoDevProxy({
+      authMode: 'owner_key',
+      ownerKey: MOCK_OWNER_KEY,
+    });
+    (proxy as any).fetchFn = mockFetch;
+
+    expect(proxy.isOwnerKeyModeActive()).toBe(true);
+
+    // Call readPreferences which encounters 401
+    const res = await proxy.readPreferences('test');
+    expect(res.status).toBe(401);
+    expect((res.data as any).disconnected).toBe(true);
+
+    // Mode is now cleared
+    expect(proxy.isOwnerKeyModeActive()).toBe(false);
+    expect(proxy.getStatus().connected).toBe(false);
+
+    // Subsequent call returns 401 Not connected without making fetch
+    mockFetch.mockClear();
+    const res2 = await proxy.readPreferences('test');
+    expect(res2.status).toBe(401);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('deterministic conflict resolution: active OAuth session takes precedence over owner-key', async () => {
+    let capturedAuth = '';
+    const mockFetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+      capturedAuth = init.headers?.['Authorization'] || init.headers?.['authorization'];
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      };
+    });
+
+    // Both OAuth and owner-key configured, AND OAuth session is active with accessToken
+    const proxy = new XMemoDevProxy({
+      enabled: true,
+      authMode: 'owner_key',
+      ownerKey: MOCK_OWNER_KEY,
+      clientId: 'mock-oauth-client',
+    });
+    (proxy as any).session = { accessToken: 'oauth-user-access-token-999' };
+    (proxy as any).fetchFn = mockFetch;
+
+    // Owner key mode is suppressed in favor of OAuth
+    expect(proxy.isOwnerKeyModeActive()).toBe(false);
+    expect(proxy.getStatus().mode).toBe('oauth');
+    expect(proxy.getStatus().statusText).toBe('XMemo connected');
+
+    // Upstream call uses OAuth access token, NOT owner key!
+    await proxy.readPreferences('test');
+    expect(capturedAuth).toBe('Bearer oauth-user-access-token-999');
+    expect(capturedAuth).not.toContain(MOCK_OWNER_KEY);
+  });
+
+  it('grep dist after build guarantees zero occurrences of XMEMO_KEY and key value', () => {
+    // Check that neither the key value nor XMEMO_KEY usage appears in compiled dist
+    const distDir = path.resolve(process.cwd(), 'dist');
+    if (fs.existsSync(distDir)) {
+      const files = fs.readdirSync(path.join(distDir, 'assets'));
+      for (const file of files) {
+        const content = fs.readFileSync(path.join(distDir, 'assets', file), 'utf-8');
+        expect(content).not.toContain('XMEMO_KEY');
+        expect(content).not.toContain(MOCK_OWNER_KEY);
+      }
+    }
   });
 });
