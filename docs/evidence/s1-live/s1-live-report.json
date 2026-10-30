@@ -1,0 +1,82 @@
+{
+  "timestamp": "2026-10-30T15:59:42.157Z",
+  "providerHost": "api.meta.ai",
+  "modelName": "muse-spark-1.3",
+  "authorizedCap": 10,
+  "totalCallsDispatched": 5,
+  "ledgerCallCount": 10,
+  "ledgerPath": ".yori-runtime/model-live-ledger.json",
+  "executionStatus": "completed",
+  "hostList": [
+    "api.meta.ai"
+  ],
+  "calls": [
+    {
+      "index": 1,
+      "endpoint": "refine",
+      "description": "Refine depart template (Piano lesson)",
+      "httpStatus": 200,
+      "latencyMs": 7994,
+      "promptTokens": 114,
+      "completionTokens": 1024,
+      "totalTokens": 1138,
+      "usedFallback": true,
+      "fallbackReason": "schema_invalid",
+      "factCheckOutcome": "discarded"
+    },
+    {
+      "index": 2,
+      "endpoint": "refine",
+      "description": "Refine rain depart template (Rain expected)",
+      "httpStatus": 200,
+      "latencyMs": 4256,
+      "promptTokens": 136,
+      "completionTokens": 1024,
+      "totalTokens": 1160,
+      "usedFallback": true,
+      "fallbackReason": "schema_invalid",
+      "factCheckOutcome": "discarded"
+    },
+    {
+      "index": 3,
+      "endpoint": "refine",
+      "description": "Refine lunch template (Green Bowl)",
+      "httpStatus": 200,
+      "latencyMs": 7306,
+      "promptTokens": 111,
+      "completionTokens": 1024,
+      "totalTokens": 1135,
+      "usedFallback": true,
+      "fallbackReason": "schema_invalid",
+      "factCheckOutcome": "discarded"
+    },
+    {
+      "index": 4,
+      "endpoint": "reason",
+      "description": "Reasoning plan ranking (rain vs lunch)",
+      "httpStatus": 200,
+      "latencyMs": 5013,
+      "promptTokens": 374,
+      "completionTokens": 1024,
+      "totalTokens": 1398,
+      "usedFallback": true,
+      "fallbackReason": "schema_invalid",
+      "factCheckOutcome": "discarded"
+    },
+    {
+      "index": 5,
+      "endpoint": "command",
+      "description": "Command interpret (\"Can I leave later?\")",
+      "httpStatus": 200,
+      "latencyMs": 5219,
+      "promptTokens": 228,
+      "completionTokens": 1024,
+      "totalTokens": 1252,
+      "usedFallback": true,
+      "fallbackReason": "schema_invalid",
+      "factCheckOutcome": "discarded"
+    }
+  ],
+  "keyOccurrenceCount": 0,
+  "d1ToD6ParityPass": true
+}

@@ -28,6 +28,7 @@ import {
   resetLedger,
   loadEnvLocal,
 } from './server-proxy.js';
+import { runLiveVerification } from '../../../scripts/live-verify-spark.js';
 import type { ModelPortRequest } from './types.js';
 
 function createMockReq(options: {
@@ -1315,6 +1316,136 @@ describe('S1-PREP-PROVIDER: loadEnvLocal test-mode regression tests (P2)', () =>
 
     loadEnvLocal(tempEnvDir);
     expect(process.env.MODEL_API_KEY).toBe('sk-secret-from-env-local-999');
+  });
+});
+
+describe('S1-LIVE: runLiveVerification unit tests (mocked)', () => {
+  const originalEnv = { ...process.env };
+  const suiteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-live-suite-'));
+  const testLedger = path.join(suiteDir, 'live-test-ledger.json');
+  const testReportMd = path.join(suiteDir, 'S1_LIVE_REPORT.md');
+  const testReportJson = path.join(suiteDir, 's1-live-report.json');
+
+  beforeEach(() => {
+    delete process.env['MODEL_API_KEY'];
+    delete process.env['META_API_KEY'];
+    delete process.env['MODEL_LIVE_ENABLED'];
+    delete process.env['MODEL_LIVE_MAX_CALLS'];
+    delete process.env['MODEL_BASE_URL'];
+    delete process.env['MODEL_NAME'];
+    resetProcessLiveCallCount();
+    resetLedger(testLedger);
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+    resetProcessLiveCallCount();
+    try {
+      resetLedger(testLedger);
+    } catch {}
+  });
+
+  afterAll(() => {
+    try {
+      if (fs.existsSync(suiteDir)) {
+        fs.rmSync(suiteDir, { recursive: true, force: true });
+      }
+    } catch {}
+  });
+
+  it('refuses without --confirm-billed flag', async () => {
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '10';
+    process.env.MODEL_API_KEY = 'sk-mock-key';
+
+    await expect(
+      runLiveVerification({
+        confirmBilled: false,
+        tempLedgerPath: testLedger,
+        skipPreconditions: true,
+      })
+    ).rejects.toThrow(/Missing mandatory --confirm-billed flag/);
+  });
+
+  it('stops on first 4xx response (e.g. 401 unauthorized or 429 rate limit) with no retry', async () => {
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '10';
+    process.env.MODEL_API_KEY = 'sk-mock-key';
+
+    let fetchCount = 0;
+    const mock401Fetch = vi.fn().mockImplementation(async () => {
+      fetchCount++;
+      return {
+        ok: false,
+        status: 401,
+        clone: () => ({
+          json: async () => ({ error: { message: 'Invalid API key', type: 'authentication_error' } }),
+        }),
+        json: async () => ({ error: { message: 'Invalid API key', type: 'authentication_error' } }),
+        text: async () => JSON.stringify({ error: { message: 'Invalid API key' } }),
+      } as any;
+    });
+
+    const result = await runLiveVerification({
+      confirmBilled: true,
+      mockFetch: mock401Fetch as any,
+      tempLedgerPath: testLedger,
+      reportPath: testReportMd,
+      jsonReportPath: testReportJson,
+      skipPreconditions: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.report.executionStatus).toBe('hard_stop');
+    expect(result.report.hardStopReason).toContain('401');
+    expect(result.report.hardStopReason).toContain('authentication_error');
+    // Exactly 1 call was attempted, zero retries!
+    expect(fetchCount).toBe(1);
+    expect(result.report.calls.length).toBe(1);
+    expect(result.report.calls[0]!.httpStatus).toBe(401);
+    expect(result.report.calls[0]!.usedFallback).toBe(true);
+  });
+
+  it('never exceeds ledger call cap', async () => {
+    process.env.MODEL_LIVE_ENABLED = '1';
+    process.env.MODEL_LIVE_MAX_CALLS = '3';
+    process.env.MODEL_API_KEY = 'sk-mock-key';
+
+    let fetchCount = 0;
+    const mock200Fetch = vi.fn().mockImplementation(async () => {
+      fetchCount++;
+      return {
+        ok: true,
+        status: 200,
+        clone: () => ({
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ wording: 'Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM' }) } }],
+            usage: { prompt_tokens: 45, completion_tokens: 15, total_tokens: 60 },
+          }),
+        }),
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ wording: 'Piano lesson at 3:00 PM: Prepare at 2:05 PM, leave by 2:25 PM' }) } }],
+          usage: { prompt_tokens: 45, completion_tokens: 15, total_tokens: 60 },
+        }),
+        text: async () => 'ok',
+      } as any;
+    });
+
+    const result = await runLiveVerification({
+      confirmBilled: true,
+      mockFetch: mock200Fetch as any,
+      tempLedgerPath: testLedger,
+      reportPath: testReportMd,
+      jsonReportPath: testReportJson,
+      skipPreconditions: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(fetchCount).toBe(3);
+    expect(result.report.totalCallsDispatched).toBe(3);
+    expect(result.report.ledgerCallCount).toBe(3);
+    const ledger = readLedgerState(testLedger);
+    expect(ledger.callCount).toBe(3);
   });
 });
 

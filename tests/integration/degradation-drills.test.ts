@@ -11,7 +11,10 @@
  * the fallback reason without crashing or degrading user experience.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
+import * as os from 'node:os';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import '../../src/plugins/registry.js';
 import {
   d1Scenario,
@@ -23,10 +26,13 @@ import {
   replayScenarioTimeline,
 } from '../../src/app/scenario-player/index.js';
 import { runPipeline } from '../../src/core/pipeline/index.js';
-import { ModelDevProxy } from '../../src/adapters/model/server-proxy.js';
+import { ModelDevProxy, resetLedger } from '../../src/adapters/model/server-proxy.js';
 import { ClientModelPort } from '../../src/adapters/model/index.js';
 import { LocalMemoryAdapter } from '../../src/adapters/xmemo/local-adapter.js';
 import { XMemoRemoteAdapter } from '../../src/adapters/xmemo/remote-adapter.js';
+
+const drillsTempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-drills-'));
+const drillsLedgerPath = path.join(drillsTempDir, 'drills-ledger.json');
 
 describe('Degradation Drill: Model Disabled (NFR-102, AC-106-2)', () => {
   const originalEnv = { ...process.env };
@@ -34,10 +40,21 @@ describe('Degradation Drill: Model Disabled (NFR-102, AC-106-2)', () => {
   beforeEach(() => {
     delete process.env['MODEL_API_KEY'];
     delete process.env['META_API_KEY'];
+    process.env['MODEL_LIVE_LEDGER_PATH'] = drillsLedgerPath;
+    resetLedger(drillsLedgerPath);
   });
 
   afterEach(() => {
     process.env = { ...originalEnv };
+  });
+
+  afterAll(() => {
+    try {
+      resetLedger(drillsLedgerPath);
+      if (fs.existsSync(drillsTempDir)) {
+        fs.rmSync(drillsTempDir, { recursive: true, force: true });
+      }
+    } catch {}
   });
 
   it('diagnostics report disabled state when MODEL_API_KEY is absent', () => {
@@ -80,6 +97,17 @@ describe('Degradation Drill: Model Disabled (NFR-102, AC-106-2)', () => {
 });
 
 describe('Degradation Drill: Model Timeout & Error Resilience (NFR-102)', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env['MODEL_LIVE_LEDGER_PATH'] = drillsLedgerPath;
+    resetLedger(drillsLedgerPath);
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
   it('falls back to deterministic template when model API call times out or throws error', async () => {
     const proxy = new ModelDevProxy({ apiKey: 'mock-key', keySource: 'MODEL_API_KEY' });
 
