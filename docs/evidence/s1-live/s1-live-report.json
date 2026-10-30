@@ -1,15 +1,48 @@
 {
   "timestamp": "2026-10-30T15:59:42.157Z",
+  "amendmentTimestamp": "2026-10-30T16:10:00.000Z",
   "providerHost": "api.meta.ai",
   "modelName": "muse-spark-1.3",
   "authorizedCap": 10,
+  "preRunLedgerCount": 5,
   "totalCallsDispatched": 5,
   "ledgerCallCount": 10,
   "ledgerPath": ".yori-runtime/model-live-ledger.json",
   "executionStatus": "completed",
+  "targetHostCompliance": true,
   "hostList": [
     "api.meta.ai"
   ],
+  "reconciliation": {
+    "durableLedgerReservations": 10,
+    "nonBilledTestReservations": 5,
+    "billedLiveDispatches": 5,
+    "plannedCalls": 10,
+    "executedCalls": 5,
+    "notExecutedCalls": [
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "notExecutedReason": "Durable ledger reached hard cap (10/10) at reservation #10 due to pre-run test reservations #1-#5",
+    "rootCause": "pre-fix degradation drills (tests/integration/degradation-drills.test.ts) ran ModelDevProxy without isolated MODEL_LIVE_LEDGER_PATH before isolation fix in commit 1c724d7",
+    "timingEvidence": "Reservations #1-#3 took 15ms total, #4-#5 took 1ms total (local Vitest operations); billed live calls #6-#10 took 4,200ms-8,000ms each over network"
+  },
+  "outcomeSummary": {
+    "totalDispatched": 5,
+    "http200Count": 5,
+    "acceptedCount": 0,
+    "fallbackCount": 5,
+    "reasonCodes": {
+      "schema_invalid": 5
+    },
+    "truncationCount": 5,
+    "truncationAnalysis": "All 5 live calls returned completion_tokens == 1024 (hitting MODEL_MAX_TOKENS=1024 clamp). muse-spark-1.3 reasoning tokens exceeded clamp before emitting closing JSON structure, triggering schema_invalid fallback.",
+    "fallbackPreserved": true,
+    "d1ToD6ParityPass": true
+  },
   "calls": [
     {
       "index": 1,
