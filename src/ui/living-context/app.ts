@@ -64,6 +64,7 @@ import {
 import { renderWhySheet } from '../review/why-sheet.js';
 import { renderAdjustDialog, type AdjustDialogValues } from '../review/adjust-dialog.js';
 import { renderDismissDialog } from '../review/dismiss-dialog.js';
+import { attachModalAccessibility, restoreInvokingFocus } from '../review/modal-accessibility.js';
 import { renderMeView } from '../me/me-view.js';
 import { createMemoryPort } from '../../adapters/xmemo/index.js';
 import { DEFAULT_DAILY_PROMPT_BUDGET } from '../../core/policy/index.js';
@@ -904,7 +905,10 @@ export function renderApp(
         if (origId) {
           requestAnimationFrame(() => {
             const el = document.getElementById(origId) ?? root.querySelector('.now-card, .v2-candidate-card');
-            (el as HTMLElement)?.focus();
+            const toFocus = el?.matches('button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])')
+              ? el
+              : el?.querySelector<HTMLElement>('button, a, [tabindex]:not([tabindex="-1"])') ?? el;
+            (toFocus as HTMLElement)?.focus();
           });
         }
       }
@@ -949,6 +953,9 @@ export function renderApp(
     | { type: 'why'; plan: PreparedPlan }
     | { type: 'adjust'; plan: PreparedPlan; values: AdjustDialogValues }
     | { type: 'dismiss'; plan: PreparedPlan } = null;
+  let modalInvokingId: string | null = null;
+  let modalInvokingSelector: string | null = null;
+  let modalCleanup: (() => void) | null = null;
 
   let actionFeedbackMessage: string | null = null;
   const timingOverrides: Record<string, { prepMinutes: number; bufferMinutes: number }> = {};
@@ -1940,7 +1947,7 @@ export function renderApp(
           activeDetail = {
             type: 'restaurant',
             candidateId: candId ?? undefined,
-            originatingElementId: card.id || (candId ? `candidate-${candId}` : undefined),
+            originatingElementId: candId ? `btn-detail-${candId}` : (card.id || undefined),
           };
           if (typeof window !== 'undefined' && window.history?.pushState) {
             window.history.pushState({ detail: activeDetail }, '', window.location.href);
@@ -1950,17 +1957,17 @@ export function renderApp(
 
         card.addEventListener('click', e => {
           const target = e.target as HTMLElement;
-          if (target.closest('button:not(.v2-candidate-card)')) return;
+          if (target.closest('.v2-directions-btn')) return;
           openCandidate();
         });
 
-        card.addEventListener('keydown', e => {
-          const ke = e as KeyboardEvent;
-          if (ke.key === 'Enter' || ke.key === ' ') {
-            ke.preventDefault();
+        const detailBtn = card.querySelector<HTMLElement>('.v2-view-detail-link');
+        if (detailBtn) {
+          detailBtn.addEventListener('click', e => {
+            e.stopPropagation();
             openCandidate();
-          }
-        });
+          });
+        }
       });
 
       // Directions button on candidate cards (V5-FUEL verified navigate handoff)
@@ -2007,6 +2014,18 @@ export function renderApp(
           if (navUrl) {
             root.querySelector('#navigate-confirm-backdrop')?.remove();
 
+            const invokingBtn = btn;
+            const headerEl = root.querySelector<HTMLElement>('.header-bar');
+            const mainEl = root.querySelector<HTMLElement>('main.main-container');
+            const navEl = root.querySelector<HTMLElement>('.bottom-tab-bar');
+
+            headerEl?.setAttribute('inert', '');
+            headerEl?.setAttribute('aria-hidden', 'true');
+            mainEl?.setAttribute('inert', '');
+            mainEl?.setAttribute('aria-hidden', 'true');
+            navEl?.setAttribute('inert', '');
+            navEl?.setAttribute('aria-hidden', 'true');
+
             const mapsAppName = navPlatform === 'ios' ? 'Apple Maps' : 'Google Maps';
             const modalEl = document.createElement('div');
             modalEl.className = 'v2-navigate-modal-backdrop';
@@ -2014,7 +2033,7 @@ export function renderApp(
             modalEl.innerHTML = `
               <div class="v2-navigate-modal" id="navigate-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="nav-modal-title">
                 <div class="v2-modal-header">
-                  <h2 id="nav-modal-title" data-slot="chrome" data-slot-reason="Navigation modal title">Start Navigation</h2>
+                  <h2 id="nav-modal-title" tabindex="-1" data-slot="chrome" data-slot-reason="Navigation modal title">Start Navigation</h2>
                   <span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Navigation verified handoff badge">Verified handoff</span>
                 </div>
                 <p class="v2-modal-body">
@@ -2045,11 +2064,30 @@ export function renderApp(
             `;
             root.appendChild(modalEl);
 
-            const closeModal = () => modalEl.remove();
-            modalEl.querySelector('#btn-cancel-navigate')?.addEventListener('click', closeModal);
-            modalEl.addEventListener('click', ev => {
-              if (ev.target === modalEl) closeModal();
+            const navModalCard = modalEl.querySelector<HTMLElement>('#navigate-confirm-modal')!;
+            let navCleanup: (() => void) | null = null;
+            const closeModal = () => {
+              if (navCleanup) {
+                navCleanup();
+                navCleanup = null;
+              }
+              headerEl?.removeAttribute('inert');
+              headerEl?.removeAttribute('aria-hidden');
+              mainEl?.removeAttribute('inert');
+              mainEl?.removeAttribute('aria-hidden');
+              navEl?.removeAttribute('inert');
+              navEl?.removeAttribute('aria-hidden');
+              modalEl.remove();
+              invokingBtn?.focus();
+            };
+
+            navCleanup = attachModalAccessibility({
+              backdrop: modalEl,
+              dialog: navModalCard,
+              onClose: closeModal,
             });
+
+            modalEl.querySelector('#btn-cancel-navigate')?.addEventListener('click', closeModal);
             modalEl.querySelector('#btn-confirm-navigate')?.addEventListener('click', ev => {
               if (isDevOrTest && (window as any).__YORI_TEST_INTERCEPT_NAV__) {
                 ev.preventDefault();
@@ -2097,7 +2135,10 @@ export function renderApp(
           if (origId) {
             requestAnimationFrame(() => {
               const el = document.getElementById(origId) ?? root.querySelector('.v2-candidate-card');
-              (el as HTMLElement)?.focus();
+              const toFocus = el?.matches('button, a, input, select, textarea, [tabindex]:not([tabindex="-1"])')
+                ? el
+                : el?.querySelector<HTMLElement>('button, a, [tabindex]:not([tabindex="-1"])') ?? el;
+              (toFocus as HTMLElement)?.focus();
             });
           }
         });
@@ -2184,6 +2225,8 @@ export function renderApp(
     const whyBtn = root.querySelector('#btn-why') as HTMLButtonElement | null;
     if (whyBtn && nowPlan) {
       whyBtn.addEventListener('click', () => {
+        modalInvokingId = 'btn-why';
+        modalInvokingSelector = '#btn-why';
         activeModal = { type: 'why', plan: nowPlan };
         update();
       });
@@ -2195,6 +2238,8 @@ export function renderApp(
         const planId = (e.currentTarget as HTMLElement).getAttribute('data-plan-id');
         const match = aheadPlans.find(p => p.id === planId);
         if (match) {
+          modalInvokingId = null;
+          modalInvokingSelector = `.btn-ahead-why[data-plan-id="${planId}"]`;
           activeModal = { type: 'why', plan: match };
           update();
         }
@@ -2205,6 +2250,8 @@ export function renderApp(
     const adjustBtn = root.querySelector('#btn-adjust') as HTMLButtonElement | null;
     if (adjustBtn && nowPlan) {
       adjustBtn.addEventListener('click', () => {
+        modalInvokingId = 'btn-adjust';
+        modalInvokingSelector = '#btn-adjust';
         const existingTiming = timingOverrides[nowPlan.id] || { prepMinutes: 20, bufferMinutes: 5 };
         activeModal = { type: 'adjust', plan: nowPlan, values: existingTiming };
         update();
@@ -2215,6 +2262,8 @@ export function renderApp(
     const dismissBtn = root.querySelector('#btn-dismiss') as HTMLButtonElement | null;
     if (dismissBtn && nowPlan) {
       dismissBtn.addEventListener('click', () => {
+        modalInvokingId = 'btn-dismiss';
+        modalInvokingSelector = '#btn-dismiss';
         activeModal = { type: 'dismiss', plan: nowPlan };
         update();
       });
@@ -2223,164 +2272,177 @@ export function renderApp(
     // -------------------------------------------------------------
     // MODAL HANDLERS
     // -------------------------------------------------------------
+    if (modalCleanup) {
+      modalCleanup();
+      modalCleanup = null;
+    }
 
-    // Why Sheet Close
-    const closeWhyBtn = root.querySelector('#btn-close-why');
-    const doneWhyBtn = root.querySelector('#btn-why-sheet-done');
-    const closeWhy = () => {
+    const closeModal = () => {
+      if (modalCleanup) {
+        modalCleanup();
+        modalCleanup = null;
+      }
       activeModal = null;
       update();
+      restoreInvokingFocus(modalInvokingId, modalInvokingSelector);
     };
-    if (closeWhyBtn) closeWhyBtn.addEventListener('click', closeWhy);
-    if (doneWhyBtn) doneWhyBtn.addEventListener('click', closeWhy);
 
-    // Adjust Dialog Handlers
-    const closeAdjustBtn = root.querySelector('#btn-close-adjust');
-    if (closeAdjustBtn) {
-      closeAdjustBtn.addEventListener('click', () => {
-        activeModal = null;
-        update();
-      });
-    }
+    if (activeModal) {
+      const modalBackdrop = root.querySelector<HTMLElement>(
+        '#why-sheet-backdrop, #adjust-dialog-backdrop, #dismiss-dialog-backdrop'
+      );
+      const modalCard = modalBackdrop?.querySelector<HTMLElement>('.modal-card');
 
-    const adjustForTodayBtn = root.querySelector('#btn-adjust-for-today');
-    if (adjustForTodayBtn && activeModal?.type === 'adjust') {
-      const planToAdjust = activeModal.plan;
-      adjustForTodayBtn.addEventListener('click', () => {
-        const prepInput = root.querySelector('#input-prep-minutes') as HTMLInputElement | null;
-        const bufferInput = root.querySelector('#input-buffer-minutes') as HTMLInputElement | null;
-        const prepMinutes = prepInput ? parseInt(prepInput.value, 10) || 20 : 20;
-        const bufferMinutes = bufferInput ? parseInt(bufferInput.value, 10) || 5 : 5;
+      if (modalBackdrop && modalCard) {
+        modalCleanup = attachModalAccessibility({
+          backdrop: modalBackdrop,
+          dialog: modalCard,
+          onClose: closeModal,
+        });
+      }
 
-        timingOverrides[planToAdjust.id] = { prepMinutes, bufferMinutes };
-        activeModal = null;
-        update();
-      });
-    }
+      // Why Sheet Close Buttons
+      const closeWhyBtn = root.querySelector('#btn-close-why');
+      const doneWhyBtn = root.querySelector('#btn-why-sheet-done');
+      if (closeWhyBtn) closeWhyBtn.addEventListener('click', closeModal);
+      if (doneWhyBtn) doneWhyBtn.addEventListener('click', closeModal);
 
-    const adjustRememberBtn = root.querySelector('#btn-adjust-remember');
-    if (adjustRememberBtn && activeModal?.type === 'adjust') {
-      const planToAdjust = activeModal.plan;
-      adjustRememberBtn.addEventListener('click', () => {
-        const prepInput = root.querySelector('#input-prep-minutes') as HTMLInputElement | null;
-        const bufferInput = root.querySelector('#input-buffer-minutes') as HTMLInputElement | null;
-        const prepMinutes = prepInput ? parseInt(prepInput.value, 10) || 20 : 20;
-        const bufferMinutes = bufferInput ? parseInt(bufferInput.value, 10) || 5 : 5;
+      // Adjust Dialog Handlers
+      const closeAdjustBtn = root.querySelector('#btn-close-adjust');
+      if (closeAdjustBtn) closeAdjustBtn.addEventListener('click', closeModal);
 
-        // Create pending proposal (never direct confirmed write!) (INV-107)
-        const proposal: MemoryFact = createMemoryFact(
-          'prep_buffer_preference',
-          { prepMinutes, bufferMinutes },
-          'pending',
-          {
-            source: 'user_feedback',
-            recordedAt: snapshotAsOf,
-            note: 'Adjusted prep and buffer preference',
-          },
-          snapshotAsOf
-        );
+      const adjustForTodayBtn = root.querySelector('#btn-adjust-for-today');
+      if (adjustForTodayBtn && activeModal?.type === 'adjust') {
+        const planToAdjust = activeModal.plan;
+        adjustForTodayBtn.addEventListener('click', () => {
+          const prepInput = root.querySelector('#input-prep-minutes') as HTMLInputElement | null;
+          const bufferInput = root.querySelector('#input-buffer-minutes') as HTMLInputElement | null;
+          const prepMinutes = prepInput ? parseInt(prepInput.value, 10) || 20 : 20;
+          const bufferMinutes = bufferInput ? parseInt(bufferInput.value, 10) || 5 : 5;
 
-        const envelope = sharedStorage.load();
-        const existingProposals = envelope?.payload.proposals ?? [];
-        const updatedProposals = existingProposals.filter(p => p.key !== proposal.key);
-        updatedProposals.push(proposal);
+          timingOverrides[planToAdjust.id] = { prepMinutes, bufferMinutes };
+          closeModal();
+        });
+      }
 
-        sharedStorage.save(
-          {
-            memoryFacts: envelope?.payload.memoryFacts ?? [],
-            proposals: updatedProposals,
-            suppressions: envelope?.payload.suppressions ?? [],
-            promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
-            acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
-          },
-          snapshotAsOf
-        );
+      const adjustRememberBtn = root.querySelector('#btn-adjust-remember');
+      if (adjustRememberBtn && activeModal?.type === 'adjust') {
+        const planToAdjust = activeModal.plan;
+        adjustRememberBtn.addEventListener('click', () => {
+          const prepInput = root.querySelector('#input-prep-minutes') as HTMLInputElement | null;
+          const bufferInput = root.querySelector('#input-buffer-minutes') as HTMLInputElement | null;
+          const prepMinutes = prepInput ? parseInt(prepInput.value, 10) || 20 : 20;
+          const bufferMinutes = bufferInput ? parseInt(bufferInput.value, 10) || 5 : 5;
 
-        timingOverrides[planToAdjust.id] = { prepMinutes, bufferMinutes };
-        activeModal = null;
-        update();
-      });
-    }
-
-    // Dismiss Dialog Handlers
-    const closeDismissBtn = root.querySelector('#btn-close-dismiss');
-    const cancelDismissBtn = root.querySelector('#btn-cancel-dismiss');
-    const closeDismiss = () => {
-      activeModal = null;
-      update();
-    };
-    if (closeDismissBtn) closeDismissBtn.addEventListener('click', closeDismiss);
-    if (cancelDismissBtn) cancelDismissBtn.addEventListener('click', closeDismiss);
-
-    const confirmDismissBtn = root.querySelector('#btn-confirm-dismiss') as HTMLButtonElement | null;
-    if (confirmDismissBtn && activeModal?.type === 'dismiss') {
-      const planToDismiss = activeModal.plan;
-      confirmDismissBtn.addEventListener('click', () => {
-        const checkedRadio = root.querySelector('input[name="dismiss-reason"]:checked') as HTMLInputElement | null;
-        const reasonKey = checkedRadio ? checkedRadio.value : 'dont_suggest_today';
-
-        let reasonText = "User dismissed: Don't suggest this today";
-        let proposalNote = STRINGS.dismissDialog.noteDismissToday.replace('{intent}', planToDismiss.intentId);
-        if (reasonKey === 'busy_today') {
-          reasonText = "User dismissed: Busy during this time";
-          proposalNote = STRINGS.dismissDialog.noteDismissBusy.replace('{intent}', planToDismiss.intentId);
-        } else if (reasonKey === 'not_needed') {
-          reasonText = "User dismissed: Not needed";
-          proposalNote = STRINGS.dismissDialog.noteDismissNotNeeded.replace('{intent}', planToDismiss.intentId);
-        }
-
-        const suppression: SuppressionReason = {
-          code: 'user_suppressed',
-          reason: reasonText,
-          scope: 'today',
-          recordedAt: snapshotAsOf,
-          targetIntent: planToDismiss.intentId,
-        };
-
-        const envelope = sharedStorage.load();
-        const existingSuppressions = envelope?.payload.suppressions ?? [];
-        const updatedSuppressions = existingSuppressions.filter(
-          s => !(s.code === 'user_suppressed' && s.targetIntent === planToDismiss.intentId)
-        );
-        updatedSuppressions.push(suppression);
-
-        // Also create a pending proposal for preferences when relevant (INV-107)
-        const existingProposals = envelope?.payload.proposals ?? [];
-        const updatedProposals = [...existingProposals];
-
-        if (reasonKey === 'dont_suggest_today') {
-          const proposalKey = `suppress_${planToDismiss.intentId}_recommendations`;
-          const pendingProposal = createMemoryFact(
-            proposalKey,
-            'user_requested_today',
+          // Create pending proposal (never direct confirmed write!) (INV-107)
+          const proposal: MemoryFact = createMemoryFact(
+            'prep_buffer_preference',
+            { prepMinutes, bufferMinutes },
             'pending',
             {
               source: 'user_feedback',
               recordedAt: snapshotAsOf,
-              note: proposalNote,
+              note: 'Adjusted prep and buffer preference',
             },
             snapshotAsOf
           );
-          const filtered = updatedProposals.filter(p => p.key !== proposalKey);
-          filtered.push(pendingProposal);
-          updatedProposals.length = 0;
-          updatedProposals.push(...filtered);
-        }
 
-        sharedStorage.save(
-          {
-            memoryFacts: envelope?.payload.memoryFacts ?? [],
-            proposals: updatedProposals,
-            suppressions: updatedSuppressions,
-            promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
-            acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
-          },
-          snapshotAsOf
-        );
+          const envelope = sharedStorage.load();
+          const existingProposals = envelope?.payload.proposals ?? [];
+          const updatedProposals = existingProposals.filter(p => p.key !== proposal.key);
+          updatedProposals.push(proposal);
 
-        activeModal = null;
-        update();
-      });
+          sharedStorage.save(
+            {
+              memoryFacts: envelope?.payload.memoryFacts ?? [],
+              proposals: updatedProposals,
+              suppressions: envelope?.payload.suppressions ?? [],
+              promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
+              acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
+            },
+            snapshotAsOf
+          );
+
+          timingOverrides[planToAdjust.id] = { prepMinutes, bufferMinutes };
+          closeModal();
+        });
+      }
+
+      // Dismiss Dialog Handlers
+      const closeDismissBtn = root.querySelector('#btn-close-dismiss');
+      const cancelDismissBtn = root.querySelector('#btn-cancel-dismiss');
+      if (closeDismissBtn) closeDismissBtn.addEventListener('click', closeModal);
+      if (cancelDismissBtn) cancelDismissBtn.addEventListener('click', closeModal);
+
+      const confirmDismissBtn = root.querySelector('#btn-confirm-dismiss') as HTMLButtonElement | null;
+      if (confirmDismissBtn && activeModal?.type === 'dismiss') {
+        const planToDismiss = activeModal.plan;
+        confirmDismissBtn.addEventListener('click', () => {
+          const checkedRadio = root.querySelector('input[name="dismiss-reason"]:checked') as HTMLInputElement | null;
+          const reasonKey = checkedRadio ? checkedRadio.value : 'dont_suggest_today';
+
+          let reasonText = "User dismissed: Don't suggest this today";
+          let proposalNote = STRINGS.dismissDialog.noteDismissToday.replace('{intent}', planToDismiss.intentId);
+          if (reasonKey === 'busy_today') {
+            reasonText = "User dismissed: Busy during this time";
+            proposalNote = STRINGS.dismissDialog.noteDismissBusy.replace('{intent}', planToDismiss.intentId);
+          } else if (reasonKey === 'not_needed') {
+            reasonText = "User dismissed: Not needed";
+            proposalNote = STRINGS.dismissDialog.noteDismissNotNeeded.replace('{intent}', planToDismiss.intentId);
+          }
+
+          const suppression: SuppressionReason = {
+            code: 'user_suppressed',
+            reason: reasonText,
+            scope: 'today',
+            recordedAt: snapshotAsOf,
+            targetIntent: planToDismiss.intentId,
+          };
+
+          const envelope = sharedStorage.load();
+          const existingSuppressions = envelope?.payload.suppressions ?? [];
+          const updatedSuppressions = existingSuppressions.filter(
+            s => !(s.code === 'user_suppressed' && s.targetIntent === planToDismiss.intentId)
+          );
+          updatedSuppressions.push(suppression);
+
+          // Also create a pending proposal for preferences when relevant (INV-107)
+          const existingProposals = envelope?.payload.proposals ?? [];
+          const updatedProposals = [...existingProposals];
+
+          if (reasonKey === 'dont_suggest_today') {
+            const proposalKey = `suppress_${planToDismiss.intentId}_recommendations`;
+            const pendingProposal = createMemoryFact(
+              proposalKey,
+              'user_requested_today',
+              'pending',
+              {
+                source: 'user_feedback',
+                recordedAt: snapshotAsOf,
+                note: proposalNote,
+              },
+              snapshotAsOf
+            );
+            const filtered = updatedProposals.filter(p => p.key !== proposalKey);
+            filtered.push(pendingProposal);
+            updatedProposals.length = 0;
+            updatedProposals.push(...filtered);
+          }
+
+          sharedStorage.save(
+            {
+              memoryFacts: envelope?.payload.memoryFacts ?? [],
+              proposals: updatedProposals,
+              suppressions: updatedSuppressions,
+              promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
+              acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
+            },
+            snapshotAsOf
+          );
+
+          closeModal();
+        });
+      }
     }
 
     // -------------------------------------------------------------
@@ -2649,14 +2711,26 @@ export function renderApp(
       const mainEl = root.querySelector<HTMLElement>('main.main-container');
       const navEl = root.querySelector<HTMLElement>('.bottom-tab-bar');
 
-      if (actionStore.getInteractionState() === 'CONVERSATION') {
+      const isModalOrConversationOpen =
+        actionStore.getInteractionState() === 'CONVERSATION' || activeModal !== null;
+
+      if (isModalOrConversationOpen) {
         headerEl?.setAttribute('inert', '');
         headerEl?.setAttribute('aria-hidden', 'true');
         mainEl?.setAttribute('inert', '');
         mainEl?.setAttribute('aria-hidden', 'true');
         navEl?.setAttribute('inert', '');
         navEl?.setAttribute('aria-hidden', 'true');
+      } else {
+        headerEl?.removeAttribute('inert');
+        headerEl?.removeAttribute('aria-hidden');
+        mainEl?.removeAttribute('inert');
+        mainEl?.removeAttribute('aria-hidden');
+        navEl?.removeAttribute('inert');
+        navEl?.removeAttribute('aria-hidden');
+      }
 
+      if (actionStore.getInteractionState() === 'CONVERSATION') {
         conversationCleanup = attachConversationEvents(root, actionStore, () => {
           headerEl?.removeAttribute('inert');
           headerEl?.removeAttribute('aria-hidden');
@@ -2668,13 +2742,6 @@ export function renderApp(
           const askBarEl = root.querySelector<HTMLButtonElement>('#ask-bar');
           askBarEl?.focus();
         });
-      } else {
-        headerEl?.removeAttribute('inert');
-        headerEl?.removeAttribute('aria-hidden');
-        mainEl?.removeAttribute('inert');
-        mainEl?.removeAttribute('aria-hidden');
-        navEl?.removeAttribute('inert');
-        navEl?.removeAttribute('aria-hidden');
       }
     }
 

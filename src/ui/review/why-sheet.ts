@@ -272,11 +272,11 @@ export function renderWhySheet(
     <div class="modal-backdrop" id="why-sheet-backdrop" role="presentation">
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="why-sheet-title">
         <div class="modal-header">
-          <h2 id="why-sheet-title" class="modal-title" data-slot="chrome" data-slot-reason="Why sheet title">${escapeHtml(STRINGS.whySheet.title)}</h2>
+          <h2 id="why-sheet-title" class="modal-title" tabindex="-1" data-slot="chrome" data-slot-reason="Why sheet title">${escapeHtml(STRINGS.whySheet.title)}</h2>
           <button type="button" class="btn-close" id="btn-close-why" aria-label="${escapeHtml(STRINGS.whySheet.close)}" data-slot="chrome" data-slot-reason="Modal close button">&times;</button>
         </div>
 
-        <div class="modal-body">
+        <div class="modal-body" tabindex="0" role="region" aria-label="${escapeHtml(STRINGS.whySheet.title)}">
           ${
             orderingRationale
               ? `

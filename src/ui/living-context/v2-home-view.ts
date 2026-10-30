@@ -608,9 +608,6 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 class="v2-candidate-card ${c.isSelected ? 'selected' : ''}"
                 id="candidate-${c.id}"
                 data-candidate-id="${c.id}"
-                role="button"
-                tabindex="0"
-                aria-label="View details for ${escapeHtml(c.name)}"
               >
                 <div class="v2-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
                   ${c.photo.svgMarkup}
@@ -641,7 +638,15 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     >
                       Directions →
                     </button>
-                    <span class="v2-view-detail-link" data-slot="chrome" data-slot-reason="View details button">Details →</span>
+                    <button
+                      type="button"
+                      class="btn v2-view-detail-link"
+                      id="btn-detail-${c.id}"
+                      data-candidate-id="${c.id}"
+                      data-slot="chrome"
+                      data-slot-reason="View details button"
+                      aria-label="View details for ${escapeHtml(c.name)}"
+                    >Details →</button>
                   </div>
                 </div>
               </div>

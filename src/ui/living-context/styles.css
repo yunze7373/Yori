@@ -762,6 +762,11 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   color: var(--color-ink);
 }
 
+.modal-title:focus,
+#nav-modal-title:focus {
+  outline: none;
+}
+
 .modal-subtitle {
   color: var(--color-muted);
   font-size: var(--text-body);
@@ -809,6 +814,15 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.modal-body:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.modal-body:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 
 .modal-footer {
@@ -2205,6 +2219,34 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   align-items: center;
   min-height: 44px;
   padding: 4px 0;
+}
+
+button.v2-view-detail-link {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 44px;
+  padding: 4px 0;
+  cursor: pointer;
+  text-decoration: none;
+  line-height: inherit;
+}
+
+button.v2-view-detail-link:hover {
+  text-decoration: underline;
+  background: transparent;
+}
+
+button.v2-view-detail-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 /* -------------------------------------------------------------------------- */

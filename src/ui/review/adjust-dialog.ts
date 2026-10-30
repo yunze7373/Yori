@@ -22,11 +22,11 @@ export function renderAdjustDialog(currentValues: AdjustDialogValues): string {
     <div class="modal-backdrop" id="adjust-dialog-backdrop" role="presentation">
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="adjust-dialog-title">
         <div class="modal-header">
-          <h2 id="adjust-dialog-title" class="modal-title">${escapeHtml(STRINGS.adjustDialog.title)}</h2>
+          <h2 id="adjust-dialog-title" class="modal-title" tabindex="-1">${escapeHtml(STRINGS.adjustDialog.title)}</h2>
           <button type="button" class="btn-close" id="btn-close-adjust" aria-label="${escapeHtml(STRINGS.actions.cancel)}">&times;</button>
         </div>
 
-        <form id="adjust-form" class="modal-body" onsubmit="return false;">
+        <form id="adjust-form" class="modal-body" tabindex="0" role="region" aria-label="${escapeHtml(STRINGS.adjustDialog.title)}" onsubmit="return false;">
           <div class="form-group">
             <label for="input-prep-minutes" class="form-label">${escapeHtml(STRINGS.adjustDialog.prepLabel)}</label>
             <input

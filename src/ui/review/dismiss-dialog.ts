@@ -16,11 +16,11 @@ export function renderDismissDialog(intentId: string): string {
     <div class="modal-backdrop" id="dismiss-dialog-backdrop" role="presentation">
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="dismiss-dialog-title">
         <div class="modal-header">
-          <h2 id="dismiss-dialog-title" class="modal-title">${escapeHtml(STRINGS.dismissDialog.title)}</h2>
+          <h2 id="dismiss-dialog-title" class="modal-title" tabindex="-1">${escapeHtml(STRINGS.dismissDialog.title)}</h2>
           <button type="button" class="btn-close" id="btn-close-dismiss" aria-label="${escapeHtml(STRINGS.actions.cancel)}">&times;</button>
         </div>
 
-        <div class="modal-body">
+        <div class="modal-body" tabindex="0" role="region" aria-label="${escapeHtml(STRINGS.dismissDialog.title)}">
           <p class="modal-subtitle">${escapeHtml(STRINGS.dismissDialog.subtitle)}</p>
 
           <div class="dismiss-options" role="radiogroup" aria-labelledby="dismiss-dialog-title">

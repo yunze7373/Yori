@@ -90,7 +90,7 @@ export function renderMeView(state: MeViewState): string {
           <span class="card-badge badge-budget" data-slot="chrome" data-slot-reason="Daily prompt budget badge">${escapeHtml(budgetUsageText)}</span>
         </div>
         <p class="me-card-desc" data-slot="chrome" data-slot-reason="Daily budget description">${escapeHtml(STRINGS.me.budgetSubtitle)}</p>
-        <div class="budget-meter-track" role="progressbar" aria-valuenow="${state.promptBudget.count}" aria-valuemin="0" aria-valuemax="${state.maxDailyPrompts}">
+        <div class="budget-meter-track" role="progressbar" aria-labelledby="me-budget-title" aria-valuenow="${state.promptBudget.count}" aria-valuemin="0" aria-valuemax="${state.maxDailyPrompts}">
           <div class="budget-meter-fill" style="width: ${Math.min(100, (state.promptBudget.count / state.maxDailyPrompts) * 100)}%;"></div>
         </div>
       </section>
