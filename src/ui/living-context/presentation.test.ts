@@ -4,6 +4,7 @@ import {
   getGreeting,
   formatNowPlan,
   formatTime,
+  humanizeProposalTitle,
 } from './presentation.js';
 import { STRINGS } from './strings.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
@@ -292,6 +293,17 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
       expect(formatted.options[0]?.label).toBe('Demo Place A · Ramen');
       expect(formatted.options[0]?.meta).toBe('Japanese · 5m away');
       expect(formatted.options[1]?.meta).toBe('Salad · 7m away');
+    });
+  });
+
+  describe('humanizeProposalTitle (XKEYDEL-P2)', () => {
+    it('humanizes proposal titles cleanly without raw keys or identifiers', () => {
+      expect(humanizeProposalTitle('prep_buffer_preference')).toBe('Remember departure prep & buffer routine?');
+      expect(humanizeProposalTitle('suppress_lunch')).toBe('Skip lunch suggestions for today?');
+      expect(humanizeProposalTitle('suppress_lunch_recommendations')).toBe('Skip lunch suggestions for today?');
+      expect(humanizeProposalTitle('grocery_store_preference')).toBe('Remember preferred grocery store?');
+      expect(humanizeProposalTitle('preferred_grocery_store')).toBe('Remember preferred grocery store?');
+      expect(humanizeProposalTitle('custom_unknown_routine')).toBe('Remember preference for custom unknown routine?');
     });
   });
 });

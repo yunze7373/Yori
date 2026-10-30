@@ -142,6 +142,9 @@ export function humanizeMemoryKey(key: string): string {
     case 'suppress_lunch':
     case 'suppress_lunch_recommendations':
       return STRINGS.memory.suppressLunchLabel;
+    case 'grocery_store_preference':
+    case 'preferred_grocery_store':
+      return 'Preferred grocery store';
     default:
       return key.replace(/_/g, ' ');
   }
@@ -165,6 +168,9 @@ export function humanizeMemoryValue(key: string, value: unknown): string {
     if (typeof value === 'string') {
       return value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, ' ');
     }
+  }
+  if (key === 'grocery_store_preference' || key === 'preferred_grocery_store') {
+    if (typeof value === 'string') return value.replace(/_/g, ' ');
   }
   if (key.includes('taste')) {
     if (typeof value === 'string') return value.replace(/_/g, ' ');

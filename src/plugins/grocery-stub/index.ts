@@ -15,7 +15,9 @@ export * from './detector.js';
 export * from './preparer.js';
 export * from './adapter.js';
 
-export const groceryStubPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
+export const groceryStubPlugin: Plugin<SimulatedProviderAdapter> & {
+  readonly managedMemoryKeys?: readonly string[];
+} = Object.freeze({
   id: 'grocery-stub',
   name: 'Grocery Stub Plugin',
   description: 'Proactive grocery run recommendation planner demonstrating zero-core-diff plugin extension.',
@@ -24,4 +26,5 @@ export const groceryStubPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze
   adapter: mockGroceryAdapter,
   requiredSignals: Object.freeze(['grocery_list']),
   triggerSignalKinds: Object.freeze(['grocery_list', 'grocery_status']),
+  managedMemoryKeys: Object.freeze(['grocery_store_preference', 'preferred_grocery_store']),
 });

@@ -14,7 +14,9 @@ export * from './detector.js';
 export * from './preparer.js';
 export * from './adapter.js';
 
-export const lunchPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
+export const lunchPlugin: Plugin<SimulatedProviderAdapter> & {
+  readonly managedMemoryKeys?: readonly string[];
+} = Object.freeze({
   id: 'lunch',
   name: 'Lunch Plugin',
   description: 'Proactive lunch recommendation planner matching confirmed taste memories.',
@@ -23,4 +25,11 @@ export const lunchPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
   adapter: mockPlaceAdapter,
   requiredSignals: Object.freeze(['location_status', 'schedule_window']),
   triggerSignalKinds: Object.freeze(['location_status']),
+  managedMemoryKeys: Object.freeze([
+    'taste_preference',
+    'taste_preferences',
+    'favorite_cuisine',
+    'suppress_lunch',
+    'suppress_lunch_recommendations',
+  ]),
 });

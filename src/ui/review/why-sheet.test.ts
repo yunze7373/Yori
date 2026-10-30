@@ -3,6 +3,8 @@ import {
   humanizeSignalKind,
   humanizeSignalDescription,
   humanizeSignalId,
+  humanizeMemoryKey,
+  humanizeMemoryValue,
   buildHumanDerivation,
   renderWhySheet,
   REASON_CODE_COPY,
@@ -175,6 +177,13 @@ describe('Why Sheet & Derivation Provenance-Aware Copy', () => {
     it('REASON_CODE_COPY.matches_confirmed_preference is domain-neutral', () => {
       expect(REASON_CODE_COPY['matches_confirmed_preference']!.description).not.toContain('travel');
       expect(REASON_CODE_COPY['matches_confirmed_preference']!.description).toBe('Matches your confirmed preference');
+    });
+
+    it('humanizes grocery preference keys and values cleanly (XKEYDEL-P2)', () => {
+      expect(humanizeMemoryKey('grocery_store_preference')).toBe('Preferred grocery store');
+      expect(humanizeMemoryKey('preferred_grocery_store')).toBe('Preferred grocery store');
+      expect(humanizeMemoryValue('grocery_store_preference', 'Nijiya_Market')).toBe('Nijiya Market');
+      expect(humanizeMemoryValue('preferred_grocery_store', 'Trader_Joes')).toBe('Trader Joes');
     });
   });
 });

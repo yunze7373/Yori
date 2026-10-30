@@ -50,34 +50,23 @@ export const UNVERIFIED_XMEMO_MCP_MAPPING = {
   deleteKeyArg: 'key',
 } as const;
 
-/**
- * Closed registry of fact keys that Yori is authorized to write or delete.
- * Enforced server-side on both write (POST confirmed-facts) and delete (DELETE confirmed-facts).
- * Anything outside this closed set is rejected with 403 ('Forbidden: not a Yori-managed key')
- * with zero upstream calls.
- * Derived from UI confirm/forget flows and humanizeMemoryKey mapping.
- */
-export const YORI_MANAGED_FACT_KEYS: ReadonlySet<string> = new Set([
-  'prep_buffer_minutes',
-  'prep_duration_minutes',
-  'prep_buffer_preference',
-  'rain_transport_preference',
-  'taste_preference',
-  'taste_preferences',
-  'favorite_cuisine',
-  'suppress_lunch',
-  'suppress_lunch_recommendations',
-]);
+import {
+  BASE_UI_FACT_KEYS,
+  deriveManagedFactKeys,
+  YORI_MANAGED_FACT_KEYS,
+  isYoriManagedFactKey,
+} from './key-contract.js';
 
 /**
- * Validates whether a key is strictly in the YORI_MANAGED_FACT_KEYS registry.
- * Rejects non-strings, whitespace variants, casing differences, unicode lookalikes,
- * and traversal/prefix tricks.
+ * Re-export single source of truth for Yori-managed fact keys.
+ * Governed by BACKLOG-20261031-XKEYDEL-P2.
  */
-export function isYoriManagedFactKey(key: unknown): key is string {
-  if (typeof key !== 'string') return false;
-  return YORI_MANAGED_FACT_KEYS.has(key);
-}
+export {
+  BASE_UI_FACT_KEYS,
+  deriveManagedFactKeys,
+  YORI_MANAGED_FACT_KEYS,
+  isYoriManagedFactKey,
+};
 
 /**
  * Normalizes candidate facts from MCP JSON-RPC recall responses.
@@ -158,12 +147,12 @@ export function hasYoriProvenance(fact: Record<string, unknown>): boolean {
   if (fact.tags === expectedTag) return true;
   if (Array.isArray(fact.tags) && fact.tags.includes(expectedTag)) return true;
 
-  // 3. Provenance object
+  // 3. Provenance object (must carry the Yori tag; source === 'yori' alone is NOT accepted)
   if (fact.provenance && typeof fact.provenance === 'object') {
     const prov = fact.provenance as Record<string, unknown>;
     if (prov.tag === expectedTag) return true;
     if (Array.isArray(prov.tags) && prov.tags.includes(expectedTag)) return true;
-    if (prov.source === 'yori' || prov.source === expectedTag) return true;
+    if (prov.source === expectedTag) return true;
   }
 
   return false;
@@ -1402,7 +1391,7 @@ export class XMemoDevProxy {
       };
     }
 
-    if (auth.mode === 'owner_key' && !options?.userConfirmed) {
+    if (auth.mode === 'owner_key' && options?.userConfirmed !== true) {
       return {
         status: 400,
         data: { error: 'Bad Request: owner_key delete requires explicit user confirmation marker' },
@@ -1769,10 +1758,11 @@ export class XMemoDevProxy {
         const confirmHeader = req.headers?.['x-yori-confirm'];
         const confirmHeaderVal = Array.isArray(confirmHeader) ? confirmHeader[0] : confirmHeader;
         const userConfirmed =
-          (payload as any)?.confirmed === true ||
-          (payload as any)?.userConfirmed === true ||
-          confirmHeaderVal === 'true' ||
-          confirmHeaderVal === '1';
+          (payload as any)?.userConfirmed !== undefined
+            ? (payload as any).userConfirmed === true
+            : (payload as any)?.confirmed === true ||
+              confirmHeaderVal === 'true' ||
+              confirmHeaderVal === '1';
 
         const deleteResult = await this.deleteFact(key, { userConfirmed });
         res.statusCode = deleteResult.status;

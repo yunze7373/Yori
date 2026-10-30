@@ -16,7 +16,9 @@ export * from './preparer.js';
 export * from './adapter.js';
 export * from './request-override.js';
 
-export const departPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
+export const departPlugin: Plugin<SimulatedProviderAdapter> & {
+  readonly managedMemoryKeys?: readonly string[];
+} = Object.freeze({
   id: 'depart',
   name: 'Depart Plugin',
   description: 'Proactive departure planner with pure deterministic time engine and rain re-planning.',
@@ -25,4 +27,10 @@ export const departPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
   adapter: departAdapter,
   requiredSignals: Object.freeze(['calendar', 'weather']),
   triggerSignalKinds: Object.freeze(['calendar']),
+  managedMemoryKeys: Object.freeze([
+    'prep_buffer_minutes',
+    'prep_duration_minutes',
+    'prep_buffer_preference',
+    'rain_transport_preference',
+  ]),
 });

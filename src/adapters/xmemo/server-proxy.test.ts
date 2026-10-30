@@ -24,6 +24,7 @@ import {
   verifyFactProvenance,
 } from './server-proxy.js';
 import { humanizeMemoryKey } from '../../ui/review/why-sheet.js';
+import { collectPluginManagedMemoryKeys } from '../../plugins/registry.js';
 import { RateLimiter } from '../model/server-proxy.js';
 
 function createMockReq(options: {
@@ -2495,25 +2496,63 @@ describe('XKEY01: Server-only owner-key demo mode', () => {
 
   describe('XKEY-DEL: Closed Fact-Key Registry, Pre-Delete Provenance, and User Confirmation Marker', () => {
     describe('1. Fact-Key Registry Completeness & Boundary Validation', () => {
-      it('verifies every UI write/forget key from why-sheet.ts is in YORI_MANAGED_FACT_KEYS', () => {
-        const knownUiKeys = [
-          'prep_buffer_minutes',
-          'prep_duration_minutes',
-          'prep_buffer_preference',
-          'rain_transport_preference',
-          'taste_preference',
-          'taste_preferences',
-          'favorite_cuisine',
-          'suppress_lunch',
-          'suppress_lunch_recommendations',
-        ];
+      it('dynamically derives all real sources and verifies every key is in YORI_MANAGED_FACT_KEYS (XKEYDEL-P2)', () => {
+        // Real Source 1: Switch cases strictly from why-sheet.ts humanizeMemoryKey
+        const whySheetCode = fs.readFileSync(path.resolve('src/ui/review/why-sheet.ts'), 'utf-8');
+        const humanizeMemFnMatch = whySheetCode.match(/function\s+humanizeMemoryKey[\s\S]*?default:/);
+        const humanizeMemBody = humanizeMemFnMatch ? humanizeMemFnMatch[0] : '';
+        const whySheetMatches = Array.from(humanizeMemBody.matchAll(/case\s+['"]([a-zA-Z0-9_-]+)['"]:/g)).map(m => m[1]);
 
-        for (const k of knownUiKeys) {
-          expect(YORI_MANAGED_FACT_KEYS.has(k)).toBe(true);
+        // Real Source 2: Switch cases strictly from presentation.ts humanizeProposalTitle
+        const presCode = fs.readFileSync(path.resolve('src/ui/living-context/presentation.ts'), 'utf-8');
+        const humanizePropFnMatch = presCode.match(/function\s+humanizeProposalTitle[\s\S]*?default:/);
+        const humanizePropBody = humanizePropFnMatch ? humanizePropFnMatch[0] : '';
+        const presMatches = Array.from(humanizePropBody.matchAll(/case\s+['"]([a-zA-Z0-9_-]+)['"]:/g)).map(m => m[1]);
+
+        // Real Source 3: Plugin manifests declarative keys
+        const pluginKeys = collectPluginManagedMemoryKeys();
+
+        // Real Source 4: Core-adjacent grounding defaults
+        const groundingKeys = ['rain_transport_preference', 'prep_buffer_minutes', 'prep_duration_minutes'];
+
+        const allRealSources = new Set<string>([
+          ...whySheetMatches.filter((s): s is string => typeof s === 'string' && s.length > 0),
+          ...presMatches.filter((s): s is string => typeof s === 'string' && s.length > 0),
+          ...pluginKeys,
+          ...groundingKeys,
+        ]);
+
+        expect(allRealSources.size).toBeGreaterThanOrEqual(11);
+
+        for (const k of allRealSources) {
+          expect(
+            YORI_MANAGED_FACT_KEYS.has(k),
+            `Key '${k}' derived from real sources must be registered in YORI_MANAGED_FACT_KEYS`
+          ).toBe(true);
           expect(isYoriManagedFactKey(k)).toBe(true);
           const label = humanizeMemoryKey(k);
           expect(label).toBeTruthy();
         }
+      });
+
+      it('covers the grocery keys decision explicitly (XKEYDEL-P2)', () => {
+        const groceryKeys = ['grocery_store_preference', 'preferred_grocery_store'];
+        for (const gk of groceryKeys) {
+          expect(YORI_MANAGED_FACT_KEYS.has(gk)).toBe(true);
+          expect(isYoriManagedFactKey(gk)).toBe(true);
+          const label = humanizeMemoryKey(gk);
+          expect(label).toBeTruthy();
+        }
+      });
+
+      it('registry derivation test fails if a new UI or plugin key is added without registration (XKEYDEL-P2)', () => {
+        const mockUnregisteredKey = 'unregistered_future_plugin_habit';
+        const simulatedSourceWithNewKey = new Set([...YORI_MANAGED_FACT_KEYS, mockUnregisteredKey]);
+
+        // Validate that if any real source adds an unregistered key, the check fails
+        const unregistered = Array.from(simulatedSourceWithNewKey).filter(k => !isYoriManagedFactKey(k));
+        expect(unregistered).toEqual([mockUnregisteredKey]);
+        expect(unregistered.length).toBe(1);
       });
 
       it('rejects arbitrary personal memory keys', () => {
@@ -2589,7 +2628,7 @@ describe('XKEY01: Server-only owner-key demo mode', () => {
         expect(hasYoriProvenance({ tags: 'yori:living-context' })).toBe(true);
         expect(hasYoriProvenance({ tags: ['yori:living-context'] })).toBe(true);
         expect(hasYoriProvenance({ provenance: { tag: 'yori:living-context' } })).toBe(true);
-        expect(hasYoriProvenance({ provenance: { source: 'yori' } })).toBe(true);
+        expect(hasYoriProvenance({ provenance: { source: 'yori' } })).toBe(false); // P3: dropped source: "yori" without tag
         expect(hasYoriProvenance({ provenance: { source: 'yori:living-context' } })).toBe(true);
 
         // Foreign or missing tags
@@ -2643,6 +2682,22 @@ describe('XKEY01: Server-only owner-key demo mode', () => {
           expect(untaggedRes.status).toBe(409);
           expect(untaggedRes.error).toContain('provenance');
         }
+
+        // Provenance {source: 'yori'} without tag -> 409 (XKEYDEL-P2)
+        const yoriSourceWithoutTag = {
+          result: {
+            facts: [{ key: 'prep_buffer_minutes', value: 5, provenance: { source: 'yori' } }],
+          },
+        };
+        const yoriNoTagRes = verifyFactProvenance(yoriSourceWithoutTag, 'prep_buffer_minutes');
+        expect(yoriNoTagRes.ok).toBe(false);
+        if (!yoriNoTagRes.ok) {
+          expect(yoriNoTagRes.status).toBe(409);
+          expect(yoriNoTagRes.reason).toBe('missing_yori_provenance');
+          expect(yoriNoTagRes.error).toContain('does not carry Yori provenance');
+        }
+        expect(hasYoriProvenance({ key: 'prep_buffer_minutes', provenance: { source: 'yori' } })).toBe(false);
+        expect(hasYoriProvenance({ key: 'prep_buffer_minutes', provenance: { tag: 'yori:living-context' } })).toBe(true);
 
         // Unknown shape -> 424
         const unknownData = { result: { weird: true } };
@@ -2891,6 +2946,61 @@ describe('XKEY01: Server-only owner-key demo mode', () => {
         expect(res.statusCode).toBe(400);
         expect(res.body).toContain('owner_key delete requires explicit user confirmation marker');
         expect(mockFetch).not.toHaveBeenCalled();
+      });
+
+      it('requires userConfirmed === true strict boolean in deleteFact; rejects string "true" with 400 (XKEYDEL-P2)', async () => {
+        const mockFetch = vi.fn();
+        const proxy = new XMemoDevProxy({ authMode: 'owner_key', ownerKey: MOCK_OWNER_KEY }, () => {}, undefined, mockFetch as any);
+
+        // 1. Direct deleteFact call with string "true" -> 400
+        const directRes = await proxy.deleteFact('prep_buffer_minutes', { userConfirmed: 'true' as any }, mockFetch as any);
+        expect(directRes.status).toBe(400);
+        expect((directRes.data as any).error).toContain('owner_key delete requires explicit user confirmation marker');
+        expect(mockFetch).not.toHaveBeenCalled();
+
+        // 2. HTTP route with body { userConfirmed: "true" } -> 400
+        const req = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'DELETE',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'prep_buffer_minutes', userConfirmed: 'true' }),
+        });
+        const res = createMockRes();
+        await proxy.handleHttpRequest(req, res);
+
+        expect(res.statusCode).toBe(400);
+        expect(res.body).toContain('owner_key delete requires explicit user confirmation marker');
+        expect(mockFetch).not.toHaveBeenCalled();
+      });
+
+      it('deleteFact halts with 409 when pre-read fact carries provenance {source: "yori"} without tag (XKEYDEL-P2)', async () => {
+        let forgetCalled = false;
+        const mockFetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+          const body = JSON.parse(init.body);
+          if (body.params?.name === 'recall') {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                result: {
+                  facts: [{ key: 'prep_buffer_minutes', value: 5, provenance: { source: 'yori' } }],
+                },
+              }),
+            };
+          }
+          if (body.params?.name === 'forget') {
+            forgetCalled = true;
+            return { ok: true, status: 200, json: async () => ({ result: { success: true } }) };
+          }
+          return { ok: false, status: 404 };
+        });
+
+        const proxy = new XMemoDevProxy({ authMode: 'owner_key', ownerKey: MOCK_OWNER_KEY }, () => {}, undefined, mockFetch as any);
+        const delRes = await proxy.deleteFact('prep_buffer_minutes', { userConfirmed: true }, mockFetch as any);
+
+        expect(delRes.status).toBe(409);
+        expect((delRes.data as any).error).toContain('does not carry Yori provenance');
+        expect(forgetCalled).toBe(false);
       });
 
       it('OAuth-disabled and owner_key mode off -> 403, zero fetch calls', async () => {

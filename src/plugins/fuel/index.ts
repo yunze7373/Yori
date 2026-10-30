@@ -14,7 +14,9 @@ export * from './detector.js';
 export * from './preparer.js';
 export * from './adapter.js';
 
-export const fuelPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
+export const fuelPlugin: Plugin<SimulatedProviderAdapter> & {
+  readonly managedMemoryKeys?: readonly string[];
+} = Object.freeze({
   id: 'fuel',
   name: 'Fuel Plugin',
   description: 'Proactive fuel recommendation planner finding nearby gas stations via PlacesProvider seam.',
@@ -23,4 +25,5 @@ export const fuelPlugin: Plugin<SimulatedProviderAdapter> = Object.freeze({
   adapter: mockFuelAdapter,
   requiredSignals: Object.freeze(['location_status']),
   triggerSignalKinds: Object.freeze(['fuel_status', 'fuel_percent', 'user_request', 'user_command']),
+  managedMemoryKeys: Object.freeze([]),
 });

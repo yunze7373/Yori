@@ -66,7 +66,7 @@ import { renderAdjustDialog, type AdjustDialogValues } from '../review/adjust-di
 import { renderDismissDialog } from '../review/dismiss-dialog.js';
 import { attachModalAccessibility, restoreInvokingFocus } from '../review/modal-accessibility.js';
 import { renderMeView } from '../me/me-view.js';
-import { createMemoryPort } from '../../adapters/xmemo/index.js';
+import { createMemoryPort, type MemoryPort } from '../../adapters/xmemo/index.js';
 import { DEFAULT_DAILY_PROMPT_BUDGET } from '../../core/policy/index.js';
 import { coordinateReasoning } from '../../app/reasoning-coordinator.js';
 import { createActionStateStore, type ActionStateStore } from '../action-state/index.js';
@@ -845,11 +845,147 @@ export function computeSceneState(
   }
 }
 
+/**
+ * Handles confirmation of a memory proposal honestly via MemoryPort (BACKLOG-20261031-XKEYDEL-P2).
+ * Fails closed if writeBack returns unsuccessful or throws:
+ * - Does NOT promote the proposal to confirmed.
+ * - Proposal remains pending in memory / storage.
+ * - Does NOT show 'Preference confirmed'.
+ * - Shows honest, calm non-technical failure message.
+ * - Logs sanitized reason without leaking fact key values or tokens.
+ */
+export async function handleConfirmProposal(
+  key: string,
+  sharedStorage: YoriStorage,
+  combinedMemory: readonly MemoryFact[],
+  memoryPort: MemoryPort,
+  snapshotAsOf: string
+): Promise<{
+  readonly success: boolean;
+  readonly message: string;
+  readonly warning?: string;
+}> {
+  const envelope = sharedStorage.load();
+  const proposals = envelope?.payload.proposals ?? [];
+  const match =
+    proposals.find(p => p.key === key) ??
+    combinedMemory.find(p => p.key === key && p.status === 'pending');
+  if (!match) {
+    return { success: false, message: 'Proposal not found' };
+  }
+
+  // Promote to confirmed
+  const confirmedFact = createMemoryFact(
+    match.key,
+    match.value,
+    'confirmed',
+    {
+      source: 'user_confirmed',
+      recordedAt: snapshotAsOf,
+      note: match.provenance.note,
+    },
+    snapshotAsOf
+  );
+
+  try {
+    // Write back confirmed fact through MemoryPort (AC-106-3)
+    const result = await memoryPort.writeBack(confirmedFact);
+    if (!result || !result.success) {
+      // Remote write back failed: keep proposal pending and show calm, honest failure message
+      const rawReason = result?.error ?? 'remote_write_unsuccessful';
+      const sanitizedReason = rawReason.replace(/[^\w\s-]/g, '').slice(0, 80);
+      console.warn(`[YoriMemory] writeBack failed: ${sanitizedReason}`);
+      return {
+        success: false,
+        message: 'Unable to save preference right now. Your setting has not been saved.',
+        warning: sanitizedReason,
+      };
+    }
+
+    return {
+      success: true,
+      message: `Preference confirmed: ${key.replace(/_/g, ' ')}`,
+    };
+  } catch (err: unknown) {
+    const sanitizedReason = err instanceof Error ? err.name : 'UnknownError';
+    console.warn(`[YoriMemory] writeBack exception: ${sanitizedReason}`);
+    return {
+      success: false,
+      message: 'Unable to save preference right now. Your setting has not been saved.',
+      warning: sanitizedReason,
+    };
+  }
+}
+
+/**
+ * Handles rejection of a memory proposal ('Not true') (BACKLOG-20261031-XKEYDEL-P2).
+ */
+export function handleRejectProposal(
+  key: string,
+  sharedStorage: YoriStorage,
+  combinedMemory: readonly MemoryFact[],
+  snapshotAsOf: string
+): {
+  readonly success: boolean;
+  readonly message: string;
+} {
+  try {
+    const envelope = sharedStorage.load();
+    const proposals = envelope?.payload.proposals ?? [];
+    const match =
+      proposals.find(p => p.key === key) ??
+      combinedMemory.find(p => p.key === key && p.status === 'pending');
+    if (!match) {
+      return { success: false, message: 'Proposal not found' };
+    }
+
+    // Update status to rejected
+    const rejectedFact = createMemoryFact(
+      match.key,
+      match.value,
+      'rejected',
+      {
+        source: 'user_feedback',
+        recordedAt: snapshotAsOf,
+        note: 'Declined by user',
+      },
+      snapshotAsOf
+    );
+
+    const updatedProposals = proposals.filter(p => p.key !== key);
+    updatedProposals.push(rejectedFact);
+
+    sharedStorage.save(
+      {
+        memoryFacts: envelope?.payload.memoryFacts ?? [],
+        proposals: updatedProposals,
+        suppressions: envelope?.payload.suppressions ?? [],
+        promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
+        acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
+      },
+      snapshotAsOf
+    );
+
+    return {
+      success: true,
+      message: `Proposal marked not true: ${key.replace(/_/g, ' ')}`,
+    };
+  } catch (err: unknown) {
+    const sanitizedReason = err instanceof Error ? err.name : 'UnknownError';
+    console.warn(`[YoriMemory] rejectProposal exception: ${sanitizedReason}`);
+    return {
+      success: false,
+      message: 'Unable to decline proposal right now. Please try again.',
+    };
+  }
+}
+
 export function renderApp(
   root: HTMLElement,
   initialScene: DemoSceneId = 'clear',
   customStorage?: YoriStorage,
-  uiVersionOverride?: UiVersion | string
+  uiVersionOverride?: UiVersion | string,
+  customMemoryPort?: MemoryPort
 ): void {
   const uiVersion: UiVersion = resolveUiVersion(uiVersionOverride ?? getEffectiveUiVersion());
   root.setAttribute('data-ui-version', uiVersion);
@@ -915,7 +1051,7 @@ export function renderApp(
     });
   }
   const sharedStorage = customStorage ?? new YoriStorage(new WebStorageDriver());
-  const memoryPort = createMemoryPort(sharedStorage);
+  const memoryPort = customMemoryPort ?? createMemoryPort(sharedStorage);
   const actionStore: ActionStateStore = createActionStateStore();
   let conversationCleanup: (() => void) | null = null;
 
@@ -2446,37 +2582,22 @@ export function renderApp(
     }
 
     // -------------------------------------------------------------
-    // PROPOSAL CONFIRM & REJECT HANDLERS (INV-107)
+    // PROPOSAL CONFIRM & REJECT HANDLERS (INV-107 & XKEYDEL-P2)
     // -------------------------------------------------------------
     root.querySelectorAll('.btn-confirm-proposal').forEach(btn => {
       btn.addEventListener('click', async e => {
         const key = (e.currentTarget as HTMLElement).getAttribute('data-key');
         if (!key) return;
 
-        const envelope = sharedStorage.load();
-        const proposals = envelope?.payload.proposals ?? [];
-        const match =
-          proposals.find(p => p.key === key) ??
-          combinedMemory.find(p => p.key === key && p.status === 'pending');
-        if (match) {
-          // Promote to confirmed
-          const confirmedFact = createMemoryFact(
-            match.key,
-            match.value,
-            'confirmed',
-            {
-              source: 'user_confirmed',
-              recordedAt: snapshotAsOf,
-              note: match.provenance.note,
-            },
-            snapshotAsOf
-          );
-
-          // Write back confirmed fact through MemoryPort (AC-106-3)
-          await memoryPort.writeBack(confirmedFact);
-          actionFeedbackMessage = `Preference confirmed: ${key.replace(/_/g, ' ')}`;
-          update();
-        }
+        const outcome = await handleConfirmProposal(
+          key,
+          sharedStorage,
+          combinedMemory,
+          memoryPort,
+          snapshotAsOf
+        );
+        actionFeedbackMessage = outcome.message;
+        update();
       });
     });
 
@@ -2485,42 +2606,14 @@ export function renderApp(
         const key = (e.currentTarget as HTMLElement).getAttribute('data-key');
         if (!key) return;
 
-        const envelope = sharedStorage.load();
-        const proposals = envelope?.payload.proposals ?? [];
-        const match =
-          proposals.find(p => p.key === key) ??
-          combinedMemory.find(p => p.key === key && p.status === 'pending');
-        if (match) {
-          // Update status to rejected
-          const rejectedFact = createMemoryFact(
-            match.key,
-            match.value,
-            'rejected',
-            {
-              source: 'user_feedback',
-              recordedAt: snapshotAsOf,
-              note: 'Declined by user',
-            },
-            snapshotAsOf
-          );
-
-          const updatedProposals = proposals.filter(p => p.key !== key);
-          updatedProposals.push(rejectedFact);
-
-          sharedStorage.save(
-            {
-              memoryFacts: envelope?.payload.memoryFacts ?? [],
-              proposals: updatedProposals,
-              suppressions: envelope?.payload.suppressions ?? [],
-              promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
-              acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
-            },
-            snapshotAsOf
-          );
-
-          actionFeedbackMessage = `Proposal marked not true: ${key.replace(/_/g, ' ')}`;
-          update();
-        }
+        const outcome = handleRejectProposal(
+          key,
+          sharedStorage,
+          combinedMemory,
+          snapshotAsOf
+        );
+        actionFeedbackMessage = outcome.message;
+        update();
       });
     });
 
