@@ -14,7 +14,8 @@
     "test:golden": "vitest run tests/golden",
     "test:drills": "vitest run tests/integration",
     "test:e2e": "playwright test",
-    "verify:production": "node scripts/verify-production-build.ts"
+    "verify:production": "node scripts/verify-production-build.ts",
+    "verify:live:spark": "vite-node scripts/live-verify-spark.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

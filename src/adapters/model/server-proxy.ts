@@ -67,6 +67,26 @@ export interface ModelProxyConfig {
   readonly keySource: 'MODEL_API_KEY' | 'META_API_KEY' | 'none';
   readonly baseUrl: string;
   readonly modelName: string;
+  readonly liveEnabled: boolean;
+  readonly maxCalls: number;
+}
+
+let processLiveCallCount = 0;
+
+export function getProcessLiveCallCount(): number {
+  return processLiveCallCount;
+}
+
+export function resetProcessLiveCallCount(): void {
+  processLiveCallCount = 0;
+}
+
+export function resolveMaxCalls(env: Record<string, string | undefined> = process.env): number {
+  const raw = env['MODEL_LIVE_MAX_CALLS'];
+  if (raw === undefined || raw.trim() === '') return 10;
+  const parsed = parseInt(raw, 10);
+  if (isNaN(parsed) || parsed < 0) return 10;
+  return Math.min(parsed, 10);
 }
 
 /**
@@ -130,12 +150,16 @@ export function resolveModelConfig(
 
   const baseUrl = process.env['MODEL_BASE_URL'] || 'https://api.meta.ai/v1';
   const modelName = process.env['MODEL_NAME'] || 'muse-spark-1.3';
+  const liveEnabled = process.env['MODEL_LIVE_ENABLED'] === '1';
+  const maxCalls = resolveMaxCalls(process.env);
 
   return {
     apiKey,
     keySource,
     baseUrl,
     modelName,
+    liveEnabled,
+    maxCalls,
   };
 }
 
@@ -230,15 +254,49 @@ export class ModelDevProxy {
     private readonly logger: (msg: string) => void = () => {},
     customRateLimiter?: RateLimiter
   ) {
-    this.config = customConfig
-      ? {
-          apiKey: customConfig.apiKey,
-          keySource: customConfig.keySource ?? (customConfig.apiKey ? 'MODEL_API_KEY' : 'none'),
-          baseUrl: customConfig.baseUrl ?? 'https://api.meta.ai/v1',
-          modelName: customConfig.modelName ?? 'muse-spark-1.3',
-        }
-      : resolveModelConfig(this.logger);
+    const resolved = resolveModelConfig(this.logger);
+    if (customConfig) {
+      const apiKey = customConfig.apiKey;
+      const keySource = customConfig.keySource ?? (apiKey ? 'MODEL_API_KEY' : 'none');
+      let liveEnabled = resolved.liveEnabled;
+      if (customConfig.liveEnabled !== undefined) {
+        liveEnabled = customConfig.liveEnabled;
+      } else if (customConfig.apiKey !== undefined) {
+        liveEnabled =
+          process.env.MODEL_LIVE_ENABLED !== undefined
+            ? process.env.MODEL_LIVE_ENABLED === '1'
+            : true;
+      }
+
+      const maxCalls =
+        customConfig.maxCalls !== undefined
+          ? Math.min(Math.max(0, customConfig.maxCalls), 10)
+          : resolved.maxCalls;
+
+      this.config = {
+        apiKey,
+        keySource,
+        baseUrl: customConfig.baseUrl ?? resolved.baseUrl,
+        modelName: customConfig.modelName ?? resolved.modelName,
+        liveEnabled,
+        maxCalls,
+      };
+    } else {
+      this.config = resolved;
+    }
     this.rateLimiter = customRateLimiter ?? new RateLimiter(30, 60_000);
+  }
+
+  public getConfig(): ModelProxyConfig {
+    return this.config;
+  }
+
+  public getCallCount(): number {
+    return processLiveCallCount;
+  }
+
+  public resetCallCount(): void {
+    processLiveCallCount = 0;
   }
 
   public getRateLimiter(): RateLimiter {
@@ -252,6 +310,24 @@ export class ModelDevProxy {
         message: 'model: disabled (no MODEL_API_KEY)',
         modelName: this.config.modelName,
         keySource: 'none',
+      };
+    }
+
+    if (!this.config.liveEnabled) {
+      return {
+        status: 'disabled',
+        message: 'model: key present, live disabled (MODEL_LIVE_ENABLED!=1)',
+        modelName: this.config.modelName,
+        keySource: this.config.keySource,
+      };
+    }
+
+    if (processLiveCallCount >= this.config.maxCalls) {
+      return {
+        status: 'disabled',
+        message: `model: live call cap reached (${processLiveCallCount}/${this.config.maxCalls}), falling back to deterministic`,
+        modelName: this.config.modelName,
+        keySource: this.config.keySource,
       };
     }
 
@@ -645,6 +721,18 @@ export class ModelDevProxy {
     }
 
     // Call the model API with strict fact validation, max_tokens, and timeout
+    if (processLiveCallCount >= this.config.maxCalls) {
+      this.logger(
+        `[ModelProxy] Call cap reached (${processLiveCallCount}/${this.config.maxCalls}): falling back to deterministic`
+      );
+      return {
+        wording: fallbackWording,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+    processLiveCallCount++;
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
@@ -789,6 +877,18 @@ export class ModelDevProxy {
       };
     }
 
+    if (processLiveCallCount >= this.config.maxCalls) {
+      this.logger(
+        `[ModelProxy] Call cap reached (${processLiveCallCount}/${this.config.maxCalls}): falling back to deterministic`
+      );
+      return {
+        result: fallback,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+    processLiveCallCount++;
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
@@ -887,15 +987,6 @@ export class ModelDevProxy {
   public async handleCommand(
     facts: Record<string, unknown>
   ): Promise<ModelCommandResponse> {
-    const diag = this.getDiagnostics();
-    if (diag.status === 'disabled') {
-      return {
-        result: null,
-        usedFallback: true,
-        fallbackReason: 'disabled',
-      };
-    }
-
     const tmpl = getTemplate('decision_command');
     if (!tmpl) {
       return {
@@ -906,7 +997,7 @@ export class ModelDevProxy {
     }
 
     // Strict schema check: knownFactKeys is required and must not be empty (G3-PARITY)
-    // Rejects before any upstream model call
+    // Rejects before any upstream model call or live dispatch
     const knownFactKeys = facts.knownFactKeys;
     if (!Array.isArray(knownFactKeys) || knownFactKeys.length === 0) {
       this.logger(
@@ -918,6 +1009,27 @@ export class ModelDevProxy {
         fallbackReason: 'schema_invalid',
       };
     }
+
+    const diag = this.getDiagnostics();
+    if (diag.status === 'disabled') {
+      return {
+        result: null,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+
+    if (processLiveCallCount >= this.config.maxCalls) {
+      this.logger(
+        `[ModelProxy] Call cap reached (${processLiveCallCount}/${this.config.maxCalls}): falling back to deterministic`
+      );
+      return {
+        result: null,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+      };
+    }
+    processLiveCallCount++;
 
     try {
       const controller = new AbortController();

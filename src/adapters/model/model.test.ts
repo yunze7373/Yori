@@ -11,6 +11,7 @@ import {
   resolveModelConfig,
   createModelProxyMiddleware,
   resolveBindHost,
+  resetProcessLiveCallCount,
 } from './server-proxy.js';
 import { SERVER_TEMPLATES, validateTemplateRequest } from './template-registry.js';
 import {
@@ -30,6 +31,10 @@ import {
 } from '../../core/contracts/index.js';
 import { sharedPolicy } from '../../core/policy/index.js';
 import type { SuppliedFacts, ModelPortRequest } from './types.js';
+
+beforeEach(() => {
+  resetProcessLiveCallCount();
+});
 
 describe('ModelPort Fact Checker (INV-103, AC-106-1)', () => {
   const sampleFacts: SuppliedFacts = {
@@ -202,6 +207,19 @@ describe('ModelDevProxy Server Configuration & Diagnostics (AC-106-2)', () => {
 });
 
 describe('ModelDevProxy HTTP Security Guards & Middleware (P1 Fix & Anti-Relay Abuse)', () => {
+  const savedEnv = { ...process.env };
+
+  beforeEach(() => {
+    delete process.env['MODEL_API_KEY'];
+    delete process.env['META_API_KEY'];
+    delete process.env['MODEL_LIVE_ENABLED'];
+    delete process.env['MODEL_BASE_URL'];
+  });
+
+  afterEach(() => {
+    process.env = { ...savedEnv };
+  });
+
   function createMockReq(options: {
     url: string;
     method: string;
@@ -1299,6 +1317,7 @@ describe('Slice A2: Proxy Guard Regression Suite & Prompt-Injection Fixtures (AC
     it('secret API key is never logged anywhere in diagnostics or logger output', () => {
       const secretKey = 'super-secret-production-token-998877';
       process.env.MODEL_API_KEY = secretKey;
+      process.env.MODEL_LIVE_ENABLED = '1';
 
       const logSpy = vi.fn();
       const proxy = new ModelDevProxy(undefined, logSpy);
