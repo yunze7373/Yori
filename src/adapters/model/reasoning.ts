@@ -26,7 +26,7 @@ import type { RejectedReasonCodeTelemetry } from './types.js';
 
 export { type RejectedReasonCodeTelemetry };
 
-export function sanitizeReasonCodeForTelemetry(raw: unknown): string {
+export function sanitizeModelText(raw: unknown): string {
   if (typeof raw !== 'string') {
     const len = typeof raw === 'undefined' ? 0 : String(raw).length;
     return `<nonconforming len=${len}>`;
@@ -36,6 +36,8 @@ export function sanitizeReasonCodeForTelemetry(raw: unknown): string {
   }
   return `<nonconforming len=${raw.length}>`;
 }
+
+export const sanitizeReasonCodeForTelemetry = sanitizeModelText;
 
 export const REGISTERED_INTENTS: ReadonlySet<string> = new Set([
   'depart',
@@ -841,6 +843,7 @@ export type DecisionCommandIntent =
   | 'LEAVE_LATER'
   | 'CHANGE_ROUTE'
   | 'FIND_LUNCH'
+  | 'FIND_FUEL'
   | 'WHY'
   | 'ACCEPT'
   | 'UNDO'
@@ -850,6 +853,7 @@ export const CLOSED_DECISION_INTENTS: ReadonlySet<string> = new Set([
   'LEAVE_LATER',
   'CHANGE_ROUTE',
   'FIND_LUNCH',
+  'FIND_FUEL',
   'WHY',
   'ACCEPT',
   'UNDO',
@@ -937,7 +941,7 @@ export function validateDecisionCommandOutput(
       return {
         valid: false,
         reason: 'extra_keys',
-        error: `Unauthorized top-level key '${k}' in decision command output`,
+        error: `Unauthorized top-level key '${sanitizeModelText(k)}' in decision command output`,
       };
     }
   }
@@ -961,21 +965,21 @@ export function validateDecisionCommandOutput(
       return {
         valid: false,
         reason: 'extra_keys',
-        error: `Unauthorized key '${k}' in slots`,
+        error: `Unauthorized key '${sanitizeModelText(k)}' in slots`,
       };
     }
   }
   if (slots.mode !== undefined) {
     if (slots.mode !== 'drive' && slots.mode !== 'bus') {
-      return { valid: false, reason: 'schema_invalid', error: `Unsupported mode '${String(slots.mode)}'` };
+      return { valid: false, reason: 'schema_invalid', error: `Unsupported mode '${sanitizeModelText(slots.mode)}'` };
     }
     if (context?.availableModes && !context.availableModes.includes(slots.mode as string)) {
-      return { valid: false, reason: 'unknown_mode', error: `Mode '${slots.mode}' not in available modes` };
+      return { valid: false, reason: 'unknown_mode', error: `Mode '${sanitizeModelText(slots.mode)}' not in available modes` };
     }
   }
   if (slots.deltaMinutes !== undefined) {
-    if (typeof slots.deltaMinutes !== 'number' || slots.deltaMinutes <= 0 || slots.deltaMinutes > 240) {
-      return { valid: false, reason: 'schema_invalid', error: `Invalid deltaMinutes '${String(slots.deltaMinutes)}'` };
+    if (typeof slots.deltaMinutes !== 'number' || !Number.isInteger(slots.deltaMinutes) || slots.deltaMinutes <= 0 || slots.deltaMinutes > 240) {
+      return { valid: false, reason: 'schema_invalid', error: `Invalid deltaMinutes '${sanitizeModelText(slots.deltaMinutes)}'` };
     }
   }
   if (slots.filters !== undefined) {
@@ -985,8 +989,25 @@ export function validateDecisionCommandOutput(
     const allowedFilters = new Set(['quieter', 'vegetarian', 'nearer']);
     for (const f of slots.filters) {
       if (typeof f !== 'string' || !allowedFilters.has(f)) {
-        return { valid: false, reason: 'unknown_filter', error: `Unsupported filter '${String(f)}'` };
+        return { valid: false, reason: 'unknown_filter', error: `Unsupported filter '${sanitizeModelText(f)}'` };
       }
+    }
+  }
+
+  // Validate recommendedOptionDelta if present
+  if (obj.recommendedOptionDelta !== undefined) {
+    if (
+      typeof obj.recommendedOptionDelta !== 'number' ||
+      !Number.isFinite(obj.recommendedOptionDelta) ||
+      !Number.isInteger(obj.recommendedOptionDelta) ||
+      obj.recommendedOptionDelta < 0 ||
+      obj.recommendedOptionDelta > 240
+    ) {
+      return {
+        valid: false,
+        reason: 'schema_invalid',
+        error: `Invalid recommendedOptionDelta '${sanitizeModelText(obj.recommendedOptionDelta)}'`,
+      };
     }
   }
 
@@ -1023,7 +1044,7 @@ export function validateDecisionCommandOutput(
         return {
           valid: false,
           reason: 'extra_keys',
-          error: `Unauthorized key '${k}' in situationAttribution`,
+          error: `Unauthorized key '${sanitizeModelText(k)}' in situationAttribution`,
         };
       }
     }
@@ -1033,6 +1054,30 @@ export function validateDecisionCommandOutput(
           field: 'situationAttribution.reasonCode',
           code: sanitizeReasonCodeForTelemetry(saObj.reasonCode),
         });
+      }
+    }
+    if (saObj.explanation !== undefined) {
+      if (typeof saObj.explanation !== 'string') {
+        return {
+          valid: false,
+          reason: 'schema_invalid',
+          error: 'situationAttribution.explanation must be a string',
+        };
+      }
+      if (saObj.explanation.length > 0) {
+        const validTimes = context?.validTimes ?? [];
+        const validPlaces = context?.validPlaces ?? [];
+        const check = validateFactsInWording(saObj.explanation, {
+          times: validTimes,
+          places: validPlaces,
+        });
+        if (!check.valid) {
+          return {
+            valid: false,
+            reason: 'unlisted_fact_token',
+            error: `situationAttribution explanation contains unlisted token: ${check.unlistedTokens.join(', ')}`,
+          };
+        }
       }
     }
   }
@@ -1048,19 +1093,28 @@ export function validateDecisionCommandOutput(
   }
 
   // 5. Fact check on explanation text (defense in depth)
-  if (typeof obj.explanation === 'string' && obj.explanation.length > 0) {
-    const validTimes = context?.validTimes ?? [];
-    const validPlaces = context?.validPlaces ?? [];
-    const check = validateFactsInWording(obj.explanation, {
-      times: validTimes,
-      places: validPlaces,
-    });
-    if (!check.valid) {
+  if (obj.explanation !== undefined) {
+    if (typeof obj.explanation !== 'string') {
       return {
         valid: false,
-        reason: 'unlisted_fact_token',
-        error: `Explanation contains unlisted token: ${check.unlistedTokens.join(', ')}`,
+        reason: 'schema_invalid',
+        error: "'explanation' must be a string",
       };
+    }
+    if (obj.explanation.length > 0) {
+      const validTimes = context?.validTimes ?? [];
+      const validPlaces = context?.validPlaces ?? [];
+      const check = validateFactsInWording(obj.explanation, {
+        times: validTimes,
+        places: validPlaces,
+      });
+      if (!check.valid) {
+        return {
+          valid: false,
+          reason: 'unlisted_fact_token',
+          error: `Explanation contains unlisted token: ${check.unlistedTokens.join(', ')}`,
+        };
+      }
     }
   }
 

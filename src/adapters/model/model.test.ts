@@ -17,7 +17,12 @@ import {
   resetProcessLiveCallCount,
   resetLedger,
 } from './server-proxy.js';
-import { SERVER_TEMPLATES, validateTemplateRequest, DECISION_COMMAND_VALID_REASON_CODES_LIST } from './template-registry.js';
+import {
+  SERVER_TEMPLATES,
+  validateTemplateRequest,
+  DECISION_COMMAND_VALID_REASON_CODES_LIST,
+  DECISION_COMMAND_VALID_INTENTS_LIST,
+} from './template-registry.js';
 import {
   buildReasoningInput,
   reorderPlansWithReasoning,
@@ -25,6 +30,8 @@ import {
   validateReasoningOutput,
   validateDecisionCommandOutput,
   VALID_REASON_CODES,
+  CLOSED_DECISION_INTENTS,
+  sanitizeModelText,
   sanitizeReasonCodeForTelemetry,
 } from './reasoning.js';
 import { ModelCommandInterpreter } from '../../ui/conversation/model-interpreter.js';
@@ -2909,8 +2916,8 @@ describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpr
       validPlaces: ['Piano Studio'],
     };
 
-    describe('Scope (1): Prompt / Schema Alignment', () => {
-      it('decision_command systemPrompt and promptInstruction explicitly enumerate all 5 reason codes from VALID_REASON_CODES', () => {
+    describe('Scope (1): Prompt / Schema Alignment & Exact Set Equality', () => {
+      it('decision_command systemPrompt and promptInstruction explicitly enumerate all reason codes from VALID_REASON_CODES', () => {
         const tmpl = SERVER_TEMPLATES.decision_command!;
         expect(tmpl).toBeDefined();
 
@@ -2921,16 +2928,60 @@ describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpr
         }
 
         expect(tmpl.systemPrompt).toContain(DECISION_COMMAND_VALID_REASON_CODES_LIST);
+        expect(tmpl.systemPrompt).toContain(DECISION_COMMAND_VALID_INTENTS_LIST);
       });
 
-      it('fails if prompt text diverges from VALID_REASON_CODES', () => {
+      it('parses enumerated intent and reason-code lists back out of rendered prompt and asserts exact set equality', () => {
         const tmpl = SERVER_TEMPLATES.decision_command!;
-        const promptCodes = Array.from(VALID_REASON_CODES);
-        for (const code of promptCodes) {
-          expect(tmpl.systemPrompt).toContain(code);
-        }
-        // Negative proof: a non-existent code must NOT be present
-        expect(tmpl.systemPrompt).not.toContain('non_existent_fake_reason_code_123');
+
+        // 1. Parse enumerated closed intents out of systemPrompt
+        const intentMatch = tmpl.systemPrompt.match(
+          /Map user utterance strictly to closed intents:\s*(.*?)\.\s*Closed slots:/
+        );
+        expect(intentMatch).not.toBeNull();
+        const parsedIntents = new Set(
+          (intentMatch?.[1] ?? '').split(',').map((s) => s.trim())
+        );
+        expect(parsedIntents).toEqual(new Set(CLOSED_DECISION_INTENTS));
+
+        // 2. Parse enumerated reason codes out of systemPrompt
+        const reasonMatch = tmpl.systemPrompt.match(
+          /Reason codes MUST be chosen ONLY from:\s*(.*?)\.\s*reasonCodes/
+        );
+        expect(reasonMatch).not.toBeNull();
+        const parsedReasons = new Set(
+          (reasonMatch?.[1] ?? '').split(',').map((s) => s.trim())
+        );
+        expect(parsedReasons).toEqual(new Set(VALID_REASON_CODES));
+
+        // 3. Parse enumerated reason codes out of promptInstruction
+        const instructionReasonMatch = tmpl.promptInstruction.match(
+          /Allowed reason codes:\s*(.*?)\.\s*reasonCodes/
+        );
+        expect(instructionReasonMatch).not.toBeNull();
+        const parsedInstructionReasons = new Set(
+          (instructionReasonMatch?.[1] ?? '').split(',').map((s) => s.trim())
+        );
+        expect(parsedInstructionReasons).toEqual(new Set(VALID_REASON_CODES));
+
+        // 4. Negative assertions proving it fails if one side changes
+        const mutatedIntents = new Set([...CLOSED_DECISION_INTENTS, 'EXTRA_INTENT']);
+        expect(parsedIntents).not.toEqual(mutatedIntents);
+
+        const mutatedReasons = new Set([...VALID_REASON_CODES, 'extra_reason']);
+        expect(parsedReasons).not.toEqual(mutatedReasons);
+
+        const syntheticPromptMissingFuel = tmpl.systemPrompt.replace('FIND_FUEL, ', '');
+        const syntheticMatch = syntheticPromptMissingFuel.match(
+          /Map user utterance strictly to closed intents:\s*(.*?)\.\s*Closed slots:/
+        );
+        expect(syntheticMatch).not.toBeNull();
+        const parsedFromSynthetic = new Set(
+          (syntheticMatch?.[1] ?? '')
+            .split(',')
+            .map((s) => s.trim())
+        );
+        expect(parsedFromSynthetic).not.toEqual(new Set(CLOSED_DECISION_INTENTS));
       });
 
       it('decision_command prompt explicitly specifies exact situationAttribution shape, optionality, and closed sets', () => {
@@ -3295,82 +3346,389 @@ describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpr
       });
     });
 
-    describe('Scope (2): Parity between server validator and client interpreter', () => {
+    describe('Scope (2): Parity between server validator and client interpreter (Property & Union Tests)', () => {
       const clientInterpreter = new ModelCommandInterpreter({ mode: 'scripted_fixture' });
 
-      it.each([
-        {
-          name: 'valid output with time_critical',
-          output: {
-            intent: 'LEAVE_LATER',
-            slots: { deltaMinutes: 15 },
-            citedSignalIds: [validSignalId],
-            citedFactKeys: [],
-            reasonCodes: ['time_critical'],
-          },
-          expectedValid: true,
-        },
-        {
-          name: 'unknown reason code',
-          output: {
-            intent: 'LEAVE_LATER',
-            slots: {},
-            citedSignalIds: [],
-            citedFactKeys: [],
-            reasonCodes: ['invented_code'],
-          },
-          expectedValid: false,
-          expectedReason: 'invalid_reason_code',
-        },
-        {
-          name: 'extra top-level keys',
-          output: {
-            intent: 'LEAVE_LATER',
-            slots: {},
-            citedSignalIds: [],
-            citedFactKeys: [],
-            reasonCodes: [],
-            bogusKey: 123,
-          },
-          expectedValid: false,
-          expectedReason: 'extra_keys',
-        },
-        {
-          name: 'extra slot keys',
-          output: {
-            intent: 'LEAVE_LATER',
-            slots: { extraSlot: true },
-            citedSignalIds: [],
-            citedFactKeys: [],
-            reasonCodes: [],
-          },
-          expectedValid: false,
-          expectedReason: 'extra_keys',
-        },
-        {
-          name: 'unlisted time in explanation',
-          output: {
-            intent: 'LEAVE_LATER',
-            slots: {},
-            citedSignalIds: [],
-            citedFactKeys: [],
-            reasonCodes: [],
-            explanation: 'Depart at 9:00 AM',
-          },
-          expectedValid: false,
-          expectedReason: 'unlisted_fact_token',
-        },
-      ])('maintains parity for: $name', ({ output, expectedValid, expectedReason }) => {
-        const serverRes = validateDecisionCommandOutput(output, baseContext);
-        const clientRes = clientInterpreter.validateDecisionOutput(output, baseContext);
+      function createValidBase(): Record<string, unknown> {
+        return {
+          intent: 'LEAVE_LATER',
+          slots: { deltaMinutes: 15 },
+          citedSignalIds: [validSignalId],
+          citedFactKeys: [],
+          reasonCodes: ['time_critical'],
+        };
+      }
 
-        expect(serverRes.valid).toBe(expectedValid);
-        expect(clientRes.valid).toBe(expectedValid);
+      function assertParity(output: unknown, ctx = baseContext, label = ''): { serverRes: any; clientRes: any } {
+        const serverRes = validateDecisionCommandOutput(output, ctx);
+        const clientRes = clientInterpreter.validateDecisionOutput(output, ctx);
 
-        if (!expectedValid) {
+        expect(serverRes.valid, `Parity valid mismatch for [${label}]`).toBe(clientRes.valid);
+        if (!serverRes.valid) {
+          expect((serverRes as any).reason, `Parity reason mismatch for [${label}]`).toBe((clientRes as any).reason);
+        }
+        return { serverRes, clientRes };
+      }
+
+      it('iterates the union of all intents through BOTH validators with identical valid/reason', () => {
+        const validIntents = Array.from(CLOSED_DECISION_INTENTS);
+        const invalidIntents = [
+          'leave_later',
+          'FIND_GAS',
+          'UNKNOWN_INTENT',
+          '',
+          '__proto__',
+          'constructor',
+          123,
+          null,
+          undefined,
+          true,
+          false,
+          {},
+          [],
+        ];
+
+        // All closed intents must be valid on BOTH
+        for (const intent of validIntents) {
+          const payload = { ...createValidBase(), intent };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `valid intent: ${intent}`);
+          expect(serverRes.valid).toBe(true);
+          expect(clientRes.valid).toBe(true);
+        }
+
+        // All invalid intents must fail with out_of_set_intent on BOTH
+        for (const intent of invalidIntents) {
+          const payload = { ...createValidBase(), intent };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `invalid intent: ${String(intent)}`);
+          expect(serverRes.valid).toBe(false);
+          expect(clientRes.valid).toBe(false);
+          expect((serverRes as any).reason).toBe('out_of_set_intent');
+          expect((clientRes as any).reason).toBe('out_of_set_intent');
+        }
+      });
+
+      it('iterates the union of all reason codes through BOTH validators with identical valid/reason', () => {
+        const validCodes = Array.from(VALID_REASON_CODES);
+        const invalidCodes = [
+          'unknown_reason',
+          'weather_adjust',
+          'TIME_CRITICAL',
+          '',
+          'a'.repeat(41),
+          123,
+          null,
+          true,
+          {},
+        ];
+
+        for (const code of validCodes) {
+          const payload = {
+            ...createValidBase(),
+            reasonCodes: [code],
+            citedFactKeys: code === 'matches_confirmed_preference' ? [validFactKey] : [],
+          };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `valid code: ${code}`);
+          expect(serverRes.valid).toBe(true);
+          expect(clientRes.valid).toBe(true);
+        }
+
+        for (const code of invalidCodes) {
+          const payload = {
+            ...createValidBase(),
+            reasonCodes: [code],
+          };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `invalid code: ${String(code)}`);
+          expect(serverRes.valid).toBe(false);
+          expect(clientRes.valid).toBe(false);
+          expect((serverRes as any).reason).toBe('invalid_reason_code');
+          expect((clientRes as any).reason).toBe('invalid_reason_code');
+        }
+      });
+
+      it('iterates the union of all modes through BOTH validators with identical valid/reason', () => {
+        const validModes = ['drive', 'bus'];
+        const invalidModes = ['walk', 'transit', 'fly', 'DRIVE', '', 'drive ', 123, null, true, {}];
+
+        for (const mode of validModes) {
+          const payload = {
+            ...createValidBase(),
+            slots: { mode },
+          };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `valid mode: ${mode}`);
+          expect(serverRes.valid).toBe(true);
+          expect(clientRes.valid).toBe(true);
+        }
+
+        for (const mode of invalidModes) {
+          const payload = {
+            ...createValidBase(),
+            slots: { mode },
+          };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `invalid mode: ${String(mode)}`);
+          expect(serverRes.valid).toBe(false);
+          expect(clientRes.valid).toBe(false);
+          expect((serverRes as any).reason).toBe('schema_invalid');
+          expect((clientRes as any).reason).toBe('schema_invalid');
+        }
+
+        // Mode not in context.availableModes -> unknown_mode on both
+        const modeNotAvailablePayload = {
+          ...createValidBase(),
+          slots: { mode: 'bus' },
+        };
+        const restrictedCtx = { ...baseContext, availableModes: ['drive'] };
+        const { serverRes, clientRes } = assertParity(modeNotAvailablePayload, restrictedCtx, 'mode not available');
+        expect(serverRes.valid).toBe(false);
+        expect(clientRes.valid).toBe(false);
+        expect((serverRes as any).reason).toBe('unknown_mode');
+        expect((clientRes as any).reason).toBe('unknown_mode');
+      });
+
+      it('iterates the union of all filters through BOTH validators with identical valid/reason', () => {
+        const validFilterSets = [
+          [],
+          ['quieter'],
+          ['vegetarian'],
+          ['nearer'],
+          ['quieter', 'vegetarian'],
+          ['quieter', 'nearer'],
+          ['vegetarian', 'nearer'],
+          ['quieter', 'vegetarian', 'nearer'],
+        ];
+        const invalidFilterSets = [
+          ['fast'],
+          ['vegan'],
+          ['quieter', 'cheap'],
+          ['NEARER'],
+          [''],
+          [123],
+          [null],
+          'not_an_array',
+          123,
+          null,
+        ];
+
+        for (const filters of validFilterSets) {
+          const payload = {
+            ...createValidBase(),
+            slots: { filters },
+          };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `valid filters: ${JSON.stringify(filters)}`);
+          expect(serverRes.valid).toBe(true);
+          expect(clientRes.valid).toBe(true);
+        }
+
+        for (const filters of invalidFilterSets) {
+          const payload = {
+            ...createValidBase(),
+            slots: { filters },
+          };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `invalid filters: ${JSON.stringify(filters)}`);
+          expect(serverRes.valid).toBe(false);
+          expect(clientRes.valid).toBe(false);
+          const expectedReason = Array.isArray(filters) ? 'unknown_filter' : 'schema_invalid';
           expect((serverRes as any).reason).toBe(expectedReason);
           expect((clientRes as any).reason).toBe(expectedReason);
         }
+      });
+
+      it('iterates the union of deltaMinutes variations through BOTH validators with identical valid/reason', () => {
+        const validDeltas = [1, 5, 15, 60, 120, 240];
+        const invalidDeltas = [0, -1, -15, 241, 500, 15.5, 0.1, NaN, Infinity, -Infinity, '15', null, {}, []];
+
+        for (const delta of validDeltas) {
+          const payload = { ...createValidBase(), slots: { deltaMinutes: delta } };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `valid delta: ${delta}`);
+          expect(serverRes.valid).toBe(true);
+          expect(clientRes.valid).toBe(true);
+        }
+
+        for (const delta of invalidDeltas) {
+          const payload = { ...createValidBase(), slots: { deltaMinutes: delta } };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `invalid delta: ${String(delta)}`);
+          expect(serverRes.valid).toBe(false);
+          expect(clientRes.valid).toBe(false);
+          expect((serverRes as any).reason).toBe('schema_invalid');
+          expect((clientRes as any).reason).toBe('schema_invalid');
+        }
+      });
+
+      it('explicitly decides and accepts FIND_FUEL in both server and client validators', () => {
+        const fuelPayload = {
+          intent: 'FIND_FUEL',
+          slots: {},
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: [],
+        };
+        const { serverRes, clientRes } = assertParity(fuelPayload, baseContext, 'FIND_FUEL');
+        expect(serverRes.valid).toBe(true);
+        expect(clientRes.valid).toBe(true);
+        expect(serverRes.data.intent).toBe('FIND_FUEL');
+        expect(clientRes.output.intent).toBe('FIND_FUEL');
+      });
+
+      it('validates situationAttribution.explanation fact checking with parity on valid and unlisted tokens', () => {
+        // Valid time in attribution explanation
+        const validAttribution = {
+          ...createValidBase(),
+          situationAttribution: {
+            signalId: validSignalId,
+            reasonCode: 'time_critical',
+            explanation: 'Depart at 2:45 PM to avoid rain delay',
+          },
+        };
+        const { serverRes: validServer, clientRes: validClient } = assertParity(
+          validAttribution,
+          baseContext,
+          'valid situationAttribution explanation'
+        );
+        expect(validServer.valid).toBe(true);
+        expect(validClient.valid).toBe(true);
+
+        // Unlisted time token in attribution explanation ('9:45 AM' not in validTimes)
+        const unlistedAttribution = {
+          ...createValidBase(),
+          situationAttribution: {
+            signalId: validSignalId,
+            reasonCode: 'time_critical',
+            explanation: 'leave at 9:45 AM to avoid rain',
+          },
+        };
+        const { serverRes: unlistedServer, clientRes: unlistedClient } = assertParity(
+          unlistedAttribution,
+          baseContext,
+          'unlisted situationAttribution explanation'
+        );
+        expect(unlistedServer.valid).toBe(false);
+        expect(unlistedClient.valid).toBe(false);
+        expect(unlistedServer.reason).toBe('unlisted_fact_token');
+        expect(unlistedClient.reason).toBe('unlisted_fact_token');
+
+        // Non-string explanation in situationAttribution -> schema_invalid
+        const invalidTypeAttribution = {
+          ...createValidBase(),
+          situationAttribution: {
+            signalId: validSignalId,
+            reasonCode: 'time_critical',
+            explanation: 12345,
+          },
+        };
+        const { serverRes: typeServer, clientRes: typeClient } = assertParity(
+          invalidTypeAttribution,
+          baseContext,
+          'non-string situationAttribution explanation'
+        );
+        expect(typeServer.valid).toBe(false);
+        expect(typeClient.valid).toBe(false);
+        expect(typeServer.reason).toBe('schema_invalid');
+        expect(typeClient.reason).toBe('schema_invalid');
+      });
+
+      it('validates recommendedOptionDelta: finite integer within 0..240 or schema_invalid (string, NaN, Infinity, float, out-of-range)', () => {
+        const validOptionDeltas = [0, 5, 10, 15, 60, 240];
+        for (const delta of validOptionDeltas) {
+          const payload = { ...createValidBase(), recommendedOptionDelta: delta };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `valid recommendedOptionDelta: ${delta}`);
+          expect(serverRes.valid).toBe(true);
+          expect(clientRes.valid).toBe(true);
+        }
+
+        const invalidOptionDeltas = [
+          'x',
+          '15',
+          '0',
+          NaN,
+          Infinity,
+          -Infinity,
+          15.5,
+          0.1,
+          -1,
+          -5,
+          241,
+          1000,
+          null,
+          {},
+          [],
+          true,
+        ];
+        for (const delta of invalidOptionDeltas) {
+          const payload = { ...createValidBase(), recommendedOptionDelta: delta };
+          const { serverRes, clientRes } = assertParity(payload, baseContext, `invalid recommendedOptionDelta: ${String(delta)}`);
+          expect(serverRes.valid).toBe(false);
+          expect(clientRes.valid).toBe(false);
+          expect(serverRes.reason).toBe('schema_invalid');
+          expect(clientRes.reason).toBe('schema_invalid');
+        }
+      });
+
+      it('redacts untrusted model text in validator error strings with <nonconforming len=N> rule', () => {
+        const longKey5000 = 'a'.repeat(5000);
+        const injectionKey = '<script>alert("xss")</script>';
+
+        // 1. 5000-char top-level key
+        const payload5000 = { ...createValidBase(), [longKey5000]: 'malicious' };
+        const { serverRes: s5000, clientRes: c5000 } = assertParity(payload5000, baseContext, '5000-char key');
+        expect(s5000.valid).toBe(false);
+        expect(c5000.valid).toBe(false);
+        expect(s5000.reason).toBe('extra_keys');
+        expect(c5000.reason).toBe('extra_keys');
+        expect(s5000.error).toContain('<nonconforming len=5000>');
+        expect(c5000.error).toContain('<nonconforming len=5000>');
+        expect(s5000.error).not.toContain(longKey5000);
+        expect(c5000.error).not.toContain(longKey5000);
+        expect(s5000.error.length).toBeLessThan(150);
+        expect(c5000.error.length).toBeLessThan(150);
+
+        // 2. Injection-like top-level key
+        const payloadInj = { ...createValidBase(), [injectionKey]: true };
+        const { serverRes: sInj, clientRes: cInj } = assertParity(payloadInj, baseContext, 'injection key');
+        expect(sInj.valid).toBe(false);
+        expect(cInj.valid).toBe(false);
+        expect(sInj.reason).toBe('extra_keys');
+        expect(cInj.reason).toBe('extra_keys');
+        expect(sInj.error).toContain(`<nonconforming len=${injectionKey.length}>`);
+        expect(cInj.error).toContain(`<nonconforming len=${injectionKey.length}>`);
+        expect(sInj.error).not.toContain('<script>');
+        expect(cInj.error).not.toContain('<script>');
+
+        // 3. Slot extra key with 5000-char and injection
+        const slot5000 = { ...createValidBase(), slots: { [longKey5000]: 123 } };
+        const { serverRes: sSlot5000, clientRes: cSlot5000 } = assertParity(slot5000, baseContext, 'slot 5000 key');
+        expect(sSlot5000.error).toContain('<nonconforming len=5000>');
+        expect(cSlot5000.error).toContain('<nonconforming len=5000>');
+        expect(sSlot5000.error).not.toContain(longKey5000);
+
+        const slotInj = { ...createValidBase(), slots: { [injectionKey]: 123 } };
+        const { serverRes: sSlotInj, clientRes: cSlotInj } = assertParity(slotInj, baseContext, 'slot inj key');
+        expect(sSlotInj.error).toContain(`<nonconforming len=${injectionKey.length}>`);
+        expect(cSlotInj.error).toContain(`<nonconforming len=${injectionKey.length}>`);
+        expect(sSlotInj.error).not.toContain('<script>');
+
+        // 4. situationAttribution extra key with 5000-char
+        const sa5000 = {
+          ...createValidBase(),
+          situationAttribution: { signalId: validSignalId, reasonCode: 'time_critical', [longKey5000]: 'bad' },
+        };
+        const { serverRes: sSa5000, clientRes: cSa5000 } = assertParity(sa5000, baseContext, 'sa 5000 key');
+        expect(sSa5000.error).toContain('<nonconforming len=5000>');
+        expect(cSa5000.error).toContain('<nonconforming len=5000>');
+
+        // 5. sanitizeModelText helper standalone tests
+        expect(sanitizeModelText('valid_identifier_123')).toBe('valid_identifier_123');
+        expect(sanitizeModelText('mode')).toBe('mode');
+        expect(sanitizeModelText('delta_minutes')).toBe('delta_minutes');
+        expect(sanitizeModelText('UPPERCASE')).toBe('<nonconforming len=9>');
+        expect(sanitizeModelText('1starts_with_num')).toBe('<nonconforming len=16>');
+        expect(sanitizeModelText('with spaces')).toBe('<nonconforming len=11>');
+        expect(sanitizeModelText('a'.repeat(40))).toBe('a'.repeat(40));
+        expect(sanitizeModelText('a'.repeat(41))).toBe('<nonconforming len=41>');
+        expect(sanitizeModelText('a'.repeat(5000))).toBe('<nonconforming len=5000>');
+        expect(sanitizeModelText('<script>evil</script>')).toBe('<nonconforming len=21>');
+        expect(sanitizeModelText('${jndi:ldap...}')).toBe('<nonconforming len=15>');
+        expect(sanitizeModelText(12345)).toBe('<nonconforming len=5>');
+        expect(sanitizeModelText(null)).toBe('<nonconforming len=4>');
+        expect(sanitizeModelText(undefined)).toBe('<nonconforming len=0>');
       });
     });
   });
