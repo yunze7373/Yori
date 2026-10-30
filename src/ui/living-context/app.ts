@@ -677,11 +677,31 @@ export function computeSceneState(
       };
       const snapshot = injectWeather(rawSnapshot);
 
+      // UI-DEMO-FY: Seed a demo routine proposal if neither confirmed nor rejected in storage
+      const hasPrepConfirmed = activeConfirmedFacts.some(f => f.key === 'prep_buffer_preference');
+      const hasPrepProposal = storedProposals.some(p => p.key === 'prep_buffer_preference');
+      const demoProposals: MemoryFact[] = (!hasPrepConfirmed && !hasPrepProposal)
+        ? [
+            createMemoryFact(
+              'prep_buffer_preference',
+              { prepMinutes: 20, bufferMinutes: 10 },
+              'pending',
+              {
+                source: 'seed',
+                recordedAt: snapshot.asOf,
+                note: 'Demo profile · sample preference',
+              },
+              snapshot.asOf
+            ),
+          ]
+        : [];
+
       const combinedMemory = [
         ...d1MemoryFacts.filter(f => !activeConfirmedFacts.some(sc => sc.key === f.key)),
         ...d3MemoryFacts.filter(f => !activeConfirmedFacts.some(sc => sc.key === f.key)),
         ...activeConfirmedFacts,
         ...storedProposals,
+        ...demoProposals,
       ];
 
       const result = runPipeline({
@@ -1139,7 +1159,11 @@ export function renderApp(
 
     if (activeTab === 'me') {
       const memoryFacts = storedEnvelope?.payload.memoryFacts ?? [];
-      const proposals = storedEnvelope?.payload.proposals ?? [];
+      const storedProposals = storedEnvelope?.payload.proposals ?? [];
+      const pendingFromMemory = combinedMemory.filter(
+        m => m.status === 'pending' && !storedProposals.some(p => p.key === m.key)
+      );
+      const proposals = [...storedProposals, ...pendingFromMemory];
       const promptBudget = storedEnvelope?.payload.promptBudget ?? {
         date: snapshotAsOf.slice(0, 10),
         count: 0,
@@ -2369,7 +2393,9 @@ export function renderApp(
 
         const envelope = sharedStorage.load();
         const proposals = envelope?.payload.proposals ?? [];
-        const match = proposals.find(p => p.key === key);
+        const match =
+          proposals.find(p => p.key === key) ??
+          combinedMemory.find(p => p.key === key && p.status === 'pending');
         if (match) {
           // Promote to confirmed
           const confirmedFact = createMemoryFact(
@@ -2399,7 +2425,9 @@ export function renderApp(
 
         const envelope = sharedStorage.load();
         const proposals = envelope?.payload.proposals ?? [];
-        const match = proposals.find(p => p.key === key);
+        const match =
+          proposals.find(p => p.key === key) ??
+          combinedMemory.find(p => p.key === key && p.status === 'pending');
         if (match) {
           // Update status to rejected
           const rejectedFact = createMemoryFact(
