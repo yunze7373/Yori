@@ -319,7 +319,7 @@ let missingAssertions = 0;
 
 for (const reqStr of Array.from(requiredUiStrings).sort()) {
   const isAsserted = assertedArray.some(
-    (a) => a === reqStr || a.includes(reqStr) || reqStr.includes(a)
+    (a) => a === reqStr || a.includes(reqStr)
   );
   if (!isAsserted) {
     console.error(`  ❌ UNASSERTED UI STRING: "${reqStr}"`);
