@@ -14,6 +14,9 @@ All interactions operate strictly within the bounded, offline action-state machi
 4. **Honest Loading Skeleton**: `#loading-skeleton` is rendered only while asynchronous status reads are actually pending, disappearing as soon as data arrives.
 5. **Fail-Closed Degraded Notice**: Under 500 status on `/api/weather/status`, `#weather-error-notice` names the degraded capability while keeping the prior plan card visible.
 
+> [!NOTE] In-Flight Evidence Staging Disclosure
+> Because the Demo scripted interpreter responds synchronously in offline demo mode, the in-flight processing state (State 03) is staged via the test harness (`window.__YORI_ACTION_STORE__`) to capture the active `#btn-cancel-inflight` action surface and double-submit blocking behavior.
+
 ---
 
 ## Screenshot Matrix
@@ -22,7 +25,7 @@ All interactions operate strictly within the bounded, offline action-state machi
 |---|---|---|---|
 | 01. Initial Home | `01-home-initial-mobile.png`<br>`7a186b49…` | `01-home-initial-desktop.png`<br>`b96ecc67…` | Baseline Home with departure Now card. |
 | 02. Ask Expanded | `02-ask-expanded-with-context-chip-mobile.png`<br>`8208bec9…` | `02-ask-expanded-with-context-chip-desktop.png`<br>`c73d30fe…` | Ask overlay showing `#conversation-context-chip` ("Demo scene · simulated"). |
-| 03. Ask In-Flight | `03-ask-inflight-processing-mobile.png`<br>`9f92986f…` | `03-ask-inflight-processing-desktop.png`<br>`ec0e9242…` | In-flight processing state with `#btn-cancel-inflight`. |
+| 03. Ask In-Flight | `03-ask-inflight-processing-mobile.png`<br>`9f92986f…` | `03-ask-inflight-processing-desktop.png`<br>`ec0e9242…` | In-flight processing state with `#btn-cancel-inflight` (staged via test harness as Demo responds synchronously). |
 | 04. Home Diff | `04-home-updated-with-diff-mobile.png`<br>`808c5fe7…` | `04-home-updated-with-diff-desktop.png`<br>`130ccc04…` | Home after collapse showing `#plan-diff-banner` and `.plan-diff-highlight`. |
 | 05. Adjust Dialog | `05-action-adjust-dialog-mobile.png`<br>`5f2e0aa7…` | `05-action-adjust-dialog-desktop.png`<br>`99223ca6…` | Modal `#adjust-dialog` for prep and buffer minutes adjustment. |
 | 06. Why Sheet | `06-action-why-sheet-mobile.png`<br>`c5443ad2…` | `06-action-why-sheet-desktop.png`<br>`c07096ea…` | Modal `#why-sheet` provenance view with grounding citations. |

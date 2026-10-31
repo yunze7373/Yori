@@ -39,8 +39,19 @@ function extractLeaveTimeFromHeadline(headline?: string): string | null {
 }
 
 /**
+ * Extracts preparation time from a headline like "prepare 2:10 PM" or "Get ready at 2:05 PM, leave by 2:25 PM".
+ */
+function extractPrepareTimeFromHeadline(headline?: string): string | null {
+  if (!headline) return null;
+  const match = headline.match(/(?:prepare|get ready at)\s+(\d{1,2}:\d{2}(?:\s*[AaPp][Mm])?)/i);
+  return match && match[1] ? match[1].trim() : null;
+}
+
+/**
  * Computes a semantic diff between prior and current plan compositions.
- * Returns null if compositions are identical or if either is missing.
+ * Diff strictly checks semantic fields (leave time, prepare time, transit mode, recommendation).
+ * Free-text headline wording is not used as a fallback to ensure no false diffs on no-ops.
+ * Returns null if compositions have identical semantic values or if either is missing.
  */
 export function computePlanDiff(
   prior: PlanDiffTarget | null | undefined,
@@ -66,7 +77,23 @@ export function computePlanDiff(
     };
   }
 
-  // 2. Transit Mode Switch
+  // 2. Prepare Time Diff (explicit prepareTimeStr or extracted from headline)
+  const priorPrep =
+    normalizeTime(prior.prepareTimeStr) || extractPrepareTimeFromHeadline(prior.headline);
+  const currentPrep =
+    normalizeTime(current.prepareTimeStr) || extractPrepareTimeFromHeadline(current.headline);
+
+  if (priorPrep && currentPrep && priorPrep !== currentPrep) {
+    return {
+      fieldName: 'prepareTime',
+      priorValue: priorPrep,
+      newValue: currentPrep,
+      diffSummary: `Prepare by ${priorPrep} → ${currentPrep}`,
+      ariaLiveText: `Preparation time updated: Prepare by ${priorPrep} changed to Prepare by ${currentPrep}.`,
+    };
+  }
+
+  // 3. Transit Mode Switch
   if (prior.mode && current.mode && prior.mode !== current.mode) {
     const priorCap = prior.mode.charAt(0).toUpperCase() + prior.mode.slice(1);
     const currCap = current.mode.charAt(0).toUpperCase() + current.mode.slice(1);
@@ -79,7 +106,7 @@ export function computePlanDiff(
     };
   }
 
-  // 3. Recommendation Diff (e.g. Lunch or Fuel candidates re-ranked)
+  // 4. Recommendation Diff (e.g. Lunch or Fuel candidates re-ranked)
   if (
     prior.topRecommendation &&
     current.topRecommendation &&
@@ -91,17 +118,6 @@ export function computePlanDiff(
       newValue: current.topRecommendation,
       diffSummary: `Recommendation updated: ${prior.topRecommendation} → ${current.topRecommendation}`,
       ariaLiveText: `Top recommendation changed from ${prior.topRecommendation} to ${current.topRecommendation}.`,
-    };
-  }
-
-  // 4. Headline Diff (fallback)
-  if (prior.headline && current.headline && prior.headline !== current.headline) {
-    return {
-      fieldName: 'headline',
-      priorValue: prior.headline,
-      newValue: current.headline,
-      diffSummary: `${prior.headline} → ${current.headline}`,
-      ariaLiveText: `Plan updated: ${current.headline}.`,
     };
   }
 

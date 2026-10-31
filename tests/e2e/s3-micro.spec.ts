@@ -259,6 +259,35 @@ test.describe('S3-MICRO: Microinteractions and Action Surfaces', () => {
     await saveEvidence(page, `07-action-dismiss-quiet-state-${suffix}.png`);
   });
 
+  test('2b. Adjust with unchanged values produces no diff banner and no false update', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2&scene=rain&test=1');
+    await page.waitForSelector('.now-card');
+
+    const adjustBtn = page.locator('#btn-adjust');
+    await expect(adjustBtn).toBeVisible();
+    await adjustBtn.click();
+
+    const adjustDialog = page.locator('#adjust-dialog');
+    await expect(adjustDialog).toBeVisible();
+
+    // Default values in adjust dialog match current plan (prep 20, buffer 5)
+    // Apply without changing values
+    const applyBtn = page.locator('#btn-adjust-for-today');
+    await applyBtn.click();
+
+    await expect(adjustDialog).not.toBeVisible();
+
+    // Invariant: no false UPDATED banner is rendered when timing is unchanged
+    const diffBanner = page.locator('#plan-diff-banner');
+    await expect(diffBanner).not.toBeVisible();
+
+    // No undo button either since no history state was pushed
+    const undoBtn = page.locator('#btn-undo-accept');
+    await expect(undoBtn).not.toBeVisible();
+  });
+
   test('3. Motion Tokens and Reduced-Motion Parity', async ({ page }) => {
     await page.goto('/?ui=v2&scene=clear&test=1');
     await page.waitForSelector('.now-card');

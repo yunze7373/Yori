@@ -3329,6 +3329,17 @@ export function renderApp(
           const newPrepStr = formatTime(newPrepIso, tz);
           const newHeadline = `Get ready at ${newPrepStr}, leave by ${newLeaveStr}`;
 
+          // Semantic truth check: do not push history or emit diff if timing values did not change
+          const priorLeaveMs = planToAdjust.leaveAt ? Date.parse(planToAdjust.leaveAt) : 0;
+          const priorPrepMs = planToAdjust.prepareAt ? Date.parse(planToAdjust.prepareAt) : 0;
+          const leaveChanged = Math.abs(newLeaveMs - priorLeaveMs) >= 60_000;
+          const prepChanged = Math.abs(newPrepMs - priorPrepMs) >= 60_000;
+
+          if (!leaveChanged && !prepChanged) {
+            // No-op adjust: times are unchanged. Do not push history or invent diff.
+            return;
+          }
+
           const updatedPlan: PreparedPlan = {
             ...planToAdjust,
             leaveAt: newLeaveIso,

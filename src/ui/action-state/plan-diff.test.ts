@@ -83,6 +83,54 @@ describe('PlanDiff Suite', () => {
     expect(diff).toBeNull();
   });
 
+  it('returns null when times are identical even if internal headline wording differs', () => {
+    const prior = {
+      headline: 'Rain re-plan for Piano lesson: prepare 2:10 PM, leave 2:30 PM (umbrella recommended)',
+      leaveTimeStr: '2:30 PM',
+      prepareTimeStr: '2:10 PM',
+    };
+    const current = {
+      headline: 'Get ready at 2:10 PM, leave by 2:30 PM',
+      leaveTimeStr: '2:30 PM',
+      prepareTimeStr: '2:10 PM',
+    };
+
+    const diff = computePlanDiff(prior, current);
+    expect(diff).toBeNull();
+  });
+
+  it('returns null when times extracted from headline are identical despite different headline wording', () => {
+    const prior = {
+      headline: 'Rain re-plan for Piano lesson: prepare 2:10 PM, leave 2:30 PM (umbrella recommended)',
+    };
+    const current = {
+      headline: 'Get ready at 2:10 PM, leave by 2:30 PM',
+    };
+
+    const diff = computePlanDiff(prior, current);
+    expect(diff).toBeNull();
+  });
+
+  it('computes prepare time diff when prep changes but leave time remains constant', () => {
+    const prior = {
+      headline: 'Get ready at 2:10 PM, leave by 2:30 PM',
+      leaveTimeStr: '2:30 PM',
+      prepareTimeStr: '2:10 PM',
+    };
+    const current = {
+      headline: 'Get ready at 2:00 PM, leave by 2:30 PM',
+      leaveTimeStr: '2:30 PM',
+      prepareTimeStr: '2:00 PM',
+    };
+
+    const diff = computePlanDiff(prior, current);
+    expect(diff).not.toBeNull();
+    expect(diff?.fieldName).toBe('prepareTime');
+    expect(diff?.priorValue).toBe('2:10 PM');
+    expect(diff?.newValue).toBe('2:00 PM');
+    expect(diff?.diffSummary).toBe('Prepare by 2:10 PM → 2:00 PM');
+  });
+
   it('returns null when either prior or current is missing', () => {
     expect(computePlanDiff(null, { headline: 'Test' })).toBeNull();
     expect(computePlanDiff({ headline: 'Test' }, undefined)).toBeNull();
