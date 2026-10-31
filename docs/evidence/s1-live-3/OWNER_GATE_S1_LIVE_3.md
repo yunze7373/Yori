@@ -69,7 +69,7 @@ Prompt tokens are estimated at ~200–500 tokens per call.
 | **Worst Case Bound** (all exhaust 4,096 cap) | 6 | ~400 prompt + 4,096 completion (~4,500 tok) | ~27,000 tokens | **\$0.0540** |
 | **Upper Bound Limit** (conservative @ 5,000 tok) | 6 | ~5,000 tokens max | ~30,000 tokens | **\$0.0600** |
 
-The maximum possible spend for this run is strictly bounded below **\$0.060 USD**.
+Token consumption is bounded at ~30,000 total tokens (6 calls $\times$ up to 4,096 completion tokens + prompt allowance). At the unverified provider rate of \$2.00 / 1M tokens (\$0.000002 / token) `[UNVERIFIED - estimated from Meta provider pricing tiers]`, the estimated spend is approximately **\$0.060 USD** (dollar estimate at an UNVERIFIED rate).
 
 > [!IMPORTANT]
 > **Hard Stop on First Truncation**: If any response returns `finish_reason === "length"` or `fallbackReason === "truncated"`, execution terminates immediately and no further calls will be dispatched, halting token consumption.
