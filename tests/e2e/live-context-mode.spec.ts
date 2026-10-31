@@ -166,7 +166,7 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    // Mock weather endpoints to return live weather
+    // Mock weather endpoints to return live weather using real schema
     await page.route(url => url.pathname.includes('/api/weather/status'), async route => {
       await route.fulfill({
         status: 200,
@@ -174,6 +174,12 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
         body: JSON.stringify({
           enabled: true,
           provider: 'open-meteo',
+          demoCity: {
+            latitude: 37.7749,
+            longitude: -122.4194,
+            name: 'San Francisco, CA',
+            timezone: 'America/Los_Angeles',
+          },
           attribution: { text: 'Open-Meteo', url: 'https://open-meteo.com/' },
         }),
       });
@@ -184,15 +190,20 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
+          enabled: true,
           signals: [
             {
               id: 'sig-live-weather-current',
               kind: 'weather',
-              provenance: 'live',
+              source: 'real',
+              label: 'real',
               value: {
-                summary: '68°F · Partly Cloudy in San Francisco',
-                temperature: 68,
-                condition: 'Partly Cloudy',
+                condition: 'rain',
+                temperatureC: 12,
+                city: 'San Francisco, CA',
+                precipProbability: 0.9,
+                rainfall: 'moderate',
+                weatherCode: 61,
               },
               issuedAt: new Date().toISOString(),
               validFor: 3600000,
@@ -200,6 +211,7 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
               consentScope: 'device_only',
             },
           ],
+          attribution: { text: 'Open-Meteo', url: 'https://open-meteo.com/' },
         }),
       });
     });
@@ -209,7 +221,11 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
     const weatherCard = page.locator('#live-weather-card');
     await expect(weatherCard).toBeVisible({ timeout: 5000 });
     await expect(weatherCard.locator('.live-source-chip')).toHaveText('Source: Open-Meteo API (Live)');
-    await expect(weatherCard.locator('.live-card-desc')).toContainText('68°F · Partly Cloudy in San Francisco');
+    await expect(weatherCard.locator('.live-card-desc')).toContainText('12°C');
+    await expect(weatherCard.locator('.live-card-desc')).toContainText('rain');
+    await expect(weatherCard.locator('.live-card-desc')).toContainText(
+      'Weather for San Francisco, CA · fixed demo city (not your location)'
+    );
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
@@ -243,10 +259,11 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
             {
               id: 'sig-live-weather-partial',
               kind: 'weather',
-              provenance: 'live',
+              source: 'real',
+              label: 'real',
               value: {
-                temperature: 52,
-                // condition and summary omitted
+                temperatureC: 18,
+                // condition, city, and summary omitted
               },
               issuedAt: new Date().toISOString(),
               validFor: 3600000,
@@ -262,9 +279,11 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
     const weatherCard = page.locator('#live-weather-card');
     await expect(weatherCard).toBeVisible({ timeout: 5000 });
     const weatherDesc = await weatherCard.locator('.live-card-desc').innerText();
-    expect(weatherDesc).toBe('52°F');
+    expect(weatherDesc).toBe('18°C');
     expect(weatherDesc).not.toContain('65°F');
     expect(weatherDesc).not.toContain('Clear');
+    expect(weatherDesc).not.toContain('fixed demo city');
+    expect(weatherDesc).not.toContain('San Francisco');
   });
 
   test('Live context: model in-flight state with cancel button and double-submit blocking', async ({

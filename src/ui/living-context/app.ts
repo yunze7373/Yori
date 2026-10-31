@@ -1528,20 +1528,35 @@ export function renderApp(
                     <p class="live-card-desc">${(() => {
                       const val = liveWeatherSignal.value as any;
                       if (!val) return 'Weather unavailable';
-                      if (typeof val.summary === 'string' && val.summary.trim() !== '') {
-                        return escapeHtml(val.summary.trim());
-                      }
-                      const parts: string[] = [];
-                      if (val.temperature !== undefined && val.temperature !== null) {
-                        parts.push(`${val.temperature}°F`);
-                      } else if (val.temperatureC !== undefined && val.temperatureC !== null) {
-                        parts.push(`${val.temperatureC}°C`);
+                      const metrics: string[] = [];
+                      if (val.temperatureC !== undefined && val.temperatureC !== null) {
+                        metrics.push(`${val.temperatureC}°C`);
+                      } else if (val.temperature !== undefined && val.temperature !== null) {
+                        metrics.push(`${val.temperature}°F`);
                       }
                       if (typeof val.condition === 'string' && val.condition.trim() !== '') {
-                        parts.push(val.condition.trim());
+                        metrics.push(val.condition.trim());
+                      } else if (typeof val.summary === 'string' && val.summary.trim() !== '') {
+                        metrics.push(val.summary.trim());
                       }
-                      if (parts.length > 0) {
-                        return escapeHtml(parts.join(' · '));
+
+                      const city =
+                        typeof val.city === 'string' && val.city.trim() !== ''
+                          ? val.city.trim()
+                          : typeof weatherStatus?.demoCity?.name === 'string' && weatherStatus.demoCity.name.trim() !== ''
+                            ? weatherStatus.demoCity.name.trim()
+                            : '';
+
+                      const items: string[] = [];
+                      if (metrics.length > 0) {
+                        items.push(metrics.join(' · '));
+                      }
+                      if (city) {
+                        items.push(`Weather for ${city} · fixed demo city (not your location)`);
+                      }
+
+                      if (items.length > 0) {
+                        return escapeHtml(items.join(' · '));
                       }
                       return 'Weather unavailable';
                     })()}</p>
