@@ -145,6 +145,11 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     const nowCardRain = page.locator('.now-card');
     await expect(nowCardRain).toBeVisible();
     await expect(nowCardRain.locator('.now-subject')).toContainText('Piano lesson');
+    await expect(nowCardRain.locator('#now-title')).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
+    const clearTiming = 'Get ready at 2:05 PM, leave by 2:25 PM';
+    const rainTiming = await nowCardRain.locator('#now-title').innerText();
+    expect(rainTiming).toContain('Get ready at 2:10 PM, leave by 2:30 PM');
+    expect(rainTiming).not.toEqual(clearTiming);
     await expect(page.locator('.v2-timeline')).toBeVisible();
 
     await checkNoHorizontalScroll(page);
@@ -251,7 +256,10 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     // -------------------------------------------------------------------------
     // Capture 03a: Rain Scene Pre-Adjust (Home)
     // -------------------------------------------------------------------------
-    await expect(page.locator('.now-card')).toBeVisible();
+    const nowCardPreAdjust = page.locator('.now-card');
+    await expect(nowCardPreAdjust).toBeVisible();
+    await expect(nowCardPreAdjust.locator('#now-title')).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
+    const preAdjustTiming = 'Get ready at 2:10 PM, leave by 2:30 PM';
     await expect(page.locator('.v2-timeline')).toBeVisible();
 
     await checkNoHorizontalScroll(page);
@@ -303,7 +311,12 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     // Capture 03c: Return to Home -> Timing Recomputed
     // -------------------------------------------------------------------------
     await navigateToHome(page, isMobile);
-    await expect(page.locator('.now-card')).toBeVisible();
+    const nowCardRecomputed = page.locator('.now-card');
+    await expect(nowCardRecomputed).toBeVisible();
+    await expect(nowCardRecomputed.locator('#now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
+    const postAdjustTiming = await nowCardRecomputed.locator('#now-title').innerText();
+    expect(postAdjustTiming).toContain('Get ready at 2:00 PM, leave by 2:25 PM');
+    expect(postAdjustTiming).not.toEqual(preAdjustTiming);
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
@@ -325,6 +338,12 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
 
     const sceneSelect = page.locator('#scene-select');
     await sceneSelect.selectOption('rain');
+
+    // Pre-command baseline on Home
+    const nowCardRain = page.locator('.now-card');
+    await expect(nowCardRain).toBeVisible();
+    await expect(nowCardRain.locator('#now-title')).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
+    const preCommandTiming = 'Get ready at 2:10 PM, leave by 2:30 PM';
 
     // -------------------------------------------------------------------------
     // Capture 04a: Open Ask Yori Conversation Overlay
@@ -352,6 +371,12 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
       'Scripted model fixture · not a live model call'
     );
 
+    // Verify comparison box appears with options and recommendation badge
+    const compBox = page.locator('.chat-comparison-box');
+    await expect(compBox).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('#conversation-transcript')).toContainText('You can leave up to 5 minutes later');
+    await expect(page.locator('.chat-comparison-recommendation')).toContainText('Recommended');
+
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
     await page.screenshot({
@@ -359,13 +384,21 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     });
 
     // -------------------------------------------------------------------------
-    // Capture 04c: Close Conversation Overlay -> Collapse Back to Updated Home
+    // Capture 04c: Select Recommended Option (+5m) -> Auto-Collapse Back to Updated Home
     // -------------------------------------------------------------------------
-    await page.locator('#conversation-close-btn').click();
-    await expect(overlay).toHaveCount(0);
+    const safeOptionBtn = page.locator('.btn-select-comparison[data-delta="5"]');
+    await expect(safeOptionBtn).toBeVisible({ timeout: 5000 });
+    await safeOptionBtn.click();
 
-    const nowCard = page.locator('.now-card');
-    await expect(nowCard).toBeVisible();
+    // Auto-collapses back to updated Home
+    await expect(overlay).toHaveCount(0, { timeout: 5000 });
+
+    const nowCardUpdated = page.locator('.now-card');
+    await expect(nowCardUpdated).toBeVisible();
+    await expect(nowCardUpdated.locator('#now-title')).toContainText('2:35 PM');
+    const postCommandTiming = await nowCardUpdated.locator('#now-title').innerText();
+    expect(postCommandTiming).toContain('2:35 PM');
+    expect(postCommandTiming).not.toEqual(preCommandTiming);
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
