@@ -219,7 +219,13 @@ export function computeSceneState(
   const userPrep = activeConfirmedFacts.find(f => f.key === 'prep_buffer_preference');
   if (userPrep && typeof userPrep.value === 'object' && userPrep.value !== null) {
     const val = userPrep.value as { prepMinutes?: number; bufferMinutes?: number };
-    if (typeof val.bufferMinutes === 'number' && !activeConfirmedFacts.some(f => f.key === 'prep_buffer_minutes')) {
+    if (
+      typeof val.bufferMinutes === 'number' &&
+      Number.isInteger(val.bufferMinutes) &&
+      val.bufferMinutes >= 0 &&
+      val.bufferMinutes <= 60 &&
+      !activeConfirmedFacts.some(f => f.key === 'prep_buffer_minutes')
+    ) {
       activeConfirmedFacts.push(
         createMemoryFact(
           'prep_buffer_minutes',
@@ -230,7 +236,13 @@ export function computeSceneState(
         )
       );
     }
-    if (typeof val.prepMinutes === 'number' && !activeConfirmedFacts.some(f => f.key === 'prep_duration_minutes')) {
+    if (
+      typeof val.prepMinutes === 'number' &&
+      Number.isInteger(val.prepMinutes) &&
+      val.prepMinutes >= 0 &&
+      val.prepMinutes <= 120 &&
+      !activeConfirmedFacts.some(f => f.key === 'prep_duration_minutes')
+    ) {
       activeConfirmedFacts.push(
         createMemoryFact(
           'prep_duration_minutes',
@@ -1254,18 +1266,43 @@ export function renderApp(
     const uPrep = activeStoredConfirmed.find(f => f.key === 'prep_buffer_preference');
     if (uPrep && typeof uPrep.value === 'object' && uPrep.value !== null) {
       const val = uPrep.value as { prepMinutes?: number; bufferMinutes?: number };
-      if (typeof val.bufferMinutes === 'number' && !activeStoredConfirmed.some(f => f.key === 'prep_buffer_minutes')) {
+      if (
+        typeof val.bufferMinutes === 'number' &&
+        Number.isInteger(val.bufferMinutes) &&
+        val.bufferMinutes >= 0 &&
+        val.bufferMinutes <= 60 &&
+        !activeStoredConfirmed.some(f => f.key === 'prep_buffer_minutes')
+      ) {
         activeStoredConfirmed.push(
           createMemoryFact('prep_buffer_minutes', val.bufferMinutes, 'confirmed', uPrep.provenance, uPrep.updatedAt)
         );
       }
-      if (typeof val.prepMinutes === 'number' && !activeStoredConfirmed.some(f => f.key === 'prep_duration_minutes')) {
+      if (
+        typeof val.prepMinutes === 'number' &&
+        Number.isInteger(val.prepMinutes) &&
+        val.prepMinutes >= 0 &&
+        val.prepMinutes <= 120 &&
+        !activeStoredConfirmed.some(f => f.key === 'prep_duration_minutes')
+      ) {
         activeStoredConfirmed.push(
           createMemoryFact('prep_duration_minutes', val.prepMinutes, 'confirmed', uPrep.provenance, uPrep.updatedAt)
         );
       }
     }
     const userConfirmedKeys = new Set(activeStoredConfirmed.map(f => f.key));
+
+    const syncedKeys = new Set<string>();
+    if (activeLoadedFacts && activeLoadedFacts.length > 0) {
+      for (const f of activeLoadedFacts) {
+        if ((f.provenance?.source as unknown as string) === 'xmemo') {
+          syncedKeys.add(f.key);
+          if (f.key === 'prep_buffer_preference') {
+            syncedKeys.add('prep_buffer_minutes');
+            syncedKeys.add('prep_duration_minutes');
+          }
+        }
+      }
+    }
 
     const living = pipelineResult.livingContext;
     const baseNowPlan = reasoningState && reasoningState.scene === currentScene ? reasoningState.now : living.now;
@@ -1906,7 +1943,8 @@ export function renderApp(
                 reasoningState?.rationales[activeModal.plan.id],
                 snapshotTimezone,
                 userConfirmedKeys,
-                actionStore.getSituationAttribution()
+                actionStore.getSituationAttribution(),
+                syncedKeys
               )
             : activeModal?.type === 'adjust'
             ? renderAdjustDialog(activeModal.values)

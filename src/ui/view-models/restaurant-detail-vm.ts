@@ -146,10 +146,15 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
   const tasteFact = plan.why?.memoryFactsUsed?.find(
     f => f.key.includes('taste') || f.key.includes('cuisine')
   );
-  const isConfirmed = tasteFact
-    ? classifyFactSource(tasteFact, userConfirmedKeys) === 'user_confirmed'
-    : false;
-  const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+  const factKind = tasteFact
+    ? classifyFactSource(tasteFact, userConfirmedKeys, plan.why?.memoryFactsUsed)
+    : undefined;
+  const isConfirmed = factKind === 'user_confirmed';
+  const provenance = isConfirmed
+    ? 'You confirmed'
+    : factKind === 'synced'
+    ? 'Synced from XMemo'
+    : 'Demo profile · sample';
   const basis = `Based on taste: ${cuisine} (${provenance})`;
 
   // Compact schematic map

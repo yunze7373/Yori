@@ -12,6 +12,7 @@
 import type { PreparedPlan, PlanOption } from '../../core/contracts/index.js';
 import { formatTime } from '../living-context/presentation.js';
 import { humanizeMemoryKey } from '../review/why-sheet.js';
+import { classifyFactSource } from './provenance.js';
 import type { OptionCardVM } from './types.js';
 import {
   GroundedRecommendationVerifier,
@@ -97,8 +98,13 @@ export function deriveOptionCardVMs(
       let rankingBasis: string | undefined;
       if (opt.rankedByFactKey) {
         const humanKey = humanizeMemoryKey(opt.rankedByFactKey);
-        const isConfirmed = userConfirmedKeys?.has(opt.rankedByFactKey) ?? false;
-        const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+        const factKind = classifyFactSource(opt.rankedByFactKey, userConfirmedKeys, plan.why?.memoryFactsUsed);
+        const provenance =
+          factKind === 'user_confirmed'
+            ? 'You confirmed'
+            : factKind === 'synced'
+            ? 'Synced from XMemo'
+            : 'Demo profile · sample';
         rankingBasis = `Ranked by habit: ${humanKey} (${provenance})`;
       } else if (isFirst) {
         rankingBasis = 'Recommended route';
@@ -183,8 +189,13 @@ export function deriveOptionCardVMs(
     const tasteFact = plan.why?.memoryFactsUsed?.find(f => f.key.includes('taste') || f.key.includes('cuisine'));
     if (tasteFact) {
       const humanKey = humanizeMemoryKey(tasteFact.key);
-      const isConfirmed = userConfirmedKeys?.has(tasteFact.key) ?? false;
-      const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+      const factKind = classifyFactSource(tasteFact, userConfirmedKeys, plan.why?.memoryFactsUsed);
+      const provenance =
+        factKind === 'user_confirmed'
+          ? 'You confirmed'
+          : factKind === 'synced'
+          ? 'Synced from XMemo'
+          : 'Demo profile · sample';
       rankingBasis = `Based on habit: ${humanKey} (${provenance})`;
     }
 

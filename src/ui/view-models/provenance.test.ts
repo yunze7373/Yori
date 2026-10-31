@@ -70,4 +70,42 @@ describe('Provenance Classifier (src/ui/view-models/provenance.ts)', () => {
     expect(classifyFactSource(providerFact, userConfirmedKeys)).toBe('provider');
     expect(provenanceLabel('provider')).toBe('Live provider');
   });
+
+  describe('Truthful XMemo Sync Provenance (Reviewer Finding P2)', () => {
+    it('classifies facts with source xmemo as synced with truthful Synced from XMemo label', () => {
+      const xmemoFact: FactLike = {
+        key: 'prep_buffer_preference',
+        status: 'confirmed',
+        provenance: { source: 'xmemo', note: 'Synced from XMemo vault' },
+        value: { prepMinutes: 25, bufferMinutes: 10 },
+      };
+
+      const kind = classifyFactSource(xmemoFact, userConfirmedKeys);
+      expect(kind).toBe('synced');
+      expect(provenanceLabel(kind)).toBe('Synced from XMemo');
+      expect(isFactUserConfirmed(xmemoFact, userConfirmedKeys)).toBe(false);
+    });
+
+    it('classifies key present in syncedKeys as synced when not locally confirmed', () => {
+      const syncedKeys = new Set(['prep_buffer_minutes']);
+      expect(classifyFactSource('prep_buffer_minutes', userConfirmedKeys, undefined, syncedKeys)).toBe('synced');
+      expect(provenanceLabel('synced')).toBe('Synced from XMemo');
+    });
+
+    it('prioritizes local user confirmation over remote sync when key is locally confirmed', () => {
+      const userConfirmed = new Set(['prep_buffer_preference']);
+      const localConfirmedFact: FactLike = {
+        key: 'prep_buffer_preference',
+        status: 'confirmed',
+        provenance: { source: 'user_confirmed' },
+        value: { prepMinutes: 30, bufferMinutes: 15 },
+      };
+      const syncedKeys = new Set(['prep_buffer_preference']);
+
+      const kind = classifyFactSource(localConfirmedFact, userConfirmed, undefined, syncedKeys);
+      expect(kind).toBe('user_confirmed');
+      expect(provenanceLabel(kind)).toBe('Confirmed');
+      expect(isFactUserConfirmed(localConfirmedFact, userConfirmed)).toBe(true);
+    });
+  });
 });

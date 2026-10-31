@@ -200,14 +200,19 @@ export function humanizeMemoryValue(key: string, value: unknown): string {
 
 export function buildHumanDerivation(
   plan: PreparedPlan,
-  userConfirmedKeys?: ReadonlySet<string>
+  userConfirmedKeys?: ReadonlySet<string>,
+  syncedKeys?: ReadonlySet<string>
 ): string {
   const tz = plan.timezone;
   const memoryFacts = plan.why?.memoryFactsUsed ?? [];
   const hasPreferences = memoryFacts.length > 0;
   const allConfirmed =
     hasPreferences &&
-    memoryFacts.every(f => classifyFactSource(f, userConfirmedKeys) === 'user_confirmed');
+    memoryFacts.every(f => classifyFactSource(f, userConfirmedKeys, undefined, syncedKeys) === 'user_confirmed');
+  const hasSynced =
+    hasPreferences &&
+    !allConfirmed &&
+    memoryFacts.some(f => classifyFactSource(f, userConfirmedKeys, undefined, syncedKeys) === 'synced');
 
   if (plan.intentId === 'depart') {
     const subject = plan.subjectTitle || 'Your upcoming appointment';
@@ -225,6 +230,8 @@ export function buildHumanDerivation(
       const requestNote = userReq ? ` (${userReq.description})` : '';
       const routineDesc = allConfirmed
         ? 'your confirmed preparation routine'
+        : hasSynced
+        ? 'your preparation routine synced from XMemo'
         : hasPreferences
         ? 'sample preparation habits from the demo profile'
         : 'your preparation routine';
@@ -237,6 +244,8 @@ export function buildHumanDerivation(
     const requestNote = userReq ? ` (${userReq.description})` : '';
     const prefDesc = allConfirmed
       ? 'align with your confirmed taste preferences'
+      : hasSynced
+      ? 'align with your taste preferences synced from XMemo'
       : hasPreferences
       ? 'align with sample taste preferences from the demo profile'
       : 'align with your taste preferences';
@@ -246,13 +255,22 @@ export function buildHumanDerivation(
   // Fallback: sanitize any raw derivation string from internal formulas
   const fallbackPrefWord = allConfirmed
     ? 'confirmed preferences'
+    : hasSynced
+    ? 'preferences synced from XMemo'
     : hasPreferences
     ? 'sample preferences from the demo profile'
     : 'preferences';
   return (
     plan.why.derivation
       .replace(/appt\s*-\s*travel\s*-\s*buffer/gi, 'travel time and buffer')
-      .replace(/confirmed taste preferences/gi, allConfirmed ? 'confirmed taste preferences' : 'sample taste preferences from the demo profile')
+      .replace(
+        /confirmed taste preferences/gi,
+        allConfirmed
+          ? 'confirmed taste preferences'
+          : hasSynced
+          ? 'taste preferences synced from XMemo'
+          : 'sample taste preferences from the demo profile'
+      )
       .replace(/[_-]/g, ' ') || `Derived automatically from context signals and ${fallbackPrefWord}.`
   );
 }
@@ -267,12 +285,13 @@ export function renderWhySheet(
     readonly reasonCode: string;
     readonly explanation?: string;
     readonly citedFactKeys?: readonly string[];
-  }
+  },
+  syncedKeys?: ReadonlySet<string>
 ): string {
   const tz = timezone || plan.timezone || 'America/Los_Angeles';
   const signals = plan.why.evidenceSignals;
   const memoryFacts = plan.why.memoryFactsUsed;
-  const derivationText = buildHumanDerivation(plan, userConfirmedKeys);
+  const derivationText = buildHumanDerivation(plan, userConfirmedKeys, syncedKeys);
 
   return `
     <div class="modal-backdrop" id="why-sheet-backdrop" role="presentation">
@@ -310,7 +329,10 @@ export function renderWhySheet(
                     const isAllUserConfirmed =
                       factsToCheck.length > 0 &&
                       factsToCheck.every(
-                        k => classifyFactSource(k, userConfirmedKeys, plan.why.memoryFactsUsed) === 'user_confirmed'
+                        k => {
+                          const kind = classifyFactSource(k, userConfirmedKeys, plan.why.memoryFactsUsed, syncedKeys);
+                          return kind === 'user_confirmed' || kind === 'synced';
+                        }
                       );
 
                     if (isAllUserConfirmed) {
@@ -415,10 +437,11 @@ export function renderWhySheet(
                 memoryFacts.length > 0
                   ? memoryFacts
                       .map(fact => {
-                        const provKind = classifyFactSource(fact, userConfirmedKeys);
+                        const provKind = classifyFactSource(fact, userConfirmedKeys, undefined, syncedKeys);
                         const isUserConfirmed = provKind === 'user_confirmed';
+                        const isSynced = provKind === 'synced';
                         const badgeText = provenanceLabel(provKind);
-                        const badgeClass = isUserConfirmed ? 'badge-confirmed' : 'badge-simulated';
+                        const badgeClass = (isUserConfirmed || isSynced) ? 'badge-confirmed' : 'badge-simulated';
                         return `
                       <div class="why-item-row">
                         <div class="why-item-main">

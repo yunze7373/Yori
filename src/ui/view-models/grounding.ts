@@ -925,7 +925,12 @@ export function createRainEvidenceBundle(options?: {
       ? factKind === 'user_confirmed'
       : (fact.key === 'rain_transport_preference' ? isConfirmedHabit : false);
     const provStr: EvidenceProvenance = isConfirmed ? 'confirmed' : 'sample';
-    const provLabel = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+    const provLabel =
+      isConfirmed
+        ? 'You confirmed'
+        : factKind === 'synced'
+        ? 'Synced from XMemo'
+        : 'Demo profile · sample';
 
     records.push({
       id: fact.key,

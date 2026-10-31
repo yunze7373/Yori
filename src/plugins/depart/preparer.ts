@@ -240,16 +240,18 @@ export class DepartPreparer implements Preparer {
     }
 
     // Finding 2: Only cite facts that exist with their real status and value
-    const memoryFactsUsed: MemoryCitation[] = [
+    const memoryFactsUsed: (MemoryCitation & { provenance?: unknown })[] = [
       {
         key: 'prep_buffer_minutes',
         value: bufferMinutes,
         status: bufferFact.status,
+        provenance: bufferFact.provenance,
       },
       {
         key: 'prep_duration_minutes',
         value: prepMinutes,
         status: prepFact.status,
+        provenance: prepFact.provenance,
       },
     ];
 
@@ -355,6 +357,7 @@ export class DepartPreparer implements Preparer {
           key: 'rain_transport_preference',
           value: rainPreferenceFact.value,
           status: rainPreferenceFact.status,
+          provenance: rainPreferenceFact.provenance,
         });
       }
 

@@ -283,11 +283,12 @@ export class LunchPreparer implements Preparer {
       );
     }
 
-    const memoryFactsUsed: MemoryCitation[] = confirmedTasteFacts.map(f =>
+    const memoryFactsUsed: (MemoryCitation & { provenance?: unknown })[] = confirmedTasteFacts.map(f =>
       Object.freeze({
         key: f.key,
         value: f.value,
         status: f.status,
+        provenance: f.provenance,
       })
     );
 

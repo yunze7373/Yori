@@ -30,6 +30,84 @@ import { isYoriManagedFactKey } from './key-contract.js';
 import { LocalMemoryAdapter } from './local-adapter.js';
 import type { MemoryPort, MemoryPortStatus } from './types.js';
 
+/**
+ * Invariant & Boundary Validator for Remote Fact Values
+ * Governed by Reviewer Finding P1 (INBOX-20261031-E69766-REV-7aef3150).
+ *
+ * Validates remote values per key against the same schema and bounds as local input
+ * before merging into the active Living Context facts. Untrusted or out-of-bounds
+ * remote entries are dropped fail-closed to prevent corrupting time-critical calculations
+ * (e.g. prep_buffer_preference prepMinutes 0-120, bufferMinutes 0-60).
+ */
+export function isValidRemoteFactValue(key: string, value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+
+  switch (key) {
+    case 'prep_buffer_preference': {
+      if (typeof value !== 'object' || Array.isArray(value)) return false;
+      const obj = value as Record<string, unknown>;
+      const prep = obj.prepMinutes;
+      const buffer = obj.bufferMinutes;
+      if (typeof prep !== 'number' || !Number.isInteger(prep) || prep < 0 || prep > 120) return false;
+      if (typeof buffer !== 'number' || !Number.isInteger(buffer) || buffer < 0 || buffer > 60) return false;
+      return true;
+    }
+
+    case 'prep_buffer_minutes': {
+      return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 60;
+    }
+
+    case 'prep_duration_minutes': {
+      return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 120;
+    }
+
+    case 'rain_transport_preference': {
+      if (typeof value !== 'string') return false;
+      const normalized = value.trim().toLowerCase();
+      return (
+        normalized === 'drive_first' ||
+        normalized === 'bus_first' ||
+        normalized === 'drive' ||
+        normalized === 'bus' ||
+        normalized === 'transit'
+      );
+    }
+
+    case 'taste_preference':
+    case 'favorite_cuisine':
+    case 'grocery_store_preference':
+    case 'preferred_grocery_store': {
+      if (typeof value !== 'string') return false;
+      const trimmed = value.trim();
+      return trimmed.length > 0 && trimmed.length <= 100;
+    }
+
+    case 'taste_preferences': {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed.length > 0 && trimmed.length <= 100;
+      }
+      if (Array.isArray(value)) {
+        return (
+          value.length > 0 &&
+          value.length <= 20 &&
+          value.every(v => typeof v === 'string' && v.trim().length > 0 && v.trim().length <= 50)
+        );
+      }
+      return false;
+    }
+
+    case 'suppress_lunch':
+    case 'suppress_lunch_recommendations': {
+      return typeof value === 'boolean' || value === 'true' || value === 'false';
+    }
+
+    default:
+      // Unknown or non-governed key: reject fail-closed
+      return false;
+  }
+}
+
 export interface CompositeMemoryAdapterOptions {
   readonly storage?: YoriStorage;
   readonly localAdapter?: LocalMemoryAdapter;
@@ -190,6 +268,7 @@ export class CompositeMemoryAdapter implements MemoryPort {
       const validRemoteFacts = remoteFacts.filter(fact => {
         if (fact.status !== 'confirmed') return false;
         if (!isYoriManagedFactKey(fact.key)) return false;
+        if (!isValidRemoteFactValue(fact.key, fact.value)) return false; // Bounds & schema validation (INV-102)
         if (localKeys.has(fact.key)) return false; // Local confirmed fact takes precedence
         return true;
       });

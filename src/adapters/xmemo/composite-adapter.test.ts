@@ -23,7 +23,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { CompositeMemoryAdapter } from './composite-adapter.js';
+import { CompositeMemoryAdapter, isValidRemoteFactValue } from './composite-adapter.js';
 import { XMemoRemoteAdapter } from './remote-adapter.js';
 import { createCompositeMemoryPort } from './index.js';
 import { YoriStorage, InMemoryStorageDriver } from '../../core/storage/index.js';
@@ -547,6 +547,123 @@ describe('CompositeMemoryAdapter (XMEMO-PORT-WIRE)', () => {
           delete (global as any).window;
         }
       }
+    });
+  });
+
+  describe('6. Remote Value Invariant & Boundary Validation (Reviewer Finding P1)', () => {
+    it('validates prep_buffer_preference schemas and bounds correctly', () => {
+      // Valid boundaries
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: 0, bufferMinutes: 0 })).toBe(true);
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: 25, bufferMinutes: 10 })).toBe(true);
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: 120, bufferMinutes: 60 })).toBe(true);
+
+      // Negative values (Reviewer finding P1)
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: -500, bufferMinutes: 10 })).toBe(false);
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: 25, bufferMinutes: -5 })).toBe(false);
+
+      // Huge values
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: 25, bufferMinutes: 100000 })).toBe(false);
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: 500, bufferMinutes: 10 })).toBe(false);
+
+      // NaN values
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: NaN, bufferMinutes: 10 })).toBe(false);
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: 25, bufferMinutes: NaN })).toBe(false);
+
+      // Non-integers
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: 15.5, bufferMinutes: 10 })).toBe(false);
+
+      // String instead of object
+      expect(isValidRemoteFactValue('prep_buffer_preference', '10m')).toBe(false);
+
+      // Nested object
+      expect(isValidRemoteFactValue('prep_buffer_preference', { prepMinutes: { val: 20 }, bufferMinutes: 10 })).toBe(false);
+
+      // Null or undefined
+      expect(isValidRemoteFactValue('prep_buffer_preference', null)).toBe(false);
+      expect(isValidRemoteFactValue('prep_buffer_preference', undefined)).toBe(false);
+      expect(isValidRemoteFactValue('prep_buffer_preference', {})).toBe(false);
+    });
+
+    it('validates prep_buffer_minutes and prep_duration_minutes bounds', () => {
+      expect(isValidRemoteFactValue('prep_buffer_minutes', 0)).toBe(true);
+      expect(isValidRemoteFactValue('prep_buffer_minutes', 60)).toBe(true);
+      expect(isValidRemoteFactValue('prep_buffer_minutes', -1)).toBe(false);
+      expect(isValidRemoteFactValue('prep_buffer_minutes', 61)).toBe(false);
+      expect(isValidRemoteFactValue('prep_buffer_minutes', NaN)).toBe(false);
+      expect(isValidRemoteFactValue('prep_buffer_minutes', '10')).toBe(false);
+
+      expect(isValidRemoteFactValue('prep_duration_minutes', 0)).toBe(true);
+      expect(isValidRemoteFactValue('prep_duration_minutes', 120)).toBe(true);
+      expect(isValidRemoteFactValue('prep_duration_minutes', -1)).toBe(false);
+      expect(isValidRemoteFactValue('prep_duration_minutes', 121)).toBe(false);
+    });
+
+    it('validates rain_transport_preference enums and rejects unknown modes', () => {
+      expect(isValidRemoteFactValue('rain_transport_preference', 'drive_first')).toBe(true);
+      expect(isValidRemoteFactValue('rain_transport_preference', 'bus_first')).toBe(true);
+      expect(isValidRemoteFactValue('rain_transport_preference', 'drive')).toBe(true);
+      expect(isValidRemoteFactValue('rain_transport_preference', 'bus')).toBe(true);
+
+      // Unknown enums
+      expect(isValidRemoteFactValue('rain_transport_preference', 'helicopter')).toBe(false);
+      expect(isValidRemoteFactValue('rain_transport_preference', 'subway')).toBe(false);
+      expect(isValidRemoteFactValue('rain_transport_preference', 123)).toBe(false);
+    });
+
+    it('validates taste preferences and suppress_lunch', () => {
+      expect(isValidRemoteFactValue('taste_preference', 'ramen')).toBe(true);
+      expect(isValidRemoteFactValue('taste_preference', '')).toBe(false);
+      expect(isValidRemoteFactValue('taste_preferences', ['ramen', 'salad'])).toBe(true);
+      expect(isValidRemoteFactValue('taste_preferences', [])).toBe(false);
+      expect(isValidRemoteFactValue('suppress_lunch', true)).toBe(true);
+      expect(isValidRemoteFactValue('suppress_lunch', 'not-a-bool')).toBe(false);
+    });
+
+    it('loadFacts() silently drops invalid remote facts and keeps valid local facts intact', async () => {
+      const storage = createMockStorage([
+        makeFact('rain_transport_preference', 'drive_first', 'confirmed'),
+      ]);
+
+      const mockFetch = vi.fn(async () => {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            // Malformed/hostile prep_buffer_preference from reviewer probe
+            {
+              key: 'prep_buffer_preference',
+              value: { prepMinutes: -500, bufferMinutes: 100000 },
+              status: 'confirmed',
+            },
+            // Unknown rain preference enum
+            {
+              key: 'rain_transport_preference',
+              value: 'hovercraft',
+              status: 'confirmed',
+            },
+            // Valid remote taste preference
+            {
+              key: 'taste_preference',
+              value: 'udon',
+              status: 'confirmed',
+            },
+          ],
+        } as Response;
+      });
+
+      const adapter = new CompositeMemoryAdapter({
+        storage,
+        fetchFn: mockFetch,
+        statusChecker: async () => ({ enabled: true, connected: true }),
+      });
+
+      const facts = await adapter.loadFacts();
+
+      // Only valid facts remain: local rain fact and valid remote taste fact
+      expect(facts.length).toBe(2);
+      expect(facts.find(f => f.key === 'prep_buffer_preference')).toBeUndefined();
+      expect(facts.find(f => f.key === 'rain_transport_preference')?.value).toBe('drive_first');
+      expect(facts.find(f => f.key === 'taste_preference')?.value).toBe('udon');
     });
   });
 });

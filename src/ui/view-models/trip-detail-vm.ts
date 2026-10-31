@@ -31,6 +31,7 @@ import {
   type EvidenceBundle,
   type SourceRef,
 } from './grounding.js';
+import { classifyFactSource } from './provenance.js';
 import type {
   TripDetailVM,
   TripModeTabVM,
@@ -268,8 +269,14 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
           value = 'unknown';
         }
       }
-      const isConfirmed = userConfirmedKeys?.has(fact.key) ?? false;
-      const provenanceText = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
+      const factKind = classifyFactSource(fact, userConfirmedKeys, plan.why?.memoryFactsUsed);
+      const isConfirmed = factKind === 'user_confirmed';
+      const provenanceText =
+        isConfirmed
+          ? 'You confirmed'
+          : factKind === 'synced'
+          ? 'Synced from XMemo'
+          : 'Demo profile · sample';
       whyHabits.push({
         label,
         value,

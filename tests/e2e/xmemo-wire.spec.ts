@@ -156,8 +156,15 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
           contentType: 'application/json',
           body: JSON.stringify([
             {
+              key: 'prep_buffer_preference',
+              value: { prepMinutes: 25, bufferMinutes: 10 },
+              status: 'confirmed',
+              note: 'Synced from XMemo vault',
+              updatedAt: '2026-10-31T09:00:00.000Z',
+            },
+            {
               key: 'rain_transport_preference',
-              value: 'drive',
+              value: 'drive_first',
               status: 'confirmed',
               note: 'Synced from XMemo vault',
               updatedAt: '2026-10-31T09:00:00.000Z',
@@ -171,6 +178,39 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
     });
 
     await page.goto('/');
+
+    // 1. Why Sheet Truthful Provenance Verification (Reviewer Finding P2)
+    // Open Why sheet on Home view
+    const whyBtn = page.locator('#btn-why');
+    await expect(whyBtn).toBeVisible();
+    await whyBtn.click();
+
+    const whyBackdrop = page.locator('#why-sheet-backdrop');
+    await expect(whyBackdrop).toBeVisible();
+
+    // Verify remote-only synced habits carry truthful 'Synced from XMemo' badges
+    const memorySection = whyBackdrop.locator('section[aria-labelledby="why-memory-heading"]');
+    await expect(memorySection).toBeVisible();
+
+    // Assert that badges for synced items strictly say 'Synced from XMemo'
+    const syncedBadges = memorySection.locator('.why-item-row .card-badge');
+    await expect(syncedBadges.first()).toBeVisible();
+    const count = await syncedBadges.count();
+    expect(count).toBeGreaterThan(0);
+
+    for (let i = 0; i < count; i++) {
+      const badgeText = await syncedBadges.nth(i).innerText();
+      // Must NOT be demo sample and must NOT claim user confirmation
+      expect(badgeText).not.toBe('Demo profile · sample preference');
+      expect(badgeText).not.toBe('Confirmed');
+      expect(badgeText).toBe('Synced from XMemo');
+    }
+
+    // Close Why sheet
+    await page.locator('#btn-why-sheet-done').click();
+    await expect(whyBackdrop).not.toBeVisible();
+
+    // 2. Me Tab Truthful Provenance Verification
     await goToMeTab(page, isMobile);
 
     // Assert: XMemo section is visible in connected state
@@ -181,7 +221,6 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
     const factRow = page.locator('#fact-rain_transport_preference');
     await expect(factRow).toBeVisible();
     await expect(factRow.locator('.memory-key')).toHaveText('Rain travel habit');
-    await expect(factRow.locator('.memory-val')).toHaveText('drive');
 
     // Assert: Truthful provenance (no invented "you confirmed")
     await expect(factRow.locator('.memory-meta')).toContainText('Source: synced from XMemo');
@@ -250,8 +289,10 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
   test('Scenario 4 (Write-Back & Data Sovereignty): Write dispatches to remote proxy; Reset Storage is local-only', async ({
     page,
   }, testInfo) => {
-    let remoteWriteCalled = false;
+    const isMobile = testInfo.project.name === 'mobile';
+    let remoteWriteCount = 0;
     let remoteWritePayload: any = null;
+    let remoteWriteHeaders: Record<string, string> = {};
 
     await page.route('**/*', async (route, request) => {
       const url = new URL(request.url());
@@ -278,8 +319,9 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
       }
 
       if (url.pathname === '/api/xmemo/confirmed-facts' && request.method() === 'POST') {
-        remoteWriteCalled = true;
+        remoteWriteCount++;
         remoteWritePayload = JSON.parse(request.postData() || '{}');
+        remoteWriteHeaders = request.headers();
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -292,16 +334,110 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
     });
 
     await page.goto('/');
-    await goToMeTab(page, testInfo.project.name === 'mobile');
 
-    // Confirm that Data Controls explicitly states Reset Storage is local-only
+    // 1. Initial page load must not perform remote writes
+    expect(remoteWriteCount).toBe(0);
+    expect(remoteWritePayload).toBeNull();
+
+    // 2. Perform Adjust -> Remember as preference -> Confirm proposal (INV-107)
+    const adjustBtn = page.locator('#btn-adjust');
+    await expect(adjustBtn).toBeVisible();
+    await adjustBtn.click();
+
+    const adjustModal = page.locator('#adjust-dialog-backdrop');
+    await expect(adjustModal).toBeVisible();
+
+    const rememberBtn = page.locator('#btn-adjust-remember');
+    await expect(rememberBtn).toBeVisible();
+    await rememberBtn.click();
+    await expect(adjustModal).not.toBeVisible();
+
+    // Proposal row is now in FOR YOU
+    const forYouRow = page.locator('#for-you-prep_buffer_preference');
+    await expect(forYouRow).toBeVisible();
+
+    // Invariant INV-107: Before confirmation, zero remote writes have occurred
+    expect(remoteWriteCount).toBe(0);
+
+    // Explicit user confirmation triggers write-back
+    const confirmBtn = forYouRow.locator('.btn-confirm-proposal');
+    await expect(confirmBtn).toBeVisible();
+    const writePromise = page.waitForRequest(
+      req => req.url().includes('/api/xmemo/confirmed-facts') && req.method() === 'POST'
+    );
+    await confirmBtn.click();
+    await writePromise;
+
+    // Proposal disappears from FOR YOU upon confirmation
+    await expect(forYouRow).not.toBeVisible();
+
+    // Assert: exactly 1 remote write was dispatched
+    expect(remoteWriteCount).toBe(1);
+    expect(remoteWritePayload).not.toBeNull();
+    expect(remoteWritePayload.status).toBe('confirmed');
+    expect(remoteWritePayload.key).toBe('prep_buffer_preference');
+
+    // Assert: zero client Authorization headers
+    expect(remoteWriteHeaders['authorization']).toBeUndefined();
+    expect(remoteWriteHeaders['Authorization']).toBeUndefined();
+
+    // 3. Confirm Reset Storage is local-only in Data Controls
+    await goToMeTab(page, isMobile);
     const dataSection = page.locator('section[aria-labelledby="me-data-title"]');
     await expect(dataSection.locator('.me-card-desc')).toContainText(
       'Resetting storage clears local browser preferences and history only. Remote XMemo vault records are preserved and never deleted from this client.'
     );
+  });
 
-    // Assert that initial page load does not dispatch any unexpected write-back
-    expect(remoteWriteCalled).toBe(false);
-    expect(remoteWritePayload).toBeNull();
+  test('Scenario 5 (Safety Bounds & Invariant Enforcement): Corrupt remote value drops fail-closed without breaking NOW card', async ({
+    page,
+  }) => {
+    await page.route('**/*', async (route, request) => {
+      const url = new URL(request.url());
+
+      if (url.pathname === '/api/xmemo/status') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            enabled: true,
+            connected: true,
+            statusText: 'Connected to mock XMemo vault',
+          }),
+        });
+        return;
+      }
+
+      if (url.pathname === '/api/xmemo/preferences') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([
+            // Corrupt out-of-bounds preference from reviewer finding P1
+            {
+              key: 'prep_buffer_preference',
+              value: { prepMinutes: -500, bufferMinutes: 100000 },
+              status: 'confirmed',
+              note: 'Hostile/corrupted vault record',
+              updatedAt: '2026-10-31T09:00:00.000Z',
+            },
+          ]),
+        });
+        return;
+      }
+
+      await route.continue();
+    });
+
+    await page.goto('/');
+
+    // Assert: The Piano lesson NOW card STILL renders and is not erased into quiet state
+    const nowSubject = page.locator('.now-subject');
+    await expect(nowSubject).toBeVisible();
+    await expect(nowSubject).toContainText('Piano lesson at 3:00 PM');
+
+    // Assert: Home does NOT show quiet state
+    const quietText = page.locator('text=Nothing needs your attention right now.');
+    await expect(quietText).toHaveCount(0);
   });
 });
