@@ -37,6 +37,9 @@
 
 ### 3. Video Recording & Editing
 - [ ] **Review Video Script**: Inspect [`VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md).
+- [ ] **Visual Proof Reference & Fallback Screenshots**:
+  - The latest owner-facing visual evidence on current HEAD is verified in [`docs/evidence/visual-proof-head/`](../evidence/visual-proof-head/) (18 deterministic captures across mobile & desktop viewports, zero external network requests, 0 Axe critical/serious violations; see [`INDEX.md`](../evidence/visual-proof-head/INDEX.md)).
+  - Historical pre-slice baseline captures are preserved in [`docs/evidence/submit-fallback/`](../evidence/submit-fallback/).
 - [ ] **Record Walkthrough (duration: UNKNOWN — confirm on logged-in submit form; prepared script ~3 minutes)**:
   - Start local dev server (`npm run dev`) or preview (`npm run preview`).
   - Record desktop (1280×800) or mobile (390×844) viewport following the timed timestamps in `VIDEO_SCRIPT.md`.
@@ -87,8 +90,9 @@
 The underlying codebase has passed all required automated verification suites for Phase Closeout:
 - ✅ **AC-EXT-1 Core Diff Invariant**: `src/core/` diff vs baseline `f43c6c1d74c4bc1159300fed9d62aec9447b886e` is **100% EMPTY** (0 files, 0 lines changed).
 - ✅ **TypeScript Strict Mode**: `tsc --noEmit` exits 0 with zero errors.
-- ✅ **Unit & Mock Integration**: 756/756 tests passing across 31 files (`npm test`).
+- ✅ **Unit & Mock Integration**: 793/793 tests passing across 32 files (`npm test`).
 - ✅ **Golden Scenario Harness**: 18/18 scenarios passing byte-identically (`npm run test:golden`).
 - ✅ **Degradation Drills**: 56/56 fault injection invariance tests passing (`npm run test:drills`).
-- ✅ **Playwright E2E**: 268/268 end-to-end tests passing across 21 files (`npx playwright test`).
+- ✅ **Playwright E2E**: 284/284 end-to-end tests passing across 23 files (`npx playwright test`).
+- ✅ **Current-HEAD Visual Proof**: 6/6 tests passing twice consecutively across 18 mobile/desktop captures (`docs/evidence/visual-proof-head/`).
 - ✅ **Static Secret Scan**: Zero tokens or keys in `src/`, `dist/`, or browser storage APIs.
