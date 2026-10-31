@@ -75,6 +75,7 @@ import {
   isYoriManagedFactKey,
   extractCandidateFacts,
   hasYoriProvenance,
+  resolveXMemoConfig,
 } from '../src/adapters/xmemo/server-proxy.js';
 import { XMemoRemoteAdapter } from '../src/adapters/xmemo/remote-adapter.js';
 
@@ -203,11 +204,29 @@ export class InProcessMockXMemoServer {
           revocation_endpoint: `${this.issuerUrl}/oauth/revoke`,
           mcp_endpoint: `${this.issuerUrl}/mcp`,
           resource: `${this.issuerUrl}/mcp`,
+          protected_resource_metadata_endpoint: `${this.issuerUrl}/.well-known/oauth-protected-resource`,
           response_types_supported: ['code'],
           grant_types_supported: ['authorization_code', 'refresh_token'],
           code_challenge_methods_supported: ['S256'],
           token_endpoint_auth_methods_supported: ['none'],
           scopes_supported: ['memory:read', 'memory:write'],
+        })
+      );
+      return;
+    }
+
+    // 1b. RFC 9207 / RFC 9470 OAuth Protected Resource Metadata
+    if (urlPath === '/.well-known/oauth-protected-resource' && req.method === 'GET') {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(
+        JSON.stringify({
+          resource: `${this.issuerUrl}/mcp`,
+          authorization_servers: [this.issuerUrl],
+          scopes_supported: ['memory:read', 'memory:write'],
+          bearer_methods_supported: ['header'],
+          resource_documentation: 'https://docs.xmemo.dev',
+          token_endpoint_auth_methods_supported: ['none'],
         })
       );
       return;
@@ -328,6 +347,10 @@ export class InProcessMockXMemoServer {
       if (!match || !match[1]) {
         res.statusCode = 401;
         res.setHeader('Content-Type', 'application/json');
+        res.setHeader(
+          'WWW-Authenticate',
+          `Bearer resource_metadata="${this.issuerUrl}/.well-known/oauth-protected-resource", scope="memory:read memory:write", error="invalid_token"`
+        );
         res.end(JSON.stringify({ error: 'Unauthorized: Bearer token required' }));
         return;
       }
@@ -1211,14 +1234,675 @@ export async function runReadOnlyOwnerKey(
   }
 }
 
+// ============================================================================
+// 🔒 XMEMO-HEALTH: Unauthenticated Public Discovery & Health Verification
+// ============================================================================
+
+export interface HealthCheckFieldComparison {
+  field: string;
+  expected: string | string[] | readonly string[];
+  discovered: string | string[] | readonly string[] | undefined;
+  status: 'MATCH' | 'MISMATCH';
+  notes?: string;
+}
+
+export interface HealthCheckRequestRecord {
+  requestIndex: number;
+  url: string;
+  method: string;
+  httpStatus: number;
+  latencyMs: number;
+  targetHost: string;
+  headersReceived?: Record<string, string>;
+}
+
+export interface HealthCheckReport {
+  schemaVersion: '1.0.0';
+  timestampUtc: string;
+  timestampJst: string;
+  runMode: 'live_health' | 'dry_run_mock';
+  targetHost: string;
+  executionStatus: 'success' | 'failed' | 'hard_stop';
+  hardStopReason?: string;
+  totalRequestsDispatched: number;
+  maxRequestsCap: number;
+  requests: HealthCheckRequestRecord[];
+  surfaceComparisons: HealthCheckFieldComparison[];
+  mcpProbe: {
+    endpoint: string;
+    unauthenticatedStatus: number;
+    hasWwwAuthenticate: boolean;
+    wwwAuthenticateHeader?: string;
+    verdict: 'PASS' | 'FAIL';
+  };
+  overallVerdict: 'PASS' | 'FAIL';
+  findings: string[];
+  privacyAudit: {
+    reportContainsTokens: boolean;
+    reportContainsKeys: boolean;
+    credentialsSent: boolean;
+    authorizationHeaderSent: boolean;
+  };
+}
+
+export interface HealthCheckOptions {
+  dryRun?: boolean;
+  issuerUrl?: string;
+  mockFetch?: typeof fetch;
+  mockServer?: InProcessMockXMemoServer;
+  reportDir?: string;
+  logger?: (msg: string) => void;
+  updateEvidence?: boolean;
+}
+
+export interface HealthCheckResult {
+  success: boolean;
+  verdict: 'PASS' | 'FAIL';
+  error?: string;
+  report: HealthCheckReport;
+}
+
+export function compareSurfaceField(
+  field: string,
+  expected: string | string[] | readonly string[],
+  discovered: string | string[] | readonly string[] | undefined,
+  fieldMatcher?: (exp: any, disc: any) => boolean,
+  notes?: string
+): HealthCheckFieldComparison {
+  if (discovered === undefined) {
+    return {
+      field,
+      expected,
+      discovered,
+      status: 'MISMATCH',
+      notes: notes || 'Field missing from upstream discovery metadata',
+    };
+  }
+
+  let isMatch = false;
+  if (fieldMatcher) {
+    isMatch = fieldMatcher(expected, discovered);
+  } else if (Array.isArray(expected) && Array.isArray(discovered)) {
+    isMatch = expected.every(item => discovered.includes(item));
+  } else {
+    isMatch = String(expected).replace(/\/$/, '') === String(discovered).replace(/\/$/, '');
+  }
+
+  return {
+    field,
+    expected,
+    discovered,
+    status: isMatch ? 'MATCH' : 'MISMATCH',
+    notes,
+  };
+}
+
+export function formatHealthReportMarkdown(report: HealthCheckReport): string {
+  const lines: string[] = [];
+  lines.push('# XMemo Public Authorization & Health Check Report (XMEMO-HEALTH)');
+  lines.push('');
+  lines.push(`- **Run Mode**: \`${report.runMode}\``);
+  lines.push(`- **Timestamp (UTC)**: \`${report.timestampUtc}\``);
+  lines.push(`- **Timestamp (JST)**: \`${report.timestampJst}\``);
+  lines.push(`- **Target Host**: \`${report.targetHost}\``);
+  lines.push(`- **Execution Status**: \`${report.executionStatus}\``);
+  lines.push(`- **Overall Verdict**: \`${report.overallVerdict}\``);
+  if (report.hardStopReason) {
+    lines.push(`- **Hard Stop Reason**: \`${report.hardStopReason}\``);
+  }
+  lines.push(`- **Total Requests Dispatched**: ${report.totalRequestsDispatched} / ${report.maxRequestsCap} (max cap: ${report.maxRequestsCap})`);
+  lines.push('');
+  lines.push('## 📡 Dispatched Requests (Unauthenticated Public Discovery Only)');
+  lines.push('');
+  lines.push('| # | Method | URL | Status | Latency | Key Headers / Challenge |');
+  lines.push('|---|---|---|---|---|---|');
+
+  for (const r of report.requests) {
+    const keyHeader = r.headersReceived?.['www-authenticate']
+      ? `WWW-Authenticate: ${r.headersReceived['www-authenticate']}`
+      : r.headersReceived?.['content-type']
+      ? `content-type: ${r.headersReceived['content-type']}`
+      : 'none';
+    lines.push(`| ${r.requestIndex} | \`${r.method}\` | \`${r.url}\` | ${r.httpStatus} | ${r.latencyMs}ms | \`${keyHeader}\` |`);
+  }
+
+  lines.push('');
+  lines.push('## 🔍 Authorization Surface Parity (AC-203-1 vs Discovered)');
+  lines.push('');
+  lines.push('| Field | Configured Expectation (AC-203-1) | Discovered from Upstream | Verdict | Notes |');
+  lines.push('|---|---|---|---|---|');
+
+  for (const c of report.surfaceComparisons) {
+    const expStr = Array.isArray(c.expected) ? c.expected.join(', ') : String(c.expected);
+    const discStr = c.discovered !== undefined
+      ? Array.isArray(c.discovered)
+        ? c.discovered.join(', ')
+        : String(c.discovered)
+      : 'missing';
+    lines.push(`| \`${c.field}\` | \`${expStr}\` | \`${discStr}\` | \`${c.status}\` | ${c.notes || '-'} |`);
+  }
+
+  lines.push('');
+  lines.push('## 🛡️ MCP Endpoint Unauthenticated Challenge');
+  lines.push('');
+  lines.push(`- **Target Endpoint**: \`${report.mcpProbe.endpoint}\``);
+  lines.push(`- **HTTP Status**: \`${report.mcpProbe.unauthenticatedStatus}\` (${report.mcpProbe.unauthenticatedStatus === 401 ? '401 Unauthorized expected' : 'unexpected'})`);
+  lines.push(`- **WWW-Authenticate Header**: \`${report.mcpProbe.wwwAuthenticateHeader || '(none)'}\``);
+  lines.push(`- **Probe Verdict**: \`${report.mcpProbe.verdict}\``);
+  lines.push('');
+  lines.push('## 🔒 Security & Privacy Audit');
+  lines.push('');
+  lines.push(`- **Credentials Sent**: \`${report.privacyAudit.credentialsSent ? 'VIOLATION' : 'false'}\` (strictly 0 tokens/keys sent)`);
+  lines.push(`- **Authorization Header Sent**: \`${report.privacyAudit.authorizationHeaderSent ? 'VIOLATION' : 'false'}\` (guarded before dispatch)`);
+  lines.push(`- **Report Contains Tokens**: \`${report.privacyAudit.reportContainsTokens ? 'VIOLATION' : 'false'}\``);
+  lines.push(`- **Report Contains Keys**: \`${report.privacyAudit.reportContainsKeys ? 'VIOLATION' : 'false'}\``);
+  lines.push('');
+
+  if (report.findings.length > 0) {
+    lines.push('## 📝 Findings');
+    lines.push('');
+    for (const f of report.findings) {
+      lines.push(`- ${f}`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+export async function runHealthCheck(
+  options: HealthCheckOptions = {}
+): Promise<HealthCheckResult> {
+  const logger = options.logger || console.log;
+  let serverToStop: InProcessMockXMemoServer | null = null;
+
+  const isDryRun =
+    options.dryRun !== undefined
+      ? options.dryRun
+      : Boolean(
+          options.mockFetch ||
+          options.mockServer ||
+          (options.issuerUrl && !options.issuerUrl.startsWith(ALLOWED_LIVE_ORIGIN))
+        );
+
+  let issuerUrl = options.issuerUrl;
+  if (!issuerUrl) {
+    if (isDryRun) {
+      if (options.mockServer) {
+        issuerUrl = options.mockServer.issuerUrl;
+      } else {
+        const mock = new InProcessMockXMemoServer();
+        issuerUrl = await mock.start();
+        serverToStop = mock;
+      }
+    } else {
+      issuerUrl = ALLOWED_LIVE_ORIGIN;
+    }
+  }
+
+  issuerUrl = issuerUrl.replace(/\/$/, '');
+
+  const expectedHost = new URL(issuerUrl).host;
+  const isLive = !isDryRun;
+
+  logger('================================================================');
+  logger(`🔍 XMEMO PUBLIC HEALTH & SURFACE CHECK (${isLive ? 'LIVE HEALTH' : 'DRY RUN MOCK'})`);
+  logger('================================================================');
+  logger(`   Target Host:         ${expectedHost}`);
+  logger(`   Protocol:            ${new URL(issuerUrl).protocol}`);
+  logger(`   Credentials:         NONE (unauthenticated public discovery only)`);
+  logger(`   Request Cap:         3 requests max`);
+
+  // In live mode, verify host and protocol strictly
+  if (isLive) {
+    const parsed = new URL(issuerUrl);
+    if (parsed.origin !== ALLOWED_LIVE_ORIGIN || parsed.protocol !== 'https:') {
+      const err = `Security violation: live health check target '${issuerUrl}' must be '${ALLOWED_LIVE_ORIGIN}' with https:`;
+      logger(`❌ ${err}`);
+      const emptyReport: HealthCheckReport = {
+        schemaVersion: '1.0.0',
+        timestampUtc: new Date().toISOString(),
+        timestampJst: new Date().toISOString(),
+        runMode: 'live_health',
+        targetHost: expectedHost,
+        executionStatus: 'hard_stop',
+        hardStopReason: err,
+        totalRequestsDispatched: 0,
+        maxRequestsCap: 3,
+        requests: [],
+        surfaceComparisons: [],
+        mcpProbe: {
+          endpoint: `${issuerUrl}/mcp`,
+          unauthenticatedStatus: 0,
+          hasWwwAuthenticate: false,
+          verdict: 'FAIL',
+        },
+        overallVerdict: 'FAIL',
+        findings: [err],
+        privacyAudit: {
+          reportContainsTokens: false,
+          reportContainsKeys: false,
+          credentialsSent: false,
+          authorizationHeaderSent: false,
+        },
+      };
+      return {
+        success: false,
+        verdict: 'FAIL',
+        error: err,
+        report: emptyReport,
+      };
+    }
+  }
+
+  const baseFetch = options.mockFetch || fetch;
+  let requestsDispatched = 0;
+  const maxRequests = 3;
+  const records: HealthCheckRequestRecord[] = [];
+  const findings: string[] = [];
+  let executionStatus: 'success' | 'failed' | 'hard_stop' = 'success';
+  let hardStopReason: string | undefined;
+  let credentialsSent = false;
+  let authorizationHeaderSent = false;
+
+  const UA =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Yori-HealthCheck/1.0';
+
+  const safeHealthFetch = async (
+    targetUrlStr: string,
+    method: string = 'GET',
+    headers: Record<string, string> = {},
+    body?: string
+  ): Promise<Response> => {
+    if (requestsDispatched >= maxRequests) {
+      throw new Error(`Upstream request hard cap reached: cannot exceed ${maxRequests} requests per run`);
+    }
+
+    const targetUrl = new URL(targetUrlStr);
+
+    // Host check
+    if (targetUrl.host !== expectedHost) {
+      throw new Error(
+        `Security violation: Target host '${targetUrl.host}' forbidden (must be '${expectedHost}')`
+      );
+    }
+
+    // Protocol check
+    if (isLive && targetUrl.protocol !== 'https:') {
+      throw new Error(
+        `Security violation: Target protocol '${targetUrl.protocol}' forbidden in live mode (must be 'https:')`
+      );
+    }
+
+    // Credential invariant check
+    for (const k of Object.keys(headers)) {
+      const lower = k.toLowerCase();
+      if (
+        lower === 'authorization' ||
+        lower === 'cookie' ||
+        lower === 'x-owner-key' ||
+        lower === 'x-api-key' ||
+        lower === 'proxy-authorization'
+      ) {
+        credentialsSent = true;
+        authorizationHeaderSent = true;
+        throw new Error(
+          `Security violation: credential header '${k}' is forbidden in unauthenticated health check`
+        );
+      }
+    }
+
+    const dispatchHeaders: Record<string, string> = {
+      'User-Agent': UA,
+      ...headers,
+    };
+
+    requestsDispatched++;
+    const start = Date.now();
+    let res: Response;
+    try {
+      res = await baseFetch(targetUrlStr, {
+        method,
+        headers: dispatchHeaders,
+        body,
+        signal: AbortSignal.timeout(10000),
+        redirect: 'manual',
+      });
+    } catch (fetchErr: unknown) {
+      const latencyMs = Date.now() - start;
+      records.push({
+        requestIndex: requestsDispatched,
+        url: targetUrlStr,
+        method,
+        httpStatus: 0,
+        latencyMs,
+        targetHost: expectedHost,
+      });
+      throw fetchErr;
+    }
+
+    const latencyMs = Date.now() - start;
+    const headersReceived: Record<string, string> = {};
+    const ct = res.headers.get('content-type');
+    if (ct) headersReceived['content-type'] = ct;
+    const wa = res.headers.get('www-authenticate');
+    if (wa) headersReceived['www-authenticate'] = wa;
+
+    records.push({
+      requestIndex: requestsDispatched,
+      url: targetUrlStr,
+      method,
+      httpStatus: res.status,
+      latencyMs,
+      targetHost: expectedHost,
+      headersReceived,
+    });
+
+    // Handle redirects (hard stop on any redirect)
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get('location');
+      if (!loc) {
+        throw new Error(`Hard stop: HTTP ${res.status} redirect without Location header`);
+      }
+      let redirectUrl: URL;
+      try {
+        redirectUrl = new URL(loc, targetUrl);
+      } catch {
+        throw new Error(`Hard stop: HTTP ${res.status} redirect with malformed Location: ${loc}`);
+      }
+      if (redirectUrl.host !== expectedHost) {
+        throw new Error(
+          `Hard stop: Unexpected redirect to external host: ${redirectUrl.host} (expected ${expectedHost})`
+        );
+      }
+      if (isLive && redirectUrl.protocol !== 'https:') {
+        throw new Error(
+          `Hard stop: Unexpected redirect to insecure protocol: ${redirectUrl.protocol}`
+        );
+      }
+      throw new Error(`Hard stop: Unexpected redirect received (${res.status} to ${loc})`);
+    }
+
+    return res;
+  };
+
+  const comparisons: HealthCheckFieldComparison[] = [];
+  let mcpProbeResult = {
+    endpoint: `${issuerUrl}/mcp`,
+    unauthenticatedStatus: 0,
+    hasWwwAuthenticate: false,
+    wwwAuthenticateHeader: undefined as string | undefined,
+    verdict: 'FAIL' as 'PASS' | 'FAIL',
+  };
+
+  try {
+    // ------------------------------------------------------------------------
+    // Request 1: RFC 8414 OAuth Authorization Server Discovery
+    // ------------------------------------------------------------------------
+    const discoUrl = `${issuerUrl}/.well-known/oauth-authorization-server`;
+    logger(`📡 Dispatching Request 1: GET ${discoUrl}`);
+    const discoRes = await safeHealthFetch(discoUrl, 'GET', { Accept: 'application/json' });
+    logger(`   Status: ${discoRes.status}`);
+
+    if (discoRes.status !== 200) {
+      executionStatus = 'failed';
+      hardStopReason = `Discovery endpoint returned HTTP ${discoRes.status}`;
+      findings.push(hardStopReason);
+    } else {
+      let discoData: any = {};
+      try {
+        discoData = await discoRes.json();
+      } catch {
+        executionStatus = 'failed';
+        hardStopReason = 'Discovery response is not valid JSON';
+        findings.push(hardStopReason);
+      }
+
+      if (executionStatus === 'success') {
+        const config = resolveXMemoConfig(
+          undefined,
+          isDryRun ? { XMEMO_ISSUER: issuerUrl } : process.env
+        );
+
+        // 1. issuer
+        comparisons.push(
+          compareSurfaceField('issuer', config.issuer, discoData.issuer)
+        );
+
+        // 2. authorization_endpoint
+        comparisons.push(
+          compareSurfaceField('authorization_endpoint', config.authorizeUrl, discoData.authorization_endpoint)
+        );
+
+        // 3. token_endpoint
+        comparisons.push(
+          compareSurfaceField('token_endpoint', config.tokenUrl, discoData.token_endpoint)
+        );
+
+        // 4. registration_endpoint
+        const expectedReg = config.registrationUrl || `${config.issuer}/oauth/register`;
+        comparisons.push(
+          compareSurfaceField('registration_endpoint', expectedReg, discoData.registration_endpoint)
+        );
+
+        // 5. revocation_endpoint
+        comparisons.push(
+          compareSurfaceField('revocation_endpoint', config.revokeUrl, discoData.revocation_endpoint)
+        );
+
+        // 6. grant_types_supported
+        const expectedGrants = ['authorization_code', 'refresh_token'];
+        comparisons.push(
+          compareSurfaceField(
+            'grant_types_supported',
+            expectedGrants,
+            discoData.grant_types_supported,
+            (exp, disc) => Array.isArray(disc) && exp.every((g: string) => disc.includes(g)),
+            'Must support authorization_code and refresh_token'
+          )
+        );
+
+        // 7. code_challenge_methods_supported
+        const expectedPkce = ['S256'];
+        comparisons.push(
+          compareSurfaceField(
+            'code_challenge_methods_supported',
+            expectedPkce,
+            discoData.code_challenge_methods_supported,
+            (exp, disc) => Array.isArray(disc) && exp.every((m: string) => disc.includes(m)),
+            'Must support S256 PKCE'
+          )
+        );
+
+        // 8. scopes_supported
+        comparisons.push(
+          compareSurfaceField(
+            'scopes_supported',
+            config.scopes,
+            discoData.scopes_supported,
+            (exp, disc) => Array.isArray(disc) && exp.every((s: string) => disc.includes(s)),
+            `Must include ${config.scopes.join(', ')}`
+          )
+        );
+
+        // --------------------------------------------------------------------
+        // Request 2: Protected Resource Metadata (if referenced)
+        // --------------------------------------------------------------------
+        const protectedResourceEndpoint =
+          discoData.protected_resource_metadata_endpoint ||
+          (Array.isArray(discoData.protected_resources) ? discoData.protected_resources[0] : undefined);
+
+        if (protectedResourceEndpoint && requestsDispatched < maxRequests) {
+          logger(`📡 Dispatching Request 2: GET ${protectedResourceEndpoint}`);
+          try {
+            const prRes = await safeHealthFetch(protectedResourceEndpoint, 'GET', { Accept: 'application/json' });
+            logger(`   Status: ${prRes.status}`);
+            if (prRes.status === 200) {
+              const prData = (await prRes.json()) as any;
+              if (prData && prData.resource) {
+                comparisons.push({
+                  field: 'protected_resource.resource',
+                  expected: config.mcpUrl,
+                  discovered: prData.resource,
+                  status: prData.resource === config.mcpUrl ? 'MATCH' : 'MISMATCH',
+                  notes: 'RFC 9207 / RFC 9470 protected resource identifier',
+                });
+              }
+            }
+          } catch (prErr: unknown) {
+            findings.push(`Protected resource fetch non-fatal error: ${String(prErr)}`);
+          }
+        }
+
+        // --------------------------------------------------------------------
+        // Request 3: Unauthenticated MCP Probe (expecting 401 with WWW-Authenticate)
+        // --------------------------------------------------------------------
+        const mcpUrl = config.mcpUrl;
+        mcpProbeResult.endpoint = mcpUrl;
+        if (requestsDispatched < maxRequests) {
+          logger(`📡 Dispatching Request 3: POST ${mcpUrl} (Unauthenticated probe)`);
+          const mcpRes = await safeHealthFetch(
+            mcpUrl,
+            'POST',
+            { 'Content-Type': 'application/json' },
+            '{}'
+          );
+          logger(`   Status: ${mcpRes.status}`);
+
+          mcpProbeResult.unauthenticatedStatus = mcpRes.status;
+          const wwwAuth = mcpRes.headers.get('www-authenticate');
+          if (wwwAuth) {
+            mcpProbeResult.hasWwwAuthenticate = true;
+            mcpProbeResult.wwwAuthenticateHeader = wwwAuth;
+            logger(`   WWW-Authenticate: ${wwwAuth.slice(0, 80)}...`);
+          }
+
+          if (mcpRes.status === 401 && mcpProbeResult.hasWwwAuthenticate) {
+            mcpProbeResult.verdict = 'PASS';
+          } else {
+            mcpProbeResult.verdict = 'FAIL';
+            findings.push(
+              `MCP probe failed: expected HTTP 401 with WWW-Authenticate, got HTTP ${mcpRes.status} (header: ${Boolean(wwwAuth)})`
+            );
+          }
+        }
+      }
+    }
+  } catch (err: unknown) {
+    executionStatus = 'hard_stop';
+    hardStopReason = String(err);
+    findings.push(hardStopReason);
+    logger(`❌ Hard stop triggered: ${hardStopReason}`);
+  }
+
+  // Evaluate surface match findings
+  for (const c of comparisons) {
+    if (c.status === 'MISMATCH') {
+      findings.push(
+        `Field '${c.field}' MISMATCH: expected '${JSON.stringify(c.expected)}', got '${JSON.stringify(c.discovered)}'`
+      );
+    }
+  }
+
+  const allMatched = comparisons.length >= 8 && comparisons.every(c => c.status === 'MATCH');
+  const mcpPass = mcpProbeResult.verdict === 'PASS';
+  const overallVerdict: 'PASS' | 'FAIL' =
+    executionStatus === 'success' && allMatched && mcpPass ? 'PASS' : 'FAIL';
+
+  const now = new Date();
+  const timestampUtc = now.toISOString();
+  const timestampJst =
+    new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(now) + ' JST';
+
+  const report: HealthCheckReport = {
+    schemaVersion: '1.0.0',
+    timestampUtc,
+    timestampJst,
+    runMode: isLive ? 'live_health' : 'dry_run_mock',
+    targetHost: expectedHost,
+    executionStatus,
+    hardStopReason,
+    totalRequestsDispatched: requestsDispatched,
+    maxRequestsCap: maxRequests,
+    requests: records,
+    surfaceComparisons: comparisons,
+    mcpProbe: mcpProbeResult,
+    overallVerdict,
+    findings,
+    privacyAudit: {
+      reportContainsTokens: false,
+      reportContainsKeys: false,
+      credentialsSent,
+      authorizationHeaderSent,
+    },
+  };
+
+  const reportJson = JSON.stringify(report, null, 2);
+  const reportMd = formatHealthReportMarkdown(report);
+
+  // Privacy assertion
+  const activeOwnerKey = process.env.XMEMO_KEY;
+  const activeModelKey = process.env.MODEL_API_KEY || process.env.META_API_KEY;
+  const forbiddenList = [
+    activeOwnerKey,
+    activeModelKey,
+    'password',
+    'Authorization: Bearer',
+    'access_token": "',
+    'client_secret": "',
+  ].filter((s): s is string => typeof s === 'string' && s.trim().length > 0);
+
+  assertReportPrivacy(reportJson, forbiddenList);
+  assertReportPrivacy(reportMd, forbiddenList);
+
+  // Persist report to docs/evidence/xmemo-health/
+  const reportDir = options.reportDir || path.resolve(__dirname, '../docs/evidence/xmemo-health');
+  fs.mkdirSync(reportDir, { recursive: true });
+  fs.writeFileSync(path.join(reportDir, 'xmemo-health-report.json'), reportJson, 'utf-8');
+  fs.writeFileSync(path.join(reportDir, 'XMEMO_HEALTH_REPORT.md'), reportMd, 'utf-8');
+
+  logger(`\n📊 HEALTH CHECK SUMMARY: ${overallVerdict} (Status: ${executionStatus.toUpperCase()})`);
+  logger(`   Requests Dispatched: ${requestsDispatched} / ${maxRequests} (cap)`);
+  logger(`   Surface Match:       ${comparisons.filter(c => c.status === 'MATCH').length} / ${comparisons.length} matched`);
+  logger(`   MCP Challenge Probe: ${mcpProbeResult.verdict}`);
+  logger(`   Evidence Generated:  ${reportDir}`);
+
+  if (serverToStop) {
+    await serverToStop.stop();
+  }
+
+  return {
+    success: executionStatus === 'success',
+    verdict: overallVerdict,
+    error: hardStopReason,
+    report,
+  };
+}
+
 async function main(): Promise<void> {
   loadEnvLocal();
   const args = process.argv.slice(2);
 
+  const isHealthMode = args.includes('--health');
   const isOwnerKeyMode = args.includes('--owner-key');
   const isReadOnlyMode = args.includes('--read-only');
   const isDryRun = args.includes('--dry-run');
   const confirmLiveReadonly = args.includes('--confirm-live-readonly');
+
+  // Case 0: Public Health Check Mode (XMEMO-HEALTH)
+  if (isHealthMode) {
+    const res = await runHealthCheck({ dryRun: isDryRun });
+    process.exit(res.success && res.verdict === 'PASS' ? 0 : 1);
+  }
 
   // Case 1: Read-Only Owner-Key Check
   if (isOwnerKeyMode && isReadOnlyMode) {

@@ -13,6 +13,7 @@ import {
   loadEnvLocal,
   ALLOWED_LIVE_ORIGIN,
   ReadOnlyVerificationReport,
+  runHealthCheck,
 } from '../../../scripts/live-verify-xmemo.js';
 import { XMemoRemoteAdapter } from './remote-adapter.js';
 
@@ -716,6 +717,389 @@ describe('XMEMO-RO: Read-Only Owner-Key Connectivity Verification', () => {
 
       // Run dry-run read-only verification
       await runReadOnlyOwnerKey({
+        dryRun: true,
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      if (initialContent !== null) {
+        const postContent = fs.readFileSync(ledgerPath, 'utf-8');
+        const postHash = crypto.createHash('sha256').update(postContent).digest('hex');
+        expect(postHash).toBe(initialHash);
+        expect(postContent).toBe(initialContent);
+      }
+    });
+  });
+
+  // ==========================================================================
+  // 11. XMEMO-HEALTH: Unauthenticated Public Discovery & Health Verification
+  // ==========================================================================
+  describe('11. XMEMO-HEALTH: Unauthenticated Public Discovery & Health Verification', () => {
+    const validDiscoveryPayload = {
+      issuer: 'https://xmemo.dev',
+      authorization_endpoint: 'https://xmemo.dev/oauth/authorize',
+      token_endpoint: 'https://xmemo.dev/oauth/token',
+      registration_endpoint: 'https://xmemo.dev/oauth/register',
+      revocation_endpoint: 'https://xmemo.dev/oauth/revoke',
+      mcp_endpoint: 'https://xmemo.dev/mcp',
+      resource: 'https://xmemo.dev/mcp',
+      protected_resource_metadata_endpoint: 'https://xmemo.dev/.well-known/oauth-protected-resource',
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token'],
+      code_challenge_methods_supported: ['S256'],
+      token_endpoint_auth_methods_supported: ['none'],
+      scopes_supported: ['memory:read', 'memory:write', 'knowledge:read'],
+    };
+
+    const validProtectedResourcePayload = {
+      resource: 'https://xmemo.dev/mcp',
+      authorization_servers: ['https://xmemo.dev'],
+      scopes_supported: ['memory:read', 'memory:write'],
+      bearer_methods_supported: ['header'],
+    };
+
+    it('evaluates MATCH when upstream surface matches all AC-203-1 configured expectations', async () => {
+      const mockFetch: typeof fetch = async (input) => {
+        const urlStr = String(input);
+        if (urlStr.includes('/.well-known/oauth-authorization-server')) {
+          return new Response(JSON.stringify(validDiscoveryPayload), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.includes('/.well-known/oauth-protected-resource')) {
+          return new Response(JSON.stringify(validProtectedResourcePayload), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.endsWith('/mcp')) {
+          return new Response(JSON.stringify({ error: 'Unauthorized: Bearer token required' }), {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+              'WWW-Authenticate':
+                'Bearer resource_metadata="https://xmemo.dev/.well-known/oauth-protected-resource", scope="memory:read memory:write", error="invalid_token"',
+            },
+          });
+        }
+        return new Response('Not Found', { status: 404 });
+      };
+
+      const res = await runHealthCheck({
+        dryRun: true,
+        issuerUrl: 'https://xmemo.dev',
+        mockFetch,
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.verdict).toBe('PASS');
+      expect(res.report.executionStatus).toBe('success');
+      expect(res.report.totalRequestsDispatched).toBe(3);
+      expect(res.report.surfaceComparisons.length).toBeGreaterThanOrEqual(8);
+      expect(res.report.surfaceComparisons.every(c => c.status === 'MATCH')).toBe(true);
+      expect(res.report.mcpProbe.verdict).toBe('PASS');
+      expect(res.report.mcpProbe.unauthenticatedStatus).toBe(401);
+      expect(res.report.mcpProbe.hasWwwAuthenticate).toBe(true);
+      expect(res.report.privacyAudit.credentialsSent).toBe(false);
+      expect(res.report.privacyAudit.authorizationHeaderSent).toBe(false);
+    });
+
+    it('evaluates MISMATCH as a finding without throwing when upstream returns non-matching fields', async () => {
+      const mismatchedDiscovery = {
+        ...validDiscoveryPayload,
+        authorization_endpoint: 'https://xmemo.dev/oauth/other-authorize',
+        grant_types_supported: ['authorization_code'], // missing refresh_token
+        scopes_supported: ['memory:read'], // missing memory:write
+      };
+
+      const mockFetch: typeof fetch = async (input) => {
+        const urlStr = String(input);
+        if (urlStr.includes('/.well-known/oauth-authorization-server')) {
+          return new Response(JSON.stringify(mismatchedDiscovery), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.includes('/.well-known/oauth-protected-resource')) {
+          return new Response(JSON.stringify(validProtectedResourcePayload), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.endsWith('/mcp')) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+              'WWW-Authenticate': 'Bearer scope="memory:read"',
+            },
+          });
+        }
+        return new Response('Not Found', { status: 404 });
+      };
+
+      const res = await runHealthCheck({
+        dryRun: true,
+        issuerUrl: 'https://xmemo.dev',
+        mockFetch,
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      // Does not throw; returns completed report with findings
+      expect(res.success).toBe(true);
+      expect(res.verdict).toBe('FAIL');
+      expect(res.report.executionStatus).toBe('success');
+
+      const authEndpointComp = res.report.surfaceComparisons.find(c => c.field === 'authorization_endpoint');
+      expect(authEndpointComp?.status).toBe('MISMATCH');
+
+      const grantComp = res.report.surfaceComparisons.find(c => c.field === 'grant_types_supported');
+      expect(grantComp?.status).toBe('MISMATCH');
+
+      const scopesComp = res.report.surfaceComparisons.find(c => c.field === 'scopes_supported');
+      expect(scopesComp?.status).toBe('MISMATCH');
+
+      expect(res.report.findings.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('verifies 401 challenge on unauthenticated MCP probe with WWW-Authenticate header', async () => {
+      // 1. Expected 401 case
+      const mockFetch401: typeof fetch = async (input) => {
+        const urlStr = String(input);
+        if (urlStr.includes('/.well-known/oauth-authorization-server')) {
+          return new Response(JSON.stringify(validDiscoveryPayload), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.includes('/.well-known/oauth-protected-resource')) {
+          return new Response(JSON.stringify(validProtectedResourcePayload), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.endsWith('/mcp')) {
+          return new Response(JSON.stringify({ error: 'invalid_token' }), {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+              'WWW-Authenticate': 'Bearer error="invalid_token", scope="memory:read memory:write"',
+            },
+          });
+        }
+        return new Response('Not Found', { status: 404 });
+      };
+
+      const res401 = await runHealthCheck({
+        dryRun: true,
+        issuerUrl: 'https://xmemo.dev',
+        mockFetch: mockFetch401,
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      expect(res401.report.mcpProbe.unauthenticatedStatus).toBe(401);
+      expect(res401.report.mcpProbe.hasWwwAuthenticate).toBe(true);
+      expect(res401.report.mcpProbe.wwwAuthenticateHeader).toContain('Bearer');
+      expect(res401.report.mcpProbe.verdict).toBe('PASS');
+
+      // 2. Negative case: unexpected HTTP 200 without auth (unauthenticated leak)
+      const mockFetch200: typeof fetch = async (input) => {
+        const urlStr = String(input);
+        if (urlStr.includes('/.well-known/oauth-authorization-server')) {
+          return new Response(JSON.stringify(validDiscoveryPayload), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.includes('/.well-known/oauth-protected-resource')) {
+          return new Response(JSON.stringify(validProtectedResourcePayload), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.endsWith('/mcp')) {
+          return new Response(JSON.stringify({ result: { status: 'open' } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response('Not Found', { status: 404 });
+      };
+
+      const res200 = await runHealthCheck({
+        dryRun: true,
+        issuerUrl: 'https://xmemo.dev',
+        mockFetch: mockFetch200,
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      expect(res200.report.mcpProbe.unauthenticatedStatus).toBe(200);
+      expect(res200.report.mcpProbe.verdict).toBe('FAIL');
+      expect(res200.verdict).toBe('FAIL');
+    });
+
+    it('triggers fail-closed hard stop on unexpected redirect to external host and halts subsequent dispatches', async () => {
+      let callCount = 0;
+      const mockFetchRedirect: typeof fetch = async () => {
+        callCount++;
+        return new Response('', {
+          status: 302,
+          headers: {
+            Location: 'https://attacker-external-host.com/oauth/discovery',
+          },
+        });
+      };
+
+      const res = await runHealthCheck({
+        dryRun: true,
+        issuerUrl: 'https://xmemo.dev',
+        mockFetch: mockFetchRedirect,
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.verdict).toBe('FAIL');
+      expect(res.report.executionStatus).toBe('hard_stop');
+      expect(res.report.hardStopReason).toContain('external host');
+      expect(res.report.hardStopReason).toContain('attacker-external-host.com');
+      // Halts immediately: exactly 1 request made, 0 subsequent dispatches
+      expect(callCount).toBe(1);
+      expect(res.report.totalRequestsDispatched).toBe(1);
+    });
+
+    it('never sends token, owner key, cookie, or Authorization header across any request', async () => {
+      const capturedHeaders: Array<Record<string, string>> = [];
+
+      const mockFetch: typeof fetch = async (input, init) => {
+        const hdrs = (init?.headers as Record<string, string>) || {};
+        capturedHeaders.push({ ...hdrs });
+
+        const urlStr = String(input);
+        if (urlStr.includes('/.well-known/oauth-authorization-server')) {
+          return new Response(JSON.stringify(validDiscoveryPayload), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.includes('/.well-known/oauth-protected-resource')) {
+          return new Response(JSON.stringify(validProtectedResourcePayload), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (urlStr.endsWith('/mcp')) {
+          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+              'WWW-Authenticate': 'Bearer error="invalid_token"',
+            },
+          });
+        }
+        return new Response('Not Found', { status: 404 });
+      };
+
+      const res = await runHealthCheck({
+        dryRun: true,
+        issuerUrl: 'https://xmemo.dev',
+        mockFetch,
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      expect(res.success).toBe(true);
+      expect(capturedHeaders.length).toBe(3);
+
+      for (const hdrs of capturedHeaders) {
+        const lowerKeys = Object.keys(hdrs).map(k => k.toLowerCase());
+        expect(lowerKeys).not.toContain('authorization');
+        expect(lowerKeys).not.toContain('cookie');
+        expect(lowerKeys).not.toContain('x-owner-key');
+        expect(lowerKeys).not.toContain('x-api-key');
+        expect(lowerKeys).not.toContain('proxy-authorization');
+      }
+
+      expect(res.report.privacyAudit.authorizationHeaderSent).toBe(false);
+      expect(res.report.privacyAudit.credentialsSent).toBe(false);
+    });
+
+    it('runs end-to-end against InProcessMockXMemoServer in dry-run mode and persists valid reports', async () => {
+      const mockServer = new InProcessMockXMemoServer();
+      await mockServer.start();
+
+      try {
+        const res = await runHealthCheck({
+          dryRun: true,
+          mockServer,
+          reportDir: tmpReportDir,
+          logger: () => {},
+        });
+
+        expect(res.success).toBe(true);
+        expect(res.verdict).toBe('PASS');
+        expect(res.report.totalRequestsDispatched).toBe(3);
+        expect(res.report.surfaceComparisons.every(c => c.status === 'MATCH')).toBe(true);
+        expect(res.report.mcpProbe.verdict).toBe('PASS');
+
+        // Check report files on disk
+        const jsonPath = path.join(tmpReportDir, 'xmemo-health-report.json');
+        const mdPath = path.join(tmpReportDir, 'XMEMO_HEALTH_REPORT.md');
+        expect(fs.existsSync(jsonPath)).toBe(true);
+        expect(fs.existsSync(mdPath)).toBe(true);
+
+        const jsonContent = fs.readFileSync(jsonPath, 'utf-8');
+        const mdContent = fs.readFileSync(mdPath, 'utf-8');
+
+        // Privacy assertions pass
+        assertReportPrivacy(jsonContent, ['mock-secret', 'password', 'Authorization: Bearer']);
+        assertReportPrivacy(mdContent, ['mock-secret', 'password', 'Authorization: Bearer']);
+      } finally {
+        await mockServer.stop();
+      }
+    });
+
+    it('refuses live health check when target host or protocol violates xmemo.dev HTTPS invariant', async () => {
+      // Insecure HTTP to live host
+      const resInsecure = await runHealthCheck({
+        dryRun: false,
+        issuerUrl: 'http://xmemo.dev',
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      expect(resInsecure.success).toBe(false);
+      expect(resInsecure.verdict).toBe('FAIL');
+      expect(resInsecure.report.executionStatus).toBe('hard_stop');
+      expect(resInsecure.report.hardStopReason).toContain('https:');
+
+      // Untrusted external host in live mode
+      const resExternal = await runHealthCheck({
+        dryRun: false,
+        issuerUrl: 'https://evil-untrusted.com',
+        reportDir: tmpReportDir,
+        logger: () => {},
+      });
+
+      expect(resExternal.success).toBe(false);
+      expect(resExternal.verdict).toBe('FAIL');
+      expect(resExternal.report.executionStatus).toBe('hard_stop');
+      expect(resExternal.report.hardStopReason).toContain(ALLOWED_LIVE_ORIGIN);
+    });
+
+    it('confirms model live ledger remains strictly untouched across health checks', async () => {
+      const ledgerPath = path.resolve(__dirname, '../../../.yori-runtime/model-live-ledger.json');
+      const initialContent = fs.existsSync(ledgerPath) ? fs.readFileSync(ledgerPath, 'utf-8') : null;
+      const initialHash = initialContent ? crypto.createHash('sha256').update(initialContent).digest('hex') : null;
+
+      // Run health check
+      await runHealthCheck({
         dryRun: true,
         reportDir: tmpReportDir,
         logger: () => {},

@@ -1,0 +1,142 @@
+{
+  "schemaVersion": "1.0.0",
+  "timestampUtc": "2026-10-31T03:37:50.274Z",
+  "timestampJst": "2026/10/31 12:37:50 JST",
+  "runMode": "live_health",
+  "targetHost": "xmemo.dev",
+  "executionStatus": "success",
+  "totalRequestsDispatched": 3,
+  "maxRequestsCap": 3,
+  "requests": [
+    {
+      "requestIndex": 1,
+      "url": "https://xmemo.dev/.well-known/oauth-authorization-server",
+      "method": "GET",
+      "httpStatus": 200,
+      "latencyMs": 146,
+      "targetHost": "xmemo.dev",
+      "headersReceived": {
+        "content-type": "application/json"
+      }
+    },
+    {
+      "requestIndex": 2,
+      "url": "https://xmemo.dev/.well-known/oauth-protected-resource",
+      "method": "GET",
+      "httpStatus": 200,
+      "latencyMs": 36,
+      "targetHost": "xmemo.dev",
+      "headersReceived": {
+        "content-type": "application/json"
+      }
+    },
+    {
+      "requestIndex": 3,
+      "url": "https://xmemo.dev/mcp",
+      "method": "POST",
+      "httpStatus": 401,
+      "latencyMs": 39,
+      "targetHost": "xmemo.dev",
+      "headersReceived": {
+        "content-type": "application/json",
+        "www-authenticate": "Bearer resource_metadata=\"https://xmemo.dev/.well-known/oauth-protected-resource\", scope=\"memory:read memory:write\", error=\"invalid_token\", error_description=\"Your XMemo OAuth authorization is missing, expired, or no longer valid. Reconnect XMemo from your client to complete OAuth authorization again, then retry.\""
+      }
+    }
+  ],
+  "surfaceComparisons": [
+    {
+      "field": "issuer",
+      "expected": "https://xmemo.dev",
+      "discovered": "https://xmemo.dev",
+      "status": "MATCH"
+    },
+    {
+      "field": "authorization_endpoint",
+      "expected": "https://xmemo.dev/oauth/authorize",
+      "discovered": "https://xmemo.dev/oauth/authorize",
+      "status": "MATCH"
+    },
+    {
+      "field": "token_endpoint",
+      "expected": "https://xmemo.dev/oauth/token",
+      "discovered": "https://xmemo.dev/oauth/token",
+      "status": "MATCH"
+    },
+    {
+      "field": "registration_endpoint",
+      "expected": "https://xmemo.dev/oauth/register",
+      "discovered": "https://xmemo.dev/oauth/register",
+      "status": "MATCH"
+    },
+    {
+      "field": "revocation_endpoint",
+      "expected": "https://xmemo.dev/oauth/revoke",
+      "discovered": "https://xmemo.dev/oauth/revoke",
+      "status": "MATCH"
+    },
+    {
+      "field": "grant_types_supported",
+      "expected": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "discovered": [
+        "authorization_code",
+        "refresh_token"
+      ],
+      "status": "MATCH",
+      "notes": "Must support authorization_code and refresh_token"
+    },
+    {
+      "field": "code_challenge_methods_supported",
+      "expected": [
+        "S256"
+      ],
+      "discovered": [
+        "S256"
+      ],
+      "status": "MATCH",
+      "notes": "Must support S256 PKCE"
+    },
+    {
+      "field": "scopes_supported",
+      "expected": [
+        "memory:read",
+        "memory:write"
+      ],
+      "discovered": [
+        "memory:read",
+        "memory:write",
+        "knowledge:read",
+        "knowledge:write",
+        "openid",
+        "profile",
+        "email"
+      ],
+      "status": "MATCH",
+      "notes": "Must include memory:read, memory:write"
+    },
+    {
+      "field": "protected_resource.resource",
+      "expected": "https://xmemo.dev/mcp",
+      "discovered": "https://xmemo.dev/mcp",
+      "status": "MATCH",
+      "notes": "RFC 9207 / RFC 9470 protected resource identifier"
+    }
+  ],
+  "mcpProbe": {
+    "endpoint": "https://xmemo.dev/mcp",
+    "unauthenticatedStatus": 401,
+    "hasWwwAuthenticate": true,
+    "wwwAuthenticateHeader": "Bearer resource_metadata=\"https://xmemo.dev/.well-known/oauth-protected-resource\", scope=\"memory:read memory:write\", error=\"invalid_token\", error_description=\"Your XMemo OAuth authorization is missing, expired, or no longer valid. Reconnect XMemo from your client to complete OAuth authorization again, then retry.\"",
+    "verdict": "PASS"
+  },
+  "overallVerdict": "PASS",
+  "findings": [],
+  "privacyAudit": {
+    "reportContainsTokens": false,
+    "reportContainsKeys": false,
+    "credentialsSent": false,
+    "authorizationHeaderSent": false
+  }
+}
