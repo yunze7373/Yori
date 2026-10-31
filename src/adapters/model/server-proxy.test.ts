@@ -2935,6 +2935,98 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
       delete process.env.MODEL_LIVE_ENABLED;
       delete process.env.MODEL_LIVE_MAX_CALLS;
     });
+
+    it('command live mode refuses when MODEL_TIMEOUT_MS is below 20000 with 0 fetches, and passes with 20000 and MODEL_MAX_TOKENS=4096', async () => {
+      const timeoutTestReportMd = path.join(s1cmdDir, 'test-timeout-guard-report.md');
+      const timeoutTestReportJson = path.join(s1cmdDir, 'test-timeout-guard-report.json');
+
+      process.env.MODEL_API_KEY = 'sk-mock-timeout-key';
+      process.env.MODEL_LIVE_ENABLED = '1';
+      process.env.MODEL_LIVE_MAX_CALLS = '6';
+      process.env.MODEL_MAX_TOKENS = '4096';
+      delete process.env.MODEL_TIMEOUT_MS; // default timeout is 2000ms < 20000ms
+
+      let fetchCount = 0;
+      const stubbedFetch = vi.fn().mockImplementation(async () => {
+        fetchCount++;
+        return {
+          ok: true,
+          status: 200,
+          clone: () => ({
+            json: async () => ({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      intent: 'LEAVE_LATER',
+                      slots: { deltaMinutes: 15 },
+                      citedSignalIds: ['weather:2026-10-28T11:30:00Z'],
+                      citedFactKeys: ['habit_rain_transit'],
+                      reasonCodes: ['weather_adjusted'],
+                    }),
+                  },
+                  finish_reason: 'stop',
+                },
+              ],
+              usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+            }),
+          }),
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    intent: 'LEAVE_LATER',
+                    slots: { deltaMinutes: 15 },
+                    citedSignalIds: ['weather:2026-10-28T11:30:00Z'],
+                    citedFactKeys: ['habit_rain_transit'],
+                    reasonCodes: ['weather_adjusted'],
+                  }),
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+          }),
+        } as any;
+      });
+
+      // 1. Without MODEL_TIMEOUT_MS (or < 20000): must refuse with 0 fetches
+      await expect(
+        runLiveVerification({
+          only: 'command',
+          confirmBilled: true,
+          skipPreconditions: true,
+          mockFetch: stubbedFetch as any,
+          tempLedgerPath: s1cmdLedger,
+          reportPath: timeoutTestReportMd,
+          jsonReportPath: timeoutTestReportJson,
+        })
+      ).rejects.toThrow(/MODEL_TIMEOUT_MS must be at least 20000/);
+
+      expect(fetchCount).toBe(0);
+
+      // 2. With MODEL_TIMEOUT_MS=20000 and MODEL_MAX_TOKENS=4096: must pass the guard
+      process.env.MODEL_TIMEOUT_MS = '20000';
+      const result = await runLiveVerification({
+        only: 'command',
+        confirmBilled: true,
+        skipPreconditions: true,
+        mockFetch: stubbedFetch as any,
+        tempLedgerPath: s1cmdLedger,
+        reportPath: timeoutTestReportMd,
+        jsonReportPath: timeoutTestReportJson,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(fetchCount).toBeGreaterThan(0);
+
+      delete process.env.MODEL_TIMEOUT_MS;
+      delete process.env.MODEL_MAX_TOKENS;
+      delete process.env.MODEL_API_KEY;
+      delete process.env.MODEL_LIVE_ENABLED;
+      delete process.env.MODEL_LIVE_MAX_CALLS;
+    });
   });
 });
 

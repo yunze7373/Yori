@@ -20,6 +20,7 @@ import type { RejectedReasonCodeTelemetry } from './types.js';
 
 export const COMMAND_PER_RUN_MAX_CALLS = 6;
 export const MIN_COMMAND_LIVE_MAX_TOKENS = 4096;
+export const MIN_COMMAND_LIVE_TIMEOUT_MS = 20000;
 
 export interface CommandSuppressionRecord {
   readonly code: string;

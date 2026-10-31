@@ -1,10 +1,10 @@
 # S1-LIVE-3: Owner Gate Clearance & Live Verification Runbook
 
 **Date**: 2026-10-31  
-**Task ID**: `INBOX-20261031-713D79`  
+**Task ID**: `INBOX-20261031-713D79` / `INBOX-20261031-EA3AFB`  
 **Target Slice**: `S1-LIVE-3` (`decision_command` live model verification)  
 **Target Model**: `muse-spark-1.3` on `https://api.meta.ai/v1/chat/completions`  
-**Current Real Ledger State**: 17 / 50 calls used (33 remaining); SHA256 `46aa6fa9158356b29b327913522188615004b4c6d61952a2e61a2bd79b96da58`  
+**Current Real Ledger State**: 18 / 50 calls used (32 remaining); SHA256 `8f42a1d445e9f8ba864c0d4f354bf4494daf912e7b02498fe9e3584688558175`  
 
 ---
 
@@ -23,7 +23,7 @@ As of `S1-LIVE-3-PREP`, the offline test harness, code-acceptance evaluator, moc
 When cleared by the owner, live verification must be executed using the exact command line below:
 
 ```bash
-MODEL_LIVE_ENABLED=1 MODEL_LIVE_MAX_CALLS=6 MODEL_MAX_TOKENS=4096 npm run verify:live:spark -- --only command --confirm-billed
+MODEL_LIVE_ENABLED=1 MODEL_LIVE_MAX_CALLS=5 MODEL_MAX_TOKENS=4096 MODEL_TIMEOUT_MS=20000 npm run verify:live:spark -- --only command --confirm-billed
 ```
 
 > [!IMPORTANT]
@@ -32,8 +32,18 @@ MODEL_LIVE_ENABLED=1 MODEL_LIVE_MAX_CALLS=6 MODEL_MAX_TOKENS=4096 npm run verify
 > 2. Strictly refuses execution without explicit `--confirm-billed` flag.
 > 3. Clamps and refuses any per-run call count $> 6$ in command mode (`COMMAND_PER_RUN_MAX_CALLS = 6`).
 > 4. Strictly refuses execution if `MODEL_MAX_TOKENS < 4096` in command mode (`MIN_COMMAND_LIVE_MAX_TOKENS = 4096`).
-> 5. Strictly refuses execution if `MODEL_API_KEY` or `META_API_KEY` is missing from the environment.
-> 6. Strictly aborts if destination host is not `api.meta.ai`.
+> 5. Strictly refuses execution if `MODEL_TIMEOUT_MS < 20000` in command mode (`MIN_COMMAND_LIVE_TIMEOUT_MS = 20000`).
+> 6. Strictly refuses execution if `MODEL_API_KEY` or `META_API_KEY` is missing from the environment.
+> 7. Strictly aborts if destination host is not `api.meta.ai`.
+
+---
+
+## 2.1. Run 1 Record & Remaining Authorized Budget
+
+- **Run 1 Execution (2026-10-31)**: Exactly 1 call was dispatched (`Can I leave later?`) under owner authorization `msg_91396bb0`. The call aborted at 2005 ms due to unset `MODEL_TIMEOUT_MS` (falling back to server proxy default ~2s instead of the required 20000 ms).
+- **Hard Stop Honoured**: The fail-closed network error HARD STOP immediately halted further dispatches, preserving remaining budget.
+- **Ledger Progression**: Real ledger atomically incremented 17 $\rightarrow$ 18 / 50 calls (SHA256 `8f42a1d445e9f8ba864c0d4f354bf4494daf912e7b02498fe9e3584688558175`).
+- **Remaining Authorized Budget**: Under owner authorization (`msg_91396bb0`, up to 6 additional calls total), 1 call was consumed and up to **5 calls remain**. Projected post-run lifetime ledger count $\le 23 / 50$ calls (lifetime remaining $\ge 27$ calls).
 
 ---
 
@@ -42,15 +52,15 @@ MODEL_LIVE_ENABLED=1 MODEL_LIVE_MAX_CALLS=6 MODEL_MAX_TOKENS=4096 npm run verify
 Before live billed execution can commence, the owner must provide two explicit authorizations:
 
 ### Authorization 1: Scope & Budget Cap Coverage (S1-CAP50 Extension)
-- **Statement**: Confirmation that the existing S1-CAP50 durable 50-call lifetime budget authorization covers live verification of the `decision_command` endpoint under a strict per-run cap $\le 6$ calls.
+- **Statement**: Confirmation that the existing S1-CAP50 durable 50-call lifetime budget authorization covers live verification of the `decision_command` endpoint under a strict per-run cap $\le 5$ calls (accounting for the 1 call consumed in Run 1).
 - **Budget State**:
   - Lifetime cap: 50 calls
-  - Pre-run ledger count: 17 calls
-  - Planned calls: $\le 6$ calls
+  - Pre-run ledger count: 18 calls (post-Run 1)
+  - Planned calls: $\le 5$ calls
   - Projected post-run ledger count: $\le 23 / 50$ calls (at least 27 calls remaining).
 
 ### Authorization 2: Funding Source & Credentials Authorization
-- **Statement**: Confirmation that the owner has provided valid Meta API credentials in `.env.local` (`MODEL_API_KEY` or `META_API_KEY`) and authorizes the micro-spend charged by Meta for up to 6 inference requests.
+- **Statement**: Confirmation that the owner has provided valid Meta API credentials in `.env.local` (`MODEL_API_KEY` or `META_API_KEY`) and authorizes the micro-spend charged by Meta for up to 5 inference requests.
 
 ---
 
@@ -64,12 +74,12 @@ Prompt tokens are estimated at ~200–500 tokens per call.
 
 | Scenario | Calls | Tokens / Call (Prompt + Completion) | Total Tokens | Spend Estimate |
 |---|---|---|---|---|
-| **Best Case** (all finish early @ ~1,250 tok) | 6 | ~250 prompt + ~1,000 completion | ~7,500 tokens | **\$0.0150** |
-| **Expected Bounded** (~2,500 tok / call) | 6 | ~400 prompt + ~2,100 completion | ~15,000 tokens | **\$0.0300** |
-| **Worst Case Bound** (all exhaust 4,096 cap) | 6 | ~400 prompt + 4,096 completion (~4,500 tok) | ~27,000 tokens | **\$0.0540** |
-| **Upper Bound Limit** (conservative @ 5,000 tok) | 6 | ~5,000 tokens max | ~30,000 tokens | **\$0.0600** |
+| **Best Case** (all finish early @ ~1,250 tok) | 5 | ~250 prompt + ~1,000 completion | ~6,250 tokens | **\$0.0125** |
+| **Expected Bounded** (~2,500 tok / call) | 5 | ~400 prompt + ~2,100 completion | ~12,500 tokens | **\$0.0250** |
+| **Worst Case Bound** (all exhaust 4,096 cap) | 5 | ~400 prompt + 4,096 completion (~4,500 tok) | ~22,500 tokens | **\$0.0450** |
+| **Upper Bound Limit** (conservative @ 5,000 tok) | 5 | ~5,000 tokens max | ~25,000 tokens | **\$0.0500** |
 
-Token consumption is bounded at ~30,000 total tokens (6 calls $\times$ up to 4,096 completion tokens + prompt allowance). At the unverified provider rate of \$2.00 / 1M tokens (\$0.000002 / token) `[UNVERIFIED - estimated from Meta provider pricing tiers]`, the estimated spend is approximately **\$0.060 USD** (dollar estimate at an UNVERIFIED rate).
+Token consumption for Run 2 is bounded at ~25,000 total tokens (5 calls $\times$ up to 4,096 completion tokens + prompt allowance). At the unverified provider rate of \$2.00 / 1M tokens (\$0.000002 / token) `[UNVERIFIED - estimated from Meta provider pricing tiers]`, the estimated spend is approximately **\$0.050 USD** (dollar estimate at an UNVERIFIED rate).
 
 > [!IMPORTANT]
 > **Hard Stop on First Truncation**: If any response returns `finish_reason === "length"` or `fallbackReason === "truncated"`, execution terminates immediately and no further calls will be dispatched, halting token consumption.

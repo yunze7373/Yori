@@ -39,5 +39,6 @@
     }
   ],
   "keyOccurrenceCount": 0,
-  "d1ToD6ParityPass": true
+  "d1ToD6ParityPass": true,
+  "isCommandOnly": true
 }

@@ -76,6 +76,7 @@ import {
   resetLedger,
   loadEnvLocal,
   resolveMaxTokensOverride,
+  resolveTimeoutMs,
   MODEL_LIFETIME_MAX_CALLS,
   MODEL_PER_RUN_MAX_CALLS,
 } from '../src/adapters/model/server-proxy.js';
@@ -84,6 +85,7 @@ import {
   evaluateCommandAcceptance,
   COMMAND_PER_RUN_MAX_CALLS,
   MIN_COMMAND_LIVE_MAX_TOKENS,
+  MIN_COMMAND_LIVE_TIMEOUT_MS,
   type CommandEvaluationContext,
   type CommandAcceptanceAudit,
 } from '../src/adapters/model/command-acceptance-evaluator.js';
@@ -888,6 +890,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
       calls: verificationRecords,
       keyOccurrenceCount: 0,
       d1ToD6ParityPass,
+      isCommandOnly: true,
     };
 
     const mdContent = generateMarkdownReport(dryRunReport);
@@ -1624,11 +1627,15 @@ export interface LiveVerificationReport {
   readonly calls: readonly LiveVerificationCallRecord[];
   readonly keyOccurrenceCount: number;
   readonly d1ToD6ParityPass: boolean;
+  readonly isCommandOnly?: boolean;
 }
 
 function generateMarkdownReport(report: LiveVerificationReport): string {
   const lines: string[] = [];
-  lines.push('# S1-LIVE: Real Billed Meta Model API Verification Report\n');
+  const title = report.isCommandOnly
+    ? '# S1-LIVE-3: Real Billed Meta Model API Verification Report\n'
+    : '# S1-LIVE: Real Billed Meta Model API Verification Report\n';
+  lines.push(title);
   lines.push('## 1. Executive Summary\n');
   lines.push('| Parameter | Value |');
   lines.push('|---|---|');
@@ -1753,6 +1760,13 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   if (isCommandOnly && maxTokensConfig < MIN_COMMAND_LIVE_MAX_TOKENS) {
     throw new Error(
       `REFUSING EXECUTION: MODEL_MAX_TOKENS must be at least ${MIN_COMMAND_LIVE_MAX_TOKENS} for live command verification (got ${maxTokensOverride ?? 'endpoint default (300)'}).`
+    );
+  }
+
+  const effectiveTimeoutMs = resolveTimeoutMs(process.env);
+  if (isCommandOnly && effectiveTimeoutMs < MIN_COMMAND_LIVE_TIMEOUT_MS) {
+    throw new Error(
+      `REFUSING EXECUTION: MODEL_TIMEOUT_MS must be at least ${MIN_COMMAND_LIVE_TIMEOUT_MS} for live command verification (got ${process.env['MODEL_TIMEOUT_MS'] ?? 'default (' + effectiveTimeoutMs + 'ms)'}).`
     );
   }
 
@@ -1914,6 +1928,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   console.log(`Lifetime Calls Used:    ${lifetimeUsed}`);
   console.log(`Lifetime Remaining:     ${lifetimeRemaining}`);
   console.log(`Per-Call max_tokens:    ${maxTokensDisplay}`);
+  console.log(`Effective Timeout:      ${effectiveTimeoutMs}ms (minimum ${MIN_COMMAND_LIVE_TIMEOUT_MS}ms for command mode)`);
   console.log(`Spend Range Estimate:   $${bestCaseSpend} - $${worstCaseSpend} (assumes ~$2.00/1M tokens [$0.000002/tok] [UNVERIFIED], best-case ${isCommandOnly ? '1 accept' : '3 accepts'} to worst-case ${effectiveCap} dispatches @ up to ${maxTokensConfig} tok/call)`);
   console.log('----------------------------------------------------------------------\n');
 
@@ -2292,6 +2307,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     calls: results,
     keyOccurrenceCount: 0,
     d1ToD6ParityPass,
+    isCommandOnly,
   };
 
   const mdContent = generateMarkdownReport(report);

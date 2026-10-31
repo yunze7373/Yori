@@ -14,6 +14,7 @@ import {
   evaluateCommandAcceptance,
   COMMAND_PER_RUN_MAX_CALLS,
   MIN_COMMAND_LIVE_MAX_TOKENS,
+  MIN_COMMAND_LIVE_TIMEOUT_MS,
   type CommandEvaluationContext,
 } from '../../src/adapters/model/command-acceptance-evaluator.js';
 import { CANONICAL_COMMAND_PROMPTS } from '../../scripts/live-verify-spark.js';
@@ -36,6 +37,10 @@ describe('Command Acceptance Evaluator (S1-LIVE-3)', () => {
 
     it('enforces MIN_COMMAND_LIVE_MAX_TOKENS >= 4096', () => {
       expect(MIN_COMMAND_LIVE_MAX_TOKENS).toBe(4096);
+    });
+
+    it('enforces MIN_COMMAND_LIVE_TIMEOUT_MS >= 20000', () => {
+      expect(MIN_COMMAND_LIVE_TIMEOUT_MS).toBe(20000);
     });
 
     it('has exactly 6 canonical command prompts matching S1-LIVE-3 budget', () => {
