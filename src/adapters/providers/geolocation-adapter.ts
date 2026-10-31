@@ -230,6 +230,18 @@ export class GeolocationAdapter implements LocationPort {
     this.enabled = enabled;
   }
 
+  public hasSessionFix(): boolean {
+    return Boolean(this.cachedCoords && this.cachedTimestamp);
+  }
+
+  public clearSessionFix(): void {
+    this.cachedCoords = undefined;
+    this.cachedAccuracy = undefined;
+    this.cachedTimestamp = undefined;
+    this.manualStatus = undefined;
+    this.lastNotice = undefined;
+  }
+
   public async requestCurrentPosition(options?: PositionOptions): Promise<LocationStatus> {
     // 1. Consent guard
     if (this.consentStatus !== 'granted') {

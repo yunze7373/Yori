@@ -235,7 +235,23 @@ export function renderMeView(state: MeViewState): string {
           : ''
       }
 
-      <!-- 6. Data Controls & Storage (INV-110) -->
+      <!-- 6. Connectors (Settings > Connectors) -->
+      <section class="card me-card" aria-labelledby="me-connectors-title">
+        <div class="me-card-header">
+          <h2 id="me-connectors-title" class="section-label" data-slot="chrome" data-slot-reason="Connectors section label">Connectors</h2>
+          <span class="card-badge badge-confirmed" data-slot="chrome" data-slot-reason="Manage connectors badge">Manage</span>
+        </div>
+        <p class="me-card-desc" data-slot="chrome" data-slot-reason="Connectors section description">
+          Manage live context sources including Location, Calendar, Weather, XMemo, and Notifications.
+        </p>
+        <div class="data-actions-row">
+          <button type="button" class="btn btn-primary" id="btn-me-connectors" data-slot="chrome" data-slot-reason="Open connectors button">
+            Manage Connectors
+          </button>
+        </div>
+      </section>
+
+      <!-- 7. Data Controls & Storage (INV-110) -->
       <section class="card me-card" aria-labelledby="me-data-title">
         <h2 id="me-data-title" class="section-label" data-slot="chrome" data-slot-reason="Data controls section label">${escapeHtml(STRINGS.me.dataControlsTitle)}</h2>
         <p class="me-card-desc" data-slot="chrome" data-slot-reason="Data controls description">

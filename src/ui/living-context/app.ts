@@ -103,6 +103,15 @@ import {
   renderPlansView,
   renderForYouView,
 } from './v2-detail-views.js';
+import {
+  getAllConnectorsStatus,
+  renderConnectorsView,
+  locationConnectorPort,
+  xmemoConnectorPort,
+  notificationsConnectorPort,
+  type ConnectorId,
+  type ConnectorStatus,
+} from '../connectors/index.js';
 
 export type DemoSceneId =
   | 'clear'
@@ -1028,7 +1037,7 @@ export function renderApp(
   let currentScene = initialScene;
   let activeTab: 'today' | 'home' | 'plans' | 'for-you' | 'me' = 'today';
   let activeDetail: {
-    type: 'trip' | 'restaurant';
+    type: 'trip' | 'restaurant' | 'connectors';
     planId?: string;
     candidateId?: string;
     selectedMode?: string;
@@ -1269,8 +1278,25 @@ export function renderApp(
     }
   }
 
+  let latestConnectorStatuses: Record<ConnectorId, ConnectorStatus> = {
+    location: { id: 'location', state: 'unavailable', detail: 'Checking location...', source: 'navigator.permissions', updatedAt: new Date().toISOString() },
+    calendar: { id: 'calendar', state: 'unavailable', detail: 'Not available yet', source: 'None', updatedAt: new Date().toISOString() },
+    weather: { id: 'weather', state: 'owner_gated', detail: 'Live weather is off (owner setting)', source: 'Open-Meteo', updatedAt: new Date().toISOString() },
+    xmemo: { id: 'xmemo', state: 'owner_gated', detail: 'XMemo OAuth disabled (owner gated)', source: 'XMemo OAuth', updatedAt: new Date().toISOString() },
+    notifications: { id: 'notifications', state: 'unavailable', detail: 'Notifications not supported', source: 'Notification API', updatedAt: new Date().toISOString() },
+  };
+
+  async function refreshConnectorStatuses() {
+    try {
+      latestConnectorStatuses = await getAllConnectorsStatus();
+    } catch {
+      // ignore
+    }
+  }
+
   void checkXMemoStatus();
   void checkWeatherStatus();
+  void refreshConnectorStatuses();
 
   function update() {
     const {
@@ -2031,6 +2057,124 @@ export function renderApp(
       `;
     }
 
+    if (conversationCleanup) {
+      conversationCleanup();
+      conversationCleanup = null;
+    }
+
+    if (demoPanelCleanup) {
+      demoPanelCleanup();
+      demoPanelCleanup = null;
+    }
+
+    if (activeDetail?.type === 'connectors') {
+      root.innerHTML = `
+        <div class="app-layout" data-ui-version="${uiVersion}">
+          ${renderConnectorsView(latestConnectorStatuses)}
+        </div>
+      `;
+
+      const backBtn = root.querySelector('#btn-connectors-back');
+      if (backBtn) {
+        backBtn.addEventListener('click', () => {
+          const origId = activeDetail?.originatingElementId;
+          activeDetail = null;
+          update();
+          if (origId) {
+            requestAnimationFrame(() => {
+              restoreInvokingFocus(origId);
+            });
+          }
+        });
+      }
+
+      const onConnectorsKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          window.removeEventListener('keydown', onConnectorsKeyDown);
+          const origId = activeDetail?.originatingElementId;
+          activeDetail = null;
+          update();
+          if (origId) {
+            requestAnimationFrame(() => {
+              restoreInvokingFocus(origId);
+            });
+          }
+        }
+      };
+      window.addEventListener('keydown', onConnectorsKeyDown, { once: true });
+
+      const connectLocBtn = root.querySelector('#btn-connect-location');
+      if (connectLocBtn) {
+        connectLocBtn.addEventListener('click', async () => {
+          connectLocBtn.setAttribute('disabled', 'true');
+          await locationConnectorPort.connect();
+          await refreshConnectorStatuses();
+          update();
+        });
+      }
+
+      const revokeLocBtn = root.querySelector('#btn-revoke-location');
+      if (revokeLocBtn) {
+        revokeLocBtn.addEventListener('click', async () => {
+          revokeLocBtn.setAttribute('disabled', 'true');
+          await locationConnectorPort.revoke();
+          await refreshConnectorStatuses();
+          update();
+        });
+      }
+
+      const checkLocBtn = root.querySelector('#btn-check-location');
+      if (checkLocBtn) {
+        checkLocBtn.addEventListener('click', async () => {
+          checkLocBtn.setAttribute('disabled', 'true');
+          await refreshConnectorStatuses();
+          update();
+        });
+      }
+
+      const connectXmemoBtn = root.querySelector('#btn-connect-xmemo');
+      if (connectXmemoBtn) {
+        connectXmemoBtn.addEventListener('click', async () => {
+          connectXmemoBtn.setAttribute('disabled', 'true');
+          await xmemoConnectorPort.connect();
+          await refreshConnectorStatuses();
+          update();
+        });
+      }
+
+      const disconnectXmemoBtn = root.querySelector('#btn-disconnect-xmemo');
+      if (disconnectXmemoBtn) {
+        disconnectXmemoBtn.addEventListener('click', async () => {
+          disconnectXmemoBtn.setAttribute('disabled', 'true');
+          await xmemoConnectorPort.disconnect();
+          await refreshConnectorStatuses();
+          update();
+        });
+      }
+
+      const connectNotifBtn = root.querySelector('#btn-connect-notifications');
+      if (connectNotifBtn) {
+        connectNotifBtn.addEventListener('click', async () => {
+          connectNotifBtn.setAttribute('disabled', 'true');
+          await notificationsConnectorPort.connect();
+          await refreshConnectorStatuses();
+          update();
+        });
+      }
+
+      const checkNotifBtn = root.querySelector('#btn-check-notifications');
+      if (checkNotifBtn) {
+        checkNotifBtn.addEventListener('click', async () => {
+          checkNotifBtn.setAttribute('disabled', 'true');
+          await refreshConnectorStatuses();
+          update();
+        });
+      }
+
+      return;
+    }
+
     root.innerHTML = `
       <div class="app-layout" data-ui-version="${uiVersion}">
         <header class="header-bar" role="banner">
@@ -2308,7 +2452,7 @@ export function renderApp(
                 syncedKeys
               )
             : activeModal?.type === 'sources'
-            ? renderSourcesSheet(activeModal.mode, snapshot, weatherStatus.enabled, defaultLocationPort.getLocation())
+            ? renderSourcesSheet(activeModal.mode, snapshot, weatherStatus.enabled, defaultLocationPort.getLocation(), latestConnectorStatuses)
             : activeModal?.type === 'adjust'
             ? renderAdjustDialog(activeModal.values)
             : activeModal?.type === 'dismiss'
@@ -2433,17 +2577,6 @@ export function renderApp(
         }
       </div>
     `;
-
-    // Clean up any previous conversation event listeners before rebinding
-    if (conversationCleanup) {
-      conversationCleanup();
-      conversationCleanup = null;
-    }
-
-    if (demoPanelCleanup) {
-      demoPanelCleanup();
-      demoPanelCleanup = null;
-    }
 
     // -------------------------------------------------------------
     // EVENT BINDINGS
@@ -3339,6 +3472,21 @@ export function renderApp(
 
     const meResetBtn = root.querySelector('#btn-me-reset') as HTMLButtonElement | null;
     if (meResetBtn) meResetBtn.addEventListener('click', () => handleReset(meResetBtn));
+
+    const meConnectorsBtn = root.querySelector('#btn-me-connectors');
+    if (meConnectorsBtn) {
+      meConnectorsBtn.addEventListener('click', async () => {
+        activeDetail = {
+          type: 'connectors',
+          originatingElementId: 'btn-me-connectors',
+        };
+        if (typeof window !== 'undefined' && window.history?.pushState) {
+          window.history.pushState({ detail: activeDetail }, '', window.location.href);
+        }
+        await refreshConnectorStatuses();
+        update();
+      });
+    }
 
     const connectBtn = root.querySelector('#btn-xmemo-connect');
     if (connectBtn) {

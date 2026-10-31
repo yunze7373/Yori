@@ -53,7 +53,8 @@ export function renderSourcesSheet(
   mode: 'demo' | 'live',
   snapshot: ContextSnapshot,
   liveWeatherEnabled: boolean,
-  liveLocation?: LocationStatus | null
+  liveLocation?: LocationStatus | null,
+  connectorStatuses?: Record<string, { state: string; detail: string }>
 ): string {
   const isLive = mode === 'live';
   const title = isLive ? 'Active Sources · Live context' : 'Sources & Provenance · Demo';
@@ -70,7 +71,31 @@ export function renderSourcesSheet(
     // fallback
   }
 
-  const isLocationGranted = liveLocation?.status === 'available';
+  const isLocationGranted = connectorStatuses?.location
+    ? connectorStatuses.location.state === 'connected'
+    : liveLocation?.status === 'available';
+
+  const weatherDetail = connectorStatuses?.weather?.detail
+    ? connectorStatuses.weather.detail
+    : (liveWeatherEnabled ? 'Live Open-Meteo API (Fixed demo city: San Francisco, CA · owner-gated).' : 'Live weather is off (WEATHER_LIVE_ENABLED flag disabled).');
+  const isWeatherLive = connectorStatuses?.weather
+    ? connectorStatuses.weather.state === 'connected'
+    : liveWeatherEnabled;
+
+  const locationDetail = connectorStatuses?.location?.detail
+    ? (connectorStatuses.location.state === 'connected' ? 'Browser geolocation · Shared this session (never continuously tracked or persisted).' : connectorStatuses.location.detail)
+    : 'Browser geolocation · One-shot consented acquisition (never continuously tracked or persisted).';
+
+  const xmemoDetail = connectorStatuses?.xmemo?.detail
+    ? connectorStatuses.xmemo.detail
+    : 'Local only · Sovereign in-browser storage (XMemo not connected · no unauthorized remote sync).';
+  const isXmemoConnected = connectorStatuses?.xmemo
+    ? connectorStatuses.xmemo.state === 'connected'
+    : false;
+
+  const calendarDetail = connectorStatuses?.calendar?.detail
+    ? connectorStatuses.calendar.detail
+    : 'Not connected · no calendar provider configured; zero calendar data is accessed.';
 
   const sourcesList = isLive
     ? `
@@ -84,30 +109,30 @@ export function renderSourcesSheet(
       <li class="sources-item" id="source-item-weather">
         <div class="sources-item-header">
           <span class="sources-item-title">Weather</span>
-          ${liveWeatherEnabled ? `<span class="signal-badge live-badge">Live</span>` : `<span class="signal-badge off-badge">Off</span>`}
+          ${isWeatherLive ? `<span class="signal-badge live-badge">Live</span>` : `<span class="signal-badge off-badge">Off</span>`}
         </div>
-        <div class="sources-item-desc">${liveWeatherEnabled ? 'Live Open-Meteo API (Fixed demo city: San Francisco, CA · owner-gated).' : 'Live weather is off (WEATHER_LIVE_ENABLED flag disabled).'}</div>
+        <div class="sources-item-desc">${escapeHtml(weatherDetail)}</div>
       </li>
       <li class="sources-item" id="source-item-location">
         <div class="sources-item-header">
           <span class="sources-item-title">Location</span>
           ${isLocationGranted ? `<span class="signal-badge live-badge">Shared this session</span>` : `<span class="signal-badge off-badge">Not shared</span>`}
         </div>
-        <div class="sources-item-desc">Browser geolocation · One-shot consented acquisition (never continuously tracked or persisted).</div>
+        <div class="sources-item-desc">${escapeHtml(locationDetail)}</div>
       </li>
       <li class="sources-item" id="source-item-calendar">
         <div class="sources-item-header">
           <span class="sources-item-title">Calendar</span>
           <span class="signal-badge off-badge">Not connected</span>
         </div>
-        <div class="sources-item-desc">Not connected · no calendar provider configured; zero calendar data is accessed.</div>
+        <div class="sources-item-desc">${escapeHtml(calendarDetail)}</div>
       </li>
       <li class="sources-item" id="source-item-memory">
         <div class="sources-item-header">
           <span class="sources-item-title">Memory &amp; Preferences</span>
-          <span class="signal-badge local-badge">Local only</span>
+          ${isXmemoConnected ? `<span class="signal-badge live-badge">Connected</span>` : `<span class="signal-badge local-badge">Local only</span>`}
         </div>
-        <div class="sources-item-desc">Local only · Sovereign in-browser storage (XMemo not connected · no unauthorized remote sync).</div>
+        <div class="sources-item-desc">${escapeHtml(xmemoDetail)}</div>
       </li>
     `
     : (!snapshot.signals || snapshot.signals.length === 0)

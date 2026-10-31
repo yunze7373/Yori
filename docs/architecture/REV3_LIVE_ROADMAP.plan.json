@@ -1,0 +1,349 @@
+{
+  "schema_version": "1.0.0",
+  "plan": {
+    "id": "yori_rev3_live_roadmap",
+    "phase": "PH-002-ui",
+    "title": "Rev3 delta roadmap: Live truthfulness, real route/map, desktop IA, real places (offline first, owner-gated live)",
+    "source": "ARCH-REV3-LIVE-MAP-PLACES-DESKTOP (owner msg_6147854c); design docs/architecture/REV3_LIVE_ROADMAP.plan.md + SPEC_IMPACT_LIVE.md; S1/S2/S3 scopes untouched, gates sequential S1 -> S2 -> S3",
+    "created_at": "2026-11-01",
+    "status": "pending",
+    "description": "Offline adapter wiring and truthful Live states first; real-provider validation only behind explicit owner gates. A map or restaurant feature is never accepted without independent e2e on real provider evidence, or it is reported blocked.",
+    "course_correction_summary": "previous_phase: Rev3 UI slices 1-3 approved/dispatched | core_delivery: live roadmap delta | deviation: Live-default direction needs the SPEC_IMPACT_LIVE amendment at the roadmap gate | INBOX_backlog: 0 P0, 0 P1 | next_phase_focus: L1 live truthfulness wiring"
+  },
+  "tasks": [
+    {
+      "id": "L1-LIVE-TRUTH",
+      "slice": "L1",
+      "title": "Live truthfulness wiring: ports, recorded fixtures, honest Live states, Demo behind ?dev=1",
+      "priority": "P0",
+      "goal": "Wire the existing provider adapters (location-port, geolocation, overpass/simulated places, open-meteo) behind their ports so Live renders only verified inputs with source and fetchedAt; without a source Live shows empty, unavailable, or permission-needed. Demo fixtures are prominently SIMULATED and reachable only behind ?dev=1; the production default is Live with honest empty states. Deterministic tests on recorded responses.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": [],
+      "goal_ids": [
+        "G-211",
+        "G-212",
+        "G-204"
+      ],
+      "acceptance_ids": [
+        "AC-211-2",
+        "AC-212-1",
+        "AC-204-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/location-port.ts",
+        "src/adapters/providers/overpass-places-adapter.ts",
+        "src/adapters/providers/simulated-places-provider.ts",
+        "src/ui/living-context/app.ts"
+      ],
+      "checks": [
+        "State-matrix tests: every Live module renders verified data with source+timestamp, or empty/unavailable/permission-needed; a fixture value can never render in Live (label audit); Demo requires ?dev=1 and is SIMULATED-labelled everywhere",
+        "Full suite green (tsc, unit, golden 18 add-only, drills, Playwright, privacy); core zero diff vs f43c6c1d; 390x844 and 1280x800 evidence of each Live state",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id L1-LIVE-TRUTH --plan-ref docs/architecture/REV3_LIVE_ROADMAP.plan.json"
+      ]
+    },
+    {
+      "id": "L2-ROUTE-MAP",
+      "slice": "L2",
+      "title": "Real route/map: routing provider port, actual geometry rendering, tiles and attribution",
+      "priority": "P0",
+      "goal": "Add a RoutingProvider port with adapters (OSRM recorded responses first) so a live navigation suggestion carries destination, geometry, ETA, timestamp/source and refresh; the map strip decodes and draws the ACTUAL route polyline with mandatory provider/tile attribution (OSM tile usage policy). Without destination, authorized location, or provider geometry, Live shows 'no route available'; the Demo route stays SIMULATED. External-map handoff allowed only when honestly labelled as a handoff.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 8,
+      "dependencies": [
+        "L1-LIVE-TRUTH"
+      ],
+      "goal_ids": [
+        "G-212"
+      ],
+      "acceptance_ids": [
+        "AC-212-1",
+        "AC-212-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers",
+        "src/ui/view-models",
+        "src/ui/living-context/app.ts"
+      ],
+      "checks": [
+        "Recorded-geometry tests: the rendered polyline decodes to the provider fixture's coordinates (not a straight/schematic line); ETA and timestamps come only from the provider record; refresh replaces stale geometry and staleness degrades to unavailable",
+        "No-route matrix: missing destination, denied location, provider error, and stale response each render 'no route available' in Live; attribution visible in every map render; core zero diff",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id L2-ROUTE-MAP --plan-ref docs/architecture/REV3_LIVE_ROADMAP.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_LIVE_A",
+      "title": "📬 INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": [
+        "L2-ROUTE-MAP"
+      ],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "S4-DESKTOP-IA",
+      "slice": "S4",
+      "title": "Desktop purpose-built IA (after S3) and per-viewport premium pass",
+      "priority": "P1",
+      "goal": "Give desktop (1280x800) its own composition over the shared state and semantic view-models: multi-column layout, detail sidebar, proportionate map region; mobile (390x844) keeps the single-priority-action sheet composition approved in S1-S3. Per-viewport visual pass against the owner mockup (reviewed by owner/Reviewer; no pixel parity claimed by implementers). Lands after S3; S1 scope is not expanded.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 8,
+      "dependencies": [
+        "L2-ROUTE-MAP",
+        "INBOX_CHECK_LIVE_A"
+      ],
+      "goal_ids": [
+        "G-105"
+      ],
+      "acceptance_ids": [
+        "AC-105-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-104"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/app.ts",
+        "src/ui/living-context/styles.css",
+        "src/ui/view-models"
+      ],
+      "checks": [
+        "Same view-models drive both compositions (no forked state); desktop shows columns/sidebar/proportionate map, mobile shows single-action sheets; full suite green at both viewports with screenshot sets",
+        "Visual review record per viewport against the owner mockup (sha256 ef4cf701...) signed by owner/Reviewer; core zero diff",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S4-DESKTOP-IA --plan-ref docs/architecture/REV3_LIVE_ROADMAP.plan.json"
+      ]
+    },
+    {
+      "id": "L3-REAL-PLACES",
+      "slice": "L3",
+      "title": "Real nearby places on the provider seam (recorded evidence, deterministic tests)",
+      "priority": "P1",
+      "goal": "Complete the real-places path on the existing Overpass seam: verified place ID, geolocation, fetchedAt on every result; open-now/rating/ETA only when the provider supplies them fresh; bounded Muse Spark ranking plus XMemo confirmed memory when authorized, deterministic fallback otherwise; no stock photos, no invented venues. All evidence in this slice is recorded/deterministic (offline-ready, not live-done).",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": [
+        "S4-DESKTOP-IA"
+      ],
+      "goal_ids": [
+        "G-212",
+        "G-213"
+      ],
+      "acceptance_ids": [
+        "AC-212-1",
+        "AC-213-1",
+        "AC-213-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101",
+        "ADR-102"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/overpass-places-adapter.ts",
+        "src/plugins/lunch",
+        "src/adapters/mock/index.ts"
+      ],
+      "checks": [
+        "Recorded-response tests: every rendered venue resolves to a provider record (ID/coords/fetchedAt); provider-missing fields (open-now, rating, ETA) are omitted, never estimated; ranking explanation cites confirmed memory or the deterministic rule",
+        "Venue-without-evidence never renders; simulated and real-labelled cards never blend; core zero diff; full suite green",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id L3-REAL-PLACES --plan-ref docs/architecture/REV3_LIVE_ROADMAP.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-ROUTE",
+      "slice": "gate",
+      "title": "OWNER GATE G-ROUTE: routing provider, cost cap, ToS acceptance",
+      "priority": "P0",
+      "goal": "Owner decision only: choose the live routing provider (accept OSRM demo-server limits, or register an OpenRouteService free key server-side, or a billed Mapbox/Google account), accept its ToS and any cost cap, and accept the tile provider terms. Terminal states: DONE, or DECLINED (recorded) - declined keeps Live at 'no route available' with the Demo route behind ?dev=1, and nothing is blocked retroactively.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "estimated_hours": 0.5,
+      "dependencies": [
+        "L3-REAL-PLACES"
+      ],
+      "owner_gate": "G-ROUTE: owner names the routing provider, accepts ToS/cost cap and tile terms; never assumed, no key handled by agents beyond server-side placement the owner authorizes",
+      "goal_ids": [
+        "G-212"
+      ],
+      "acceptance_ids": [
+        "AC-212-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers"
+      ],
+      "checks": [
+        "Owner decision recorded verbatim (provider, ToS acceptance, cost cap, date); without it no live routing call is enabled",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-ROUTE --plan-ref docs/architecture/REV3_LIVE_ROADMAP.plan.json"
+      ]
+    },
+    {
+      "id": "GATE-LIVE-RUN",
+      "slice": "gate",
+      "title": "OWNER GATE G-LIVE-RUN: independent e2e on REAL provider evidence",
+      "priority": "P0",
+      "goal": "Owner-gated validation session: with authorized device location and the chosen live providers, run the independent e2e for the map and restaurant features on REAL provider evidence (real geometry on the map, real venues with fresh fields), plus the visual sign-off per viewport against the owner mockup. Each feature is either accepted on that evidence or explicitly reported BLOCKED on its gate - recorded-fixture green never counts as live-done.",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 4,
+      "dependencies": [
+        "GATE-ROUTE"
+      ],
+      "owner_gate": "G-LIVE-RUN: owner authorizes the real-run session (location consent on the device, any billed usage inside the G-ROUTE cap) and gives the per-viewport visual sign-off",
+      "goal_ids": [
+        "G-212",
+        "G-213",
+        "G-105"
+      ],
+      "acceptance_ids": [
+        "AC-212-1",
+        "AC-213-1",
+        "AC-105-1"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers",
+        "src/ui/view-models"
+      ],
+      "checks": [
+        "Real-run evidence pack: live map draws the provider's actual route geometry with timestamps; live restaurant list shows real venues (ID/fetchedAt, fresh open-now/rating only when supplied); each feature marked ACCEPTED on real evidence or BLOCKED with the missing gate named",
+        "Kill-switch drill: live flags off restores the deterministic Demo path (behind ?dev=1) byte-identically; no fixture data ever rendered in Live during the run",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id GATE-LIVE-RUN --plan-ref docs/architecture/REV3_LIVE_ROADMAP.plan.json"
+      ]
+    },
+    {
+      "id": "CLOSEOUT_LIVE",
+      "slice": "closeout",
+      "title": "Live roadmap closeout: regression trace across Rev3 goals",
+      "priority": "P0",
+      "goal": "Clean-checkout full suite plus a regression trace that every prior goal family still verifies (golden causality, suppression/budget, connectors truthfulness, model-off invariance, AC-EXT-1), so the live delta provably did not reopen approved behaviour.",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 3,
+      "dependencies": [
+        "GATE-LIVE-RUN"
+      ],
+      "goal_ids": [
+        "G-101",
+        "G-102",
+        "G-103",
+        "G-104",
+        "G-105",
+        "G-106",
+        "G-107",
+        "G-201",
+        "G-202",
+        "G-203",
+        "G-204",
+        "G-205",
+        "G-211",
+        "G-212",
+        "G-213"
+      ],
+      "acceptance_ids": [
+        "AC-101-2",
+        "AC-102-1",
+        "AC-103-1",
+        "AC-104-2",
+        "AC-105-1",
+        "AC-106-2",
+        "AC-EXT-1",
+        "AC-201-3",
+        "AC-202-2",
+        "AC-203-2",
+        "AC-204-2",
+        "AC-205-2",
+        "AC-211-2",
+        "AC-212-2",
+        "AC-213-2"
+      ],
+      "arch_contract_refs": [
+        "ADR-101"
+      ],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers",
+        "src/ui/view-models",
+        "tests/golden"
+      ],
+      "checks": [
+        "Full matrix green from a clean checkout with zero credentials (Live shows honest empty states; Demo only behind ?dev=1); git diff f43c6c1d -- src/core empty (AC-EXT-1)",
+        "Each feature in the roadmap is listed ACCEPTED on real evidence or BLOCKED with its owner gate named; nothing fixture-green is reported as live-done",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id CLOSEOUT_LIVE --plan-ref docs/architecture/REV3_LIVE_ROADMAP.plan.json"
+      ]
+    },
+    {
+      "id": "PHASE_R_LIVE_001",
+      "title": "🔥 Phase R planning + generate next phase plan",
+      "type": "meta",
+      "priority": "critical",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": [
+        "CLOSEOUT_LIVE"
+      ],
+      "goal": "Roadmap closed or explicitly blocked-reported -> Phase R -> assess against the submission timeline (internal 2026-11-04, external 2026-11-05 11:00 JST) -> draft any next plan and submit for Reviewer plan review AND owner confirmation. All owner gates remain exactly as gated; nothing auto-executes.",
+      "phase_r_trigger": {
+        "auto_execute": true,
+        "tasks": [
+          "⚠️ Re-read .progress/AI_INSTRUCTIONS.md (ensure rules are not lost after model switch)",
+          "📬 R1: Read INBOX.md (scan mode command section first, then task section)",
+          "💤 R1.5: Convergence gate (no real pending → standby)",
+          "🎯 R2: Read docs/architecture/goals.yaml and PHASE_PLAN.md, execute target alignment assessment; 运行 phase_r_alignment_check.py 验证架构对齐锚点 (alignment anchor check)",
+          "📊 R3: Phase review: git diff confirm delivery + archive completed tasks + Git Commit",
+          "🗺️ R5: Intelligent planning: draft the next phase plan and submit it for Reviewer plan review AND owner confirmation (guarded autonomy); PH-003 requires the privacy-review gate and must not auto-start",
+          "Update PROGRESS_STATUS.json + TODOS.md",
+          "⏸️ R6: Execute NOTHING from the next plan before the Reviewer + owner gate passes; enter standby and wait for the gate result"
+        ]
+      }
+    }
+  ],
+  "success_criteria": [
+    "Live never renders fixture data; every live value carries source and timestamp, or the module shows empty/unavailable/permission-needed",
+    "Map and restaurant features are accepted only on independent real-provider e2e evidence, or explicitly reported blocked on their owner gate",
+    "git diff f43c6c1d -- src/core empty across the roadmap; no billable calls, deploys, pushes, or submission by any agent"
+  ]
+}
