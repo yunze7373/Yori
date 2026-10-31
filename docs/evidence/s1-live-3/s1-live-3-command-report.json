@@ -1,0 +1,43 @@
+{
+  "timestamp": "2026-10-31T03:07:55.313Z",
+  "providerHost": "api.meta.ai",
+  "modelName": "muse-spark-1.3",
+  "authorizedCap": 6,
+  "preRunLedgerCount": 17,
+  "lifetimeRemaining": 32,
+  "lifetimeCap": 50,
+  "totalCallsDispatched": 1,
+  "ledgerCallCount": 18,
+  "ledgerDelta": 1,
+  "ledgerReconciled": true,
+  "ledgerPath": ".yori-runtime/model-live-ledger.json",
+  "executionStatus": "hard_stop",
+  "hardStopReason": "Network error: This operation was aborted",
+  "hostList": [
+    "api.meta.ai"
+  ],
+  "calls": [
+    {
+      "index": 1,
+      "endpoint": "command",
+      "description": "Command valid shift (\"Can I leave later?\")",
+      "httpStatus": 0,
+      "latencyMs": 2005,
+      "usedFallback": true,
+      "fallbackReason": "timeout",
+      "factCheckOutcome": "discarded",
+      "error": "This operation was aborted",
+      "audit": {
+        "closedIntent": false,
+        "intentMatchesExpectation": false,
+        "slotsMatchExpectation": false,
+        "validReasonCodes": false,
+        "factKeyParity": false,
+        "stopFinishReason": false,
+        "suppressionHonoured": true
+      }
+    }
+  ],
+  "keyOccurrenceCount": 0,
+  "d1ToD6ParityPass": true
+}
