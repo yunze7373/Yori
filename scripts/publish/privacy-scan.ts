@@ -52,6 +52,21 @@ export interface PrivacyScanResults {
   overallPass: boolean;
 }
 
+// Allowed fixture coordinates: SF, LA, Tokyo, Seattle
+// Order-agnostic: supports both [lat, lon] and GeoJSON standard [lon, lat]
+export const isFixtureCoord = (a: number, b: number): boolean => {
+  const fixtures = [
+    { lat: 37.7749, lon: -122.4194 }, // San Francisco
+    { lat: 34.0522, lon: -118.2437 }, // Los Angeles
+    { lat: 35.6764, lon: 139.65 },    // Tokyo (general)
+    { lat: 35.6895, lon: 139.6917 },  // Tokyo (Shinjuku test fixture)
+    { lat: 47.6062, lon: -122.3321 }, // Seattle (places fixture cluster)
+  ];
+  const matchesOrder = (lat: number, lon: number) =>
+    fixtures.some(f => Math.abs(f.lat - lat) < 0.05 && Math.abs(f.lon - lon) < 0.05);
+  return matchesOrder(a, b) || matchesOrder(b, a);
+};
+
 export function runPrivacyScan(repoRoot: string): PrivacyScanResults {
   const trackedFiles = execSync('git ls-files', { cwd: repoRoot, encoding: 'utf-8' })
     .split('\n')
@@ -98,18 +113,6 @@ export function runPrivacyScan(repoRoot: string): PrivacyScanResults {
   const nameRegex = new RegExp(`\\b${localTargetUser}\\b`, 'gi');
 
   const coordRegex = /(-?\d{1,3}\.\d{4,8})\s*,\s*(-?\d{1,3}\.\d{4,8})/g;
-
-  // Allowed fixture coordinates: SF, LA, Tokyo, Seattle
-  const isFixtureCoord = (lat: number, lon: number): boolean => {
-    const fixtures = [
-      { lat: 37.7749, lon: -122.4194 }, // San Francisco
-      { lat: 34.0522, lon: -118.2437 }, // Los Angeles
-      { lat: 35.6764, lon: 139.65 },    // Tokyo (general)
-      { lat: 35.6895, lon: 139.6917 },  // Tokyo (Shinjuku test fixture)
-      { lat: 47.6062, lon: -122.3321 }, // Seattle (places fixture cluster)
-    ];
-    return fixtures.some(f => Math.abs(f.lat - lat) < 0.05 && Math.abs(f.lon - lon) < 0.05);
-  };
 
   let imageCount = 0;
 

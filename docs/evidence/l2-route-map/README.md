@@ -55,7 +55,7 @@ This evidence bundle records verification for slice **L2-ROUTE-MAP** (TID: `INBO
 | State | Mobile (390×844) | Desktop (1280×800) | Description |
 |---|---|---|---|
 | 01. Live No Destination | `live-no-destination-mobile.png`<br>`8d923c50…` | `live-no-destination-desktop.png`<br>`1613b7d4…` | Live empty home with no destination set ("No route available · no destination set"). |
-| 02. Live Location Not Shared | `live-location-not-shared-mobile.png`<br>`8d923c50…` | `live-location-not-shared-desktop.png`<br>`1613b7d4…` | Destination present but location fix not granted ("No route available · location not shared"). |
+| 02. Live Location Not Shared | `live-location-not-shared-mobile.png`<br>`87defe36…` | `live-location-not-shared-desktop.png`<br>`398ec13d…` | Destination present but location fix not granted ("No route available · location not shared"). |
 | 03. Live Provider Disabled | `live-provider-disabled-mobile.png`<br>`1d1d4164…` | `live-provider-disabled-desktop.png`<br>`59bc99d0…` | Destination and location present, provider disabled ("No route available · provider disabled"). |
 | 04. Live Provider Error | `live-provider-error-mobile.png`<br>`fc12f6b0…` | `live-provider-error-desktop.png`<br>`a9ec182d…` | Destination and location present, provider returns 500 ("No route available · provider error"). |
 | 05. Live Route Recorded | `live-route-recorded-mobile.png`<br>`e8bcecce…` | `live-route-recorded-desktop.png`<br>`77aa4eca…` | Decoded multi-point polyline, ETA (6 min), distance (2.1 km), attribution, and Open in Maps handoff. |

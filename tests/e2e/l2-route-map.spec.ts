@@ -170,8 +170,15 @@ test.describe('L2-ROUTE-MAP: Real Route/Map Routing Pipeline', () => {
       await expect(routeCardNoDest).toContainText('no destination set');
       await saveEvidence(page, `live-no-destination-${vp.name}.png`);
 
-      // State 2: location_not_shared (test destination injected, but location not granted/shared)
+      // Adversarial check: ungated ?test_destination=1 without ?test=1 MUST be ignored
       await page.goto('/?mode=live&test_destination=1');
+      await page.waitForSelector('#notice-route-unavailable');
+      const routeCardUngated = page.locator('#notice-route-unavailable');
+      await expect(routeCardUngated).toHaveAttribute('data-no-route-reason', 'no_destination');
+      await expect(routeCardUngated).toContainText('no destination set');
+
+      // State 2: location_not_shared (test destination injected under ?test=1, but location not granted/shared)
+      await page.goto('/?mode=live&test=1&test_destination=1');
       await page.waitForSelector('#notice-route-unavailable');
       const routeCardLocNotShared = page.locator('#notice-route-unavailable');
       await expect(routeCardLocNotShared).toBeVisible();
@@ -189,7 +196,7 @@ test.describe('L2-ROUTE-MAP: Real Route/Map Routing Pipeline', () => {
           body: JSON.stringify({ enabled: false, error: 'Live routing is disabled' }),
         });
       });
-      await page.goto('/?mode=live&test_destination=1');
+      await page.goto('/?mode=live&test=1&test_destination=1');
       await mockLocationGranted(page);
       const connectLocBtn = page.locator('#btn-connect-location');
       if (await connectLocBtn.isVisible()) {
@@ -220,7 +227,7 @@ test.describe('L2-ROUTE-MAP: Real Route/Map Routing Pipeline', () => {
           body: JSON.stringify({ error: 'Internal provider failure' }),
         });
       });
-      await page.goto('/?mode=live&test_destination=1');
+      await page.goto('/?mode=live&test=1&test_destination=1');
       await mockLocationGranted(page);
       const connectLocBtn2 = page.locator('#btn-connect-location');
       if (await connectLocBtn2.isVisible()) {
@@ -235,8 +242,14 @@ test.describe('L2-ROUTE-MAP: Real Route/Map Routing Pipeline', () => {
       await expect(routeCardProvError).toContainText('provider error');
       await saveEvidence(page, `live-provider-error-${vp.name}.png`);
 
-      // State 5: stale
+      // Adversarial check: ungated ?test_no_route_reason without ?test=1 MUST be ignored
       await page.goto('/?mode=live&test_no_route_reason=stale');
+      await page.waitForSelector('#notice-route-unavailable');
+      const routeCardReasonUngated = page.locator('#notice-route-unavailable');
+      await expect(routeCardReasonUngated).toHaveAttribute('data-no-route-reason', 'no_destination');
+
+      // State 5: stale (gated under ?test=1)
+      await page.goto('/?mode=live&test=1&test_no_route_reason=stale');
       await page.waitForSelector('#notice-route-unavailable');
       const routeCardStale = page.locator('#notice-route-unavailable');
       await expect(routeCardStale).toBeVisible();
@@ -288,7 +301,7 @@ test.describe('L2-ROUTE-MAP: Real Route/Map Routing Pipeline', () => {
         });
       });
 
-      await page.goto('/?mode=live&test_destination=1');
+      await page.goto('/?mode=live&test=1&test_destination=1');
       await mockLocationGranted(page);
       const connectBtn = page.locator('#btn-connect-location');
       await expect(connectBtn).toBeVisible();

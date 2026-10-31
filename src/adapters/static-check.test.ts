@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { LocalMemoryAdapter, XMemoRemoteAdapter } from './xmemo/index.js';
 import { createMemoryFact } from '../core/contracts/index.js';
+import { isFixtureCoord } from '../../scripts/publish/privacy-scan.js';
 
 describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
   function collectFiles(dir: string): string[] {
@@ -287,5 +288,50 @@ describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
     expect(invalidFiles).toEqual([]);
     expect(woff2Files.length).toBe(8); // 4 Inter (400, 500, 600, 700) + 4 Newsreader (400, 500, 600, 400-italic)
     expect(licenseFiles.length).toBe(2); // LICENSE-inter.txt, LICENSE-newsreader.txt
+  });
+
+  it('ensures production client JS bundle dead-code eliminates route test hooks and fixture destinations', () => {
+    const distDir = path.resolve('dist');
+    if (!fs.existsSync(distDir)) {
+      return;
+    }
+    const distFiles = collectFiles(distDir);
+    for (const filePath of distFiles) {
+      if (filePath.endsWith('.js')) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        expect(content, `Ungated test_destination found in production bundle ${filePath}`).not.toContain('test_destination');
+        expect(content, `Ungated test_no_route_reason found in production bundle ${filePath}`).not.toContain('test_no_route_reason');
+        expect(content, `Ungated fixture destination 'Mission Dolores' found in production bundle ${filePath}`).not.toContain('Mission Dolores');
+      }
+    }
+  });
+
+  it('ensures isFixtureCoord supports both [lat, lon] and GeoJSON [lon, lat] orders and rejects non-fixture coordinates', () => {
+    // San Francisco
+    expect(isFixtureCoord(37.7749, -122.4194)).toBe(true);
+    expect(isFixtureCoord(-122.4194, 37.7749)).toBe(true);
+    // Mission Dolores in SF cluster
+    expect(isFixtureCoord(-122.4148, 37.7599)).toBe(true);
+    expect(isFixtureCoord(37.7599, -122.4148)).toBe(true);
+    // Los Angeles
+    expect(isFixtureCoord(34.0522, -118.2437)).toBe(true);
+    expect(isFixtureCoord(-118.2437, 34.0522)).toBe(true);
+    // Tokyo
+    expect(isFixtureCoord(35.6764, 139.65)).toBe(true);
+    expect(isFixtureCoord(139.65, 35.6764)).toBe(true);
+    // Seattle
+    expect(isFixtureCoord(47.6062, -122.3321)).toBe(true);
+    expect(isFixtureCoord(-122.3321, 47.6062)).toBe(true);
+
+    // Non-fixture points (0, 0 or offset coordinates)
+    expect(isFixtureCoord(0, 0)).toBe(false);
+    expect(isFixtureCoord(10.5, 20.5)).toBe(false);
+    expect(isFixtureCoord(20.5, 10.5)).toBe(false);
+
+    // Coordinate outside SF threshold (> 0.05 deg difference)
+    const sfLatShifted = 37.7749 + 0.1;
+    const sfLon = -122.4194;
+    expect(isFixtureCoord(sfLatShifted, sfLon)).toBe(false);
+    expect(isFixtureCoord(sfLon, sfLatShifted)).toBe(false);
   });
 });

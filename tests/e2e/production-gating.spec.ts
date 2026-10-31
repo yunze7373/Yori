@@ -59,6 +59,22 @@ test.describe('PRE-S1-C: Production Gating of Dev/Test Hooks and URL Forcing', (
     expect(hooksState.modelCommandInterpreterClass).toBe('undefined');
     expect(hooksState.lastNavUrl).toBe('undefined');
     expect(hooksState.interceptNav).toBe('undefined');
+
+    // 4. Route test hooks are INERT in shipping production build:
+    await page.goto(`${SHIPPING_PREVIEW_URL}/?mode=live&test_destination=1&test=1`);
+    await page.waitForSelector('#notice-route-unavailable');
+    const routeCard = page.locator('#notice-route-unavailable');
+    await expect(routeCard).toHaveAttribute('data-no-route-reason', 'no_destination');
+    await expect(routeCard).toContainText('no destination set');
+    await expect(page.locator('#live-route-card')).toHaveCount(0);
+    const bodyText = await page.locator('body').innerText();
+    expect(bodyText).not.toContain('Mission Dolores');
+
+    await page.goto(`${SHIPPING_PREVIEW_URL}/?mode=live&test_no_route_reason=stale&test=1`);
+    await page.waitForSelector('#notice-route-unavailable');
+    const reasonCard = page.locator('#notice-route-unavailable');
+    await expect(reasonCard).toHaveAttribute('data-no-route-reason', 'no_destination');
+    await expect(reasonCard).not.toContainText('data is stale');
   });
 
   test('Positive case: on TEST build with ?test=1&scene=lunch&geo_consent=denied, forcing and hooks are active and observable', async ({

@@ -1393,8 +1393,14 @@ export function renderApp(
       }
     }
 
-    // Dev/Test Hook destination injection
-    if (typeof window !== 'undefined' && window.location?.search) {
+    // Dev/Test Hook destination injection (strictly gated by compile-time test hooks and isDevOrTest)
+    if (
+      typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined' &&
+      __YORI_ENABLE_TEST_HOOKS__ &&
+      isDevOrTest &&
+      typeof window !== 'undefined' &&
+      window.location?.search
+    ) {
       const params = new URLSearchParams(window.location.search);
       if (params.get('test_destination') === '1' && !liveDestination) {
         liveDestination = {
@@ -1450,7 +1456,13 @@ export function renderApp(
   }
 
   function getLiveNoRouteReason(): NoRouteReason {
-    if (typeof window !== 'undefined' && window.location?.search) {
+    if (
+      typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined' &&
+      __YORI_ENABLE_TEST_HOOKS__ &&
+      isDevOrTest &&
+      typeof window !== 'undefined' &&
+      window.location?.search
+    ) {
       const params = new URLSearchParams(window.location.search);
       const forced = params.get('test_no_route_reason') as NoRouteReason | null;
       if (forced && forced in NO_ROUTE_REASON_LABELS) {
