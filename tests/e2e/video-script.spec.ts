@@ -109,6 +109,8 @@ export const VIDEO_SCRIPT_FIXTURES = {
       'Time to get ready',
       'Demo profile · sample preference',
       'Adjust Departure Timing',
+      'For this time only',
+      'Remember as preference',
       'Remember departure prep & buffer routine?',
     ],
   },
@@ -120,6 +122,7 @@ export const VIDEO_SCRIPT_FIXTURES = {
       'Me & Memory',
       '0 of 3 used today',
       'No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.',
+      'Reset Storage',
       'Preparation buffer habit',
       'Confirmed',
       'Get ready at 2:00 PM, leave by 2:25 PM',
@@ -145,6 +148,7 @@ export const VIDEO_SCRIPT_FIXTURES = {
     title: 'Optional V5 Extension: Dynamic Fuel & Manual Geolocation',
     budgetSeconds: 20,
     quotedStrings: [
+      'Fuel (Low Fuel Warning)',
       'Low Fuel Warning',
       'Nearby gas stations from simulated fixture · straight-line distances shown',
       'Metro Gas & Go',
@@ -189,6 +193,9 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await page.waitForTimeout(200);
 
     // Assert verbatim quoted strings
+    await expect(page.locator('#scene-select option[value="fuel"]')).toHaveText(
+      'Fuel (Low Fuel Warning)'
+    );
     await expect(page.locator('.demo-chip')).toHaveText('Demo · simulated context');
     await expect(page.locator('#badge-ui-version')).toHaveText('V2 Preview');
     await expect(page.locator('.now-card .now-subject')).toHaveText('Piano lesson at 3:00 PM');
@@ -353,6 +360,8 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     // Open Adjust dialog and save buffer preference
     await page.locator('#btn-adjust').click();
     await expect(page.locator('#adjust-dialog-title')).toContainText('Adjust Departure Timing');
+    await expect(page.locator('#btn-adjust-for-today')).toHaveText('For this time only');
+    await expect(page.locator('#btn-adjust-remember')).toHaveText('Remember as preference');
     await page.locator('#input-prep-minutes').fill('25');
     await page.locator('#input-buffer-minutes').fill('10');
     await page.locator('#btn-adjust-remember').click();
@@ -384,6 +393,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await expect(page.locator('#confirmed-facts-list .memory-empty')).toHaveText(
       'No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.'
     );
+    await expect(page.locator('#btn-me-reset')).toHaveText('Reset Storage');
 
     // Locate pending proposal "Preparation buffer habit" and confirm it
     const pendingRow = page.locator('#proposal-prep_buffer_preference');
@@ -443,6 +453,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     // Send query "Can I leave later?"
     await page.locator('#conversation-input').fill('Can I leave later?');
     await page.locator('#conversation-send-btn').click();
+    await expect(page.locator('.chat-bubble-user .chat-text')).toHaveText('Can I leave later?');
     await expect(page.locator('#engine-status-chip')).toContainText(
       'Scripted model fixture · not a live model call'
     );
@@ -538,6 +549,9 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
 
     const nowCard = page.locator('.now-card');
     await expect(nowCard).toBeVisible();
+    await expect(page.locator('#scene-select option[value="fuel"]')).toHaveText(
+      'Fuel (Low Fuel Warning)'
+    );
     await expect(nowCard.locator('.now-subject')).toHaveText('Low Fuel Warning');
     await expect(nowCard.locator('.card-badge')).toHaveText('SIMULATED');
     await expect(nowCard.locator('.mock-places-notice')).toHaveText(
