@@ -665,10 +665,7 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Rain forecast · simulated');
     await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Issued 1:35 PM');
 
-    // Return to Home for option cards & habit note (kept in hidden shelf on Home for DOM queries)
-    await page.locator('#trip-detail-back-btn').click();
-
-    const optionCards = page.locator('.v2-trip-details-shelf .v2-options-grid .v2-option-card');
+    const optionCards = page.locator('.v2-options-grid .v2-option-card');
     await expect(optionCards).toHaveCount(2);
 
     const driveCard = optionCards.first();
@@ -684,6 +681,9 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(busCard.locator('.v2-option-badge')).toHaveText('Alternative');
     await expect(busCard.locator('.v2-option-meta')).toHaveText('40 min bus + 5m margin');
     await expect(page.locator('.habit-note')).toHaveText('You usually prefer driving when it rains.');
+
+    // Return to Home
+    await page.locator('#trip-detail-back-btn').click();
 
     // --- Part 3 (D3 Away & D4 Busy) Verbatim Quotes ---
     await selectDemoScene(page, 'away-lunch');

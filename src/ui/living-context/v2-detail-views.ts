@@ -51,7 +51,41 @@ export function renderTripDetail(vm: TripDetailVM): string {
         <div class="v2-options-grid v2-mode-tabs" role="tablist" aria-label="Available Modes">
           ${vm.modeTabs
             .map(
-              tab => `
+              tab => {
+                const optTitleRef = tab.fieldSourceRefs?.leaveTime
+                  ? `${escapeHtml(tab.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(tab.fieldSourceRefs.leaveTime.field)}`
+                  : tab.sourceRef
+                    ? `${escapeHtml(tab.sourceRef.recordId)}.${escapeHtml(tab.sourceRef.field)}`
+                    : '';
+                const optMetaRef = tab.fieldSourceRefs?.travelMinutes
+                  ? `${escapeHtml(tab.fieldSourceRefs.travelMinutes.recordId)}.${escapeHtml(tab.fieldSourceRefs.travelMinutes.field)}`
+                  : '';
+                const optBasisRef = tab.fieldSourceRefs?.rankingBasis
+                  ? `${escapeHtml(tab.fieldSourceRefs.rankingBasis.recordId)}.${escapeHtml(tab.fieldSourceRefs.rankingBasis.field)}`
+                  : '';
+                const optLateRef = tab.fieldSourceRefs?.lateMinutes
+                  ? `${escapeHtml(tab.fieldSourceRefs.lateMinutes.recordId)}.${escapeHtml(tab.fieldSourceRefs.lateMinutes.field)}`
+                  : '';
+
+                const metaText = tab.meta || tab.detail || (tab.durationMinutes ? `${tab.durationMinutes} min ${tab.mode} + 5m margin` : '');
+                let detailHtml = '';
+                if (metaText) {
+                  if (metaText.includes('late by')) {
+                    const splitIdx = metaText.indexOf(' · ');
+                    const travelPart = splitIdx >= 0 ? metaText.slice(0, splitIdx) : metaText;
+                    const latePart = splitIdx >= 0 ? metaText.slice(splitIdx + 3) : '';
+                    detailHtml = `<div class="v2-tab-times v2-option-meta"><span ${optMetaRef ? `data-source-ref="${optMetaRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(travelPart)}</span><span data-slot="chrome" data-slot-reason="Option late connector"> · </span><span ${optLateRef ? `data-source-ref="${optLateRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option late meta"`}>${escapeHtml(latePart)}</span></div>`;
+                  } else {
+                    detailHtml = `<div class="v2-tab-times v2-option-meta"${optMetaRef ? ` data-source-ref="${optMetaRef}" data-slot="domain"` : ` data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(metaText)}</div>`;
+                  }
+                }
+
+                const badgeText = tab.badge || (tab.mode === 'drive' ? 'Recommended' : 'Alternative');
+                const basisText = tab.rankingBasis || (tab.mode === 'drive' ? 'Ranked by habit: Rain travel habit (Demo profile · sample)' : '');
+                const modeCap = tab.mode ? (tab.mode.charAt(0).toUpperCase() + tab.mode.slice(1)) : 'Option';
+                const labelText = tab.leaveTime ? `${modeCap} · leave ${tab.leaveTime}` : tab.label;
+
+                return `
             <button
               type="button"
               role="tab"
@@ -61,13 +95,15 @@ export function renderTripDetail(vm: TripDetailVM): string {
               aria-selected="${tab.isSelected}"
             >
               <div class="v2-option-top">
-                <span class="v2-tab-label v2-option-label">${escapeHtml(tab.label)}</span>
-                ${tab.mode === 'drive' ? '<span class="v2-option-badge recommended">Recommended</span>' : '<span class="v2-option-badge">Alternative</span>'}
+                <span class="v2-tab-label v2-option-label" ${optTitleRef ? `data-source-ref="${optTitleRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option mode label"`}>${escapeHtml(labelText)}</span>
+                ${badgeText ? `<span class="v2-option-badge ${badgeText.toLowerCase()}" data-slot="chrome" data-slot-reason="Option recommendation badge">${escapeHtml(badgeText)}</span>` : ''}
               </div>
-              <div class="v2-tab-times v2-option-meta">${escapeHtml(tab.leaveTime)} – ${escapeHtml(tab.arriveTime)}${tab.durationMinutes ? ` · ${tab.durationMinutes} min drive + 5m margin` : ''}</div>
-              ${tab.mode === 'drive' ? '<div class="v2-option-basis">Ranked by habit: Rain travel habit (Demo profile · sample)</div>' : ''}
+              <div class="v2-tab-duration" data-slot="chrome" data-slot-reason="Option duration label">${escapeHtml(tab.label)}</div>
+              ${detailHtml}
+              ${basisText ? `<div class="v2-option-basis" ${optBasisRef ? `data-source-ref="${optBasisRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option ranking basis"`}>${escapeHtml(basisText)}</div>` : ''}
             </button>
-          `
+          `;
+              }
             )
             .join('')}
         </div>

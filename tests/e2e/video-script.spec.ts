@@ -245,11 +245,8 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     );
     await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Issued 1:35 PM');
 
-    // Return to Home for option cards & habit note (kept in hidden shelf on Home for DOM queries)
-    await page.locator('#trip-detail-back-btn').click();
-
-    // Ranked transit options
-    const optionCards = page.locator('.v2-trip-details-shelf .v2-options-grid .v2-option-card');
+    // Ranked transit options in Trip Details
+    const optionCards = page.locator('.v2-options-grid .v2-option-card');
     await expect(optionCards).toHaveCount(2);
 
     const driveCard = optionCards.first();
@@ -267,6 +264,9 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
 
     // Habit citation
     await expect(page.locator('.habit-note')).toHaveText('You usually prefer driving when it rains.');
+
+    // Return to Home for screenshot
+    await page.locator('#trip-detail-back-btn').click();
 
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `02-rain-replan-d2-${viewName}.png`),

@@ -197,6 +197,10 @@ export interface TripModeTabVM {
   readonly arriveTime: string;
   readonly durationMinutes?: number;
   readonly isSelected: boolean;
+  readonly detail?: string;
+  readonly meta?: string;
+  readonly badge?: string;
+  readonly rankingBasis?: string;
   readonly sourceRef?: SourceRef;
   readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
 }

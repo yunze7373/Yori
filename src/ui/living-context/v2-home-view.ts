@@ -567,66 +567,6 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
             </div>
 
-            ${
-              vm.options && vm.options.length > 0
-                ? `
-              <div class="v2-trip-details-shelf" style="display: none;" aria-hidden="true">
-                <div class="v2-options-grid" role="group" aria-label="Available Modes">
-                  ${vm.options
-                    .map(
-                      opt => {
-                        const optTitleRef = opt.fieldSourceRefs?.leaveTime
-                          ? `${escapeHtml(opt.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(opt.fieldSourceRefs.leaveTime.field)}`
-                          : opt.sourceRef
-                            ? `${escapeHtml(opt.sourceRef.recordId)}.${escapeHtml(opt.sourceRef.field)}`
-                            : '';
-                        const optMetaRef = opt.fieldSourceRefs?.travelMinutes
-                          ? `${escapeHtml(opt.fieldSourceRefs.travelMinutes.recordId)}.${escapeHtml(opt.fieldSourceRefs.travelMinutes.field)}`
-                          : '';
-                        const optBasisRef = opt.fieldSourceRefs?.rankingBasis
-                          ? `${escapeHtml(opt.fieldSourceRefs.rankingBasis.recordId)}.${escapeHtml(opt.fieldSourceRefs.rankingBasis.field)}`
-                          : '';
-                        const optLateRef = opt.fieldSourceRefs?.lateMinutes
-                          ? `${escapeHtml(opt.fieldSourceRefs.lateMinutes.recordId)}.${escapeHtml(opt.fieldSourceRefs.lateMinutes.field)}`
-                          : '';
-                        const modeLabel = opt.mode ? opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1) : (opt.title.startsWith('Bus') ? 'Bus' : 'Drive');
-                        const hasLeave = opt.title.includes('leave ');
-                        const leaveTimeVal = opt.leaveTime || (hasLeave ? opt.title.split('leave ')[1] : '');
-
-                        let detailHtml = '';
-                        if (opt.detail) {
-                          if (opt.detail.includes('late by')) {
-                            const splitIdx = opt.detail.indexOf(' · ');
-                            const travelPart = splitIdx >= 0 ? opt.detail.slice(0, splitIdx) : opt.detail;
-                            const latePart = splitIdx >= 0 ? opt.detail.slice(splitIdx + 3) : '';
-                            detailHtml = `<div class="v2-option-meta"><span ${optMetaRef ? `data-source-ref="${optMetaRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(travelPart)}</span><span data-slot="chrome" data-slot-reason="Option late connector"> · </span><span ${optLateRef ? `data-source-ref="${optLateRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option late meta"`}>${escapeHtml(latePart)}</span></div>`;
-                          } else {
-                            detailHtml = `<div class="v2-option-meta"${optMetaRef ? ` data-source-ref="${optMetaRef}" data-slot="domain"` : ` data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(opt.detail)}</div>`;
-                          }
-                        }
-
-                        return `
-                    <div class="v2-option-card ${opt.isSelected ? 'selected' : ''}" data-mode="${escapeHtml(opt.mode || '')}">
-                      <div class="v2-option-top">
-                        <span class="v2-option-label">
-                          <span data-slot="chrome" data-slot-reason="Option mode label">${escapeHtml(modeLabel)} · leave </span><span class="v2-option-leave-time" ${optTitleRef ? `data-source-ref="${optTitleRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option leave time"`}>${escapeHtml(leaveTimeVal || opt.title)}</span>
-                        </span>
-                        ${opt.badge ? `<span class="v2-option-badge ${opt.isRecommended ? 'recommended' : ''}" data-slot="chrome" data-slot-reason="Option recommendation badge">${escapeHtml(opt.badge)}</span>` : (opt.isRecommended ? `<span class="v2-option-badge recommended" data-slot="chrome" data-slot-reason="Option recommendation badge">Recommended</span>` : '')}
-                      </div>
-                      ${detailHtml}
-                      ${opt.rankingBasis ? `<div class="v2-option-basis" ${optBasisRef ? `data-source-ref="${optBasisRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option ranking basis"`}>${escapeHtml(opt.rankingBasis)}</div>` : ''}
-                    </div>
-                  `;
-                      }
-                    )
-                    .join('')}
-                </div>
-                ${vm.habitNote ? `<div class="habit-note" data-source-ref="rain_transport_preference.habitNote" data-slot="domain">${escapeHtml(vm.habitNote)}</div>` : ''}
-              </div>
-            `
-                : ''
-            }
-
             ${renderActionRow(vm)}
           </section>
         </div>

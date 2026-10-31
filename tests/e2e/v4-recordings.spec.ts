@@ -165,9 +165,8 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await page.locator('#btn-view-trip-details').click();
     await expect(page.locator('.v2-map-weather-callout')).toContainText('Rain forecast · simulated');
     await expect(page.locator('.v2-map-weather-callout')).toContainText('Issued 1:35 PM');
-    await page.locator('#trip-detail-back-btn').click();
 
-    const optionCards = page.locator('.v2-trip-details-shelf .v2-option-card');
+    const optionCards = page.locator('.v2-options-grid .v2-option-card');
     await expect(optionCards).toHaveCount(2);
     const driveCard = optionCards.nth(0);
     await expect(driveCard.locator('.v2-option-label')).toHaveText('Drive · leave 2:30 PM');
@@ -178,6 +177,8 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(busCard.locator('.v2-option-label')).toHaveText('Bus · leave 2:15 PM');
     await expect(busCard.locator('.v2-option-badge')).toHaveText('Alternative');
     await expect(busCard.locator('.v2-option-meta')).toHaveText('40 min bus + 5m margin');
+
+    await page.locator('#trip-detail-back-btn').click();
     await recordStep(
       'Route Options (Drive vs Bus)',
       'Compare primary Drive recommendation against alternative Bus option in Trip Details',

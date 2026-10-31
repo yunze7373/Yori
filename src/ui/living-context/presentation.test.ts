@@ -7,7 +7,8 @@ import {
   humanizeProposalTitle,
 } from './presentation.js';
 import { renderV2Home } from './v2-home-view.js';
-import type { HomeCompositionVM } from '../view-models/types.js';
+import { renderTripDetail } from './v2-detail-views.js';
+import type { HomeCompositionVM, TripDetailVM } from '../view-models/types.js';
 import { STRINGS } from './strings.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
 
@@ -360,22 +361,43 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
       expect(candHtml).toContain('data-source-ref="rec&quot; onmouseover=alert(1).name"');
       expect(candHtml).not.toMatch(/" onmouseover=alert\(1\)/);
 
-      // 2. Test journey layout transit option cards
-      const journeyVM: HomeCompositionVM = {
-        layoutKind: 'journey',
+      // 2. Test transit option cards in TripDetail view
+      const tripDetailVM: TripDetailVM = {
+        planId: 'opt-test-plan',
         title: 'Depart',
         headline: 'Leave for lesson',
-        basis: 'Standard schedule',
-        isRain: true,
-        options: [
+        destinationName: 'Piano lesson',
+        apptTime: '3:00 PM',
+        leaveTime: '2:30 PM',
+        arriveTime: '2:55 PM',
+        bufferText: 'On time',
+        prepText: '20m prep',
+        selectedMode: 'bus',
+        map: {
+          id: 'map-1',
+          label: 'Map',
+          simulatedBadge: 'Simulated',
+          sizeHint: 'prominent',
+          destinationName: 'Piano lesson',
+          markers: [],
+          polylines: [],
+          ariaDescription: 'Map',
+        },
+        steps: [],
+        whyDerivation: '',
+        whyHabits: [],
+        isAccepted: false,
+        actions: [],
+        modeTabs: [
           {
             id: 'opt1',
-            label: 'Option 1',
-            title: 'Bus · leave 2:30 PM',
+            label: 'Bus · leave 2:30 PM',
             mode: 'bus',
+            leaveTime: '2:30 PM',
+            arriveTime: '3:10 PM',
             isSelected: true,
-            isRecommended: true,
-            detail: '40 min bus · late by 10m',
+            badge: 'Recommended',
+            meta: '40 min bus · late by 10m',
             rankingBasis: 'Rain habit',
             fieldSourceRefs: {
               leaveTime: { recordId: 'leave" onmouseover=x', field: 'leaveTime' },
@@ -385,13 +407,9 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
             },
           },
         ],
-        isAccepted: false,
-        actions: [],
-        aheadItems: [],
-        proposals: [],
       };
 
-      const journeyHtml = renderV2Home(journeyVM);
+      const journeyHtml = renderTripDetail(tripDetailVM);
       expect(journeyHtml).toContain('data-source-ref="leave&quot; onmouseover=x.leaveTime"');
       expect(journeyHtml).toContain('data-source-ref="travel&quot; onmouseover=x.travelMinutes"');
       expect(journeyHtml).toContain('data-source-ref="basis&quot; onmouseover=x.rankingBasis"');
@@ -400,32 +418,49 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
     });
 
     it('omits data-source-ref when fieldSourceRefs is missing instead of inventing literal fallbacks', () => {
-      const vm: HomeCompositionVM = {
-        layoutKind: 'journey',
+      const vm: TripDetailVM = {
+        planId: 'opt-no-refs-plan',
         title: 'Depart',
         headline: 'Departure plan',
-        basis: 'Standard schedule',
-        isRain: false,
-        options: [
+        destinationName: 'Piano lesson',
+        apptTime: '3:00 PM',
+        leaveTime: '2:30 PM',
+        arriveTime: '2:55 PM',
+        bufferText: 'On time',
+        prepText: '20m prep',
+        selectedMode: 'drive',
+        map: {
+          id: 'map-1',
+          label: 'Map',
+          simulatedBadge: 'Simulated',
+          sizeHint: 'prominent',
+          destinationName: 'Piano lesson',
+          markers: [],
+          polylines: [],
+          ariaDescription: 'Map',
+        },
+        steps: [],
+        whyDerivation: '',
+        whyHabits: [],
+        isAccepted: false,
+        actions: [],
+        modeTabs: [
           {
             id: 'opt-no-refs',
-            label: 'Option No Refs',
-            title: 'Drive · leave 2:30 PM',
+            label: 'Drive · leave 2:30 PM',
             mode: 'drive',
+            leaveTime: '2:30 PM',
+            arriveTime: '2:55 PM',
             isSelected: true,
-            isRecommended: false,
-            detail: '25 min drive · late by 10m',
+            badge: 'Alternative',
+            meta: '25 min drive · late by 10m',
             rankingBasis: 'Alternative route',
             // fieldSourceRefs intentionally empty/undefined
           },
         ],
-        isAccepted: false,
-        actions: [],
-        aheadItems: [],
-        proposals: [],
       };
 
-      const html = renderV2Home(vm);
+      const html = renderTripDetail(vm);
 
       // Verify no invented literal provenance fallbacks are emitted
       expect(html).not.toContain('rain_transport_preference.rankingBasis');

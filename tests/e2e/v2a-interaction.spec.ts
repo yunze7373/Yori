@@ -37,6 +37,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await expect(page.locator('.now-card')).toContainText('2:30 PM');
 
     // Assert V2 transit option cards verbatim in Rain scene (Part 2 of VIDEO_SCRIPT.md)
+    await page.locator('#btn-view-trip-details').click();
     const optionCards = page.locator('.v2-options-grid .v2-option-card');
     await expect(optionCards).toHaveCount(2);
 
@@ -52,6 +53,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await expect(busCard.locator('.v2-option-label')).toHaveText('Bus · leave 2:15 PM');
     await expect(busCard.locator('.v2-option-badge')).toHaveText('Alternative');
     await expect(busCard.locator('.v2-option-meta')).toHaveText('40 min bus + 5m margin');
+    await page.locator('#trip-detail-back-btn').click();
 
     // 2. Open conversation via Ask bar
     const askBar = page.locator('#ask-bar');
@@ -89,8 +91,10 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await expect(nowCard).toContainText('2:45 PM');
     await expect(nowCard).toContainText('2:25 PM'); // prepare time shifted equally (+15m from 2:10 PM)
 
-    // Assert both Rain option cards render after confirmed leave-later shift
-    await expect(optionCards).toHaveCount(2);
+    // Assert both Rain option cards render in Trip Details after confirmed leave-later shift
+    await page.locator('#btn-view-trip-details').click();
+    await expect(page.locator('.v2-options-grid .v2-option-card')).toHaveCount(2);
+    await page.locator('#trip-detail-back-btn').click();
 
     // 7. Verify Why sheet carries user_request provenance
     const whyBtn = page.locator('#btn-why');
@@ -122,8 +126,10 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     // Prior plan restored: leave 2:30 PM
     await expect(nowCard).toContainText('2:30 PM');
 
-    // Assert both Rain option cards render after Undo
-    await expect(optionCards).toHaveCount(2);
+    // Assert both Rain option cards render in Trip Details after Undo
+    await page.locator('#btn-view-trip-details').click();
+    await expect(page.locator('.v2-options-grid .v2-option-card')).toHaveCount(2);
+    await page.locator('#trip-detail-back-btn').click();
 
     // 9. Adjust prep/buffer and confirm: assert both option cards render
     const adjustBtn = page.locator('#btn-adjust');
@@ -134,8 +140,10 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await page.locator('#input-prep-minutes').fill('25');
     await page.locator('#btn-adjust-for-today').click();
 
-    // Verify option cards still render with count 2 after confirmed prep/buffer change
-    await expect(optionCards).toHaveCount(2);
+    // Verify option cards still render with count 2 in Trip Details after confirmed prep/buffer change
+    await page.locator('#btn-view-trip-details').click();
+    await expect(page.locator('.v2-options-grid .v2-option-card')).toHaveCount(2);
+    await page.locator('#trip-detail-back-btn').click();
 
     // 10. Axe accessibility audit
     await checkAxe(page);
@@ -385,11 +393,13 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
 
       await selectDemoScene(page, 'rain');
 
-      // Initial state: 2 option cards (Drive Recommended, Bus Alternative)
-      const optionCards = page.locator('.v2-option-card');
-      await expect(optionCards).toHaveCount(2);
-      await expect(optionCards.first().locator('.v2-option-badge')).toHaveText('Recommended');
-      await expect(optionCards.first().locator('.v2-option-label')).toContainText('Drive');
+      // Initial state: in Trip Details, 2 option cards (Drive Recommended, Bus Alternative)
+      await page.locator('#btn-view-trip-details').click();
+      const initialCards = page.locator('.v2-options-grid .v2-option-card');
+      await expect(initialCards).toHaveCount(2);
+      await expect(initialCards.first().locator('.v2-option-badge')).toHaveText('Recommended');
+      await expect(initialCards.first().locator('.v2-option-label')).toHaveText('Drive · leave 2:30 PM');
+      await page.locator('#trip-detail-back-btn').click();
 
       // Open conversation
       const askBar = page.locator('#ask-bar');
@@ -417,16 +427,19 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       }
       await expect(overlay).toHaveCount(0, { timeout: 5000 });
 
-      // In updated state: both cards render (toHaveCount(2)), with Bus first (Recommended) and Drive second (Alternative)
-      await expect(optionCards).toHaveCount(2);
+      // In updated state: navigate to Trip Details and verify both cards render, with Bus first (Recommended) and Drive second (Alternative)
+      await page.locator('#btn-view-trip-details').click();
+      const updatedCards = page.locator('.v2-options-grid .v2-option-card');
+      await expect(updatedCards).toHaveCount(2);
 
-      const firstCard = optionCards.first();
+      const firstCard = updatedCards.first();
       await expect(firstCard.locator('.v2-option-badge')).toHaveText('Recommended');
-      await expect(firstCard.locator('.v2-option-label')).toContainText('Bus · leave 2:15 PM');
+      await expect(firstCard.locator('.v2-option-label')).toHaveText('Bus · leave 2:15 PM');
 
-      const secondCard = optionCards.nth(1);
+      const secondCard = updatedCards.nth(1);
       await expect(secondCard.locator('.v2-option-badge')).toHaveText('Alternative');
-      await expect(secondCard.locator('.v2-option-label')).toContainText('Drive · leave 2:30 PM');
+      await expect(secondCard.locator('.v2-option-label')).toHaveText('Drive · leave 2:30 PM');
+      await page.locator('#trip-detail-back-btn').click();
     });
 
     test(`V2a Rain Details Why rows render 5 min / 20 min and zero unknown text across default, leave-later, and bus states (${viewport.name})`, async ({

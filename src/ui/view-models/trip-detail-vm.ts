@@ -110,7 +110,8 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
         ? selectedMode.toLowerCase()
         : typedOptions[0]!.mode!.toLowerCase();
 
-    for (const opt of typedOptions) {
+    for (let i = 0; i < typedOptions.length; i++) {
+      const opt = typedOptions[i]!;
       const mode = opt.mode!;
       const modeCap = mode.charAt(0).toUpperCase() + mode.slice(1);
       const optTiming = derivePlanTimingFacts(plan, opt);
@@ -127,6 +128,12 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
 
       // If travelMinutes is missing, omit rather than displaying "0 min"
       const label = duration !== undefined ? `${modeCap} · ${duration} min` : modeCap;
+      const isFirst = i === 0;
+      const badge = isFirst ? 'Recommended' : 'Alternative';
+      const meta = opt.details || (duration !== undefined ? `${duration} min ${mode} + 5m margin` : '');
+      const rankingBasis = opt.rankedByFactKey
+        ? 'Ranked by habit: Rain travel habit (Demo profile · sample)'
+        : (isFirst ? 'Recommended route' : 'Alternative route');
 
       modeTabs.push({
         id: `mode-tab-${mode}`,
@@ -136,6 +143,12 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
         arriveTime,
         durationMinutes: duration,
         isSelected: mode.toLowerCase() === activeMode,
+        detail: meta,
+        meta,
+        badge,
+        rankingBasis,
+        sourceRef: (opt as any).sourceRef,
+        fieldSourceRefs: (opt as any).fieldSourceRefs,
       });
     }
   } else {
@@ -190,6 +203,8 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
       arriveTime,
       durationMinutes: travelDurationMinutes,
       isSelected: true,
+      meta: travelDurationMinutes !== undefined ? `${travelDurationMinutes} min ${singleMode} + 5m margin` : '',
+      badge: 'Recommended',
     });
   }
 
