@@ -68,11 +68,20 @@ async function navigateToMe(page: Page, isMobile: boolean): Promise<void> {
   await page.waitForTimeout(300);
 }
 
-async function navigateToToday(page: Page, isMobile: boolean): Promise<void> {
+async function navigateToHome(page: Page, isMobile: boolean): Promise<void> {
   if (isMobile) {
-    await page.locator('#tab-today').click();
+    await page.locator('#tab-home').click();
   } else {
-    await page.locator('#desktop-nav-today').click();
+    await page.locator('#desktop-nav-home').click();
+  }
+  await page.waitForTimeout(300);
+}
+
+async function navigateToForYou(page: Page, isMobile: boolean): Promise<void> {
+  if (isMobile) {
+    await page.locator('#tab-for-you').click();
+  } else {
+    await page.locator('#desktop-nav-for-you').click();
   }
   await page.waitForTimeout(300);
 }
@@ -113,30 +122,52 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await sceneSelect.selectOption('rain');
 
     // -------------------------------------------------------------------------
-    // Capture 01: Home showing NOW + AHEAD + FOR YOU (Rain Departure D2)
+    // Capture 01: Home showing V2 Hierarchy (Rain Departure D2)
     // -------------------------------------------------------------------------
+    const appLayout = page.locator('.app-layout');
+    await expect(appLayout).toHaveAttribute('data-ui-version', 'v2');
+
+    // Header badges
+    await expect(page.locator('#badge-ui-version')).toBeVisible();
+    await expect(page.locator('#badge-ui-version')).toContainText('V2 Preview');
+    await expect(page.locator('.demo-chip')).toBeVisible();
+    await expect(page.locator('.demo-chip')).toContainText('Demo · simulated context');
+
+    // Primary navigation affordance (Home / Plans / For You / Me)
+    if (isMobile) {
+      await expect(page.locator('#tab-home')).toBeVisible();
+      await expect(page.locator('#tab-plans')).toBeVisible();
+      await expect(page.locator('#tab-for-you')).toBeVisible();
+      await expect(page.locator('#tab-me')).toBeVisible();
+    } else {
+      await expect(page.locator('#desktop-nav-home')).toBeVisible();
+      await expect(page.locator('#desktop-nav-plans')).toBeVisible();
+      await expect(page.locator('#desktop-nav-for-you')).toBeVisible();
+      await expect(page.locator('#desktop-nav-me')).toBeVisible();
+    }
+
+    // Rain insight banner
+    const insightBanner = page.locator('.v2-insight-banner');
+    await expect(insightBanner).toBeVisible();
+    await expect(insightBanner.locator('.v2-insight-title')).toContainText('What changed: rain forecast');
+
+    // Prominent route map canvas
+    await expect(page.locator('.v2-map-canvas.prominent')).toBeVisible();
+
+    // Now card & journey timeline
     const nowCardD2 = page.locator('.now-card');
     await expect(nowCardD2).toBeVisible();
     await expect(nowCardD2.locator('.now-subject')).toContainText('Piano lesson');
-    await expect(nowCardD2.locator('.rain-banner')).toContainText('What changed: rain forecast');
+    await expect(nowCardD2.locator('.now-subject')).toContainText('3:00 PM');
+    await expect(page.locator('.v2-timeline')).toBeVisible();
 
-    const umbrellaChip = nowCardD2.locator('#chip-umbrella');
-    await expect(umbrellaChip).toBeVisible();
-    await expect(umbrellaChip).toContainText('Umbrella');
-
-    await expect(nowCardD2.locator('.habit-note')).toHaveText('You usually prefer driving when it rains.');
-
-    const transitOptions = nowCardD2.locator('.options-grid .option-tile');
-    await expect(transitOptions).toHaveCount(2);
-    await expect(transitOptions.nth(0)).toContainText('Drive · leave 2:30 PM');
-    await expect(transitOptions.nth(1)).toContainText('Bus · leave 2:15 PM');
-
-    await expect(page.locator('.now-card')).toBeVisible();
-    await expect(page.locator('.now-card .section-label')).toContainText('NOW');
-    await expect(page.locator('section[aria-label*="AHEAD"]')).toBeVisible();
-    await expect(page.locator('section[aria-label*="AHEAD"] .section-label')).toContainText('AHEAD');
-    await expect(page.locator('section[aria-label*="FOR YOU"]')).toBeVisible();
-    await expect(page.locator('section[aria-label*="FOR YOU"] .section-label')).toContainText('FOR YOU');
+    // Actions & Ask bar
+    await expect(page.locator('#btn-accept')).toBeVisible();
+    await expect(page.locator('#btn-adjust')).toBeVisible();
+    await expect(page.locator('#btn-dismiss')).toBeVisible();
+    await expect(page.locator('#btn-why')).toBeVisible();
+    await expect(page.locator('#btn-view-trip-details')).toBeVisible();
+    await expect(page.locator('#ask-bar')).toBeVisible();
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
@@ -221,7 +252,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     // -------------------------------------------------------------------------
     // Capture 04: Reject / Dismiss with Reason -> Dismissal Note (Rain Departure D2)
     // -------------------------------------------------------------------------
-    await navigateToToday(page, isMobile);
+    await navigateToHome(page, isMobile);
 
     const dismissBtn = page.locator('#btn-dismiss');
     await expect(dismissBtn).toBeVisible();
@@ -260,8 +291,30 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await sceneSelect.selectOption('away-lunch');
 
     // -------------------------------------------------------------------------
-    // Capture 05: Home showing NOW + AHEAD + FOR YOU (Away Lunch D3)
+    // Capture 05: Home showing V2 Candidates Hierarchy (Away Lunch D3)
     // -------------------------------------------------------------------------
+    const appLayoutD3 = page.locator('.app-layout');
+    await expect(appLayoutD3).toHaveAttribute('data-ui-version', 'v2');
+
+    // Header badges
+    await expect(page.locator('#badge-ui-version')).toBeVisible();
+    await expect(page.locator('#badge-ui-version')).toContainText('V2 Preview');
+    await expect(page.locator('.demo-chip')).toBeVisible();
+    await expect(page.locator('.demo-chip')).toContainText('Demo · simulated context');
+
+    // Primary navigation affordance (Home / Plans / For You / Me)
+    if (isMobile) {
+      await expect(page.locator('#tab-home')).toBeVisible();
+      await expect(page.locator('#tab-plans')).toBeVisible();
+      await expect(page.locator('#tab-for-you')).toBeVisible();
+      await expect(page.locator('#tab-me')).toBeVisible();
+    } else {
+      await expect(page.locator('#desktop-nav-home')).toBeVisible();
+      await expect(page.locator('#desktop-nav-plans')).toBeVisible();
+      await expect(page.locator('#desktop-nav-for-you')).toBeVisible();
+      await expect(page.locator('#desktop-nav-me')).toBeVisible();
+    }
+
     const nowCardD3 = page.locator('.now-card');
     await expect(nowCardD3).toBeVisible();
     await expect(nowCardD3.locator('.now-subject')).toContainText('Lunch options near you');
@@ -269,12 +322,11 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
       'Mock places for this demo; real listings come from a place provider.'
     );
 
-    await expect(page.locator('.now-card')).toBeVisible();
-    await expect(page.locator('.now-card .section-label')).toContainText('NOW');
-    await expect(page.locator('section[aria-label*="AHEAD"]')).toBeVisible();
-    await expect(page.locator('section[aria-label*="AHEAD"] .section-label')).toContainText('AHEAD');
-    await expect(page.locator('section[aria-label*="FOR YOU"]')).toBeVisible();
-    await expect(page.locator('section[aria-label*="FOR YOU"] .section-label')).toContainText('FOR YOU');
+    // Map canvas, actions, and Ask bar
+    await expect(page.locator('.v2-map-canvas')).toBeVisible();
+    await expect(page.locator('#btn-dismiss')).toBeVisible();
+    await expect(page.locator('#btn-why')).toBeVisible();
+    await expect(page.locator('#ask-bar')).toBeVisible();
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
@@ -311,7 +363,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await page.waitForTimeout(200);
 
     // -------------------------------------------------------------------------
-    // Capture 07: Dismiss with Reason -> Dismissal Note & Proposal Created
+    // Capture 07: Dismiss with Reason -> Dismissal Quiet State & Proposal in For You
     // -------------------------------------------------------------------------
     const dismissBtn = page.locator('#btn-dismiss');
     await expect(dismissBtn).toBeVisible();
@@ -327,10 +379,12 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await expect(quietTitle).toBeVisible();
     await expect(quietTitle).toHaveText('Nothing needs your attention right now.');
 
-    const lunchProposal = page.locator('#for-you-suppress_lunch_recommendations');
+    // Navigate to For You tab to view the generated routine proposal
+    await navigateToForYou(page, isMobile);
+    const lunchProposal = page.locator('.v2-proposal-item-card[data-proposal-key="suppress_lunch_recommendations"]');
     await expect(lunchProposal).toBeVisible();
-    await expect(lunchProposal.locator('.item-title')).toContainText('Skip lunch suggestions for today?');
-    await expect(lunchProposal.locator('.item-subtitle')).toContainText('You dismissed lunch · Not today');
+    await expect(lunchProposal.locator('.v2-proposal-title')).toContainText('Skip lunch suggestions for today?');
+    await expect(lunchProposal.locator('.v2-proposal-basis')).toBeVisible();
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);

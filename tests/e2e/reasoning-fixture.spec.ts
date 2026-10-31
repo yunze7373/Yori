@@ -30,7 +30,7 @@ test.beforeAll(() => {
 
 test.describe('PH-002 B2: Constrained Reasoning UI & Why-Order Verification', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.evaluate(() => {
       localStorage.clear();
     });
@@ -91,7 +91,7 @@ test.describe('PH-002 B2: Constrained Reasoning UI & Why-Order Verification', ()
       });
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
 
     // 2. Switch to 'multi-candidate' (Reasoning demo) scene
     const sceneSelect = page.locator('#scene-select');
@@ -184,7 +184,7 @@ test.describe('PH-002 B2: Constrained Reasoning UI & Why-Order Verification', ()
       });
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
 
     // 2. Switch to 'multi-candidate' scene
     const sceneSelect = page.locator('#scene-select');

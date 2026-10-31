@@ -70,7 +70,7 @@ async function navigateToToday(page: Page, isMobile: boolean) {
 
 test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.evaluate(() => {
       localStorage.clear();
     });
@@ -86,7 +86,7 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     // -------------------------------------------------------------------------
     // Step 1: Hook & The Calm Philosophy (Scene D1: Clear Departure)
     // -------------------------------------------------------------------------
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const sceneSelect = page.locator('#scene-select');
     await sceneSelect.selectOption('clear');
 

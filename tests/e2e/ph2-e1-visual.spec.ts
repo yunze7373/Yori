@@ -68,7 +68,7 @@ async function goToMeTab(page: Page, isMobile: boolean) {
 
 test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.evaluate(() => {
       localStorage.clear();
     });
@@ -79,7 +79,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.locator('#scene-select').selectOption('clear');
     await expect(page.locator('.now-card')).toBeVisible();
     await expect(page.locator('.demo-chip')).toBeVisible();
@@ -95,7 +95,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.locator('#scene-select').selectOption('rain');
     await expect(page.locator('.rain-banner')).toBeVisible();
     await expect(page.locator('.checklist-chip')).toBeVisible();
@@ -111,7 +111,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.locator('#scene-select').selectOption('away-lunch');
     await expect(page.locator('.map-card')).toBeVisible();
     await expect(page.locator('.options-grid')).toBeVisible();
@@ -127,7 +127,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.locator('#scene-select').selectOption('busy-lunch');
     await expect(page.locator('.quiet-card')).toBeVisible();
 
@@ -142,7 +142,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.locator('#scene-select').selectOption('missing-weather');
     await expect(page.locator('.notice-box')).toBeVisible();
 
@@ -157,7 +157,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.locator('#scene-select').selectOption('corrupt-storage');
     await expect(page.locator('.error-box')).toBeVisible();
 
@@ -217,7 +217,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
       });
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.locator('#scene-select').selectOption('multi-candidate');
 
     const nowCard = page.locator('.now-card');
@@ -244,7 +244,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.locator('#scene-select').selectOption('rain');
 
     const whyBtn = page.locator('#btn-why');
@@ -266,7 +266,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.locator('#scene-select').selectOption('rain');
 
     const adjustBtn = page.locator('#btn-adjust');
@@ -296,7 +296,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
       });
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await goToMeTab(page, isMobile);
     await expect(page.locator('#confirmed-facts-list')).toBeVisible();
     await expect(page.locator('#me-xmemo-title')).toHaveCount(0);
@@ -324,7 +324,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
       });
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await goToMeTab(page, isMobile);
     await expect(page.locator('#me-xmemo-title')).toBeVisible();
     await expect(page.locator('#btn-xmemo-connect')).toBeVisible();
@@ -383,7 +383,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
       });
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await expect(page.locator('#chip-live-weather')).toBeVisible();
     await expect(page.locator('#weather-attribution')).toBeVisible();
 

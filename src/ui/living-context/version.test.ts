@@ -27,17 +27,20 @@ describe('V-ANCHOR: UI Versioning & Fallback Anchor Contract', () => {
       expect(resolveUiVersion('  V2\n')).toBe('v2');
     });
 
-    it('defaults to v1 for explicit v1 tokens', () => {
+    it('resolves explicit v1 tokens to v1 (verified rollback path)', () => {
       expect(resolveUiVersion('v1')).toBe('v1');
       expect(resolveUiVersion('V1')).toBe('v1');
       expect(resolveUiVersion('  v1  ')).toBe('v1');
     });
 
-    it('fails closed to v1 for missing, empty, or invalid tokens without throwing', () => {
-      expect(resolveUiVersion(undefined)).toBe('v1');
-      expect(resolveUiVersion(null)).toBe('v1');
-      expect(resolveUiVersion('')).toBe('v1');
-      expect(resolveUiVersion('   ')).toBe('v1');
+    it('defaults to v2 for missing or empty tokens', () => {
+      expect(resolveUiVersion(undefined)).toBe('v2');
+      expect(resolveUiVersion(null)).toBe('v2');
+      expect(resolveUiVersion('')).toBe('v2');
+      expect(resolveUiVersion('   ')).toBe('v2');
+    });
+
+    it('fails closed to v1 for unknown or invalid tokens without throwing', () => {
       expect(resolveUiVersion('v3')).toBe('v1');
       expect(resolveUiVersion('invalid')).toBe('v1');
       expect(resolveUiVersion('null')).toBe('v1');
@@ -47,8 +50,8 @@ describe('V-ANCHOR: UI Versioning & Fallback Anchor Contract', () => {
   });
 
   describe('getEffectiveUiVersion', () => {
-    it('defaults to v1 when environment variable is unset', () => {
-      expect(getEffectiveUiVersion()).toBe('v1');
+    it('defaults to v2 when environment variable is unset', () => {
+      expect(getEffectiveUiVersion()).toBe('v2');
     });
 
     it('returns v2 when process.env.VITE_YORI_UI is v2', () => {
@@ -56,11 +59,13 @@ describe('V-ANCHOR: UI Versioning & Fallback Anchor Contract', () => {
       expect(getEffectiveUiVersion()).toBe('v2');
     });
 
-    it('falls back to v1 when process.env.VITE_YORI_UI is invalid or v1', () => {
-      process.env.VITE_YORI_UI = 'invalid-token';
-      expect(getEffectiveUiVersion()).toBe('v1');
-
+    it('returns v1 when process.env.VITE_YORI_UI is v1 (rollback path)', () => {
       process.env.VITE_YORI_UI = 'v1';
+      expect(getEffectiveUiVersion()).toBe('v1');
+    });
+
+    it('falls back to v1 when process.env.VITE_YORI_UI is invalid token', () => {
+      process.env.VITE_YORI_UI = 'invalid-token';
       expect(getEffectiveUiVersion()).toBe('v1');
     });
   });

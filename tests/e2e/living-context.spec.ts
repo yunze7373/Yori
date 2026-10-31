@@ -30,7 +30,7 @@ test.beforeAll(() => {
 test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeout)', () => {
   test.beforeEach(async ({ page }) => {
     // Clear localStorage before each test to ensure deterministic clean state
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await page.evaluate(() => {
       localStorage.clear();
     });
@@ -43,7 +43,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
 
     // 1. Verify Demo status label is present (INV-102)
     const demoChip = page.locator('.demo-chip');
@@ -102,7 +102,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const select = page.locator('#scene-select');
     await select.selectOption('rain');
 
@@ -137,7 +137,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
   });
 
   test('Review Loop: Accept and Undo functionality', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const select = page.locator('#scene-select');
     await select.selectOption('clear');
 
@@ -168,7 +168,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const select = page.locator('#scene-select');
     await select.selectOption('rain');
 
@@ -217,7 +217,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const select = page.locator('#scene-select');
     await select.selectOption('clear');
 
@@ -260,7 +260,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const select = page.locator('#scene-select');
     await select.selectOption('away-lunch');
 
@@ -305,7 +305,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
 
     // 1. First trigger Adjust to create a pending proposal
     const select = page.locator('#scene-select');
@@ -353,7 +353,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
   test('Me Page: Proposal rejection moves fact to audit and never applies (INV-107)', async ({
     page,
   }) => {
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const isMobile = page.viewportSize() ? page.viewportSize()!.width < 600 : false;
 
     // 1. Create proposal via adjust
@@ -383,7 +383,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
   });
 
   test('Persistence Across Browser Reload (AC-105-4 & INV-110)', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const isMobile = page.viewportSize() ? page.viewportSize()!.width < 600 : false;
 
     // 1. Adjust prep time and remember proposal
@@ -440,7 +440,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const select = page.locator('#scene-select');
     await select.selectOption('away-lunch');
 
@@ -474,7 +474,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const select = page.locator('#scene-select');
     await select.selectOption('busy-lunch');
 
@@ -494,7 +494,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const select = page.locator('#scene-select');
     await select.selectOption('missing-weather');
 
@@ -514,7 +514,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const select = page.locator('#scene-select');
     await select.selectOption('corrupt-storage');
 
@@ -553,7 +553,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
   test('Calm UI Invariants: No notice in clean scenes and zero engineering jargon across all scenes (Finding 1)', async ({
     page,
   }) => {
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const select = page.locator('#scene-select');
 
     // 1. Verify no notice in Clear, Rain, Away-lunch, Busy-lunch
@@ -591,7 +591,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
 
     // 3. Extend zero-jargon scan to Me tab with a confirmed fact present (UI-POLISH-P3)
     await page.evaluate(() => localStorage.clear());
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     const freshSelect = page.locator('#scene-select');
     await freshSelect.selectOption('rain');
     await page.locator('#btn-adjust').click();

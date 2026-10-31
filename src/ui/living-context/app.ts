@@ -118,12 +118,26 @@ export type UiVersion = 'v1' | 'v2';
 
 /**
  * Resolve UI version from raw input or build-time environment.
- * Defaults strictly to 'v1' until CUTLINE_CHECK_V2 passes (Reviewer condition C3).
- * Invalid, empty, or unknown tokens safely fall back to 'v1' without error.
+ * CUTLINE_CHECK_V2 passed with outcome CONTINUE (docs/architecture/LIVING_CONTEXT_V2.md §11).
+ * Promoted to 'v2' as default in task PREVIEW-HEAD-TRUTH (INBOX-20261031-15EADE).
+ * When raw is undefined, null, or empty string, defaults to 'v2'.
+ * Explicit 'v1' acts as the verified rollback path.
+ * Unknown or invalid tokens safely fail closed to 'v1'.
  */
 export function resolveUiVersion(raw?: string | null): UiVersion {
-  if (typeof raw === 'string' && raw.trim().toLowerCase() === 'v2') {
+  if (raw === undefined || raw === null) {
     return 'v2';
+  }
+  const trimmed = typeof raw === 'string' ? raw.trim() : '';
+  if (trimmed === '') {
+    return 'v2';
+  }
+  const lower = trimmed.toLowerCase();
+  if (lower === 'v2') {
+    return 'v2';
+  }
+  if (lower === 'v1') {
+    return 'v1';
   }
   return 'v1';
 }

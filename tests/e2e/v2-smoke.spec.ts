@@ -23,8 +23,8 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     }
   });
 
-  test('V1 approved home renders by default without ask bar and passes axe accessibility', async ({ page }) => {
-    await page.goto('/');
+  test('V1 rollback path renders via ?ui=v1 without ask bar and passes axe accessibility', async ({ page }) => {
+    await page.goto('/?ui=v1');
     await page.waitForSelector('.app-layout');
 
     // Root layout data attribute reflects v1
@@ -53,6 +53,25 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     const isMobile = (viewport?.width ?? 0) < 600;
     const filename = isMobile ? 'v1-home-mobile-390x844.png' : 'v1-home-desktop-1280x800.png';
     await page.screenshot({ path: path.join(EVIDENCE_DIR, filename), fullPage: false });
+  });
+
+  test('V2 living context renders by default at root URL "/" without query parameters', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('.app-layout');
+
+    // Root layout data attribute reflects v2
+    const appLayout = page.locator('.app-layout');
+    await expect(appLayout).toHaveAttribute('data-ui-version', 'v2');
+
+    // V2 badge is rendered
+    await expect(page.locator('#badge-ui-version')).toBeVisible();
+    await expect(page.locator('#badge-ui-version')).toContainText('V2 Preview');
+
+    // Ask bar is rendered on v2
+    await expect(page.locator('#ask-bar')).toBeVisible();
+
+    // Standard demo chip is present
+    await expect(page.locator('.demo-chip')).toContainText('Demo · simulated context');
   });
 
   test('V2 shell renders with Ask bar, opens Conversation shell, manages focus trap, Back, Esc, pin, and axe', async ({ page }) => {

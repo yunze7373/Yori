@@ -97,7 +97,7 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
       await route.continue();
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await goToMeTab(page, isMobile);
 
     // Assert: zero data calls beyond status
@@ -177,7 +177,7 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
       await route.continue();
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
 
     // 1. Why Sheet Truthful Provenance Verification (Reviewer Finding P2)
     // Open Why sheet on Home view
@@ -267,7 +267,7 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
       await route.continue();
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
     await goToMeTab(page, isMobile);
 
     // Assert: XMemo section is visible and displays fallback status
@@ -333,7 +333,7 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
       await route.continue();
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
 
     // 1. Initial page load must not perform remote writes
     expect(remoteWriteCount).toBe(0);
@@ -429,7 +429,7 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
       await route.continue();
     });
 
-    await page.goto('/');
+    await page.goto('/?ui=v1');
 
     // Assert: The Piano lesson NOW card STILL renders and is not erased into quiet state
     const nowSubject = page.locator('.now-subject');

@@ -640,3 +640,7 @@ All names, hashes, and pixel dimensions match the plan exactly with zero mismatc
   - Re-record & final polish window: **2026-11-03 – 2026-11-04**.
   - Internal freeze: **2026-11-04**.
   - External deadline: **2026-11-05 11:00 JST**.
+- **Default UI Flip (PREVIEW-HEAD-TRUTH / INBOX-20261031-15EADE):**
+  - **Date:** 2026-10-31
+  - **Action:** Promoted Living Context V2 to the default UI version in `src/ui/living-context/app.ts` (`resolveUiVersion()` and `getEffectiveUiVersion()` default to `'v2'`).
+  - **Rollback Invariant:** Explicit `?ui=v1` or `VITE_YORI_UI=v1` safely preserves the approved V1 layout without modification. Unknown/invalid tokens fail closed to `'v1'`.
