@@ -10,6 +10,7 @@ import type { LocationCoords } from './location-port.js';
 export interface PlaceItem {
   readonly id?: string;
   readonly placeId: string;
+  readonly osmId?: number | string;
   readonly coords: LocationCoords;
   readonly name: string;
   readonly category: 'gas_station' | 'restaurant' | string;
@@ -24,6 +25,7 @@ export interface PlaceItem {
   readonly cuisine?: string;
   readonly noiseLevel?: 'quiet' | 'moderate' | 'lively' | string;
   readonly vegetarian?: boolean;
+  readonly attribution?: string;
 }
 
 export interface PlacesQuery {

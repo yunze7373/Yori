@@ -210,6 +210,39 @@ describe('V5-FUEL: OverpassPlacesAdapter', () => {
     expect(parsed[1]!.name).toBe('Shell Station');
   });
 
+  it('L1-LIVE-TRUTH: parses recorded Overpass response to candidates with OSM id, name, distance, fetchedAt and ODbL attribution', () => {
+    const recordedFixture = [
+      {
+        id: 789123,
+        type: 'node' as const,
+        lat: 37.7755,
+        lon: -122.4185,
+        tags: {
+          name: 'Civic Center Diner',
+          amenity: 'restaurant',
+          'addr:street': 'Grove St',
+          'addr:housenumber': '100',
+        },
+      },
+    ];
+
+    const results = parseOverpassElements(
+      recordedFixture,
+      'restaurant',
+      DEFAULT_DEMO_COORDS,
+      '2026-10-31T21:00:00.000Z'
+    );
+
+    expect(results.length).toBe(1);
+    const item = results[0]!;
+    expect(item.osmId).toBe(789123);
+    expect(item.name).toBe('Civic Center Diner');
+    expect(item.straightLineDistanceMeters).toBeGreaterThan(0);
+    expect(item.straightLineDistanceLabel).toBeDefined();
+    expect(item.fetchedAt).toBe('2026-10-31T21:00:00.000Z');
+    expect(item.attribution).toBe('© OpenStreetMap contributors (ODbL)');
+  });
+
   it('executes mapped request using injected mock fetch', async () => {
     const mockResponse = {
       elements: [

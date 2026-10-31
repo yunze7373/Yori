@@ -429,4 +429,72 @@ describe('V5-GEO: GeolocationAdapter (AC-211-1, AC-211-2)', () => {
       expect(adapter.createLocationEvidenceRecord()).toBeUndefined();
     });
   });
+
+  describe('L1-LIVE-TRUTH: acquireSessionFix Cap and Debounce Guard', () => {
+    it('acquireSessionFix respects maxRequestsPerSession cap (5)', async () => {
+      mockGeo.getCurrentPosition.mockImplementation((success) => {
+        success({
+          coords: { latitude: 37.7749, longitude: -122.4194, accuracy: 25 },
+          timestamp: Date.now(),
+        });
+      });
+
+      const adapter = new GeolocationAdapter({
+        enabled: true,
+        simulated: false,
+        maxRequestsPerSession: 5,
+        debounceMs: 0, // disable debounce for cap test
+        cacheTtlMs: 0, // disable cache to test per-session request count
+        geolocationProvider: mockGeo,
+        initialStatus: 'prompt',
+      });
+
+      // Call 5 times successfully
+      for (let i = 0; i < 5; i++) {
+        adapter.clearSessionFix();
+        const res = await adapter.acquireSessionFix();
+        expect(res.status).toBe('available');
+      }
+      expect(mockGeo.getCurrentPosition).toHaveBeenCalledTimes(5);
+      expect(adapter.getRequestCount()).toBe(5);
+
+      // 6th call exceeds budget
+      adapter.clearSessionFix();
+      const sixth = await adapter.acquireSessionFix();
+      expect(sixth.status).toBe('unavailable');
+      expect(sixth.notice).toContain('budget exhausted');
+      // Provider not invoked a 6th time
+      expect(mockGeo.getCurrentPosition).toHaveBeenCalledTimes(5);
+    });
+
+    it('acquireSessionFix respects 2000ms debounce guard', async () => {
+      let callCount = 0;
+      mockGeo.getCurrentPosition.mockImplementation((success) => {
+        callCount++;
+        success({
+          coords: { latitude: 37.7749, longitude: -122.4194, accuracy: 25 },
+          timestamp: Date.now(),
+        });
+      });
+
+      const adapter = new GeolocationAdapter({
+        enabled: true,
+        simulated: false,
+        debounceMs: 2000,
+        cacheTtlMs: 0, // disable cache to isolate debounce
+        geolocationProvider: mockGeo,
+        initialStatus: 'prompt',
+      });
+
+      // First call invokes provider
+      const fix1 = await adapter.acquireSessionFix();
+      expect(fix1.status).toBe('available');
+      expect(callCount).toBe(1);
+
+      // Immediate second call is debounced; returns existing fix without calling provider again
+      const fix2 = await adapter.acquireSessionFix();
+      expect(fix2.status).toBe('available');
+      expect(callCount).toBe(1);
+    });
+  });
 });

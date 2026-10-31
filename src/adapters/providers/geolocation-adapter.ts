@@ -245,6 +245,28 @@ export class GeolocationAdapter implements LocationPort {
   public async acquireSessionFix(options?: PositionOptions): Promise<LocationStatus> {
     this.grantConsent();
     const now = Date.now();
+
+    // 1. Session request budget guard (cap of 5 requests per session)
+    if (this.requestCount >= this.maxRequestsPerSession) {
+      this.lastNotice = 'Session location request budget exhausted';
+      return {
+        status: 'unavailable',
+        source: 'geolocation',
+        updatedAt: new Date(now).toISOString(),
+        notice: this.lastNotice,
+      };
+    }
+
+    // 2. Debounce guard (2000ms debounce)
+    if (now - this.lastRequestTime < this.debounceMs && this.cachedCoords) {
+      return this.getLocation();
+    }
+
+    // 3. Cache guard (cache TTL)
+    if (this.cachedCoords && this.cachedTimestamp && now - this.cachedTimestamp < this.cacheTtlMs) {
+      return this.getLocation();
+    }
+
     const geo =
       this.geolocationProvider ??
       (typeof navigator !== 'undefined' ? navigator.geolocation : undefined);

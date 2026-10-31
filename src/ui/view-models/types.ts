@@ -136,6 +136,8 @@ export interface ProposalItemVM {
   readonly key: string;
   readonly title: string;
   readonly basis?: string;
+  readonly provenance?: 'user' | 'fixture' | 'none';
+  readonly value?: unknown;
 }
 
 export interface HomeCompositionVM {

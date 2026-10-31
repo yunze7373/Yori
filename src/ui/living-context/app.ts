@@ -58,6 +58,7 @@ import {
   formatNoticeMessage,
   humanizeProposalTitle,
 } from './presentation.js';
+import { isWeatherStale } from '../view-models/provenance.js';
 import {
   YoriStorage,
   WebStorageDriver,
@@ -177,6 +178,45 @@ export function getEffectiveUiVersion(): UiVersion {
       ? ((import.meta as any).env.VITE_YORI_UI as string | undefined)
       : undefined);
   return resolveUiVersion(envRaw);
+}
+
+export type ContextMode = 'demo' | 'live';
+
+export function resolveContextMode(raw?: string | null): ContextMode {
+  if (typeof raw !== 'string') return 'demo';
+  const lower = raw.trim().toLowerCase();
+  return lower === 'live' ? 'live' : 'demo';
+}
+
+/**
+ * Resolve the effective default mode (VITE_YORI_DEFAULT_MODE = demo | live, default 'demo').
+ * Query string parameters ?mode=live|demo or ?default_mode=live|demo and window.__YORI_DEFAULT_MODE__ take precedence.
+ */
+export function getEffectiveDefaultMode(): ContextMode {
+  if (typeof window !== 'undefined') {
+    const win = window as any;
+    if (typeof win.__YORI_DEFAULT_MODE__ === 'string') {
+      return resolveContextMode(win.__YORI_DEFAULT_MODE__);
+    }
+    if (window.location?.search) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const modeParam = params.get('mode') || params.get('default_mode');
+        if (modeParam !== null) {
+          return resolveContextMode(modeParam);
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  const envRaw =
+    (typeof process !== 'undefined' && process.env ? process.env.VITE_YORI_DEFAULT_MODE : undefined) ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env
+      ? ((import.meta as any).env.VITE_YORI_DEFAULT_MODE as string | undefined)
+      : undefined);
+  return resolveContextMode(envRaw);
 }
 
 export interface AppState {
@@ -1063,14 +1103,23 @@ export function renderApp(
   let demoPanelOpen = false;
   let demoPanelCleanup: (() => void) | null = null;
 
+  const defaultMode = getEffectiveDefaultMode();
+  let contextMode: 'demo' | 'live' = defaultMode;
+
   let isDevMode = false;
   if (typeof window !== 'undefined') {
     try {
       const p = new URLSearchParams(window.location.search);
-      if (p.get('dev') === '1' || p.get('test') === '1' || Boolean((import.meta as any).env?.DEV)) {
+      const devParam = p.get('dev');
+      if (devParam === '1' || p.get('test') === '1') {
         isDevMode = true;
         sessionStorage.setItem('yori_dev', '1');
-      } else if (sessionStorage.getItem('yori_dev') === '1') {
+      } else if (devParam === '0') {
+        isDevMode = false;
+        sessionStorage.removeItem('yori_dev');
+      } else if (defaultMode === 'live' || contextMode === 'live') {
+        isDevMode = false;
+      } else if (Boolean((import.meta as any).env?.DEV) || sessionStorage.getItem('yori_dev') === '1') {
         isDevMode = true;
       }
     } catch {
@@ -1212,18 +1261,9 @@ export function renderApp(
     enabled: false,
   };
   let liveWeatherSignal: RealSignal<WeatherData> | null = null;
-  let contextMode: 'demo' | 'live' = 'demo';
-  if (typeof window !== 'undefined' && window.location?.search) {
-    try {
-      const p = new URLSearchParams(window.location.search);
-      if (p.get('mode') === 'live') {
-        contextMode = 'live';
-        defaultLocationPort.setLocation('prompt');
-        defaultModelCommandInterpreter.setMode('live');
-      }
-    } catch {
-      // ignore
-    }
+  if (contextMode === 'live') {
+    defaultLocationPort.setLocation('prompt');
+    defaultModelCommandInterpreter.setMode('live');
   }
   let liveLocationStatus = defaultLocationPort.getLocation();
 
@@ -1595,46 +1635,84 @@ export function renderApp(
         });
         v2BodyHtml = renderRestaurantDetail(restaurantVM);
       } else if (activeTab === 'plans') {
-        v2BodyHtml = renderPlansView(aheadPlans);
+        if (contextMode === 'live') {
+          v2BodyHtml = renderPlansView([]);
+        } else {
+          v2BodyHtml = renderPlansView(aheadPlans);
+        }
       } else if (activeTab === 'for-you') {
-        const proposalsVM = living.forYou.map(f => {
-          const isConfirmed = userConfirmedKeys.has(f.key);
-          const title = humanizeProposalTitle(f.key);
-          const basis = isConfirmed
-            ? 'Confirmed preference'
-            : 'Derived from sample demo profile';
-          return { key: f.key, title, basis, value: f.value };
-        });
-        v2BodyHtml = renderForYouView(proposalsVM);
+        if (contextMode === 'live') {
+          const userConfirmedProposals = living.forYou
+            .filter(f => userConfirmedKeys.has(f.key))
+            .map(f => ({
+              key: f.key,
+              title: humanizeProposalTitle(f.key),
+              basis: 'Confirmed preference',
+              value: f.value,
+              provenance: 'user' as const,
+            }));
+          v2BodyHtml = renderForYouView(userConfirmedProposals);
+        } else {
+          const proposalsVM = living.forYou.map(f => {
+            const isConfirmed = userConfirmedKeys.has(f.key);
+            const title = humanizeProposalTitle(f.key);
+            const basis = isConfirmed
+              ? 'Confirmed preference'
+              : 'Derived from sample demo profile';
+            return {
+              key: f.key,
+              title,
+              basis,
+              value: f.value,
+              provenance: isConfirmed ? ('user' as const) : ('fixture' as const),
+            };
+          });
+          v2BodyHtml = renderForYouView(proposalsVM);
+        }
       } else if (contextMode === 'live') {
+        const isStaleWeather = isWeatherStale(liveWeatherSignal);
+        const liveWeatherActive = weatherStatus.enabled && liveWeatherSignal && !isStaleWeather;
+        const nowIso = new Date().toISOString();
+
         v2BodyHtml = `
           <section class="live-context-container" aria-label="Live Context Dashboard">
-            <!-- Calendar Section -->
-            <div class="live-card live-notice-card" id="notice-calendar-disconnected" role="status">
-              <div class="live-card-row">
-                <div class="live-card-icon" aria-hidden="true">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="16" y1="2" x2="16" y2="6"></line>
-                    <line x1="8" y1="2" x2="8" y2="6"></line>
-                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                  </svg>
-                </div>
-                <div class="live-card-body">
-                  <div class="live-card-header">
-                    <h2 class="live-card-title">Calendar</h2>
-                    <span class="live-source-chip">Not connected</span>
-                  </div>
-                  <p class="live-card-desc">No calendar connected</p>
-                </div>
+            <!-- Quiet / Empty Now Card -->
+            <section class="card quiet-card live-empty-card" data-provenance="none" aria-label="Now">
+              <div class="quiet-icon" aria-hidden="true">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="5"></circle>
+                  <line x1="12" y1="1" x2="12" y2="3"></line>
+                  <line x1="12" y1="21" x2="12" y2="23"></line>
+                </svg>
               </div>
-            </div>
+              <h2 class="quiet-title">Nothing needs your attention right now.</h2>
+              <p class="quiet-subtitle">All caught up. Yori will notify you when a departure or routine needs attention.</p>
+            </section>
 
             <!-- Weather Section -->
             ${
-              weatherStatus.enabled && liveWeatherSignal
+              isStaleWeather
                 ? `
-              <div class="live-card" id="live-weather-card">
+              <div class="live-card live-notice-card" id="notice-weather-unavailable" role="status" data-provenance="none">
+                <div class="live-card-row">
+                  <div class="live-card-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+                    </svg>
+                  </div>
+                  <div class="live-card-body">
+                    <div class="live-card-header">
+                      <h2 class="live-card-title">Live Weather</h2>
+                      <span class="live-source-chip">Unavailable</span>
+                    </div>
+                    <p class="live-card-desc">Weather unavailable · data is stale</p>
+                  </div>
+                </div>
+              </div>
+              `
+                : liveWeatherActive
+                ? `
+              <div class="live-card" id="live-weather-card" data-provenance="live" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal?.issuedAt || (liveWeatherSignal?.value as any)?.fetchedAt || nowIso)}">
                 <div class="live-card-row">
                   <div class="live-card-icon" aria-hidden="true">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1647,7 +1725,7 @@ export function renderApp(
                       <span class="live-source-chip">Source: Open-Meteo API (Live)</span>
                     </div>
                     <p class="live-card-desc">${(() => {
-                      const val = liveWeatherSignal.value as any;
+                      const val = liveWeatherSignal?.value as any;
                       if (!val) return 'Weather unavailable';
                       const metrics: string[] = [];
                       if (val.temperatureC !== undefined && val.temperatureC !== null) {
@@ -1686,7 +1764,7 @@ export function renderApp(
               </div>
               `
                 : `
-              <div class="live-card live-notice-card" id="notice-weather-off" role="status">
+              <div class="live-card live-notice-card" id="notice-weather-off" role="status" data-provenance="none">
                 <div class="live-card-row">
                   <div class="live-card-icon" aria-hidden="true">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1709,7 +1787,7 @@ export function renderApp(
             ${
               liveLocationStatus.status === 'available' && liveLocationStatus.coords
                 ? `
-              <div class="live-card" id="live-location-card">
+              <div class="live-card" id="live-location-card" data-provenance="live" data-source="geolocation" data-fetched-at="${escapeHtml(liveLocationStatus.updatedAt || nowIso)}">
                 <div class="live-card-row">
                   <div class="live-card-icon" aria-hidden="true">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1729,7 +1807,7 @@ export function renderApp(
               `
                 : liveLocationStatus.status === 'denied' || liveLocationStatus.status === 'unavailable'
                 ? `
-              <div class="live-card live-notice-card" id="notice-location-denied" role="status">
+              <div class="live-card live-notice-card" id="notice-location-denied" role="status" data-provenance="none">
                 <div class="live-card-row">
                   <div class="live-card-icon" aria-hidden="true">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1748,7 +1826,7 @@ export function renderApp(
               </div>
               `
                 : `
-              <div class="live-card" id="live-location-prompt-card">
+              <div class="live-card" id="live-location-prompt-card" data-provenance="none">
                 <div class="live-card-row">
                   <div class="live-card-icon" aria-hidden="true">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1770,6 +1848,64 @@ export function renderApp(
               </div>
               `
             }
+
+            <!-- Nearby Places Section -->
+            <div class="live-card live-notice-card" id="notice-places-disabled" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 2v20M21 2v6a3 3 0 0 1-3 3M15 2v6a3 3 0 0 0 3 3M3 2v7a4 4 0 0 0 4 4v9M7 2v20"></path>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h2 class="live-card-title">Nearby Places</h2>
+                    <span class="live-source-chip">Owner Gated</span>
+                  </div>
+                  <p class="live-card-desc">Nearby places · not enabled (owner setting)</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Route Section -->
+            <div class="live-card live-notice-card" id="notice-route-unavailable" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h2 class="live-card-title">Route</h2>
+                    <span class="live-source-chip">No Route</span>
+                  </div>
+                  <p class="live-card-desc">No route available</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Calendar Section -->
+            <div class="live-card live-notice-card" id="notice-calendar-disconnected" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h2 class="live-card-title">Calendar</h2>
+                    <span class="live-source-chip">Not connected</span>
+                  </div>
+                  <p class="live-card-desc">No calendar connected</p>
+                </div>
+              </div>
+            </div>
           </section>
         `;
       } else {
@@ -2397,6 +2533,7 @@ export function renderApp(
                   class="context-pill ${contextMode === 'live' ? 'live' : 'demo'}"
                   id="pill-context-status"
                   aria-label="View sources and truth status"
+                  ${contextMode === 'live' ? `data-provenance="live" data-source="device_clock" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}
                 >
                   <div class="context-pill-content">
                     <div class="context-pill-header">
@@ -2413,9 +2550,9 @@ export function renderApp(
               }
 
               ${
-                weatherStatus.enabled && liveWeatherSignal
+                weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || !isWeatherStale(liveWeatherSignal))
                   ? `
-              <div class="weather-attribution" id="weather-attribution">
+              <div class="weather-attribution" id="weather-attribution" data-provenance="${contextMode === 'live' ? 'live' : 'fixture'}" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal.issuedAt || (liveWeatherSignal.value as any)?.fetchedAt || new Date().toISOString())}">
                 <a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</a>
               </div>
               `

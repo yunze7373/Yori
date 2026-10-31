@@ -27,7 +27,7 @@ export function renderTripDetail(vm: TripDetailVM): string {
   const planId = vm.planId;
 
   return `
-    <div class="v2-detail-view v2-trip-detail" data-plan-id="${escapeHtml(planId)}">
+    <div class="v2-detail-view v2-trip-detail" data-plan-id="${escapeHtml(planId)}" data-provenance="fixture">
       <div class="v2-detail-top-nav">
         <button type="button" class="v2-back-btn" id="trip-detail-back-btn" aria-label="Back to home">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -223,7 +223,7 @@ export function renderTripDetail(vm: TripDetailVM): string {
  */
 export function renderRestaurantDetail(vm: RestaurantDetailVM): string {
   return `
-    <div class="v2-detail-view v2-restaurant-detail" data-candidate-id="${escapeHtml(vm.id)}">
+    <div class="v2-detail-view v2-restaurant-detail" data-candidate-id="${escapeHtml(vm.id)}" data-provenance="fixture">
       <div class="v2-detail-top-nav">
         <button type="button" class="v2-back-btn" id="restaurant-detail-back-btn" aria-label="Back to home">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -333,8 +333,8 @@ export function renderPlansView(aheadPlans: readonly PreparedPlan[]): string {
       ${
         aheadPlans.length === 0
           ? `
-        <div class="card v2-empty-plans">
-          <p>No additional plans scheduled ahead for today. You're all caught up.</p>
+        <div class="card v2-empty-plans" data-provenance="none">
+          <p>No upcoming plans scheduled right now. Yori coordinates with your day as plans are confirmed.</p>
         </div>
       `
           : `
@@ -342,7 +342,7 @@ export function renderPlansView(aheadPlans: readonly PreparedPlan[]): string {
           ${aheadPlans
             .map(
               plan => `
-            <div class="card v2-plan-item-card" data-plan-id="${escapeHtml(plan.id)}">
+            <div class="card v2-plan-item-card" data-plan-id="${escapeHtml(plan.id)}" data-provenance="fixture">
               <div class="v2-plan-item-header">
                 <span class="card-badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
                 <h2 class="v2-plan-headline">${escapeHtml(plan.headline)}</h2>
@@ -387,7 +387,7 @@ export function renderForYouView(proposals: readonly ProposalItemVM[]): string {
       ${
         proposals.length === 0
           ? `
-        <div class="card v2-empty-proposals">
+        <div class="card v2-empty-proposals" data-provenance="none">
           <p>No pending proposals waiting right now. Yori learns routines calmly as you use the app.</p>
         </div>
       `
@@ -396,7 +396,7 @@ export function renderForYouView(proposals: readonly ProposalItemVM[]): string {
           ${proposals
             .map(
               prop => `
-            <div class="card v2-proposal-item-card" data-proposal-key="${escapeHtml(prop.key)}">
+            <div class="card v2-proposal-item-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.provenance || (prop.basis?.includes('Confirmed') ? 'user' : 'fixture')}">
               <div class="v2-proposal-header">
                 <span class="card-badge">PROPOSAL</span>
                 <h2 class="v2-proposal-title">${escapeHtml(prop.title)}</h2>

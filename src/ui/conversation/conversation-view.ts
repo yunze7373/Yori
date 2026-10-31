@@ -35,8 +35,8 @@ export function renderConversationOverlay(store: ActionStateStore): string {
             <div class="conversation-title-block">
               <h2 class="conversation-title" id="conversation-title">${escapeHtml(STRINGS.conversation.title)}</h2>
               <div class="conversation-subtitle-row">
-                <span class="v2-offline-badge" id="conversation-status-badge">Offline demo · simulated</span>
-                <span class="context-chip conversation-context-chip ${store.isLiveMode() ? 'live-chip' : 'demo-chip'}" id="conversation-context-chip">${store.isLiveMode() ? 'Live context' : 'Demo scene · simulated'}</span>
+                <span class="v2-offline-badge" id="conversation-status-badge" ${store.isLiveMode() ? `data-provenance="live" data-source="model_interpreter" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}>${store.isLiveMode() ? 'Live assistant' : 'Offline demo · simulated'}</span>
+                <span class="context-chip conversation-context-chip ${store.isLiveMode() ? 'live-chip' : 'demo-chip'}" id="conversation-context-chip" ${store.isLiveMode() ? `data-provenance="live" data-source="device_clock" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}>${store.isLiveMode() ? 'Live context' : 'Demo scene · simulated'}</span>
                 <span class="engine-status-chip" id="engine-status-chip">${escapeHtml(engineStatusLabel)}</span>
               </div>
             </div>

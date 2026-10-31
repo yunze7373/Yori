@@ -88,6 +88,7 @@ export function parseOverpassElements(
 
     items.push({
       placeId: `overpass-${el.type}-${el.id}`,
+      osmId: el.id,
       coords,
       name,
       category,
@@ -98,6 +99,7 @@ export function parseOverpassElements(
       straightLineDistanceLabel: formatStraightLineDistance(distMeters),
       openingStatus: 'unknown',
       brand: el.tags?.brand,
+      attribution: '© OpenStreetMap contributors (ODbL)',
     });
   }
 

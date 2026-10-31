@@ -3,6 +3,9 @@ import {
   classifyFactSource,
   provenanceLabel,
   isFactUserConfirmed,
+  formatProvenanceAttrs,
+  isWeatherStale,
+  resolveElementProvenance,
   type FactLike,
 } from './provenance.js';
 
@@ -106,6 +109,115 @@ describe('Provenance Classifier (src/ui/view-models/provenance.ts)', () => {
       expect(kind).toBe('user_confirmed');
       expect(provenanceLabel(kind)).toBe('Confirmed');
       expect(isFactUserConfirmed(localConfirmedFact, userConfirmed)).toBe(true);
+    });
+  });
+
+  describe('formatProvenanceAttrs', () => {
+    it('formats live provenance with source and fetchedAt attributes', () => {
+      const attrs = formatProvenanceAttrs('live', 'open-meteo', '2026-11-01T06:00:00.000Z');
+      expect(attrs).toBe('data-provenance="live" data-source="open-meteo" data-fetched-at="2026-11-01T06:00:00.000Z"');
+    });
+
+    it('defaults source and fetchedAt when not provided for live', () => {
+      const attrs = formatProvenanceAttrs('live');
+      expect(attrs).toContain('data-provenance="live"');
+      expect(attrs).toContain('data-source="live_feed"');
+      expect(attrs).toContain('data-fetched-at="');
+    });
+
+    it('formats fixture, user, and none with simple data-provenance attribute', () => {
+      expect(formatProvenanceAttrs('fixture')).toBe('data-provenance="fixture"');
+      expect(formatProvenanceAttrs('user')).toBe('data-provenance="user"');
+      expect(formatProvenanceAttrs('none')).toBe('data-provenance="none"');
+    });
+  });
+
+  describe('isWeatherStale', () => {
+    const fixedNow = 1761984000000; // arbitrary fixed epoch
+
+    it('returns false if signal is missing or null', () => {
+      expect(isWeatherStale(null, fixedNow)).toBe(false);
+      expect(isWeatherStale(undefined, fixedNow)).toBe(false);
+    });
+
+    it('returns false when weather data is fresh (within 2h validFor)', () => {
+      const signal = {
+        fetchedAt: new Date(fixedNow - 30 * 60 * 1000).toISOString(), // 30 min ago
+        validFor: 7200000, // 2h
+      };
+      expect(isWeatherStale(signal, fixedNow)).toBe(false);
+    });
+
+    it('returns true when weather data fetchedAt is older than validFor', () => {
+      const signal = {
+        fetchedAt: new Date(fixedNow - 3 * 3600 * 1000).toISOString(), // 3h ago
+        validFor: 7200000, // 2h
+      };
+      expect(isWeatherStale(signal, fixedNow)).toBe(true);
+    });
+
+    it('falls back to issuedAt if fetchedAt is missing', () => {
+      const signal = {
+        issuedAt: new Date(fixedNow - 2.5 * 3600 * 1000).toISOString(), // 2.5h ago
+        validFor: 7200000,
+      };
+      expect(isWeatherStale(signal, fixedNow)).toBe(true);
+    });
+
+    it('uses 2h default window if validFor is unspecified', () => {
+      const freshSignal = {
+        fetchedAt: new Date(fixedNow - 1 * 3600 * 1000).toISOString(), // 1h ago
+      };
+      expect(isWeatherStale(freshSignal, fixedNow)).toBe(false);
+
+      const staleSignal = {
+        fetchedAt: new Date(fixedNow - 2.5 * 3600 * 1000).toISOString(), // 2.5h ago
+      };
+      expect(isWeatherStale(staleSignal, fixedNow)).toBe(true);
+    });
+  });
+
+  describe('resolveElementProvenance', () => {
+    it('in Demo mode, returns fixture for scene elements', () => {
+      expect(resolveElementProvenance('demo', 'scene_plan')).toEqual({ provenance: 'fixture' });
+      expect(resolveElementProvenance('demo', 'scene_map')).toEqual({ provenance: 'fixture' });
+      expect(resolveElementProvenance('demo', 'scene_timeline')).toEqual({ provenance: 'fixture' });
+      expect(resolveElementProvenance('demo', 'scene_candidate')).toEqual({ provenance: 'fixture' });
+    });
+
+    it('in Demo mode, returns user for user memories', () => {
+      expect(resolveElementProvenance('demo', 'user_memory')).toEqual({ provenance: 'user' });
+    });
+
+    it('in Live mode, returns live with source device_clock for clock', () => {
+      const res = resolveElementProvenance('live', 'device_clock');
+      expect(res.provenance).toBe('live');
+      expect(res.source).toBe('device_clock');
+      expect(res.fetchedAt).toBeDefined();
+    });
+
+    it('in Live mode, returns live with source open-meteo for weather_live', () => {
+      const res = resolveElementProvenance('live', 'weather_live');
+      expect(res.provenance).toBe('live');
+      expect(res.source).toBe('open-meteo');
+      expect(res.fetchedAt).toBeDefined();
+    });
+
+    it('in Live mode, returns live with source geolocation for location_shared', () => {
+      const res = resolveElementProvenance('live', 'location_shared');
+      expect(res.provenance).toBe('live');
+      expect(res.source).toBe('geolocation');
+      expect(res.fetchedAt).toBeDefined();
+    });
+
+    it('in Live mode, returns none for empty, unshared location, weather off/stale, places not enabled, route unavailable', () => {
+      expect(resolveElementProvenance('live', 'weather_off')).toEqual({ provenance: 'none' });
+      expect(resolveElementProvenance('live', 'weather_stale')).toEqual({ provenance: 'none' });
+      expect(resolveElementProvenance('live', 'location_prompt')).toEqual({ provenance: 'none' });
+      expect(resolveElementProvenance('live', 'location_denied')).toEqual({ provenance: 'none' });
+      expect(resolveElementProvenance('live', 'places_not_enabled')).toEqual({ provenance: 'none' });
+      expect(resolveElementProvenance('live', 'route_unavailable')).toEqual({ provenance: 'none' });
+      expect(resolveElementProvenance('live', 'empty')).toEqual({ provenance: 'none' });
     });
   });
 });

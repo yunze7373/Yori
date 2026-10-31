@@ -196,7 +196,7 @@ export function renderCompactMapStrip(map: MapVM): string {
     : (STRINGS.map.mobileLabel || 'Route Map');
 
   return `
-    <section class="card v2-map-card compact compact-map-strip" aria-label="${escapeHtml(map.label)}">
+    <section class="card v2-map-card compact compact-map-strip" aria-label="${escapeHtml(map.label)}" data-provenance="fixture">
       <div class="map-header map-strip-header">
         <span class="map-strip-label section-label" data-slot="chrome" data-slot-reason="Map strip label">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
@@ -221,7 +221,7 @@ export function renderMapCard(map: MapVM): string {
     : (STRINGS.map.mobileLabel || 'Route Map');
 
   return `
-    <section class="card v2-map-card ${map.sizeHint}" aria-label="${escapeHtml(map.label)}">
+    <section class="card v2-map-card ${map.sizeHint}" aria-label="${escapeHtml(map.label)}" data-provenance="fixture">
       <div class="map-header">
         <span class="section-label" data-slot="chrome" data-slot-reason="Map section heading"><span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span></span>
         <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated map badge">${escapeHtml(map.simulatedBadge)}</span>
@@ -466,7 +466,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
     return `
       <div class="v2-home-container quiet">
         ${renderStateNotices(vm)}
-        <section class="card quiet-card" aria-label="Quiet State">
+        <section class="card quiet-card" aria-label="Quiet State" data-provenance="fixture">
           <div class="quiet-icon" aria-hidden="true">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="5"></circle>
@@ -492,7 +492,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
         ${
           vm.isRain && vm.rainBanner
             ? `
-          <div class="v2-insight-banner" role="status">
+          <div class="v2-insight-banner" role="status" data-provenance="fixture">
             <div class="v2-insight-icon" aria-hidden="true">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"></path>
@@ -536,7 +536,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
 
         <!-- Responsive Hero Structure (NOW Card with Inline Map) -->
         <div class="v2-journey-grid">
-          <section class="card now-card v2-journey-card" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}">
+          <section class="card now-card v2-journey-card" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="fixture">
             ${renderPlanDiffBanner(vm.planDiff)}
             <div class="v2-card-header">
               <!-- Compact Category Row (Finding P2) -->
@@ -625,7 +625,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
   return `
     <div class="v2-home-container candidates">
       ${renderStateNotices(vm)}
-      <section class="card now-card v2-candidates-hero" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}">
+      <section class="card now-card v2-candidates-hero" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="fixture">
         ${renderPlanDiffBanner(vm.planDiff)}
         <div class="v2-card-header">
           <!-- Compact Category Row (Finding P2) -->
@@ -701,6 +701,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 class="v2-candidate-card selected compact-hero-card"
                 id="candidate-${escapeHtml(topC.id)}"
                 data-candidate-id="${escapeHtml(topC.id)}"
+                data-provenance="fixture"
               >
                 <div class="v2-candidate-art compact-hero-thumb" role="img" aria-label="${escapeHtml(topC.photo.altText)}">
                   ${topC.photo.svgMarkup}
@@ -755,6 +756,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   class="v2-candidate-card ${c.isSelected ? 'selected' : ''}"
                   id="candidate-${escapeHtml(c.id)}"
                   data-candidate-id="${escapeHtml(c.id)}"
+                  data-provenance="fixture"
                 >
                   <div class="v2-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
                     ${c.photo.svgMarkup}
@@ -822,7 +824,7 @@ function renderCollapsibleSecondary(vm: HomeCompositionVM): string {
             ${ahead
               .map(
                 item => `
-              <div class="card ahead-card" data-ahead-id="${escapeHtml(item.id)}" data-slot="chrome" data-slot-reason="Ahead card container">
+              <div class="card ahead-card" data-ahead-id="${escapeHtml(item.id)}" data-provenance="fixture" data-slot="chrome" data-slot-reason="Ahead card container">
                 <h3 class="ahead-title" data-slot="chrome" data-slot-reason="Ahead card title">${escapeHtml(item.title)}</h3>
                 <p class="ahead-subtitle" data-slot="chrome" data-slot-reason="Ahead card subtitle">${escapeHtml(item.subtitle)}</p>
               </div>
@@ -847,7 +849,7 @@ function renderCollapsibleSecondary(vm: HomeCompositionVM): string {
             ${proposals
               .map(
                 prop => `
-              <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-slot="chrome" data-slot-reason="Proposal card container">
+              <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.basis?.includes('Confirmed') ? 'user' : 'fixture'}" data-slot="chrome" data-slot-reason="Proposal card container">
                 <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Proposal card title">${escapeHtml(prop.title)}</h3>
                 ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Proposal card basis">${escapeHtml(prop.basis)}</p>` : ''}
                 <div class="proposal-actions" style="margin-top: 12px; display: flex; gap: 8px;">

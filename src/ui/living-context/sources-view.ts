@@ -97,37 +97,39 @@ export function renderSourcesSheet(
     ? connectorStatuses.calendar.detail
     : 'Not connected · no calendar provider configured; zero calendar data is accessed.';
 
+  const nowIso = new Date().toISOString();
+
   const sourcesList = isLive
     ? `
-      <li class="sources-item" id="source-item-clock">
+      <li class="sources-item" id="source-item-clock" data-provenance="live" data-source="device_clock" data-fetched-at="${nowIso}">
         <div class="sources-item-header">
           <span class="sources-item-title">Device clock</span>
           <span class="signal-badge live-badge">Live</span>
         </div>
         <div class="sources-item-desc">Local device system clock (${escapeHtml(clockTime)}). Drives the greeting and temporal grounding.</div>
       </li>
-      <li class="sources-item" id="source-item-weather">
+      <li class="sources-item" id="source-item-weather" ${isWeatherLive ? `data-provenance="live" data-source="open-meteo" data-fetched-at="${nowIso}"` : 'data-provenance="none"'}>
         <div class="sources-item-header">
           <span class="sources-item-title">Weather</span>
           ${isWeatherLive ? `<span class="signal-badge live-badge">Live</span>` : `<span class="signal-badge off-badge">Off</span>`}
         </div>
         <div class="sources-item-desc">${escapeHtml(weatherDetail)}</div>
       </li>
-      <li class="sources-item" id="source-item-location">
+      <li class="sources-item" id="source-item-location" ${isLocationGranted ? `data-provenance="live" data-source="geolocation" data-fetched-at="${liveLocation?.updatedAt || nowIso}"` : 'data-provenance="none"'}>
         <div class="sources-item-header">
           <span class="sources-item-title">Location</span>
           ${isLocationGranted ? `<span class="signal-badge live-badge">Shared this session</span>` : `<span class="signal-badge off-badge">Not shared</span>`}
         </div>
         <div class="sources-item-desc">${escapeHtml(locationDetail)}</div>
       </li>
-      <li class="sources-item" id="source-item-calendar">
+      <li class="sources-item" id="source-item-calendar" data-provenance="none">
         <div class="sources-item-header">
           <span class="sources-item-title">Calendar</span>
           <span class="signal-badge off-badge">Not connected</span>
         </div>
         <div class="sources-item-desc">${escapeHtml(calendarDetail)}</div>
       </li>
-      <li class="sources-item" id="source-item-memory">
+      <li class="sources-item" id="source-item-memory" ${isXmemoConnected ? `data-provenance="live" data-source="xmemo" data-fetched-at="${nowIso}"` : 'data-provenance="user"'}>
         <div class="sources-item-header">
           <span class="sources-item-title">Memory &amp; Preferences</span>
           ${isXmemoConnected ? `<span class="signal-badge live-badge">Connected</span>` : `<span class="signal-badge local-badge">Local only</span>`}
@@ -136,7 +138,7 @@ export function renderSourcesSheet(
       </li>
     `
     : (!snapshot.signals || snapshot.signals.length === 0)
-    ? `<li class="sources-empty" id="sources-empty-state">No signals in this scene</li>`
+    ? `<li class="sources-empty" id="sources-empty-state" data-provenance="none">No signals in this scene</li>`
     : snapshot.signals
         .map((sig: any, idx: number) => {
           const item = formatDemoSignal(sig);
@@ -144,7 +146,7 @@ export function renderSourcesSheet(
             ? `${item.id}-${idx}`
             : item.id;
           return `
-      <li class="sources-item" id="${escapeHtml(itemId)}">
+      <li class="sources-item" id="${escapeHtml(itemId)}" data-provenance="fixture">
         <div class="sources-item-header">
           <span class="sources-item-title">${escapeHtml(item.title)}</span>
           <span class="signal-badge simulated-badge">${escapeHtml(item.badge)}</span>
