@@ -564,4 +564,45 @@ describe('PH-002 D1: Weather Dev Server Proxy Middleware Security', () => {
     expect(data.signals[0].source).toBe('real');
     expect(data.attribution.text).toBe(OPEN_METEO_ATTRIBUTION.text);
   });
+
+  it('non-weather path on non-allowlisted loopback host (127.0.0.1:4179) passes through to next() without 403', async () => {
+    const middleware = createWeatherProxyMiddleware({ enabled: true });
+    const req: any = {
+      url: '/assets/index.js',
+      method: 'GET',
+      headers: { host: '127.0.0.1:4179' },
+    };
+    const res: any = {
+      writeHead: vi.fn(),
+      end: vi.fn(),
+    };
+    const next = vi.fn();
+
+    await middleware(req, res, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.writeHead).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/weather/status on disallowed Host returns 403', async () => {
+    const middleware = createWeatherProxyMiddleware({ enabled: true });
+    const req: any = {
+      url: '/api/weather/status',
+      method: 'GET',
+      headers: { host: 'evil.example.com' },
+    };
+    let responseBody = '';
+    const res: any = {
+      writeHead: vi.fn(),
+      end: vi.fn((data: string) => {
+        responseBody = data;
+      }),
+    };
+    const next = vi.fn();
+
+    await middleware(req, res, next);
+    expect(res.writeHead).toHaveBeenCalledWith(403, expect.anything());
+    const data = JSON.parse(responseBody);
+    expect(data.error).toContain('allowlisted loopback host required');
+    expect(next).not.toHaveBeenCalled();
+  });
 });

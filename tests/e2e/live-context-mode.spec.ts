@@ -100,7 +100,7 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
     // Dashboard shows truthful live context cards
     await expect(page.locator('#notice-calendar-disconnected')).toBeVisible();
     await expect(page.locator('#notice-calendar-disconnected .live-card-desc')).toHaveText('No calendar connected');
-    await expect(page.locator('#notice-calendar-disconnected .live-source-chip')).toHaveText('Provenance: System Calendar');
+    await expect(page.locator('#notice-calendar-disconnected .live-source-chip')).toHaveText('Not connected');
 
     await expect(page.locator('#notice-weather-off')).toBeVisible();
     await expect(page.locator('#notice-weather-off .live-card-desc')).toHaveText('Live weather is off');
@@ -146,8 +146,11 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
     const locCard = page.locator('#live-location-card');
     await expect(locCard).toBeVisible({ timeout: 5000 });
     await expect(locCard.locator('.live-source-chip')).toHaveText('Source: Browser Geolocation (Consented)');
-    await expect(locCard.locator('.live-card-desc')).toContainText('37.77°');
-    await expect(locCard.locator('.live-card-desc')).toContainText('-122.42°');
+    await expect(locCard.locator('.live-card-desc')).toContainText('Location shared · used for this session only');
+
+    // Invariant: no numeric coordinates rendered on screen
+    const liveContainerText = await page.locator('.live-context-container').innerText();
+    expect(liveContainerText).not.toMatch(/\d+\.\d+°/);
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
@@ -214,6 +217,54 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
       path: path.join(EVIDENCE_DIR, `03-live-weather-connected-${viewName}.png`),
       fullPage: true,
     });
+  });
+
+  test('Live context: partial weather payload renders present fields only without invented defaults', async ({
+    page,
+  }) => {
+    await page.route(url => url.pathname.includes('/api/weather/status'), async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          provider: 'open-meteo',
+          attribution: { text: 'Open-Meteo', url: 'https://open-meteo.com/' },
+        }),
+      });
+    });
+
+    await page.route(url => url.pathname.includes('/api/weather/current'), async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          signals: [
+            {
+              id: 'sig-live-weather-partial',
+              kind: 'weather',
+              provenance: 'live',
+              value: {
+                temperature: 52,
+                // condition and summary omitted
+              },
+              issuedAt: new Date().toISOString(),
+              validFor: 3600000,
+              confidence: 1.0,
+              consentScope: 'device_only',
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto('/?mode=live');
+    const weatherCard = page.locator('#live-weather-card');
+    await expect(weatherCard).toBeVisible({ timeout: 5000 });
+    const weatherDesc = await weatherCard.locator('.live-card-desc').innerText();
+    expect(weatherDesc).toBe('52°F');
+    expect(weatherDesc).not.toContain('65°F');
+    expect(weatherDesc).not.toContain('Clear');
   });
 
   test('Live context: model in-flight state with cancel button and double-submit blocking', async ({

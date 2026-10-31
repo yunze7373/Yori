@@ -1502,7 +1502,7 @@ export function renderApp(
                 <div class="live-card-body">
                   <div class="live-card-header">
                     <h2 class="live-card-title">Calendar</h2>
-                    <span class="live-source-chip">Provenance: System Calendar</span>
+                    <span class="live-source-chip">Not connected</span>
                   </div>
                   <p class="live-card-desc">No calendar connected</p>
                 </div>
@@ -1525,10 +1525,26 @@ export function renderApp(
                       <h2 class="live-card-title">Live Weather</h2>
                       <span class="live-source-chip">Source: Open-Meteo API (Live)</span>
                     </div>
-                    <p class="live-card-desc">${escapeHtml(
-                      (liveWeatherSignal.value as any)?.summary ||
-                      `${(liveWeatherSignal.value as any)?.temperature ?? 65}°F · ${(liveWeatherSignal.value as any)?.condition ?? 'Clear'}`
-                    )}</p>
+                    <p class="live-card-desc">${(() => {
+                      const val = liveWeatherSignal.value as any;
+                      if (!val) return 'Weather unavailable';
+                      if (typeof val.summary === 'string' && val.summary.trim() !== '') {
+                        return escapeHtml(val.summary.trim());
+                      }
+                      const parts: string[] = [];
+                      if (val.temperature !== undefined && val.temperature !== null) {
+                        parts.push(`${val.temperature}°F`);
+                      } else if (val.temperatureC !== undefined && val.temperatureC !== null) {
+                        parts.push(`${val.temperatureC}°C`);
+                      }
+                      if (typeof val.condition === 'string' && val.condition.trim() !== '') {
+                        parts.push(val.condition.trim());
+                      }
+                      if (parts.length > 0) {
+                        return escapeHtml(parts.join(' · '));
+                      }
+                      return 'Weather unavailable';
+                    })()}</p>
                   </div>
                 </div>
               </div>
@@ -1570,7 +1586,7 @@ export function renderApp(
                       <h2 class="live-card-title">Location</h2>
                       <span class="live-source-chip">Source: Browser Geolocation (Consented)</span>
                     </div>
-                    <p class="live-card-desc">Coarse coordinates: ${liveLocationStatus.coords.lat.toFixed(2)}°, ${liveLocationStatus.coords.lng.toFixed(2)}° (accuracy ~${Math.round(liveLocationStatus.accuracy ?? 100)}m)</p>
+                    <p class="live-card-desc">Location shared · used for this session only (accuracy ~${Math.round(liveLocationStatus.accuracy ?? 100)}m)</p>
                   </div>
                 </div>
               </div>

@@ -85,3 +85,23 @@ export function resolveXMemoRedirectUri(
 
   return 'http://127.0.0.1:5173/api/xmemo/callback';
 }
+
+/**
+ * Returns all allowlisted loopback callback redirect URIs.
+ * If an explicit redirect URI is provided, it is included as the primary URI.
+ */
+export function getAllowedLoopbackRedirectUris(explicitRedirectUri?: string): string[] {
+  const uris: string[] = [];
+  if (explicitRedirectUri && explicitRedirectUri.trim() !== '') {
+    uris.push(explicitRedirectUri.trim());
+  }
+  for (const host of ALLOWLISTED_LOOPBACK_HOSTNAMES) {
+    for (const port of ALLOWLISTED_LOOPBACK_PORTS) {
+      const uri = `http://${host}:${port}/api/xmemo/callback`;
+      if (!uris.includes(uri)) {
+        uris.push(uri);
+      }
+    }
+  }
+  return uris;
+}

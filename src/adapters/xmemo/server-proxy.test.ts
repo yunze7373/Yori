@@ -787,7 +787,14 @@ describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
 
     // Exact RFC 7591 registration payload check
     expect(registrationPayload).toEqual({
-      redirect_uris: ['http://127.0.0.1:5173/api/xmemo/callback'],
+      redirect_uris: [
+        'http://127.0.0.1:5173/api/xmemo/callback',
+        'http://127.0.0.1:4173/api/xmemo/callback',
+        'http://127.0.0.1:4174/api/xmemo/callback',
+        'http://localhost:4173/api/xmemo/callback',
+        'http://localhost:4174/api/xmemo/callback',
+        'http://localhost:5173/api/xmemo/callback',
+      ],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
@@ -1085,7 +1092,14 @@ describe('RFC 7591 Dynamic Client Registration & Persistence', () => {
     const result = await proxy.ensureRegistered(mockFetch);
     expect(result.success).toBe(true);
     expect(result.clientId).toBe('fresh-matching-redirect-client-id');
-    expect(regPayload.redirect_uris).toEqual(['http://127.0.0.1:5173/api/xmemo/callback']);
+    expect(regPayload.redirect_uris).toEqual([
+      'http://127.0.0.1:5173/api/xmemo/callback',
+      'http://127.0.0.1:4173/api/xmemo/callback',
+      'http://127.0.0.1:4174/api/xmemo/callback',
+      'http://localhost:4173/api/xmemo/callback',
+      'http://localhost:4174/api/xmemo/callback',
+      'http://localhost:5173/api/xmemo/callback',
+    ]);
 
     const updated = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
     expect(updated.client_id).toBe('fresh-matching-redirect-client-id');

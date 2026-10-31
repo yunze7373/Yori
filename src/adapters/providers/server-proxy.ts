@@ -89,6 +89,13 @@ export function createWeatherProxyMiddleware(
     res: ServerResponse,
     next: () => void
   ): Promise<void> {
+    const urlStr = req.url || '';
+    const rawPathname = urlStr.split('?')[0] || '';
+
+    if (!rawPathname.startsWith('/api/weather')) {
+      return next();
+    }
+
     const hostHeader = req.headers['host'];
     let baseUrl = 'http://127.0.0.1:5173';
     if (hostHeader) {
@@ -101,13 +108,8 @@ export function createWeatherProxyMiddleware(
         baseUrl = `http://${hostHeader.trim()}`;
       }
     }
-    const urlStr = req.url || '';
     const parsedUrl = new URL(urlStr, baseUrl);
     const pathname = parsedUrl.pathname;
-
-    if (!pathname.startsWith('/api/weather')) {
-      return next();
-    }
 
     // Security Guard: Sec-Fetch-Site / Cross-site check
     const secFetchSite = req.headers['sec-fetch-site'];

@@ -31,6 +31,7 @@ import {
 import {
   isAllowlistedLoopbackHost,
   resolveXMemoRedirectUri,
+  getAllowedLoopbackRedirectUris,
   ALLOWLISTED_LOOPBACK_PORTS,
   ALLOWLISTED_LOOPBACK_HOSTNAMES,
 } from './loopback-allowlist.js';
@@ -38,6 +39,7 @@ import {
 export {
   isAllowlistedLoopbackHost,
   resolveXMemoRedirectUri,
+  getAllowedLoopbackRedirectUris,
   ALLOWLISTED_LOOPBACK_PORTS,
   ALLOWLISTED_LOOPBACK_HOSTNAMES,
 };
@@ -424,6 +426,7 @@ export class XMemoDevProxy {
   private session: XMemoSession = {};
   private clientId?: string;
   private clientSecret?: string;
+  private registeredRedirectUris: string[] = [];
   private authorizeUrl: string;
   private tokenUrl: string;
   private revokeUrl: string;
@@ -548,6 +551,7 @@ export class XMemoDevProxy {
   public resetRegistration(): void {
     this.clientId = this.config.clientId;
     this.clientSecret = this.config.clientSecret;
+    this.registeredRedirectUris = [];
     this.registrationError = undefined;
     this.registrationPromise = undefined;
     this.lastNetworkErrorTime = 0;
@@ -556,7 +560,7 @@ export class XMemoDevProxy {
     }
   }
 
-  private tryLoadPersistedClientId(): boolean {
+  private tryLoadPersistedClientId(targetRedirectUri?: string): boolean {
     if (!this.config.clientStoragePath) return false;
     try {
       if (fs.existsSync(this.config.clientStoragePath)) {
@@ -571,15 +575,20 @@ export class XMemoDevProxy {
             return false;
           }
 
-          // Resolve stored redirect_uri: explicit field or extract from RFC 7591 JWT payload
-          let storedRedirectUri = data.redirect_uri;
-          if (!storedRedirectUri && typeof data.client_id === 'string' && data.client_id.startsWith('xmemo-dcr.')) {
+          // Resolve stored redirect_uris: decode full list from redirect_uris or single redirect_uri or RFC 7591 JWT payload
+          let storedRedirectUris: string[] = [];
+          if (Array.isArray(data.redirect_uris)) {
+            storedRedirectUris = data.redirect_uris.filter((u: any) => typeof u === 'string' && u.trim() !== '');
+          } else if (typeof data.redirect_uri === 'string' && data.redirect_uri.trim() !== '') {
+            storedRedirectUris = [data.redirect_uri.trim()];
+          }
+          if (storedRedirectUris.length === 0 && typeof data.client_id === 'string' && data.client_id.startsWith('xmemo-dcr.')) {
             try {
               const parts = data.client_id.split('.');
               if (parts.length >= 2) {
                 const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
-                if (Array.isArray(payload.redirect_uris) && payload.redirect_uris.length > 0) {
-                  storedRedirectUri = payload.redirect_uris[0];
+                if (Array.isArray(payload.redirect_uris)) {
+                  storedRedirectUris = payload.redirect_uris.filter((u: any) => typeof u === 'string' && u.trim() !== '');
                 }
               }
             } catch {
@@ -587,15 +596,17 @@ export class XMemoDevProxy {
             }
           }
 
-          // Validate redirect_uri matches configured redirectUri
-          if (!storedRedirectUri || storedRedirectUri !== this.config.redirectUri) {
+          // Validate redirect_uri: stored redirect_uris must contain the URI being used
+          const requiredUri = targetRedirectUri || this.config.redirectUri;
+          if (!storedRedirectUris.includes(requiredUri)) {
             this.logger(
-              `[XMemoProxy] Persisted client registration redirect_uri mismatch: stored '${storedRedirectUri}' != configured '${this.config.redirectUri}'. Ignoring persisted registration.`
+              `[XMemoProxy] Persisted client registration redirect_uris mismatch: stored list does not contain '${requiredUri}'. Ignoring persisted registration.`
             );
             return false;
           }
 
           this.clientId = data.client_id.trim();
+          this.registeredRedirectUris = storedRedirectUris;
           if (typeof data.client_secret === 'string' && data.client_secret.trim()) {
             this.clientSecret = data.client_secret.trim();
           }
@@ -609,17 +620,21 @@ export class XMemoDevProxy {
     return false;
   }
 
-  private persistRegistration(clientId: string, clientSecret?: string): void {
+  private persistRegistration(clientId: string, clientSecret?: string, redirectUris?: string[]): void {
     if (!this.config.clientStoragePath) return;
     try {
       const dir = path.dirname(this.config.clientStoragePath);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      const data: Record<string, string> = {
+      const uris = redirectUris && redirectUris.length > 0
+        ? redirectUris
+        : getAllowedLoopbackRedirectUris(this.config.redirectUri);
+      const data: Record<string, any> = {
         client_id: clientId,
         issuer: this.config.issuer,
         redirect_uri: this.config.redirectUri,
+        redirect_uris: uris,
         registered_at: new Date().toISOString(),
       };
       if (clientSecret) {
@@ -641,12 +656,30 @@ export class XMemoDevProxy {
   }
 
   public async ensureRegistered(
-    fetchFn: typeof fetch = this.fetchFn
+    fetchFn: typeof fetch = this.fetchFn,
+    targetRedirectUri?: string
   ): Promise<{ success: boolean; clientId?: string; error?: string }> {
     if (!this.config.enabled) {
       return { success: false, error: 'XMemo OAuth disabled' };
     }
+
+    const requiredUri = targetRedirectUri || this.config.redirectUri;
+
+    // If client is already set, verify whether it covers the requiredUri
     if (this.clientId) {
+      if (this.registeredRedirectUris.length === 0 || this.registeredRedirectUris.includes(requiredUri)) {
+        return { success: true, clientId: this.clientId };
+      }
+      this.logger(
+        `[XMemoProxy] Current registration does not contain '${requiredUri}'. Re-registering.`
+      );
+      this.clientId = undefined;
+      this.clientSecret = undefined;
+      this.registeredRedirectUris = [];
+      this.registrationPromise = undefined;
+    }
+
+    if (this.tryLoadPersistedClientId(requiredUri)) {
       return { success: true, clientId: this.clientId };
     }
     if (this.registrationError) {
@@ -819,8 +852,9 @@ export class XMemoDevProxy {
           }
         }
 
+        const allowedUris = getAllowedLoopbackRedirectUris(this.config.redirectUri);
         const registrationPayload = {
-          redirect_uris: [this.config.redirectUri],
+          redirect_uris: allowedUris,
           grant_types: ['authorization_code', 'refresh_token'],
           response_types: ['code'],
           token_endpoint_auth_method: 'none',
@@ -873,8 +907,12 @@ export class XMemoDevProxy {
         if (typeof regData.client_secret === 'string' && regData.client_secret.trim()) {
           this.clientSecret = regData.client_secret.trim();
         }
+        this.registeredRedirectUris =
+          Array.isArray(regData.redirect_uris) && regData.redirect_uris.length > 0
+            ? regData.redirect_uris.filter((u: any) => typeof u === 'string' && u.trim() !== '')
+            : allowedUris;
 
-        this.persistRegistration(this.clientId!, this.clientSecret);
+        this.persistRegistration(this.clientId!, this.clientSecret, this.registeredRedirectUris);
         this.logger(`[XMemoProxy] Dynamic registration succeeded. Client ID: ${this.clientId}`);
         return { success: true, clientId: this.clientId };
       } catch (err: unknown) {
@@ -1011,6 +1049,13 @@ export class XMemoDevProxy {
     const { codeVerifier, codeChallenge } = generatePkcePair();
     const state = generateState();
     const redirectUri = redirectUriOverride || this.config.redirectUri;
+
+    // Validate that the redirect_uri being used is in the registered redirect_uris set
+    if (this.registeredRedirectUris.length > 0 && !this.registeredRedirectUris.includes(redirectUri)) {
+      throw new Error(
+        `redirect_uri '${redirectUri}' is not in the registered redirect_uris set: [${this.registeredRedirectUris.join(', ')}]`
+      );
+    }
 
     // Prune stale states older than 10 minutes
     const now = Date.now();
@@ -1655,15 +1700,6 @@ export class XMemoDevProxy {
         res.end(JSON.stringify({ error: 'Disallowed host header' }));
         return true;
       }
-      if (
-        this.config.enabled &&
-        !this.clientId &&
-        (!this.registrationError ||
-          (this.registrationError === 'network_error' &&
-            Date.now() - this.lastNetworkErrorTime >= this.networkRetryIntervalMs))
-      ) {
-        await this.ensureRegistered();
-      }
       try {
         const hostHeader = (req.headers?.['host'] as string) || undefined;
         let redirectUriOverride: string | undefined;
@@ -1676,6 +1712,15 @@ export class XMemoDevProxy {
             res.end(JSON.stringify({ error: (err as Error).message }));
             return true;
           }
+        }
+        if (
+          this.config.enabled &&
+          (!this.clientId || (this.registeredRedirectUris.length > 0 && redirectUriOverride && !this.registeredRedirectUris.includes(redirectUriOverride))) &&
+          (!this.registrationError ||
+            (this.registrationError === 'network_error' &&
+              Date.now() - this.lastNetworkErrorTime >= this.networkRetryIntervalMs))
+        ) {
+          await this.ensureRegistered(this.fetchFn, redirectUriOverride);
         }
         const result = this.createAuthUrl(redirectUriOverride);
         res.statusCode = 200;
