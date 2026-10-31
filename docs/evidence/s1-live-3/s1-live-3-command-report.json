@@ -1,14 +1,14 @@
 {
-  "timestamp": "2026-10-31T03:07:55.313Z",
+  "timestamp": "2026-10-31T03:21:17.082Z",
   "providerHost": "api.meta.ai",
   "modelName": "muse-spark-1.3",
-  "authorizedCap": 6,
-  "preRunLedgerCount": 17,
-  "lifetimeRemaining": 32,
+  "authorizedCap": 5,
+  "preRunLedgerCount": 18,
+  "lifetimeRemaining": 28,
   "lifetimeCap": 50,
-  "totalCallsDispatched": 1,
-  "ledgerCallCount": 18,
-  "ledgerDelta": 1,
+  "totalCallsDispatched": 4,
+  "ledgerCallCount": 22,
+  "ledgerDelta": 4,
   "ledgerReconciled": true,
   "ledgerPath": ".yori-runtime/model-live-ledger.json",
   "executionStatus": "hard_stop",
@@ -21,8 +21,77 @@
       "index": 1,
       "endpoint": "command",
       "description": "Command valid shift (\"Can I leave later?\")",
+      "httpStatus": 200,
+      "latencyMs": 9378,
+      "promptTokens": 467,
+      "completionTokens": 1139,
+      "totalTokens": 1606,
+      "reasoningTokens": 1105,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted",
+      "audit": {
+        "closedIntent": true,
+        "intentMatchesExpectation": true,
+        "slotsMatchExpectation": true,
+        "validReasonCodes": true,
+        "factKeyParity": true,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 2,
+      "endpoint": "command",
+      "description": "Command valid explicit shift (\"Leave 15 minutes later\")",
+      "httpStatus": 200,
+      "latencyMs": 6850,
+      "promptTokens": 467,
+      "completionTokens": 935,
+      "totalTokens": 1402,
+      "reasoningTokens": 897,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted",
+      "audit": {
+        "closedIntent": true,
+        "intentMatchesExpectation": true,
+        "slotsMatchExpectation": true,
+        "validReasonCodes": true,
+        "factKeyParity": true,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 3,
+      "endpoint": "command",
+      "description": "Command suppression (\"I already ate lunch today, don't suggest lunch\")",
+      "httpStatus": 200,
+      "latencyMs": 8692,
+      "promptTokens": 443,
+      "completionTokens": 1247,
+      "totalTokens": 1690,
+      "reasoningTokens": 1215,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted",
+      "audit": {
+        "closedIntent": true,
+        "intentMatchesExpectation": true,
+        "slotsMatchExpectation": true,
+        "validReasonCodes": true,
+        "factKeyParity": true,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 4,
+      "endpoint": "command",
+      "description": "Command route mode switch (\"Take the bus instead\")",
       "httpStatus": 0,
-      "latencyMs": 2005,
+      "latencyMs": 20008,
       "usedFallback": true,
       "fallbackReason": "timeout",
       "factCheckOutcome": "discarded",
@@ -40,5 +109,31 @@
   ],
   "keyOccurrenceCount": 0,
   "d1ToD6ParityPass": true,
-  "isCommandOnly": true
+  "isCommandOnly": true,
+  "runIndex": 2,
+  "previousRuns": [
+    {
+      "runIndex": 1,
+      "timestamp": "2026-10-31T03:07:55.313Z",
+      "authorizedCap": 6,
+      "totalCallsDispatched": 1,
+      "preRunLedgerCount": 17,
+      "postRunLedgerCount": 18,
+      "executionStatus": "hard_stop",
+      "hardStopReason": "Network error: This operation was aborted",
+      "calls": [
+        {
+          "index": 1,
+          "endpoint": "command",
+          "description": "Command valid shift (\"Can I leave later?\")",
+          "httpStatus": 0,
+          "latencyMs": 2005,
+          "usedFallback": true,
+          "fallbackReason": "timeout",
+          "factCheckOutcome": "discarded",
+          "error": "This operation was aborted"
+        }
+      ]
+    }
+  ]
 }
