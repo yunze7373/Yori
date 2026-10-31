@@ -21,6 +21,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'node:path';
 import fs from 'node:fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { openDemoPanel, closeDemoPanel, selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('north-star-audit');
 
@@ -107,16 +108,17 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     await page.evaluate(() => localStorage.clear());
     await page.reload();
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('clear');
+    await selectDemoScene(page, 'clear');
 
     // -------------------------------------------------------------------------
     // Capture 01a: Clear Scene Baseline (Home)
     // -------------------------------------------------------------------------
     const appLayout = page.locator('.app-layout');
     await expect(appLayout).toHaveAttribute('data-ui-version', 'v2');
+    await openDemoPanel(page);
     await expect(page.locator('#badge-ui-version')).toContainText('V2 Preview');
     await expect(page.locator('.demo-chip')).toContainText('Demo · simulated context');
+    await closeDemoPanel(page);
 
     const nowCardClear = page.locator('.now-card');
     await expect(nowCardClear).toBeVisible();
@@ -134,7 +136,7 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     // -------------------------------------------------------------------------
     // Capture 01b: Rain Scene Updated Context (Home)
     // -------------------------------------------------------------------------
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     const insightBanner = page.locator('.v2-insight-banner');
     await expect(insightBanner).toBeVisible();
@@ -170,8 +172,7 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     await page.evaluate(() => localStorage.clear());
     await page.reload();
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('away-lunch');
+    await selectDemoScene(page, 'away-lunch');
 
     // -------------------------------------------------------------------------
     // Capture 02a: Away Lunch Home (Candidates Hero)
@@ -250,8 +251,7 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     await page.evaluate(() => localStorage.clear());
     await page.reload();
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     // -------------------------------------------------------------------------
     // Capture 03a: Rain Scene Pre-Adjust (Home)
@@ -336,8 +336,7 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     await page.evaluate(() => localStorage.clear());
     await page.reload();
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     // Pre-command baseline on Home
     const nowCardRain = page.locator('.now-card');

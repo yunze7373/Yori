@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { openDemoPanel, closeDemoPanel, selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('v2');
 
@@ -31,8 +32,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await page.waitForSelector('.app-layout');
 
     // Select rain scene
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
     await expect(page.locator('.now-card')).toContainText('Piano lesson');
     await expect(page.locator('.now-card')).toContainText('2:30 PM');
 
@@ -155,12 +155,14 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
 
-    // Verify replay button exists
+    // Verify replay button exists inside demo panel
+    await openDemoPanel(page);
     const replayBtn = page.locator('#btn-replay-before-you-ask');
     await expect(replayBtn).toBeVisible();
 
     // Click replay Before You Ask
     await replayBtn.click();
+    await closeDemoPanel(page);
 
     // Wait for transition to rain scene
     const nowCard = page.locator('.now-card');
@@ -187,8 +189,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     const askBar = page.locator('#ask-bar');
     await askBar.click();
@@ -308,8 +309,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     // Dismiss the plan
     const dismissBtn = page.locator('#btn-dismiss');
@@ -348,8 +348,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     const askBar = page.locator('#ask-bar');
     await askBar.click();
@@ -384,8 +383,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       await page.goto('/?ui=v2');
       await page.waitForSelector('.app-layout');
 
-      const sceneSelect = page.locator('#scene-select');
-      await sceneSelect.selectOption('rain');
+      await selectDemoScene(page, 'rain');
 
       // Initial state: 2 option cards (Drive Recommended, Bus Alternative)
       const optionCards = page.locator('.v2-option-card');
@@ -438,8 +436,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       await page.goto('/?ui=v2');
       await page.waitForSelector('.app-layout');
 
-      const sceneSelect = page.locator('#scene-select');
-      await sceneSelect.selectOption('rain');
+      await selectDemoScene(page, 'rain');
 
       // Helper to verify Details screen Why rows and zero 'unknown' text
       const verifyDetailsScreen = async () => {
@@ -546,8 +543,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       await page.goto('/?ui=v2');
       await page.waitForSelector('.app-layout');
 
-      const sceneSelect = page.locator('#scene-select');
-      await sceneSelect.selectOption('rain');
+      await selectDemoScene(page, 'rain');
       await page.waitForSelector('.now-card', { timeout: 10000 });
 
       // Initial state: Rain base plan (2:10 PM prep, 2:30 PM departure)

@@ -28,6 +28,7 @@ import { test, expect, Page } from '@playwright/test';
 import path from 'node:path';
 import fs from 'node:fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { openDemoPanel, closeDemoPanel, selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('video');
 
@@ -189,6 +190,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     // Segment 1: Hook & The Calm Philosophy (0:00 – 0:25 · 25s)
     // =========================================================================
     const seg1Start = Date.now();
+    await openDemoPanel(page);
     await page.selectOption('#scene-select', 'clear');
     await page.waitForTimeout(200);
 
@@ -198,11 +200,12 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     );
     await expect(page.locator('.demo-chip')).toHaveText('Demo · simulated context');
     await expect(page.locator('#badge-ui-version')).toHaveText('V2 Preview');
+    await closeDemoPanel(page);
     await expect(page.locator('.now-card .now-subject')).toHaveText('Piano lesson at 3:00 PM');
     await expect(page.locator('.now-card #now-title')).toHaveText(
       'Get ready at 2:05 PM, leave by 2:25 PM'
     );
-    await expect(page.locator('.now-card .card-badge')).toHaveText('SIMULATED');
+    await expect(page.locator('.now-card .card-badge').first()).toHaveText('SIMULATED');
 
     if (isMobile) {
       await expect(page.locator('.map-header .v2-heading-mobile')).toHaveText('Route Map');
@@ -226,7 +229,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     // Segment 2: Thinking Ahead & Environmental Adaptation (0:25 – 0:50 · 25s)
     // =========================================================================
     const seg2Start = Date.now();
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForTimeout(200);
 
     // Alert banner & Umbrella chip
@@ -274,7 +277,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     // Segment 3: Away Dining & Honest Quiet State (0:50 – 1:15 · 25s)
     // =========================================================================
     const seg3Start = Date.now();
-    await page.selectOption('#scene-select', 'away-lunch');
+    await selectDemoScene(page, 'away-lunch');
     await page.waitForTimeout(200);
 
     // Candidates Hero & Details
@@ -306,7 +309,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
 
     // Switch to D4 Busy Lunch: quiet state
-    await page.selectOption('#scene-select', 'busy-lunch');
+    await selectDemoScene(page, 'busy-lunch');
     await page.waitForTimeout(200);
     await expect(page.locator('.quiet-title')).toHaveText('Nothing needs your attention right now.');
     await expect(page.locator('.quiet-subtitle')).toHaveText(
@@ -326,7 +329,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     // Segment 4: The Explainable Review Loop (1:15 – 1:45 · 30s)
     // =========================================================================
     const seg4Start = Date.now();
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForTimeout(200);
 
     // Open Why sheet
@@ -462,7 +465,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await expect(overlay).toHaveCount(0);
 
     // Multi-candidate reasoning demo scene
-    await page.selectOption('#scene-select', 'multi-candidate');
+    await selectDemoScene(page, 'multi-candidate');
     await page.waitForTimeout(200);
 
     // Piano lesson prioritized as NOW
@@ -497,7 +500,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     // =========================================================================
     const seg7Start = Date.now();
     // Return to clean Home view
-    await page.selectOption('#scene-select', 'clear');
+    await selectDemoScene(page, 'clear');
     await page.waitForTimeout(200);
 
     await expect(page.locator('.now-card')).toBeVisible();
@@ -549,9 +552,11 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
 
     const nowCard = page.locator('.now-card');
     await expect(nowCard).toBeVisible();
+    await openDemoPanel(page);
     await expect(page.locator('#scene-select option[value="fuel"]')).toHaveText(
       'Fuel (Low Fuel Warning)'
     );
+    await closeDemoPanel(page);
     await expect(nowCard.locator('.now-subject')).toHaveText('Low Fuel Warning');
     await expect(nowCard.locator('.card-badge')).toHaveText('SIMULATED');
     await expect(nowCard.locator('.mock-places-notice')).toHaveText(

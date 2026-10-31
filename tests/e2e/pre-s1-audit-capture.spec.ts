@@ -17,6 +17,7 @@ import { test, expect, type Page } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('pre-s1');
 const DUMPS_DIR = path.resolve(EVIDENCE_DIR, 'dumps');
@@ -207,8 +208,7 @@ test.describe('PRE-S1-B: Slot-Aware Grounding Walkthrough Capture Suite', () => 
     allSlots.push(...(await extractRenderedSlots(page, scene, 'Initial Clear State', vpSuffix)));
 
     // Step 2: Weather shift to Rain
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
     await expect(page.locator('.v2-insight-banner')).toBeVisible();
     steps.push('Weather Shift (Rain)');
     allSlots.push(...(await extractRenderedSlots(page, scene, 'Weather Shift (Rain)', vpSuffix)));
@@ -283,7 +283,7 @@ test.describe('PRE-S1-B: Slot-Aware Grounding Walkthrough Capture Suite', () => 
     // Step 1: Away-Lunch scene (D3)
     await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
-    await page.selectOption('#scene-select', 'away-lunch');
+    await selectDemoScene(page, 'away-lunch');
     await expect(page.locator('.v2-candidate-list')).toBeVisible();
     steps.push('Proactive Away Lunch Card');
     allSlots.push(...(await extractRenderedSlots(page, scene, 'Proactive Away Lunch Card', vpSuffix)));
@@ -318,7 +318,7 @@ test.describe('PRE-S1-B: Slot-Aware Grounding Walkthrough Capture Suite', () => 
     // Step 1: Fuel scene (low fuel warning)
     await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
-    await page.selectOption('#scene-select', 'fuel');
+    await selectDemoScene(page, 'fuel');
     await expect(page.locator('.v2-candidate-list')).toBeVisible();
     steps.push('Low Fuel Hero Card');
     allSlots.push(...(await extractRenderedSlots(page, scene, 'Low Fuel Hero Card', vpSuffix)));

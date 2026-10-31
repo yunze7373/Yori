@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('v2');
 
@@ -34,8 +35,7 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     await page.waitForSelector('.app-layout');
 
     // Select away-lunch scene
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('away-lunch');
+    await selectDemoScene(page, 'away-lunch');
 
     // 2. Initial Home Verification
     const nowCard = page.locator('.now-card');
@@ -219,8 +219,7 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     await page.waitForSelector('.app-layout');
 
     // Select away-lunch scene
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('away-lunch');
+    await selectDemoScene(page, 'away-lunch');
 
     // 2. Open conversation and pin it so it does not auto-collapse
     const askBar = page.locator('#ask-bar');
@@ -288,7 +287,7 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     // 1. Away Lunch Sweep
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
-    await page.locator('#scene-select').selectOption('away-lunch');
+    await selectDemoScene(page, 'away-lunch');
 
     // (1a) Home surface
     let text = await page.locator('.app-layout').innerText();
@@ -339,7 +338,7 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     assertNoFalseConfirmedOrLive(text, 'away-lunch:after-undo:home');
 
     // 2. Rain Scene Sweep
-    await page.locator('#scene-select').selectOption('rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForSelector('.now-card');
 
     // (2a) Rain Home

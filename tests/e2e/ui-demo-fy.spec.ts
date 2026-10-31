@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('ui-demo-fy');
 
@@ -43,8 +44,7 @@ test.describe('UI-DEMO-FY: Deterministic For You & Plans / Ahead Loop', () => {
     await page.goto('/?ui=v2&test=1&scene=multi-candidate');
     await page.waitForSelector('.app-layout');
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('multi-candidate');
+    await selectDemoScene(page, 'multi-candidate');
 
     // Verify Home timeline: NOW is time-critical Piano lesson departure at 3:00 PM
     const nowCard = page.locator('.now-card');
@@ -148,8 +148,7 @@ test.describe('UI-DEMO-FY: Deterministic For You & Plans / Ahead Loop', () => {
     await page.goto('/?ui=v2&test=1&scene=multi-candidate');
     await page.waitForSelector('.app-layout');
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('multi-candidate');
+    await selectDemoScene(page, 'multi-candidate');
 
     // Navigate to For You Tab
     const forYouNav = isMobile ? page.locator('#tab-for-you') : page.locator('#desktop-nav-for-you');
@@ -199,8 +198,7 @@ test.describe('UI-DEMO-FY: Deterministic For You & Plans / Ahead Loop', () => {
     await page.goto('/?ui=v2&test=1&scene=rain');
     await page.waitForSelector('.app-layout');
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     // 2. Check For You tab starts empty before interaction
     const forYouNav = isMobile ? page.locator('#tab-for-you') : page.locator('#desktop-nav-for-you');

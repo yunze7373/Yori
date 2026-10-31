@@ -25,6 +25,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { openDemoPanel, closeDemoPanel } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('app-live-runtime');
 
@@ -78,7 +79,15 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
 
     await page.goto('/');
 
-    // 1. Invariant: Default mode on load is strictly Demo scenes
+    // 1. Invariant: Consumer header has exactly one status pill telling the truth
+    const contextPill = page.locator('#pill-context-status');
+    await expect(contextPill).toBeVisible();
+    await expect(contextPill).toHaveText(/Demo · simulated/);
+
+    // Open Demo Panel to access presentation controls
+    await openDemoPanel(page);
+
+    // Invariant: Default mode in demo panel is strictly Demo scenes
     const demoBtn = page.locator('#btn-mode-demo');
     const liveBtn = page.locator('#btn-mode-live');
     await expect(demoBtn).toBeVisible();
@@ -92,10 +101,16 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
     await expect(liveBtn).toHaveClass(/active/);
     await expect(demoBtn).not.toHaveClass(/active/);
 
-    // Header updates to Live context
+    // Panel updates to Live context
     await expect(page.locator('#chip-live-context')).toBeVisible();
     await expect(page.locator('#pill-live-runtime')).toBeVisible();
-    await expect(page.locator('.greeting-subheading')).toContainText('Live context · Device time');
+
+    // Close panel to inspect Home view
+    await closeDemoPanel(page);
+
+    // Header updates to Live context and honest quiet subheading
+    await expect(contextPill).toHaveText(/Live context/);
+    await expect(page.locator('.greeting-subheading')).toHaveText('Nothing needs you right now.');
 
     // Dashboard shows truthful live context cards
     await expect(page.locator('#notice-calendar-disconnected')).toBeVisible();
@@ -118,11 +133,14 @@ test.describe('APP-LIVE-RUNTIME: Live Context Mode & In-Flight UX', () => {
     });
 
     // 3. Switch back to Demo scenes
+    await openDemoPanel(page);
     await demoBtn.click();
     await expect(demoBtn).toHaveClass(/active/);
     await expect(page.locator('.demo-chip')).toBeVisible();
     await expect(page.locator('#scene-select')).toBeVisible();
     await expect(page.locator('#chip-live-context')).toHaveCount(0);
+    await closeDemoPanel(page);
+    await expect(contextPill).toHaveText(/Demo · simulated/);
   });
 
   test('Live context: location consent and one-shot acquisition', async ({

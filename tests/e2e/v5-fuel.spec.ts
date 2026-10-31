@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('v5-fuel');
 const shouldRecord = Boolean(process.env.V5_RECORD);
@@ -63,8 +64,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await page.waitForSelector('.app-layout');
 
     // Select fuel scene
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('fuel');
+    await selectDemoScene(page, 'fuel');
 
     // 2. Initial Fuel Hero Card Verification
     const nowCard = page.locator('.now-card');
@@ -166,8 +166,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     });
 
     // Select fuel scene
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('fuel');
+    await selectDemoScene(page, 'fuel');
 
     // Degraded state rendered prominently on quiet state card
     const quietCard = page.locator('.quiet-card');
@@ -200,8 +199,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await page.waitForSelector('.app-layout');
 
     // 1. In away-lunch scene: Chinese "加油" is ambiguous without travel context
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('away-lunch');
+    await selectDemoScene(page, 'away-lunch');
 
     // Open ask drawer
     const askButton = page.locator('#ask-bar');
@@ -237,8 +235,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('fuel');
+    await selectDemoScene(page, 'fuel');
 
     // Switch location to Los Angeles: lat: 34.0522, lng: -118.2437
     await page.evaluate(() => {
@@ -302,8 +299,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('fuel');
+    await selectDemoScene(page, 'fuel');
 
     // Session is SF. A candidate from Seattle (fuel-sea-1) submitted against this session must fail closed
     const result = await page.evaluate(() => {
@@ -347,8 +343,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await page.goto('/?ui=v2&test=1');
     await page.waitForSelector('.app-layout');
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('fuel');
+    await selectDemoScene(page, 'fuel');
 
     // 1. Simulate provider error
     await page.evaluate(() => {
@@ -389,8 +384,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await page.waitForSelector('.app-layout');
 
     // 1. Select Rain scene
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     // Verify initial Rain scene hero card is present
     await expect(page.locator('.now-card')).toContainText('Piano');
@@ -452,8 +446,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await page.waitForSelector('.app-layout');
 
     // 1. Select Rain scene
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     // 2. Set places provider into error state
     await page.evaluate(() => {

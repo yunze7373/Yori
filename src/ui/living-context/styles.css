@@ -3303,6 +3303,412 @@ button.v2-view-detail-link:focus-visible {
   padding: var(--space-2, 8px) var(--space-3, 12px);
 }
 
+/* ==========================================================================
+   Rev3 UI-HOME-QUIET: Quiet Consumer Header & Isolated Demo Panel
+   Governed by TID: INBOX-20261031-24FF42
+   ========================================================================== */
+
+/* Centered comfortable column for V2 at 1280px */
+.app-layout[data-ui-version="v2"] .main-container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+@media (min-width: 1280px) {
+  .app-layout[data-ui-version="v2"] .main-container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding-top: 36px;
+    padding-bottom: 160px;
+  }
+}
+
+/* V2 Header Row */
+.v2-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0 16px 0;
+  width: 100%;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.v2-brand-wordmark {
+  font-family: var(--font-display, "Newsreader", Georgia, serif);
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+  letter-spacing: -0.02em;
+  user-select: none;
+}
+
+.v2-desktop-nav {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .v2-desktop-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .v2-desktop-nav .nav-pill {
+    min-height: 44px;
+    padding: 8px 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+  }
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Compact Context Status Pill */
+.v2-context-pill-container {
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+
+.context-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 16px;
+  font-family: var(--font-sans, "Inter", sans-serif);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  touch-action: manipulation;
+  border: 1px solid var(--color-chip-border, #CAD6D0);
+  background: var(--color-chip-bg, #EDF7F0);
+  color: var(--color-chip-text, #16382F);
+  text-align: left;
+}
+
+.context-pill.demo {
+  background: #FAF6EF;
+  border-color: #DCCFB7;
+  color: #4A3B22;
+}
+
+.context-pill.demo .context-pill-subtitle {
+  color: #524020;
+}
+
+.context-pill.live {
+  background: #E8F5EE;
+  border-color: #B2D5C3;
+  color: #123C30;
+}
+
+.context-pill.live .context-pill-subtitle {
+  color: #17483A;
+}
+
+.context-pill-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.context-pill-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.context-pill-chevron {
+  font-size: 0.9375rem;
+  opacity: 0.75;
+  margin-left: 2px;
+}
+
+.context-pill-subtitle {
+  font-size: 0.75rem;
+  font-weight: 400;
+  padding-left: 14px;
+}
+
+.context-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  background: currentColor;
+}
+
+.context-pill:hover,
+.context-pill:focus-visible {
+  outline: 2px solid var(--color-primary-btn, #16382F);
+  outline-offset: 2px;
+  box-shadow: 0 2px 8px rgba(22, 56, 47, 0.08);
+}
+
+/* Developer Demo Controls Affordance */
+.btn-dev-demo-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px dashed #C8BFA8;
+  background: #FAF7F0;
+  color: #6E5A35;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-dev-demo-controls:hover,
+.btn-dev-demo-controls:focus-visible {
+  border-color: #16382F;
+  outline: 2px solid #16382F;
+  outline-offset: 2px;
+  background: #F3EFE3;
+}
+
+/* Botanical Leaf SVG Decoration (A8) */
+.greeting-section {
+  position: relative;
+}
+
+.v2-botanical-leaf {
+  position: absolute;
+  top: 0;
+  right: 0;
+  pointer-events: none;
+  color: var(--color-primary-btn, #16382F);
+  z-index: 0;
+}
+
+/* Avatar / Settings Affordance */
+.header-avatar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  background: #EAEFEA;
+  border: 1px solid var(--color-card-border, #E1E6E0);
+  color: var(--color-ink, #162824);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  touch-action: manipulation;
+  padding: 0;
+}
+
+.header-avatar-btn:hover,
+.header-avatar-btn:focus-visible {
+  background: #DFE7E0;
+  outline: 2px solid var(--color-primary-btn, #16382F);
+  outline-offset: 2px;
+}
+
+/* Demo Controls Presentation Panel */
+.demo-panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 40, 36, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.demo-panel {
+  background: #FFFFFF;
+  border: 1px solid var(--color-card-border, #E1E6E0);
+  box-shadow: 0 16px 48px rgba(22, 40, 36, 0.2);
+  width: 460px;
+  max-width: 92vw;
+  max-height: 85vh;
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  outline: none;
+  overflow-y: auto;
+}
+
+@media (max-width: 767px) {
+  .demo-panel-overlay {
+    align-items: flex-end;
+  }
+  .demo-panel {
+    width: 100%;
+    max-width: 100vw;
+    border-radius: 20px 20px 0 0;
+    border-bottom: none;
+    padding: 20px 20px 36px 20px;
+    max-height: 85vh;
+    animation: v2SlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes v2SlideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.demo-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-card-border, #E1E6E0);
+}
+
+.demo-panel-title {
+  font-family: var(--font-display, "Newsreader", Georgia, serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+  margin: 0;
+}
+
+.btn-close-demo-panel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--color-muted, #384A43);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-close-demo-panel:hover,
+.btn-close-demo-panel:focus-visible {
+  background: var(--color-card-muted-bg, #F4F7F4);
+  outline: 2px solid var(--color-primary-btn, #16382F);
+  outline-offset: 2px;
+}
+
+.demo-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.demo-panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.demo-panel-section-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: var(--color-tertiary, #5A6D66);
+}
+
+.demo-panel-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Inline small route map inside Now action card */
+.v2-card-inline-map,
+.now-inline-map {
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+.v2-card-inline-map .v2-map-card,
+.now-inline-map .v2-map-card {
+  border-radius: 14px;
+  background: var(--color-map-bg, #E9F1E8);
+  border: 1px solid #D5E2D5;
+  padding: 12px;
+  box-shadow: none;
+}
+
+.v2-card-inline-map .v2-map-canvas,
+.now-inline-map .v2-map-canvas {
+  height: 140px;
+}
+
+/* Restrained greeting typography */
+.app-layout[data-ui-version="v2"] .greeting-title {
+  font-family: var(--font-display, "Newsreader", Georgia, serif);
+  font-size: 2.25rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--color-ink, #162824);
+  margin-bottom: 6px;
+}
+
+.app-layout[data-ui-version="v2"] .greeting-subheading {
+  font-family: var(--font-sans, "Inter", sans-serif);
+  font-size: 1.0625rem;
+  color: var(--color-muted, #384A43);
+  line-height: 1.45;
+}
+
+/* Ahead & For You Cards Visual Distinction */
+.app-layout[data-ui-version="v2"] .card.ahead-card {
+  background: #FAF8F5;
+  border: 1px solid #E5E1D8;
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(18, 32, 27, 0.02);
+}
+
+.app-layout[data-ui-version="v2"] .card.proposal-card {
+  background: #FDFBF7;
+  border: 1px solid #E8E2D5;
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 12px;
+}
+
+.app-layout[data-ui-version="v2"] .v2-journey-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 
 
 

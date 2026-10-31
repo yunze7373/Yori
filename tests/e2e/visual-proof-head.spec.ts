@@ -31,6 +31,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'node:path';
 import fs from 'node:fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { openDemoPanel, closeDemoPanel, selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('visual-proof-head');
 
@@ -118,8 +119,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await page.evaluate(() => localStorage.clear());
     await page.reload();
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     // -------------------------------------------------------------------------
     // Capture 01: Home showing V2 Hierarchy (Rain Departure D2)
@@ -127,11 +127,17 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     const appLayout = page.locator('.app-layout');
     await expect(appLayout).toHaveAttribute('data-ui-version', 'v2');
 
-    // Header badges
+    // Header status pill on consumer Home
+    await expect(page.locator('#pill-context-status')).toBeVisible();
+    await expect(page.locator('#pill-context-status')).toContainText('Demo · simulated');
+
+    // Technical status badges accessible in demo panel
+    await openDemoPanel(page);
     await expect(page.locator('#badge-ui-version')).toBeVisible();
     await expect(page.locator('#badge-ui-version')).toContainText('V2 Preview');
     await expect(page.locator('.demo-chip')).toBeVisible();
     await expect(page.locator('.demo-chip')).toContainText('Demo · simulated context');
+    await closeDemoPanel(page);
 
     // Primary navigation affordance (Home / Plans / For You / Me)
     if (isMobile) {
@@ -287,8 +293,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await page.evaluate(() => localStorage.clear());
     await page.reload();
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('away-lunch');
+    await selectDemoScene(page, 'away-lunch');
 
     // -------------------------------------------------------------------------
     // Capture 05: Home showing V2 Candidates Hierarchy (Away Lunch D3)
@@ -296,11 +301,17 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     const appLayoutD3 = page.locator('.app-layout');
     await expect(appLayoutD3).toHaveAttribute('data-ui-version', 'v2');
 
-    // Header badges
+    // Header status pill on consumer Home
+    await expect(page.locator('#pill-context-status')).toBeVisible();
+    await expect(page.locator('#pill-context-status')).toContainText('Demo · simulated');
+
+    // Technical status badges accessible in demo panel
+    await openDemoPanel(page);
     await expect(page.locator('#badge-ui-version')).toBeVisible();
     await expect(page.locator('#badge-ui-version')).toContainText('V2 Preview');
     await expect(page.locator('.demo-chip')).toBeVisible();
     await expect(page.locator('.demo-chip')).toContainText('Demo · simulated context');
+    await closeDemoPanel(page);
 
     // Primary navigation affordance (Home / Plans / For You / Me)
     if (isMobile) {
@@ -462,8 +473,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await page.evaluate(() => localStorage.clear());
     await page.reload();
 
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('rain');
+    await selectDemoScene(page, 'rain');
 
     // -------------------------------------------------------------------------
     // Capture 09: Why Sheet with 'Synced from XMemo' Provenance Badges

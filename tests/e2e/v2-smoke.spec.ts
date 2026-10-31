@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { openDemoPanel, closeDemoPanel, selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('v2');
 
@@ -63,15 +64,20 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     const appLayout = page.locator('.app-layout');
     await expect(appLayout).toHaveAttribute('data-ui-version', 'v2');
 
-    // V2 badge is rendered
-    await expect(page.locator('#badge-ui-version')).toBeVisible();
-    await expect(page.locator('#badge-ui-version')).toContainText('V2 Preview');
-
     // Ask bar is rendered on v2
     await expect(page.locator('#ask-bar')).toBeVisible();
 
-    // Standard demo chip is present
+    // Consumer header has honest status pill
+    const contextPill = page.locator('#pill-context-status');
+    await expect(contextPill).toBeVisible();
+    await expect(contextPill).toContainText('Demo · simulated');
+
+    // V2 badge and demo chip are accessible inside demo panel
+    await openDemoPanel(page);
+    await expect(page.locator('#badge-ui-version')).toBeVisible();
+    await expect(page.locator('#badge-ui-version')).toContainText('V2 Preview');
     await expect(page.locator('.demo-chip')).toContainText('Demo · simulated context');
+    await closeDemoPanel(page);
   });
 
   test('V2 shell renders with Ask bar, opens Conversation shell, manages focus trap, Back, Esc, pin, and axe', async ({ page }) => {
@@ -82,10 +88,12 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     const appLayout = page.locator('.app-layout');
     await expect(appLayout).toHaveAttribute('data-ui-version', 'v2');
 
-    // V2 badge IS rendered
+    // V2 badge is accessible via demo panel
+    await openDemoPanel(page);
     const v2Badge = page.locator('#badge-ui-version');
     await expect(v2Badge).toBeVisible();
     await expect(v2Badge).toHaveText('V2 Preview');
+    await closeDemoPanel(page);
 
     // Ask bar is rendered docked at the bottom of the home screen
     const askBar = page.locator('#ask-bar');
@@ -241,7 +249,7 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(page.locator('.v2-options-grid')).toHaveCount(0);
 
     // Switch to Rain D2
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await expect(page.locator('.now-card')).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
     await expect(page.locator('.now-card')).toContainText('Umbrella');
     await expect(page.locator('.now-card')).toContainText('Drive · leave 2:30 PM');
@@ -270,7 +278,7 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await page.screenshot({ path: path.join(EVIDENCE_DIR, rainFilename), fullPage: false });
 
     // Switch to Away Lunch D3
-    await page.selectOption('#scene-select', 'away-lunch');
+    await selectDemoScene(page, 'away-lunch');
     await expect(page.locator('.now-card')).toContainText('Lunch options near you');
 
     // Verify V2 Candidate components (local illustrations and compact map)
@@ -302,7 +310,7 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
   test('V1b: TripDetail expanded view with mode tabs, schematic map, timing, why provenance, and back navigation', async ({ page }) => {
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
 
     const viewport = page.viewportSize();
     const isMobile = (viewport?.width ?? 0) < 600;
@@ -409,7 +417,7 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
   test('V1b: RestaurantDetail expanded view with local artwork, attribute chips, Save UI state, in-app Directions, and back navigation', async ({ page }) => {
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
-    await page.selectOption('#scene-select', 'away-lunch');
+    await selectDemoScene(page, 'away-lunch');
 
     const viewport = page.viewportSize();
     const isMobile = (viewport?.width ?? 0) < 600;
@@ -618,15 +626,17 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     };
 
     // --- Part 1 (Hook) Verbatim Quotes ---
+    await openDemoPanel(page);
     await expect(page.locator('.demo-chip')).toHaveText('Demo · simulated context');
     await expect(page.locator('#badge-ui-version')).toHaveText('V2 Preview');
+    await closeDemoPanel(page);
     await expect(page.locator('.now-card .now-subject')).toHaveText('Piano lesson at 3:00 PM');
     await expect(page.locator('.now-card #now-title')).toHaveText('Get ready at 2:05 PM, leave by 2:25 PM');
-    await expect(page.locator('.now-card .card-badge')).toHaveText('SIMULATED');
+    await expect(page.locator('.now-card .card-badge').first()).toHaveText('SIMULATED');
     await expect(page.locator('#ask-bar .ask-bar-hint')).toHaveText('Tap to chat');
 
     // --- Part 2 (D2 Rain) Verbatim Quotes ---
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForTimeout(200);
 
     await expect(page.locator('.v2-insight-title, .rain-banner').first()).toContainText('What changed: rain forecast');
@@ -652,7 +662,7 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(page.locator('.habit-note')).toHaveText('You usually prefer driving when it rains.');
 
     // --- Part 3 (D3 Away & D4 Busy) Verbatim Quotes ---
-    await page.selectOption('#scene-select', 'away-lunch');
+    await selectDemoScene(page, 'away-lunch');
     await page.waitForTimeout(200);
 
     await expect(page.locator('.v2-candidates-hero .now-subject')).toHaveText('Lunch options near you');
@@ -671,12 +681,12 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(venueCards.nth(2)).toContainText('Demo Place C · Sushi');
 
     // Busy Lunch (D4) quiet state
-    await page.selectOption('#scene-select', 'busy-lunch');
+    await selectDemoScene(page, 'busy-lunch');
     await page.waitForTimeout(200);
     await expect(page.locator('.quiet-title')).toHaveText('Nothing needs your attention right now.');
 
     // --- Part 4 (Why Sheet & Adjust) Verbatim Quotes ---
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForTimeout(200);
 
     await page.locator('#btn-why').click();

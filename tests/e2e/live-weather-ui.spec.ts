@@ -13,6 +13,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'node:path';
 import fs from 'node:fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { openDemoPanel } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('ph2-d1');
 
@@ -35,7 +36,8 @@ test.describe('PH-002 D1: Live Weather UI Affordance & Attribution', () => {
       });
     });
 
-    await page.goto('/');
+    await page.goto('/?dev=1');
+    await openDemoPanel(page);
     await expect(page.locator('.demo-chip')).toBeVisible();
 
     // Verify Live Weather elements are NOT present in the DOM
@@ -94,7 +96,8 @@ test.describe('PH-002 D1: Live Weather UI Affordance & Attribution', () => {
       });
     });
 
-    await page.goto('/');
+    await page.goto('/?dev=1');
+    await openDemoPanel(page);
 
     // Verify Live Weather elements appear
     await expect(page.locator('#chip-live-weather')).toBeVisible();

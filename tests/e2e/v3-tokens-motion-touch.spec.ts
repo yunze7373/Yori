@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { openDemoPanel, closeDemoPanel, selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('v3');
 
@@ -88,7 +89,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     expect(greetingFont.toLowerCase()).toContain('newsreader');
 
     // 3. Verify tabular numbers applied on time displays
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     const timeEl = page.locator('#trip-leave-time, .now-time, .v2-time-value').first();
     if (await timeEl.count() > 0) {
       const numericStyle = await timeEl.evaluate(el => {
@@ -144,10 +145,13 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
       await assertTouchTarget('#tab-for-you', 'For You Tab');
       await assertTouchTarget('#tab-me', 'Me Tab');
     }
+    await assertTouchTarget('#pill-context-status', 'Context Status Pill');
+    await openDemoPanel(page);
     await assertTouchTarget('#scene-select', 'Scene Select Dropdown');
+    await closeDemoPanel(page);
 
     // Switch to Rain scene
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForTimeout(200);
 
     // Detail button / link
@@ -178,7 +182,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     }
 
     // --- Screen 3: Away Lunch Restaurant Detail View ---
-    await page.selectOption('#scene-select', 'away-lunch');
+    await selectDemoScene(page, 'away-lunch');
     await page.waitForTimeout(200);
 
     const firstCandidate = page.locator('.v2-candidate-card').first();
@@ -265,7 +269,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     await expect(overlay).toHaveCount(0);
 
     // 3. Switch scene and open Why sheet under reduced motion
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     const whyBtn = page.locator('#btn-why').first();
     await whyBtn.click();
 
@@ -289,7 +293,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     // 1. Home View
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForTimeout(300);
 
     await expect(page.locator('.now-card')).toContainText('Piano lesson');
@@ -347,7 +351,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     // 1. Home View
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
-    await page.selectOption('#scene-select', 'away-lunch');
+    await selectDemoScene(page, 'away-lunch');
     await page.waitForTimeout(300);
 
     await expect(page.locator('.now-card')).toContainText('Lunch options near you');
@@ -423,7 +427,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
   }) => {
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForTimeout(300);
 
     // Locate the weather callout rect and text
@@ -450,7 +454,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForTimeout(300);
 
     // 1. Ask bar height <= 56px
@@ -497,7 +501,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     expect(headingNoTruncation, 'Section heading should fit without ellipsis truncation').toBe(true);
 
     // Lunch scene on mobile: places heading "Places Map" / "PLACES MAP"
-    await page.selectOption('#scene-select', 'away-lunch');
+    await selectDemoScene(page, 'away-lunch');
     await page.waitForTimeout(200);
     await expect(page.locator('.map-header .v2-heading-mobile').first()).toBeVisible();
     await expect(page.locator('.map-header .v2-heading-desktop').first()).toBeHidden();
@@ -506,7 +510,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
 
     // 5. Verify desktop copy when expanded to 1280x800
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForTimeout(200);
     await expect(page.locator('#ask-bar .v2-ask-desktop')).toBeVisible();
     await expect(page.locator('#ask-bar .v2-ask-mobile')).toBeHidden();
@@ -518,7 +522,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     expect(await page.locator('.map-header .v2-heading-desktop').first().innerText()).toBe('SPATIAL CONTEXT MAP');
 
     // Lunch scene on desktop: places heading "Nearby Places Map" / "NEARBY PLACES MAP"
-    await page.selectOption('#scene-select', 'away-lunch');
+    await selectDemoScene(page, 'away-lunch');
     await page.waitForTimeout(200);
     await expect(page.locator('.map-header .v2-heading-desktop').first()).toBeVisible();
     await expect(page.locator('.map-header .v2-heading-mobile').first()).toBeHidden();
@@ -528,7 +532,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     // 6. Verify effective computed font-size >= 10px on all map SVG text elements at 390x844
     await page.setViewportSize({ width: 390, height: 844 });
     for (const testScene of ['rain', 'clear', 'away-lunch']) {
-      await page.selectOption('#scene-select', testScene);
+      await selectDemoScene(page, testScene);
       await page.waitForTimeout(200);
       const svgTexts = page.locator('.v2-map-canvas svg text');
       const textCount = await svgTexts.count();
@@ -555,7 +559,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     for (const vp of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {
       await page.setViewportSize(vp);
       for (const testScene of ['rain', 'clear', 'away-lunch']) {
-        await page.selectOption('#scene-select', testScene);
+        await selectDemoScene(page, testScene);
         await page.waitForTimeout(200);
 
         const svgEl = page.locator('.v2-map-canvas svg');
@@ -621,7 +625,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
       for (const scene of ['rain', 'clear']) {
         await page.goto('/?ui=v2');
         await page.waitForSelector('.app-layout');
-        await page.selectOption('#scene-select', scene);
+        await selectDemoScene(page, scene);
         await page.waitForTimeout(200);
 
         const calloutRects = page.locator('.v2-map-weather-callout rect, .v2-map-canvas svg g:has(text) > rect');
@@ -657,7 +661,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
   }) => {
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await page.waitForTimeout(200);
 
     await page.locator('#ask-bar').click();

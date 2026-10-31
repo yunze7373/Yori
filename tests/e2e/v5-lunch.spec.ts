@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('v5-lunch');
 const shouldRecord = Boolean(process.env.V5_LUNCH_RECORD || process.env.V5_RECORD);
@@ -498,14 +499,13 @@ test.describe('V5-LUNCH: PlacesProvider Seam, Dynamic Recommendations, Grounding
     await expect(nowCard).toContainText('Demo Place A · Ramen');
 
     // Switch to dynamic lunch scene
-    const sceneSelect = page.locator('#scene-select');
-    await sceneSelect.selectOption('lunch');
+    await selectDemoScene(page, 'lunch');
 
     // Dynamic lunch scene loads with Pacific Ramen Bar
     await expect(nowCard).toContainText('Pacific Ramen Bar');
 
     // Switch back to away-lunch
-    await sceneSelect.selectOption('away-lunch');
+    await selectDemoScene(page, 'away-lunch');
     await expect(nowCard).toContainText('Demo Place A · Ramen');
   });
 });

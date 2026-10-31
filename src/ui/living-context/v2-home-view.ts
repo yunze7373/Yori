@@ -56,12 +56,12 @@ function renderMapSvg(map: MapVM): string {
         ${
           map.weatherCallout
             ? `
-          <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 94}, ${map.weatherCallout.y - 18})">
-            <rect width="188" height="38" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
-            <text x="94" y="14" fill="#FFFFFF" font-size="12" font-weight="700" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutText" data-slot="domain">
+          <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 94}, ${map.weatherCallout.y - 20})">
+            <rect width="188" height="40" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
+            <text x="94" y="13" fill="#FFFFFF" font-size="12.5" font-weight="700" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutText" data-slot="domain">
               ${escapeHtml(map.weatherCallout.text)}
             </text>
-            <text x="94" y="30" fill="#E2EAE5" font-size="12" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutSubtext" data-slot="domain">
+            <text x="94" y="31" fill="#E2EAE5" font-size="12.5" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutSubtext" data-slot="domain">
               ${escapeHtml(map.weatherCallout.subtext || '')}
             </text>
           </g>
@@ -77,7 +77,7 @@ function renderMapSvg(map: MapVM): string {
                 <g class="v2-map-marker origin" transform="translate(${m.x}, ${m.y})">
                   <circle cx="0" cy="0" r="6" fill="#16382F"/>
                   <circle cx="0" cy="0" r="10" stroke="#16382F" stroke-width="1.5" opacity="0.4"/>
-                  <text x="0" y="18" fill="#16382F" font-size="12" font-weight="700" text-anchor="middle" font-family="sans-serif">
+                  <text x="0" y="18" fill="#16382F" font-size="13" font-weight="700" text-anchor="middle" font-family="sans-serif">
                     ${escapeHtml(m.label)}
                   </text>
                 </g>
@@ -88,7 +88,7 @@ function renderMapSvg(map: MapVM): string {
                 <g class="v2-map-marker destination" transform="translate(${m.x}, ${m.y})">
                   <circle cx="0" cy="0" r="8" fill="#2D6A4F"/>
                   <circle cx="0" cy="0" r="14" stroke="#2D6A4F" stroke-width="2" stroke-dasharray="4 2"/>
-                  <text x="0" y="-12" fill="#16382F" font-size="12" font-weight="700" text-anchor="middle" font-family="sans-serif">
+                  <text x="0" y="-12" fill="#16382F" font-size="13" font-weight="700" text-anchor="middle" font-family="sans-serif">
                     ${escapeHtml(m.label)}
                   </text>
                 </g>
@@ -101,7 +101,7 @@ function renderMapSvg(map: MapVM): string {
               <g class="v2-map-marker place ${m.isHighlight ? 'highlight' : ''}" transform="translate(${m.x}, ${m.y})">
                 <circle cx="0" cy="0" r="${m.isHighlight ? 7 : 5}" fill="${m.isHighlight ? '#2D6A4F' : '#5B6B65'}"/>
                 ${m.isHighlight ? '<circle cx="0" cy="0" r="11" stroke="#2D6A4F" stroke-width="1.5" opacity="0.5"/>' : ''}
-                <text x="0" y="${m.y < 70 ? -10 : 16}" fill="#16382F" font-size="12" font-weight="${m.isHighlight ? '700' : '500'}" text-anchor="middle" font-family="sans-serif">
+                <text x="0" y="${m.y < 70 ? -10 : 16}" fill="#16382F" font-size="13" font-weight="${m.isHighlight ? '700' : '500'}" text-anchor="middle" font-family="sans-serif">
                   ${escapeHtml(mapPlaceLabel)}
                 </text>
               </g>
@@ -378,10 +378,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             : ''
         }
 
-        <!-- Responsive Hero Structure (Prominent Map + NOW Card) -->
+        <!-- Responsive Hero Structure (NOW Card with Inline Map) -->
         <div class="v2-journey-grid">
-          ${vm.map ? renderMapCard(vm.map) : ''}
-
           <section class="card now-card v2-journey-card" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}">
             <div class="v2-card-header">
               <span class="section-label" data-slot="chrome" data-slot-reason="Section header label">${escapeHtml(STRINGS.sections.now)}</span>
@@ -527,6 +525,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             }
 
             ${vm.habitNote ? `<div class="habit-note" data-source-ref="rain_transport_preference.habitNote" data-slot="domain">${escapeHtml(vm.habitNote)}</div>` : ''}
+
+            ${vm.map ? `<div class="v2-card-inline-map now-inline-map">${renderMapCard(vm.map)}</div>` : ''}
 
             <div class="now-basis">
               <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
@@ -687,7 +687,10 @@ function renderCollapsibleSecondary(vm: HomeCompositionVM): string {
         ahead.length > 0
           ? `
         <section aria-label="${escapeHtml(STRINGS.sections.ahead)}">
-          <h2 class="section-label" data-slot="chrome" data-slot-reason="Secondary section label">${escapeHtml(STRINGS.sections.ahead)}</h2>
+          <div class="v2-section-header-row" style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+            <h2 class="section-label" data-slot="chrome" data-slot-reason="Secondary section label">${escapeHtml(STRINGS.sections.ahead)}</h2>
+            <button type="button" class="v2-see-all-link" id="link-ahead-see-all" style="background: none; border: none; font-size: 0.8125rem; color: var(--color-primary-btn, #16382F); font-weight: 600; cursor: pointer; padding: 4px 8px;">See all ›</button>
+          </div>
           <div class="ahead-list">
             ${ahead
               .map(
@@ -709,7 +712,10 @@ function renderCollapsibleSecondary(vm: HomeCompositionVM): string {
         proposals.length > 0
           ? `
         <section aria-label="${escapeHtml(STRINGS.sections.forYou)}">
-          <h2 class="section-label" data-slot="chrome" data-slot-reason="Secondary section label">${escapeHtml(STRINGS.sections.forYou)}</h2>
+          <div class="v2-section-header-row" style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+            <h2 class="section-label" data-slot="chrome" data-slot-reason="Secondary section label">${escapeHtml(STRINGS.sections.forYou)}</h2>
+            <button type="button" class="v2-see-all-link" id="link-foryou-see-all" style="background: none; border: none; font-size: 0.8125rem; color: var(--color-primary-btn, #16382F); font-weight: 600; cursor: pointer; padding: 4px 8px;">See all ›</button>
+          </div>
           <div class="for-you-list">
             ${proposals
               .map(
@@ -717,6 +723,14 @@ function renderCollapsibleSecondary(vm: HomeCompositionVM): string {
               <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-slot="chrome" data-slot-reason="Proposal card container">
                 <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Proposal card title">${escapeHtml(prop.title)}</h3>
                 ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Proposal card basis">${escapeHtml(prop.basis)}</p>` : ''}
+                <div class="proposal-actions" style="margin-top: 12px; display: flex; gap: 8px;">
+                  <button type="button" class="btn btn-sm btn-primary btn-confirm-proposal" data-key="${escapeHtml(prop.key)}" aria-label="Confirm preference: ${escapeHtml(prop.title)}">
+                    Confirm
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline btn-reject-proposal" data-key="${escapeHtml(prop.key)}" aria-label="Reject preference: ${escapeHtml(prop.title)}">
+                    Reject
+                  </button>
+                </div>
               </div>
             `
               )

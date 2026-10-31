@@ -1035,6 +1035,31 @@ export function renderApp(
     originatingElementId?: string;
   } | null = null;
 
+  let demoPanelOpen = false;
+  let demoPanelCleanup: (() => void) | null = null;
+
+  let isDevMode = false;
+  if (typeof window !== 'undefined') {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('dev') === '1' || p.get('test') === '1' || Boolean((import.meta as any).env?.DEV)) {
+        isDevMode = true;
+        sessionStorage.setItem('yori_dev', '1');
+      } else if (sessionStorage.getItem('yori_dev') === '1') {
+        isDevMode = true;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('yori:open-demo-panel', () => {
+      demoPanelOpen = true;
+      update();
+    });
+  }
+
   const testHooksEnabled =
     typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined'
       ? __YORI_ENABLE_TEST_HOOKS__
@@ -1289,6 +1314,7 @@ export function renderApp(
     }
 
     const acceptedPlanIds: readonly string[] = storedEnvelope?.payload.acceptedPlanIds ?? [];
+    const storedSuppressions = storedEnvelope?.payload.suppressions ?? [];
     const rawStoredConfirmed = storedEnvelope?.payload.memoryFacts ?? [];
     const activeStoredConfirmed: MemoryFact[] = [...rawStoredConfirmed.filter(f => f.status === 'confirmed')];
     const uPrep = activeStoredConfirmed.find(f => f.key === 'prep_buffer_preference');
@@ -1390,13 +1416,48 @@ export function renderApp(
         ? (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'America/Los_Angeles')
         : snapshotTimezone;
     const baseGreeting = getGreeting(effectiveNowIso, effectiveTz);
+
+    const hasPreparedCard = Boolean(
+      contextMode !== 'live' &&
+      (
+        (nowPlan && !acceptedPlanIds.includes(nowPlan.id) && !storedSuppressions.some(s => s.targetIntent === nowPlan.intentId || (s as any).intentId === nowPlan.intentId)) ||
+        (nowPlan && acceptedPlanIds.includes(nowPlan.id)) ||
+        (admittedCandidate && !storedSuppressions.some(s => s.targetIntent === 'lunch' || (s as any).intentId === 'lunch')) ||
+        (living.forYou && living.forYou.length > 0)
+      ) &&
+      currentScene !== 'busy-lunch' &&
+      currentScene !== 'corrupt-storage'
+    );
+
     const greeting =
-      contextMode === 'live'
+      uiVersion === 'v2'
+        ? {
+            greeting: baseGreeting.greeting,
+            subheading: hasPreparedCard ? STRINGS.header.subheadingPrepared : STRINGS.header.subheadingQuiet,
+          }
+        : contextMode === 'live'
         ? {
             greeting: baseGreeting.greeting,
             subheading: `Live context · Device time ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
           }
         : baseGreeting;
+
+    const sourcesSubline =
+      contextMode === 'demo'
+        ? 'Demo · simulated scenes'
+        : (() => {
+            const parts = ['Device clock'];
+            if (weatherStatus.enabled && liveWeatherSignal) {
+              parts.push('Weather');
+            }
+            if (liveLocationStatus.status === 'available') {
+              parts.push('Location');
+            }
+            if (xmemoStatus.enabled && xmemoStatus.connected) {
+              parts.push('Memories');
+            }
+            return parts.join(' · ');
+          })();
 
     actionStore.setCommandContext({
       plan: contextMode === 'live' ? null : (nowPlan ?? null),
@@ -1972,6 +2033,59 @@ export function renderApp(
       <div class="app-layout" data-ui-version="${uiVersion}">
         <header class="header-bar" role="banner">
           <div class="main-container" style="padding-bottom: 0;">
+            ${
+              uiVersion === 'v2'
+                ? `
+            <div class="v2-header-row">
+              <div class="header-left">
+                <span class="v2-brand-wordmark">Yori</span>
+              </div>
+              <nav class="v2-desktop-nav desktop-nav" aria-label="Desktop Navigation">
+                <button type="button" class="nav-pill ${activeTab === 'today' || activeTab === 'home' ? 'active' : ''}" data-tab="home" id="desktop-nav-home">
+                  Home
+                </button>
+                <button type="button" class="nav-pill ${activeTab === 'plans' ? 'active' : ''}" data-tab="plans" id="desktop-nav-plans">
+                  Plans
+                </button>
+                <button type="button" class="nav-pill ${activeTab === 'for-you' ? 'active' : ''}" data-tab="for-you" id="desktop-nav-for-you">
+                  For You
+                </button>
+                <button type="button" class="nav-pill ${activeTab === 'me' ? 'active' : ''}" data-tab="me" id="desktop-nav-me">
+                  Me
+                </button>
+              </nav>
+              <div class="header-right">
+                ${
+                  isDevMode
+                    ? `
+                <button
+                  type="button"
+                  class="btn-dev-demo-controls"
+                  id="btn-dev-demo-controls"
+                  aria-label="Demo controls for presentation"
+                  title="Demo controls (Presentation)"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                  </svg>
+                  <span>Demo controls</span>
+                </button>
+                `
+                    : ''
+                }
+                <button
+                  type="button"
+                  class="header-avatar-btn"
+                  id="btn-header-avatar"
+                  aria-label="Open settings and profile"
+                >
+                  <span aria-hidden="true">H</span>
+                </button>
+              </div>
+            </div>
+            `
+                : `
             <div class="top-meta">
               <div class="mode-switch-group" role="group" aria-label="Context Mode Switch">
                 <button type="button" class="btn-mode-toggle ${contextMode === 'demo' ? 'active' : ''}" id="btn-mode-demo" aria-pressed="${contextMode === 'demo' ? 'true' : 'false'}">Demo scenes</button>
@@ -1996,15 +2110,6 @@ export function renderApp(
               `
               }
               ${
-                uiVersion === 'v2'
-                  ? `
-              <span class="v2-preview-badge" id="badge-ui-version" aria-label="V2 Shell Active">
-                ${escapeHtml(STRINGS.header.v2Badge)}
-              </span>
-              `
-                  : ''
-              }
-              ${
                 weatherStatus.enabled && liveWeatherSignal
                   ? `
               <span class="live-weather-chip" id="chip-live-weather" aria-label="Live Weather Active">
@@ -2016,31 +2121,12 @@ export function renderApp(
 
               <!-- Desktop Navigation Links -->
               <nav class="desktop-nav" aria-label="Desktop Navigation">
-                ${
-                  uiVersion === 'v2'
-                    ? `
-                <button type="button" class="nav-pill ${activeTab === 'today' || activeTab === 'home' ? 'active' : ''}" data-tab="home" id="desktop-nav-home">
-                  Home
-                </button>
-                <button type="button" class="nav-pill ${activeTab === 'plans' ? 'active' : ''}" data-tab="plans" id="desktop-nav-plans">
-                  Plans
-                </button>
-                <button type="button" class="nav-pill ${activeTab === 'for-you' ? 'active' : ''}" data-tab="for-you" id="desktop-nav-for-you">
-                  For You
-                </button>
-                <button type="button" class="nav-pill ${activeTab === 'me' ? 'active' : ''}" data-tab="me" id="desktop-nav-me">
-                  Me
-                </button>
-                `
-                    : `
                 <button type="button" class="nav-pill ${activeTab === 'today' ? 'active' : ''}" data-tab="today" id="desktop-nav-today">
                   ${escapeHtml(STRINGS.tabs.today)}
                 </button>
                 <button type="button" class="nav-pill ${activeTab === 'me' ? 'active' : ''}" data-tab="me" id="desktop-nav-me">
                   ${escapeHtml(STRINGS.tabs.me)}
                 </button>
-                `
-                }
               </nav>
 
               ${
@@ -2059,11 +2145,6 @@ export function renderApp(
                   <option value="multi-candidate" ${currentScene === 'multi-candidate' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.multiCandidate)}</option>
                   <option value="fuel" ${currentScene === 'fuel' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.fuel)}</option>
                 </select>
-                ${
-                  uiVersion === 'v2'
-                    ? `<button type="button" class="btn btn-outline btn-sm v2-replay-btn" id="btn-replay-before-you-ask" aria-label="Replay Before You Ask transition">Replay: Before You Ask</button>`
-                    : ''
-                }
               </div>
               `
                   : `
@@ -2073,10 +2154,54 @@ export function renderApp(
               `
               }
             </div>
+            `
+            }
 
             <div class="greeting-section">
+              ${
+                uiVersion === 'v2'
+                  ? `
+              <div class="v2-botanical-leaf" aria-hidden="true">
+                <svg width="68" height="68" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.12">
+                  <path d="M50 90 C 50 50, 80 30, 90 10 C 70 20, 50 50, 50 90 Z"/>
+                  <path d="M50 90 C 50 50, 20 30, 10 10 C 30 20, 50 50, 50 90 Z"/>
+                  <path d="M50 90 L 50 15"/>
+                  <path d="M50 70 C 60 60, 70 55, 75 50"/>
+                  <path d="M50 70 C 40 60, 30 55, 25 50"/>
+                  <path d="M50 45 C 60 38, 70 32, 75 28"/>
+                  <path d="M50 45 C 40 38, 30 32, 25 28"/>
+                </svg>
+              </div>
+              `
+                  : ''
+              }
               <h1 class="greeting-title">${escapeHtml(greeting.greeting)}</h1>
               <p class="greeting-subheading">${escapeHtml(greeting.subheading)}</p>
+
+              ${
+                uiVersion === 'v2'
+                  ? `
+              <div class="v2-context-pill-container">
+                <button
+                  type="button"
+                  class="context-pill ${contextMode === 'live' ? 'live' : 'demo'}"
+                  id="pill-context-status"
+                  aria-label="View sources and truth status"
+                >
+                  <div class="context-pill-content">
+                    <div class="context-pill-header">
+                      <span class="context-pill-dot" aria-hidden="true"></span>
+                      <span class="context-pill-title">${contextMode === 'live' ? STRINGS.header.livePill : STRINGS.header.demoPill}</span>
+                      <span class="context-pill-chevron" aria-hidden="true">›</span>
+                    </div>
+                    <div class="context-pill-subtitle">${escapeHtml(sourcesSubline)}</div>
+                  </div>
+                </button>
+              </div>
+              `
+                  : ''
+              }
+
               ${
                 weatherStatus.enabled && liveWeatherSignal
                   ? `
@@ -2190,6 +2315,115 @@ export function renderApp(
             ? renderConversationOverlay(actionStore)
             : ''
         }
+
+        <!-- Rev3 Isolated Demo Controls Presentation Panel (UI-HOME-QUIET) -->
+        ${
+          uiVersion === 'v2' && demoPanelOpen
+            ? `
+          <div class="demo-panel-overlay" id="demo-panel-overlay">
+            <div
+              class="demo-panel"
+              id="demo-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="demo-panel-title"
+            >
+              <div class="demo-panel-header">
+                <h2 class="demo-panel-title" id="demo-panel-title">${escapeHtml(STRINGS.header.demoPanelTitle)}</h2>
+                <button
+                  type="button"
+                  class="btn-close-demo-panel"
+                  id="btn-close-demo-panel"
+                  aria-label="Close demo controls"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+
+              <div class="demo-panel-body">
+                <div class="demo-panel-section">
+                  <span class="demo-panel-section-label">Context Mode</span>
+                  <div class="mode-switch-group" role="group" aria-label="Context Mode Switch">
+                    <button type="button" class="btn-mode-toggle ${contextMode === 'demo' ? 'active' : ''}" id="btn-mode-demo" aria-pressed="${contextMode === 'demo' ? 'true' : 'false'}">Demo scenes</button>
+                    <button type="button" class="btn-mode-toggle ${contextMode === 'live' ? 'active' : ''}" id="btn-mode-live" aria-pressed="${contextMode === 'live' ? 'true' : 'false'}">Live context</button>
+                  </div>
+                </div>
+
+                ${
+                  contextMode === 'demo'
+                    ? `
+                <div class="demo-panel-section">
+                  <label for="scene-select" class="demo-panel-section-label">Demo Scene</label>
+                  <div class="scene-switcher" style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <select id="scene-select" class="scene-select" aria-label="Switch Demo Scenario">
+                      <option value="clear" ${currentScene === 'clear' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.clear)}</option>
+                      <option value="rain" ${currentScene === 'rain' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.rain)}</option>
+                      <option value="away-lunch" ${currentScene === 'away-lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.awayLunch)}</option>
+                      <option value="lunch" ${currentScene === 'lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.lunch)}</option>
+                      <option value="busy-lunch" ${currentScene === 'busy-lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.busyLunch)}</option>
+                      <option value="missing-weather" ${currentScene === 'missing-weather' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.missingWeather)}</option>
+                      <option value="corrupt-storage" ${currentScene === 'corrupt-storage' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.corruptStorage)}</option>
+                      <option value="multi-candidate" ${currentScene === 'multi-candidate' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.multiCandidate)}</option>
+                      <option value="fuel" ${currentScene === 'fuel' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.fuel)}</option>
+                    </select>
+                    <button type="button" class="btn btn-outline btn-sm v2-replay-btn" id="btn-replay-before-you-ask" aria-label="Replay Before You Ask transition">Replay: Before You Ask</button>
+                  </div>
+                </div>
+                `
+                    : `
+                <div class="demo-panel-section">
+                  <span class="demo-panel-section-label">Live Runtime</span>
+                  <div class="live-runtime-badge-container">
+                    <span class="live-runtime-pill" id="pill-live-runtime">Live Runtime · Device Clock</span>
+                  </div>
+                </div>
+                `
+                }
+
+                <div class="demo-panel-section">
+                  <span class="demo-panel-section-label">Technical Status</span>
+                  <div class="demo-panel-badges">
+                    <span class="v2-preview-badge" id="badge-ui-version" aria-label="V2 Shell Active">
+                      ${escapeHtml(STRINGS.header.v2Badge)}
+                    </span>
+                    ${
+                      contextMode === 'demo'
+                        ? `
+                    <span class="demo-chip" aria-label="Simulation Status">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12A10 10 0 0 1 12 2z"/>
+                        <path d="M12 6v6l4 2"/>
+                      </svg>
+                      ${escapeHtml(STRINGS.header.demoChip)}
+                    </span>
+                    `
+                        : `
+                    <span class="live-context-chip" id="chip-live-context" aria-label="Live Runtime Active">
+                      <span class="live-dot" aria-hidden="true"></span>
+                      Live context
+                    </span>
+                    `
+                    }
+                    ${
+                      weatherStatus.enabled && liveWeatherSignal
+                        ? `
+                    <span class="live-weather-chip" id="chip-live-weather" aria-label="Live Weather Active">
+                      ${escapeHtml(STRINGS.header.liveWeatherBadge)}
+                    </span>
+                    `
+                        : ''
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `
+            : ''
+        }
       </div>
     `;
 
@@ -2199,8 +2433,112 @@ export function renderApp(
       conversationCleanup = null;
     }
 
+    if (demoPanelCleanup) {
+      demoPanelCleanup();
+      demoPanelCleanup = null;
+    }
+
     // -------------------------------------------------------------
     // EVENT BINDINGS
+    // -------------------------------------------------------------
+
+    // Rev3 UI-HOME-QUIET: Context Pill (Opens Sources/Why) & Demo Controls Presentation Panel
+    const pillStatusBtn = root.querySelector('#pill-context-status');
+    if (pillStatusBtn) {
+      pillStatusBtn.addEventListener('click', () => {
+        modalInvokingId = 'pill-context-status';
+        modalInvokingSelector = '#pill-context-status';
+        if (nowPlan) {
+          activeModal = { type: 'why', plan: nowPlan };
+        } else {
+          const dummySourcesPlan: PreparedPlan = {
+            id: 'sources-overview',
+            intentId: 'sources',
+            headline: 'Home Sources & Truth Status',
+            optionsOrSteps: [],
+            requiresConfirmation: false,
+            createdAt: snapshot.asOf,
+            why: {
+              evidenceSignals: snapshot.signals.map(s => ({
+                signalId: `${s.kind}:${s.issuedAt}`,
+                source: s.source,
+                kind: s.kind,
+                issuedAt: s.issuedAt,
+              })),
+              memoryFactsUsed: [],
+              derivation:
+                contextMode === 'live'
+                  ? 'Signals read directly from device clock and consented providers.'
+                  : 'Signals derived from deterministic scenario fixtures.',
+            },
+          };
+          activeModal = { type: 'why', plan: dummySourcesPlan };
+        }
+        update();
+      });
+    }
+
+    const devDemoBtn = root.querySelector('#btn-dev-demo-controls');
+    if (devDemoBtn) {
+      devDemoBtn.addEventListener('click', () => {
+        modalInvokingId = 'btn-dev-demo-controls';
+        demoPanelOpen = true;
+        update();
+      });
+    }
+
+    const avatarBtn = root.querySelector('#btn-header-avatar');
+    if (avatarBtn) {
+      avatarBtn.addEventListener('click', async () => {
+        activeTab = 'me';
+        activeDetail = null;
+        update();
+        await checkXMemoStatus();
+      });
+    }
+
+    const linkAheadSeeAll = root.querySelector('#link-ahead-see-all');
+    if (linkAheadSeeAll) {
+      linkAheadSeeAll.addEventListener('click', () => {
+        activeTab = 'plans';
+        activeDetail = null;
+        update();
+      });
+    }
+
+    const linkForYouSeeAll = root.querySelector('#link-foryou-see-all');
+    if (linkForYouSeeAll) {
+      linkForYouSeeAll.addEventListener('click', () => {
+        activeTab = 'for-you';
+        activeDetail = null;
+        update();
+      });
+    }
+
+    if (demoPanelOpen) {
+      const demoOverlay = root.querySelector<HTMLElement>('#demo-panel-overlay');
+      const demoDialog = root.querySelector<HTMLElement>('#demo-panel');
+      if (demoOverlay && demoDialog) {
+        demoPanelCleanup = attachModalAccessibility({
+          backdrop: demoOverlay,
+          dialog: demoDialog,
+          onClose: () => {
+            demoPanelOpen = false;
+            update();
+            restoreInvokingFocus(modalInvokingId || 'btn-dev-demo-controls');
+          },
+        });
+      }
+
+      const closePanelBtn = root.querySelector('#btn-close-demo-panel');
+      if (closePanelBtn) {
+        closePanelBtn.addEventListener('click', () => {
+          demoPanelOpen = false;
+          update();
+          restoreInvokingFocus(modalInvokingId || 'btn-dev-demo-controls');
+        });
+      }
+    }
     // -------------------------------------------------------------
 
     // 0a. Context Mode Switcher [Demo scenes | Live context]
@@ -3167,7 +3505,7 @@ export function renderApp(
       const navEl = root.querySelector<HTMLElement>('.bottom-tab-bar');
 
       const isModalOrConversationOpen =
-        actionStore.getInteractionState() === 'CONVERSATION' || activeModal !== null;
+        actionStore.getInteractionState() === 'CONVERSATION' || activeModal !== null || demoPanelOpen;
 
       if (isModalOrConversationOpen) {
         headerEl?.setAttribute('inert', '');

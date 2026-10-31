@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { openDemoPanel, closeDemoPanel, selectDemoScene } from './helpers/demo-panel.js';
 
 const RECORDINGS_DIR = getEvidenceDir('v4/recordings');
 const DUMPS_DIR = getEvidenceDir('v4/dumps');
@@ -134,9 +135,11 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     // 1. Initial State (Clear Departure)
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
+    await openDemoPanel(page);
     await expect(page.locator('.demo-chip')).toHaveText('Demo · simulated context');
     await expect(page.locator('#badge-ui-version')).toHaveText('V2 Preview');
-    await expect(page.locator('.now-card .card-badge')).toHaveText('SIMULATED');
+    await closeDemoPanel(page);
+    await expect(page.locator('.now-card .card-badge').first()).toHaveText('SIMULATED');
     await checkAxe(page);
     await recordStep(
       'Initial Clear State',
@@ -147,7 +150,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await page.waitForTimeout(2500);
 
     // 2. Change (Clear -> Rain Transition)
-    await page.selectOption('#scene-select', 'rain');
+    await selectDemoScene(page, 'rain');
     await expect(page.locator('.v2-insight-title, .rain-banner').first()).toContainText('What changed: rain forecast');
     await expect(page.locator('#chip-umbrella').first()).toContainText('Umbrella');
     await expect(page.locator('.v2-map-weather-callout')).toContainText('Rain forecast · simulated');
@@ -412,7 +415,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     // 1. Proactive Candidate Card on Away Lunch
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
-    await page.selectOption('#scene-select', 'away-lunch');
+    await selectDemoScene(page, 'away-lunch');
     await page.waitForTimeout(1000);
 
     const nowCard = page.locator('.now-card');
@@ -528,7 +531,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await page.waitForTimeout(1000);
 
     // 7. Quiet State & Sovereignty
-    await page.selectOption('#scene-select', 'busy-lunch');
+    await selectDemoScene(page, 'busy-lunch');
     await expect(page.locator('.quiet-title')).toHaveText('Nothing needs your attention right now.');
     await expect(page.locator('.quiet-subtitle')).toHaveText("You're all caught up. We'll let you know when something comes up.");
     await page.waitForTimeout(1000);
