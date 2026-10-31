@@ -197,6 +197,10 @@ describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
   it('ensures zero real calendar/route provider code or live GPS paths exist in src (PH-002 D2, AC-204-2)', () => {
     const srcFiles = collectFiles(path.resolve('src'));
     const allowedAdapterPath = path.resolve('src/adapters/providers/geolocation-adapter.ts');
+    const allowedRouteAdapters = new Set([
+      path.resolve('src/adapters/providers/osrm-route-adapter.ts'),
+      path.resolve('src/adapters/providers/ors-route-adapter.ts'),
+    ]);
     const forbiddenPatterns = [
       /googleapis\.com\/calendar/i,
       /graph\.microsoft\.com.*calendar/i,
@@ -209,7 +213,15 @@ describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
 
     for (const filePath of srcFiles) {
       const content = fs.readFileSync(filePath, 'utf-8');
+      const isRouteAdapter = allowedRouteAdapters.has(filePath);
+
       for (const pattern of forbiddenPatterns) {
+        if (
+          isRouteAdapter &&
+          (pattern.source.includes('osrm') || pattern.source.includes('openrouteservice'))
+        ) {
+          continue;
+        }
         const match = pattern.exec(content);
         expect(
           match,

@@ -19,6 +19,13 @@ import {
 } from './weather-types.js';
 import { OpenMeteoWeatherAdapter } from './open-meteo-adapter.js';
 import { isAllowlistedLoopbackHost } from '../xmemo/loopback-allowlist.js';
+import {
+  OSRM_ATTRIBUTION,
+  type Coordinate,
+  type RouteMode,
+} from './routing-types.js';
+import type { RoutingProvider } from './routing-provider.js';
+import { OSRMRouteAdapter } from './osrm-route-adapter.js';
 
 export interface WeatherProxyConfig {
   readonly enabled: boolean;
@@ -179,6 +186,195 @@ export function createWeatherProxyMiddleware(
           'Cache-Control': 'no-store',
         });
         res.end(JSON.stringify({ error: err?.message || 'Failed to fetch weather' }));
+      }
+      return;
+    }
+
+    // Method Not Allowed / Not Found
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Endpoint not found' }));
+  };
+}
+
+export interface RouteProxyConfig {
+  readonly enabled: boolean;
+  readonly tilesEnabled: boolean;
+  readonly provider: string;
+}
+
+export function resolveRouteConfig(
+  env: NodeJS.ProcessEnv = process.env
+): RouteProxyConfig {
+  const enabledVal = env['ROUTE_LIVE_ENABLED'];
+  const enabled = enabledVal === 'true' || enabledVal === '1';
+
+  const tilesVal = env['TILES_ENABLED'];
+  const tilesEnabled = tilesVal === 'true' || tilesVal === '1';
+
+  const provider = env['ROUTE_PROVIDER'] || 'osrm';
+
+  return {
+    enabled,
+    tilesEnabled,
+    provider,
+  };
+}
+
+export function createRouteProxyMiddleware(
+  configOverride?: Partial<RouteProxyConfig>,
+  adapterOverride?: RoutingProvider
+) {
+  const baseConfig = resolveRouteConfig();
+  const config: RouteProxyConfig = {
+    enabled: configOverride?.enabled ?? baseConfig.enabled,
+    tilesEnabled: configOverride?.tilesEnabled ?? baseConfig.tilesEnabled,
+    provider: configOverride?.provider ?? baseConfig.provider,
+  };
+
+  const routeAdapter = adapterOverride ?? new OSRMRouteAdapter();
+
+  return async function routeProxyMiddleware(
+    req: IncomingMessage,
+    res: ServerResponse,
+    next: () => void
+  ): Promise<void> {
+    const urlStr = req.url || '';
+    const rawPathname = urlStr.split('?')[0] || '';
+
+    // Path-first guard: only intercept /api/route paths
+    if (!rawPathname.startsWith('/api/route')) {
+      return next();
+    }
+
+    const hostHeader = req.headers['host'];
+    let baseUrl = 'http://127.0.0.1:5173';
+    if (hostHeader) {
+      if (!isAllowlistedLoopbackHost(hostHeader) && process.env.DEV_DEVICE_TESTING !== 'true') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Access forbidden: allowlisted loopback host required' }));
+        return;
+      }
+      if (isAllowlistedLoopbackHost(hostHeader)) {
+        baseUrl = `http://${hostHeader.trim()}`;
+      }
+    }
+
+    // Security Guard: Sec-Fetch-Site / Cross-site check
+    const secFetchSite = req.headers['sec-fetch-site'];
+    if (secFetchSite === 'cross-site') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Cross-site requests forbidden' }));
+      return;
+    }
+
+    // Security Guard: Referer check
+    const referer = req.headers['referer'];
+    if (referer && !isLocalOriginOrReferer(referer) && process.env.DEV_DEVICE_TESTING !== 'true') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Untrusted referer' }));
+      return;
+    }
+
+    const parsedUrl = new URL(urlStr, baseUrl);
+    const pathname = parsedUrl.pathname;
+
+    // Route 1: GET /api/route/status
+    if (pathname === '/api/route/status' && req.method === 'GET') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      });
+      res.end(
+        JSON.stringify({
+          enabled: config.enabled,
+          provider: config.provider,
+          attribution: OSRM_ATTRIBUTION,
+          tilesEnabled: config.tilesEnabled,
+        })
+      );
+      return;
+    }
+
+    // Route 2: GET /api/route
+    if ((pathname === '/api/route' || pathname === '/api/route/') && req.method === 'GET') {
+      if (!config.enabled) {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            enabled: false,
+            error: 'Live routing is disabled (set ROUTE_LIVE_ENABLED=true)',
+          })
+        );
+        return;
+      }
+
+      const originParam = parsedUrl.searchParams.get('origin');
+      const destParam = parsedUrl.searchParams.get('destination');
+      const modeParam = (parsedUrl.searchParams.get('mode') || 'driving') as RouteMode;
+
+      if (!originParam || !destParam) {
+        res.writeHead(400, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            error: 'Missing required query parameters: origin and destination ([lat,lng])',
+          })
+        );
+        return;
+      }
+
+      const parseCoords = (val: string): Coordinate | null => {
+        const parts = val.split(',').map(s => parseFloat(s.trim()));
+        if (parts.length !== 2 || parts.some(n => Number.isNaN(n) || !Number.isFinite(n))) {
+          return null;
+        }
+        return [parts[0]!, parts[1]!] as Coordinate;
+      };
+
+      const origin = parseCoords(originParam);
+      const destination = parseCoords(destParam);
+
+      if (!origin || !destination) {
+        res.writeHead(400, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            error: 'Invalid coordinate format. Expected "lat,lng"',
+          })
+        );
+        return;
+      }
+
+      try {
+        const routeResult = await routeAdapter.route(origin, destination, modeParam);
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            enabled: true,
+            route: routeResult,
+            attribution: OSRM_ATTRIBUTION,
+          })
+        );
+      } catch (err: any) {
+        res.writeHead(500, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            error: err?.message || 'Routing provider error',
+          })
+        );
       }
       return;
     }

@@ -114,6 +114,22 @@ import {
   type ConnectorId,
   type ConnectorStatus,
 } from '../connectors/index.js';
+import type {
+  DestinationInfo,
+  RouteResult,
+  RouteStatus,
+  NoRouteReason,
+} from '../../adapters/providers/routing-types.js';
+import {
+  NO_ROUTE_REASON_LABELS,
+  isRouteStale,
+} from '../../adapters/providers/routing-types.js';
+import { LiveDestinationAdapter } from '../../adapters/providers/destination-port.js';
+import {
+  renderLiveRouteSvg,
+  formatDistance,
+  formatDuration,
+} from './route-geometry.js';
 
 export type DemoSceneId =
   | 'clear'
@@ -1344,6 +1360,135 @@ export function renderApp(
     }
   }
 
+  // Live Routing Seam (L2-ROUTE-MAP)
+  const liveDestinationPort = new LiveDestinationAdapter();
+  let liveDestination: DestinationInfo | null = null;
+  let liveRoute: RouteResult | null = null;
+  let liveRouteStatus: RouteStatus = { enabled: false };
+  let liveRouteError = false;
+
+  async function checkRouteStatus() {
+    try {
+      if (typeof fetch !== 'undefined') {
+        const resp = await fetch('/api/route/status', { cache: 'no-store' });
+        if (resp.ok) {
+          liveRouteStatus = (await resp.json()) as RouteStatus;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    await refreshLiveRoute();
+  }
+
+  async function refreshLiveRoute() {
+    if (contextMode !== 'live') return;
+
+    // Check destination
+    if (!liveDestination) {
+      try {
+        liveDestination = await liveDestinationPort.getLiveDestination();
+      } catch {
+        liveDestination = null;
+      }
+    }
+
+    // Dev/Test Hook destination injection
+    if (typeof window !== 'undefined' && window.location?.search) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('test_destination') === '1' && !liveDestination) {
+        liveDestination = {
+          coordinate: [37.7599, -122.4148],
+          name: 'Mission Dolores',
+          address: 'Mission Dolores, San Francisco, CA',
+        };
+      }
+    }
+
+    const hasLocation =
+      (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted') &&
+      (liveLocationStatus.coords != null || (liveLocationStatus as any).latitude != null);
+
+    const locCoords: [number, number] | null = liveLocationStatus.coords
+      ? [liveLocationStatus.coords.lat, liveLocationStatus.coords.lng]
+      : typeof (liveLocationStatus as any).latitude === 'number' &&
+        typeof (liveLocationStatus as any).longitude === 'number'
+      ? [(liveLocationStatus as any).latitude, (liveLocationStatus as any).longitude]
+      : null;
+
+    if (!hasLocation || !locCoords || !liveDestination) {
+      liveRoute = null;
+      update();
+      return;
+    }
+
+    try {
+      update();
+      const [origLat, origLng] = locCoords;
+      const [destLat, destLng] = liveDestination.coordinate;
+      const routeUrl = `/api/route?origin=${origLat},${origLng}&destination=${destLat},${destLng}&mode=driving`;
+      const resp = await fetch(routeUrl, { cache: 'no-store' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.enabled && data.route) {
+          liveRoute = data.route;
+          liveRouteError = false;
+        } else {
+          liveRoute = null;
+          liveRouteError = false;
+        }
+      } else {
+        liveRoute = null;
+        liveRouteError = true;
+      }
+    } catch {
+      liveRoute = null;
+      liveRouteError = true;
+    } finally {
+      update();
+    }
+  }
+
+  function getLiveNoRouteReason(): NoRouteReason {
+    if (typeof window !== 'undefined' && window.location?.search) {
+      const params = new URLSearchParams(window.location.search);
+      const forced = params.get('test_no_route_reason') as NoRouteReason | null;
+      if (forced && forced in NO_ROUTE_REASON_LABELS) {
+        return forced;
+      }
+    }
+
+    if (liveRoute && isRouteStale(liveRoute)) {
+      return 'stale';
+    }
+
+    if (liveRouteError) {
+      return 'provider_error';
+    }
+
+    const hasLocation =
+      (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted') &&
+      (liveLocationStatus.coords != null || (liveLocationStatus as any).latitude != null);
+
+    if (liveDestination && hasLocation && liveRouteStatus && !liveRouteStatus.enabled) {
+      return 'provider_disabled';
+    }
+
+    if (!liveDestination) {
+      return 'no_destination';
+    }
+
+    if (!hasLocation) {
+      return 'location_not_shared';
+    }
+
+    if (liveRouteStatus && !liveRouteStatus.enabled) {
+      return 'provider_disabled';
+    }
+
+    return 'no_destination';
+  }
+
   let latestConnectorStatuses: Record<ConnectorId, ConnectorStatus> = {
     location: { id: 'location', state: 'unavailable', detail: 'Checking location...', source: 'navigator.permissions', updatedAt: new Date().toISOString() },
     calendar: { id: 'calendar', state: 'unavailable', detail: 'Not available yet', source: 'None', updatedAt: new Date().toISOString() },
@@ -1362,6 +1507,7 @@ export function renderApp(
 
   void checkXMemoStatus();
   void checkWeatherStatus();
+  void checkRouteStatus();
   void refreshConnectorStatuses();
 
   function update() {
@@ -1867,8 +2013,72 @@ export function renderApp(
               </div>
             </div>
 
-            <!-- Route Section -->
-            <div class="live-card live-notice-card" id="notice-route-unavailable" role="status" data-provenance="none">
+            <!-- Route Section (L2-ROUTE-MAP) -->
+            ${
+              liveRoute && !isRouteStale(liveRoute) && liveDestination
+                ? `
+            <div class="live-card live-route-card" id="live-route-card" data-provenance="live" data-source="osrm" data-fetched-at="${escapeHtml(liveRoute.fetchedAt)}">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h2 class="live-card-title">Route to ${escapeHtml(liveDestination.name)}</h2>
+                    <span class="live-source-chip">Live · OSRM</span>
+                  </div>
+                  <div class="live-route-metrics">
+                    <span class="live-route-eta">${formatDuration(liveRoute.durationS)}</span>
+                    <span class="live-route-distance">(${formatDistance(liveRoute.distanceM)})</span>
+                  </div>
+                  <div class="live-route-map-container" role="img" aria-label="Route map from current location to ${escapeHtml(liveDestination.name)}">
+                    ${renderLiveRouteSvg(liveRoute, {
+                      originLabel: 'Current Location',
+                      destLabel: liveDestination.name,
+                    })}
+                  </div>
+                  <div class="live-route-footer">
+                    <div class="live-route-attribution" data-slot="chrome" data-slot-reason="Routing provider attribution">
+                      Route © OSRM · data © OpenStreetMap contributors
+                    </div>
+                    ${
+                      liveLocationStatus.coords || (liveLocationStatus as any).latitude != null
+                        ? (() => {
+                            const origLat = liveLocationStatus.coords
+                              ? liveLocationStatus.coords.lat
+                              : (liveLocationStatus as any).latitude;
+                            const origLng = liveLocationStatus.coords
+                              ? liveLocationStatus.coords.lng
+                              : (liveLocationStatus as any).longitude;
+                            return `
+                      <div class="live-route-handoff">
+                        <a
+                          href="https://www.google.com/maps/dir/?api=1&origin=${origLat},${origLng}&destination=${liveDestination.coordinate[0]},${liveDestination.coordinate[1]}"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="live-external-maps-link"
+                        >
+                          Open in Maps
+                        </a>
+                        <span class="live-external-maps-note">Opens your maps app · not an in-app route</span>
+                      </div>
+                      `;
+                          })()
+                        : ''
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+            `
+                : (() => {
+                    const reason = getLiveNoRouteReason();
+                    const reasonDesc = NO_ROUTE_REASON_LABELS[reason] || 'no destination set';
+                    return `
+            <div class="live-card live-notice-card" id="notice-route-unavailable" role="status" data-provenance="none" data-no-route-reason="${reason}">
               <div class="live-card-row">
                 <div class="live-card-icon" aria-hidden="true">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1881,10 +2091,13 @@ export function renderApp(
                     <h2 class="live-card-title">Route</h2>
                     <span class="live-source-chip">No Route</span>
                   </div>
-                  <p class="live-card-desc">No route available</p>
+                  <p class="live-card-desc">No route available · ${escapeHtml(reasonDesc)}</p>
                 </div>
               </div>
             </div>
+            `;
+                  })()
+            }
 
             <!-- Calendar Section -->
             <div class="live-card live-notice-card" id="notice-calendar-disconnected" role="status" data-provenance="none">
@@ -2878,6 +3091,7 @@ export function renderApp(
         defaultModelCommandInterpreter.setMode('live');
         liveLocationStatus = defaultLocationPort.getLocation();
         await refreshConnectorStatuses();
+        void checkRouteStatus();
         update();
       });
     }
@@ -2895,6 +3109,7 @@ export function renderApp(
           liveLocationStatus = defaultLocationPort.getLocation();
         }
         await refreshConnectorStatuses();
+        await refreshLiveRoute();
         update();
       });
     }

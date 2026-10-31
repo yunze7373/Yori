@@ -4,7 +4,10 @@ import {
   resolveBindHost,
 } from './src/adapters/model/server-proxy.js';
 import { createXMemoProxyMiddleware } from './src/adapters/xmemo/server-proxy.js';
-import { createWeatherProxyMiddleware } from './src/adapters/providers/server-proxy.js';
+import {
+  createWeatherProxyMiddleware,
+  createRouteProxyMiddleware,
+} from './src/adapters/providers/server-proxy.js';
 
 function modelProxyPlugin(): Plugin {
   const middleware = createModelProxyMiddleware();
@@ -48,6 +51,20 @@ function weatherProxyPlugin(): Plugin {
   };
 }
 
+function routeProxyPlugin(): Plugin {
+  const middleware = createRouteProxyMiddleware();
+
+  return {
+    name: 'route-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
+
 /**
  * Vite Configuration for Yori Living Context
  *
@@ -74,7 +91,12 @@ export default defineConfig(({ mode }) => {
     define: {
       __YORI_ENABLE_TEST_HOOKS__: JSON.stringify(enableTestHooks),
     },
-    plugins: [modelProxyPlugin(), xmemoProxyPlugin(), weatherProxyPlugin()],
+    plugins: [
+      modelProxyPlugin(),
+      xmemoProxyPlugin(),
+      weatherProxyPlugin(),
+      routeProxyPlugin(),
+    ],
     server: {
       port: 5173,
       host: bindHost,

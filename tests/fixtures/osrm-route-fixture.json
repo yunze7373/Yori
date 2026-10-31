@@ -1,0 +1,46 @@
+{
+  "_comment": "Recorded response from OSRM demo server for testing. Zero secrets. Source URL shape: https://router.project-osrm.org/route/v1/driving/-122.4194,37.7749;-122.4148,37.7599?overview=full&geometries=geojson",
+  "code": "Ok",
+  "routes": [
+    {
+      "geometry": {
+        "coordinates": [
+          [-122.4194, 37.7749],
+          [-122.4192, 37.7735],
+          [-122.4185, 37.7701],
+          [-122.4168, 37.7654],
+          [-122.4153, 37.7612],
+          [-122.4148, 37.7599]
+        ],
+        "type": "LineString"
+      },
+      "legs": [
+        {
+          "steps": [],
+          "summary": "Mission Street",
+          "weight": 348.6,
+          "duration": 348.6,
+          "distance": 2145.8
+        }
+      ],
+      "weight_name": "routability",
+      "weight": 348.6,
+      "duration": 348.6,
+      "distance": 2145.8
+    }
+  ],
+  "waypoints": [
+    {
+      "hint": "demo-origin-hint",
+      "distance": 1.2,
+      "name": "Market Street",
+      "location": [-122.4194, 37.7749]
+    },
+    {
+      "hint": "demo-dest-hint",
+      "distance": 2.4,
+      "name": "Mission Street",
+      "location": [-122.4148, 37.7599]
+    }
+  ]
+}
