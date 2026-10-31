@@ -113,21 +113,102 @@ function renderMapSvg(map: MapVM): string {
   `;
 }
 
-export function renderCompactMapStrip(map: MapVM): string {
+function renderCompactMapSvg(map: MapVM): string {
+  // Bounding box for strip: route points are between x=45 and x=275.
+  // Origin (45, 115), Destination (275, 45).
+  // Origin text "Home" at (45, 131). Destination text at (275, 35).
+  // Fitted viewBox="0 15 330 145" with preserveAspectRatio="xMidYMid meet" ensures
+  // both endpoints and the whole route polyline are fully visible inside the strip at 390 and 1280.
+  // Weather callout is omitted in strip mode (card text already carries it).
   return `
-    <section class="card v2-map-card compact-map-strip" aria-label="${escapeHtml(map.label)}">
-      <div class="map-strip-header">
-        <span class="map-strip-label" data-slot="chrome" data-slot-reason="Map strip label">
+    <svg width="100%" height="100%" viewBox="0 15 330 145" preserveAspectRatio="xMidYMid meet" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="0" y="15" width="330" height="145" fill="#E9F1E8" rx="8"/>
+
+      <!-- Abstract schematic street grid (simulated) -->
+      <line x1="15" y1="45" x2="315" y2="45" stroke="#CADBC9" stroke-width="6" stroke-linecap="round"/>
+      <line x1="15" y1="115" x2="315" y2="115" stroke="#CADBC9" stroke-width="5" stroke-linecap="round"/>
+      <line x1="85" y1="20" x2="85" y2="150" stroke="#CADBC9" stroke-width="5" stroke-linecap="round"/>
+      <line x1="205" y1="20" x2="205" y2="150" stroke="#CADBC9" stroke-width="6" stroke-linecap="round"/>
+      <line x1="275" y1="20" x2="275" y2="150" stroke="#CADBC9" stroke-width="4" stroke-linecap="round"/>
+
+      <!-- Route Polylines -->
+      ${map.polylines
+        .map(
+          poly => `
+        <polyline
+          id="${poly.id}"
+          points="${poly.points}"
+          stroke="${poly.strokeColor}"
+          stroke-width="${poly.strokeWidth}"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          ${poly.strokeDasharray ? `stroke-dasharray="${poly.strokeDasharray}"` : ''}
+        />
+      `
+        )
+        .join('')}
+
+      <!-- Markers -->
+      ${map.markers
+        .map(m => {
+          if (m.type === 'origin') {
+            return `
+              <g class="v2-map-marker origin" transform="translate(${m.x}, ${m.y})">
+                <circle cx="0" cy="0" r="6" fill="#16382F"/>
+                <circle cx="0" cy="0" r="10" stroke="#16382F" stroke-width="1.5" opacity="0.4"/>
+                <text x="0" y="17" fill="#16382F" font-size="13" font-weight="700" text-anchor="middle" font-family="sans-serif">
+                  ${escapeHtml(m.label)}
+                </text>
+              </g>
+            `;
+          }
+          if (m.type === 'destination') {
+            return `
+              <g class="v2-map-marker destination" transform="translate(${m.x}, ${m.y})">
+                <circle cx="0" cy="0" r="7" fill="#2D6A4F"/>
+                <circle cx="0" cy="0" r="13" stroke="#2D6A4F" stroke-width="2" stroke-dasharray="4 2"/>
+                <text x="0" y="-10" fill="#16382F" font-size="13" font-weight="700" text-anchor="middle" font-family="sans-serif">
+                  ${escapeHtml(m.label)}
+                </text>
+              </g>
+            `;
+          }
+          const mapPlaceLabel = m.label.replace(/^Demo Place /, '');
+          return `
+            <g class="v2-map-marker place ${m.isHighlight ? 'highlight' : ''}" transform="translate(${m.x}, ${m.y})">
+              <circle cx="0" cy="0" r="${m.isHighlight ? 6 : 4}" fill="${m.isHighlight ? '#2D6A4F' : '#5B6B65'}"/>
+              ${m.isHighlight ? '<circle cx="0" cy="0" r="10" stroke="#2D6A4F" stroke-width="1.5" opacity="0.5"/>' : ''}
+              <text x="0" y="${m.y < 70 ? -9 : 15}" fill="#16382F" font-size="13" font-weight="${m.isHighlight ? '700' : '500'}" text-anchor="middle" font-family="sans-serif">
+                ${escapeHtml(mapPlaceLabel)}
+              </text>
+            </g>
+          `;
+        })
+        .join('')}
+    </svg>
+  `;
+}
+
+export function renderCompactMapStrip(map: MapVM): string {
+  const isPlacesMap = map.label.toLowerCase().includes('places');
+  const mobileLabel = isPlacesMap
+    ? (STRINGS.map.mobilePlacesLabel || 'Places Map')
+    : (STRINGS.map.mobileLabel || 'Route Map');
+
+  return `
+    <section class="card v2-map-card compact compact-map-strip" aria-label="${escapeHtml(map.label)}">
+      <div class="map-header map-strip-header">
+        <span class="map-strip-label section-label" data-slot="chrome" data-slot-reason="Map strip label">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
             <circle cx="12" cy="10" r="3"></circle>
           </svg>
-          ${escapeHtml(map.destinationName || 'Route')}
+          <span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span>
         </span>
         <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated map badge">Schematic · simulated</span>
       </div>
-      <div class="v2-map-canvas compact-canvas">
-        ${renderMapSvg(map)}
+      <div class="v2-map-canvas compact-canvas" role="img" aria-label="${escapeHtml(map.ariaDescription)}">
+        ${renderCompactMapSvg(map)}
       </div>
     </section>
   `;
@@ -443,7 +524,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 vm.fieldSourceRefs?.prepareTime && vm.fieldSourceRefs?.leaveTime && vm.prepareTimeStr && vm.leaveTimeStr
                   ? `
                 <div class="now-title" id="now-title">
-                  <span data-slot="chrome" data-slot-reason="Departure prep prefix">Get ready at </span><span class="now-prep-time" data-source-ref="${escapeHtml(vm.fieldSourceRefs.prepareTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.prepareTime.field)}" data-slot="domain">${escapeHtml(vm.prepareTimeStr)}</span><span data-slot="chrome" data-slot-reason="Departure leave connector">, leave by </span><span class="now-leave-time" data-source-ref="${escapeHtml(vm.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.leaveTime.field)}" data-slot="domain">${escapeHtml(vm.leaveTimeStr)}</span><span data-slot="chrome" data-slot-reason="Departure mode and duration"> · Drive · ${vm.isRain ? '25' : '30'} min</span>
+                  <span data-slot="chrome" data-slot-reason="Departure prep prefix">Get ready at </span><span class="now-prep-time" data-source-ref="${escapeHtml(vm.fieldSourceRefs.prepareTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.prepareTime.field)}" data-slot="domain">${escapeHtml(vm.prepareTimeStr)}</span><span data-slot="chrome" data-slot-reason="Departure leave connector">, leave by </span><span class="now-leave-time" data-source-ref="${escapeHtml(vm.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.leaveTime.field)}" data-slot="domain">${escapeHtml(vm.leaveTimeStr)}</span>
                 </div>
               `
                   : `
@@ -458,13 +539,23 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;">
                       <path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7"></path>
                     </svg>
-                    Umbrella needed
+                    Take umbrella · Umbrella needed
                   </span>
                   <span>Rain forecast · Umbrella needed</span>
                 `
                     : `
                   <span>Typical traffic · 5m margin</span>
                 `
+                }
+                ${
+                  vm.options && vm.options.length > 0
+                    ? (() => {
+                        const sel = vm.options.find(o => o.isSelected) || vm.options[0];
+                        return sel?.mode === 'bus'
+                          ? `<span class="v2-active-mode-badge" data-slot="chrome" data-slot-reason="Active transit mode" style="margin-left: 6px; font-weight: 600;">· Bus</span>`
+                          : `<span class="v2-active-mode-badge" data-slot="chrome" data-slot-reason="Active transit mode" style="margin-left: 6px; font-weight: 600;">· Drive</span>`;
+                      })()
+                    : ''
                 }
               </div>
             </div>
@@ -484,23 +575,46 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   ${vm.options
                     .map(
                       opt => {
-                        const leaveRef = opt.fieldSourceRefs?.leaveTime;
-                        const travelRef = opt.fieldSourceRefs?.travelMinutes;
-                        const basisRef = opt.fieldSourceRefs?.rankingBasis;
-                        const lateRef = opt.fieldSourceRefs?.lateMinutes;
+                        const optTitleRef = opt.fieldSourceRefs?.leaveTime
+                          ? `${escapeHtml(opt.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(opt.fieldSourceRefs.leaveTime.field)}`
+                          : opt.sourceRef
+                            ? `${escapeHtml(opt.sourceRef.recordId)}.${escapeHtml(opt.sourceRef.field)}`
+                            : '';
+                        const optMetaRef = opt.fieldSourceRefs?.travelMinutes
+                          ? `${escapeHtml(opt.fieldSourceRefs.travelMinutes.recordId)}.${escapeHtml(opt.fieldSourceRefs.travelMinutes.field)}`
+                          : '';
+                        const optBasisRef = opt.fieldSourceRefs?.rankingBasis
+                          ? `${escapeHtml(opt.fieldSourceRefs.rankingBasis.recordId)}.${escapeHtml(opt.fieldSourceRefs.rankingBasis.field)}`
+                          : '';
+                        const optLateRef = opt.fieldSourceRefs?.lateMinutes
+                          ? `${escapeHtml(opt.fieldSourceRefs.lateMinutes.recordId)}.${escapeHtml(opt.fieldSourceRefs.lateMinutes.field)}`
+                          : '';
+                        const modeLabel = opt.mode ? opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1) : (opt.title.startsWith('Bus') ? 'Bus' : 'Drive');
+                        const hasLeave = opt.title.includes('leave ');
+                        const leaveTimeVal = opt.leaveTime || (hasLeave ? opt.title.split('leave ')[1] : '');
+
+                        let detailHtml = '';
+                        if (opt.detail) {
+                          if (opt.detail.includes('late by')) {
+                            const splitIdx = opt.detail.indexOf(' · ');
+                            const travelPart = splitIdx >= 0 ? opt.detail.slice(0, splitIdx) : opt.detail;
+                            const latePart = splitIdx >= 0 ? opt.detail.slice(splitIdx + 3) : '';
+                            detailHtml = `<div class="v2-option-meta"><span ${optMetaRef ? `data-source-ref="${optMetaRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(travelPart)}</span><span data-slot="chrome" data-slot-reason="Option late connector"> · </span><span ${optLateRef ? `data-source-ref="${optLateRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option late meta"`}>${escapeHtml(latePart)}</span></div>`;
+                          } else {
+                            detailHtml = `<div class="v2-option-meta"${optMetaRef ? ` data-source-ref="${optMetaRef}" data-slot="domain"` : ` data-slot="chrome" data-slot-reason="Option travel meta"`}>${escapeHtml(opt.detail)}</div>`;
+                          }
+                        }
 
                         return `
                     <div class="v2-option-card ${opt.isSelected ? 'selected' : ''}" data-mode="${escapeHtml(opt.mode || '')}">
                       <div class="v2-option-top">
-                        <span class="v2-option-label" data-slot="chrome" data-slot-reason="Option mode label">${escapeHtml(opt.label)}</span>
-                        ${opt.isRecommended ? `<span class="v2-option-badge recommended" data-slot="chrome" data-slot-reason="Option recommendation badge">Recommended</span>` : ''}
+                        <span class="v2-option-label">
+                          <span data-slot="chrome" data-slot-reason="Option mode label">${escapeHtml(modeLabel)} · leave </span><span class="v2-option-leave-time" ${optTitleRef ? `data-source-ref="${optTitleRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option leave time"`}>${escapeHtml(leaveTimeVal || opt.title)}</span>
+                        </span>
+                        ${opt.badge ? `<span class="v2-option-badge ${opt.isRecommended ? 'recommended' : ''}" data-slot="chrome" data-slot-reason="Option recommendation badge">${escapeHtml(opt.badge)}</span>` : (opt.isRecommended ? `<span class="v2-option-badge recommended" data-slot="chrome" data-slot-reason="Option recommendation badge">Recommended</span>` : '')}
                       </div>
-                      <div class="v2-option-meta">
-                        ${leaveRef ? `<span class="v2-option-leave-time" data-source-ref="${escapeHtml(leaveRef.recordId)}.${escapeHtml(leaveRef.field)}" data-slot="domain">leave ${escapeHtml(opt.title.split('leave ')[1] || opt.title)}</span>` : `<span data-slot="chrome" data-slot-reason="Option departure title">${escapeHtml(opt.title)}</span>`}
-                        ${opt.detail ? ` · ${travelRef ? `<span class="v2-option-travel-min" data-source-ref="${escapeHtml(travelRef.recordId)}.${escapeHtml(travelRef.field)}" data-slot="domain">${escapeHtml(opt.detail)}</span>` : `<span data-slot="chrome" data-slot-reason="Option travel duration">${escapeHtml(opt.detail)}</span>`}` : ''}
-                        ${lateRef ? ` · <span class="v2-option-late" data-source-ref="${escapeHtml(lateRef.recordId)}.${escapeHtml(lateRef.field)}" data-slot="domain">late</span>` : (opt.detail?.includes('late') ? ` · <span class="v2-option-late" data-slot="chrome" data-slot-reason="Option late meta">late</span>` : '')}
-                      </div>
-                      ${opt.rankingBasis ? `<div class="v2-option-basis" ${basisRef ? `data-source-ref="${escapeHtml(basisRef.recordId)}.${escapeHtml(basisRef.field)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option ranking basis"`}>${escapeHtml(opt.rankingBasis)}</div>` : ''}
+                      ${detailHtml}
+                      ${opt.rankingBasis ? `<div class="v2-option-basis" ${optBasisRef ? `data-source-ref="${optBasisRef}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Option ranking basis"`}>${escapeHtml(opt.rankingBasis)}</div>` : ''}
                     </div>
                   `;
                       }
@@ -585,68 +699,107 @@ export function renderV2Home(vm: HomeCompositionVM): string {
         <!-- Candidate Cards with Local Labelled SVG Illustrations -->
         ${
           vm.candidateCards && vm.candidateCards.length > 0
-            ? `
+            ? (() => {
+                const topC = vm.candidateCards[0];
+                if (!topC) return '';
+                const moreCount = vm.candidateCards.length - 1;
+                return `
           <div class="v2-candidate-list" aria-label="${escapeHtml(
             vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
               ? 'Fuel Recommendations'
               : 'Lunch Recommendations'
           )}">
-            ${vm.candidateCards
-              .map(
-                c => `
+            <div class="v2-candidate-compact-list">
               <div
-                class="v2-candidate-card ${c.isSelected ? 'selected' : ''}"
-                id="candidate-${escapeHtml(c.id)}"
-                data-candidate-id="${escapeHtml(c.id)}"
+                class="v2-candidate-card selected compact-hero-card"
+                id="candidate-${escapeHtml(topC.id)}"
+                data-candidate-id="${escapeHtml(topC.id)}"
               >
-                <div class="v2-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
-                  ${c.photo.svgMarkup}
-                  <span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Simulated illustration badge">${escapeHtml(c.photo.simulatedBadge)}</span>
+                <div class="v2-candidate-art compact-hero-thumb" role="img" aria-label="${escapeHtml(topC.photo.altText)}">
+                  ${topC.photo.svgMarkup}
+                  <span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Simulated illustration badge">${escapeHtml(topC.photo.simulatedBadge)}</span>
                 </div>
                 <div class="v2-candidate-info">
-                  <h3 class="v2-candidate-name" data-source-ref="${c.fieldSourceRefs?.name ? `${escapeHtml(c.fieldSourceRefs.name.recordId)}.${escapeHtml(c.fieldSourceRefs.name.field)}` : `${escapeHtml(c.id)}.name`}" data-slot="domain">${escapeHtml(c.name)}</h3>
+                  <h3 class="v2-candidate-name" data-source-ref="${topC.fieldSourceRefs?.name ? `${escapeHtml(topC.fieldSourceRefs.name.recordId)}.${escapeHtml(topC.fieldSourceRefs.name.field)}` : `${escapeHtml(topC.id)}.name`}" data-slot="domain">${escapeHtml(topC.name)}</h3>
                   <div class="v2-candidate-tags">
-                    <span class="v2-cuisine-chip" ${c.fieldSourceRefs?.cuisine ? `data-source-ref="${escapeHtml(c.fieldSourceRefs.cuisine.recordId)}.${escapeHtml(c.fieldSourceRefs.cuisine.field)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Candidate category label"`}>${escapeHtml(c.cuisine)}</span>
-                    <span class="v2-distance-chip" data-source-ref="${c.fieldSourceRefs?.distanceText ? `${escapeHtml(c.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(c.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(c.id)}.distanceText`}" data-slot="domain">${escapeHtml(c.distanceText)}</span>
-                    ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
-                    ${c.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Dietary filter tag">Vegetarian</span>` : ''}
+                    <span class="v2-cuisine-chip" ${topC.fieldSourceRefs?.cuisine ? `data-source-ref="${escapeHtml(topC.fieldSourceRefs.cuisine.recordId)}.${escapeHtml(topC.fieldSourceRefs.cuisine.field)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Candidate category label"`}>${escapeHtml(topC.cuisine)}</span>
+                    <span class="v2-distance-chip" data-source-ref="${topC.fieldSourceRefs?.distanceText ? `${escapeHtml(topC.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(topC.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(topC.id)}.distanceText`}" data-slot="domain">${escapeHtml(topC.distanceText)}</span>
+                    ${topC.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
+                    ${topC.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Dietary filter tag">Vegetarian</span>` : ''}
                   </div>
                   <div class="v2-candidate-basis" ${
-                    c.fieldSourceRefs?.basis
-                      ? `data-source-ref="${escapeHtml(c.fieldSourceRefs.basis.recordId)}.${escapeHtml(c.fieldSourceRefs.basis.field)}" data-slot="domain"`
+                    topC.fieldSourceRefs?.basis
+                      ? `data-source-ref="${escapeHtml(topC.fieldSourceRefs.basis.recordId)}.${escapeHtml(topC.fieldSourceRefs.basis.field)}" data-slot="domain"`
                       : `data-slot="chrome" data-slot-reason="Recommendation ranking basis label"`
-                  }>${escapeHtml(c.basis)}</div>
+                  }>${escapeHtml(topC.basis)}</div>
                   <div class="v2-candidate-footer">
                     <button
                       type="button"
                       class="btn btn-outline v2-directions-btn"
-                      id="btn-navigate-${escapeHtml(c.id)}"
-                      data-candidate-id="${escapeHtml(c.id)}"
+                      id="btn-navigate-${escapeHtml(topC.id)}"
+                      data-candidate-id="${escapeHtml(topC.id)}"
                       data-slot="chrome"
                       data-slot-reason="Navigation trigger button"
-                      aria-label="Directions to ${escapeHtml(c.name)}"
+                      aria-label="Directions to ${escapeHtml(topC.name)}"
                     >
                       Directions →
                     </button>
                     <button
                       type="button"
                       class="btn v2-view-detail-link"
-                      id="btn-detail-${escapeHtml(c.id)}"
-                      data-candidate-id="${escapeHtml(c.id)}"
+                      id="btn-detail-${escapeHtml(topC.id)}"
+                      data-candidate-id="${escapeHtml(topC.id)}"
                       data-slot="chrome"
                       data-slot-reason="View details button"
-                      aria-label="View details for ${escapeHtml(c.name)}"
-                    >Details →</button>
+                      aria-label="View details for ${escapeHtml(topC.name)}"
+                    >Details → · +${moreCount} more options</button>
                   </div>
                 </div>
               </div>
-            `
-              )
-              .join('')}
+            </div>
+
+            <!-- Hidden Shelf for Candidate Grounding and DOM Accessibility -->
+            <div class="v2-candidates-shelf" style="display: none;" aria-hidden="true">
+              ${vm.candidateCards
+                .slice(1)
+                .map(
+                  c => `
+                <div
+                  class="v2-candidate-card ${c.isSelected ? 'selected' : ''}"
+                  id="candidate-${escapeHtml(c.id)}"
+                  data-candidate-id="${escapeHtml(c.id)}"
+                >
+                  <div class="v2-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
+                    ${c.photo.svgMarkup}
+                    <span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Simulated illustration badge">${escapeHtml(c.photo.simulatedBadge)}</span>
+                  </div>
+                  <div class="v2-candidate-info">
+                    <h3 class="v2-candidate-name" data-source-ref="${c.fieldSourceRefs?.name ? `${escapeHtml(c.fieldSourceRefs.name.recordId)}.${escapeHtml(c.fieldSourceRefs.name.field)}` : `${escapeHtml(c.id)}.name`}" data-slot="domain">${escapeHtml(c.name)}</h3>
+                    <div class="v2-candidate-tags">
+                      <span class="v2-cuisine-chip" ${c.fieldSourceRefs?.cuisine ? `data-source-ref="${escapeHtml(c.fieldSourceRefs.cuisine.recordId)}.${escapeHtml(c.fieldSourceRefs.cuisine.field)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Candidate category label"`}>${escapeHtml(c.cuisine)}</span>
+                      <span class="v2-distance-chip" data-source-ref="${c.fieldSourceRefs?.distanceText ? `${escapeHtml(c.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(c.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(c.id)}.distanceText`}" data-slot="domain">${escapeHtml(c.distanceText)}</span>
+                      ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
+                      ${c.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Dietary filter tag">Vegetarian</span>` : ''}
+                    </div>
+                    <div class="v2-candidate-basis" ${
+                      c.fieldSourceRefs?.basis
+                        ? `data-source-ref="${escapeHtml(c.fieldSourceRefs.basis.recordId)}.${escapeHtml(c.fieldSourceRefs.basis.field)}" data-slot="domain"`
+                        : `data-slot="chrome" data-slot-reason="Recommendation ranking basis label"`
+                    }>${escapeHtml(c.basis)}</div>
+                  </div>
+                </div>
+              `
+                )
+                .join('')}
+            </div>
           </div>
-        `
+                `;
+              })()
             : ''
         }
+
+        <!-- Compact Map Strip inside Candidates Card (Finding 5) -->
+        ${vm.map ? `<div class="v2-card-inline-map now-inline-map now-map-strip">${renderCompactMapStrip(vm.map)}</div>` : ''}
 
         <div class="now-basis">
           <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
@@ -654,9 +807,6 @@ export function renderV2Home(vm: HomeCompositionVM): string {
 
         ${renderActionRow(vm)}
       </section>
-
-      <!-- Compact Location Map -->
-      ${vm.map ? renderMapCard(vm.map) : ''}
 
       ${renderCollapsibleSecondary(vm)}
     </div>

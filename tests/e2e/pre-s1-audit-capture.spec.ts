@@ -213,10 +213,12 @@ test.describe('PRE-S1-B: Slot-Aware Grounding Walkthrough Capture Suite', () => 
     steps.push('Weather Shift (Rain)');
     allSlots.push(...(await extractRenderedSlots(page, scene, 'Weather Shift (Rain)', vpSuffix)));
 
-    // Step 3: Route Options (Drive vs Bus)
+    // Step 3: Route Options (Drive vs Bus) in Trip Details (Finding 1)
+    await page.locator('#btn-view-trip-details').click();
     await expect(page.locator('.v2-options-grid')).toBeVisible();
     steps.push('Route Options (Drive vs Bus)');
     allSlots.push(...(await extractRenderedSlots(page, scene, 'Route Options (Drive vs Bus)', vpSuffix)));
+    await page.locator('#trip-detail-back-btn').click();
 
     // Step 4: Why Provenance Sheet
     const whyBtn = page.locator('#btn-why');

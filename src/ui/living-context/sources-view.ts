@@ -10,8 +10,44 @@
 
 import { escapeHtml } from './presentation.js';
 import { STRINGS } from './strings.js';
-import type { ContextSnapshot } from '../../core/contracts/index.js';
+import { humanizeSignalKind } from '../review/why-sheet.js';
+import type { ContextSnapshot, ContextSignal } from '../../core/contracts/index.js';
 import type { LocationStatus } from '../../adapters/providers/location-port.js';
+
+function formatDemoSignal(sig: ContextSignal): { id: string; title: string; badge: string; desc: string } {
+  const kind = sig.kind || 'signal';
+  const id = `source-item-${kind.replace(/_/g, '-')}`;
+  const title = humanizeSignalKind(kind);
+  const badge = sig.label ? sig.label.toUpperCase() : 'SIMULATED';
+
+  let desc = '';
+  const val = sig.value as any;
+  if (kind === 'calendar') {
+    desc = val?.title ? `${val.title} · Scheduled event` : (sig.source ? `Calendar event (${sig.source})` : 'Calendar event');
+  } else if (kind === 'weather' || kind === 'weather_forecast') {
+    const cond = val?.condition ? (val.condition.charAt(0).toUpperCase() + val.condition.slice(1)) : 'Rain';
+    desc = `${cond} forecast in travel window · Ambient signal`;
+  } else if (kind === 'travel' || kind === 'travel_estimate' || kind === 'traffic') {
+    desc = val?.durationMinutes ? `Travel estimate: ${val.durationMinutes} min via ${val?.mode || 'primary route'}` : 'Transit & route travel estimate';
+  } else if (kind === 'location' || kind === 'location_status') {
+    const area = val?.currentArea || 'Downtown';
+    const homeStr = val?.isHome ? 'at home' : 'away from home';
+    desc = `Location: ${area} (${homeStr})`;
+  } else if (kind === 'schedule_window') {
+    const nextEv = val?.nextEvent || 'scheduled event';
+    const freeUntil = val?.freeUntil ? (val.freeUntil.includes('T') ? val.freeUntil.split('T')[1].slice(0, 5) : val.freeUntil) : 'window';
+    desc = `Schedule window: free until ${freeUntil} (${nextEv})`;
+  } else if (kind === 'eating_status') {
+    desc = val?.eatenToday === false ? `Meal status: lunch not eaten today${val?.lastMeal ? ` · Last meal: ${val.lastMeal}` : ''}` : 'Meal timing status';
+  } else if (kind === 'mock_places' || kind === 'places') {
+    const count = Array.isArray(val) ? val.length : 3;
+    desc = `Nearby places: ${count} venue options evaluated`;
+  } else {
+    desc = typeof val === 'string' ? val : (sig.source ? `Signal: ${kind} (${sig.source})` : `Signal: ${kind}`);
+  }
+
+  return { id, title, badge, desc };
+}
 
 export function renderSourcesSheet(
   mode: 'demo' | 'live',
@@ -74,29 +110,25 @@ export function renderSourcesSheet(
         <div class="sources-item-desc">Local only · Sovereign in-browser storage (XMemo not connected · no unauthorized remote sync).</div>
       </li>
     `
-    : `
-      <li class="sources-item" id="source-item-calendar">
+    : (!snapshot.signals || snapshot.signals.length === 0)
+    ? `<li class="sources-empty" id="sources-empty-state">No signals in this scene</li>`
+    : snapshot.signals
+        .map((sig: any, idx: number) => {
+          const item = formatDemoSignal(sig);
+          const itemId = idx > 0 && snapshot.signals.findIndex((s: any) => s.kind === sig.kind) !== idx
+            ? `${item.id}-${idx}`
+            : item.id;
+          return `
+      <li class="sources-item" id="${escapeHtml(itemId)}">
         <div class="sources-item-header">
-          <span class="sources-item-title">Calendar event · Scheduled event</span>
-          <span class="signal-badge simulated-badge">SIMULATED</span>
+          <span class="sources-item-title">${escapeHtml(item.title)}</span>
+          <span class="signal-badge simulated-badge">${escapeHtml(item.badge)}</span>
         </div>
-        <div class="sources-item-desc">${escapeHtml((snapshot.signals.find((s: any) => s.kind === 'calendar')?.source as string) || 'Piano lesson at 3:00 PM (demo fixture)')}</div>
+        <div class="sources-item-desc">${escapeHtml(item.desc)}</div>
       </li>
-      <li class="sources-item" id="source-item-weather">
-        <div class="sources-item-header">
-          <span class="sources-item-title">Weather forecast · Ambient signal</span>
-          <span class="signal-badge simulated-badge">SIMULATED</span>
-        </div>
-        <div class="sources-item-desc">${escapeHtml((snapshot.signals.find((s: any) => s.kind === 'weather')?.source as string) || 'Rain forecast in travel window (demo fixture)')}</div>
-      </li>
-      <li class="sources-item" id="source-item-memory">
-        <div class="sources-item-header">
-          <span class="sources-item-title">Preference profile · Habit history</span>
-          <span class="signal-badge simulated-badge">SIMULATED</span>
-        </div>
-        <div class="sources-item-desc">Sample demo profile · Rain travel & dining habits (demo fixture).</div>
-      </li>
-    `;
+          `;
+        })
+        .join('');
 
   return `
     <div class="modal-backdrop" id="why-sheet-backdrop" role="presentation">

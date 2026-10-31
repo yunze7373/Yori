@@ -496,4 +496,105 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await saveEvidence(page, `after-demo-panel-open-${vpName}.png`);
     await closeDemoPanel(page);
   });
+
+  test('8. Finding 3: Compact Map Strip origin/destination markers and labels lie inside strip bbox at 390 and 1280', async ({
+    page,
+  }, testInfo) => {
+    const width = testInfo.project.name === 'mobile' ? 390 : 1280;
+    const height = testInfo.project.name === 'mobile' ? 844 : 800;
+    await page.setViewportSize({ width, height });
+    await page.goto('/?dev=1');
+    await page.waitForSelector('.app-layout');
+    await openDemoPanel(page);
+    await page.locator('#scene-select').selectOption('rain');
+    await closeDemoPanel(page);
+
+    const strip = page.locator('.compact-map-strip .compact-canvas');
+    await expect(strip).toBeVisible();
+    const stripBox = await strip.boundingBox();
+    expect(stripBox).not.toBeNull();
+    expect(stripBox!.height).toBeLessThanOrEqual(145);
+
+    const originMarker = page.locator('.v2-map-marker.origin');
+    const destMarker = page.locator('.v2-map-marker.destination');
+    await expect(originMarker).toBeVisible();
+    await expect(destMarker).toBeVisible();
+
+    const originBox = await originMarker.boundingBox();
+    const destBox = await destMarker.boundingBox();
+    expect(originBox).not.toBeNull();
+    expect(destBox).not.toBeNull();
+
+    // Verify origin marker lies inside strip bbox
+    expect(originBox!.x).toBeGreaterThanOrEqual(stripBox!.x - 2);
+    expect(originBox!.x + originBox!.width).toBeLessThanOrEqual(stripBox!.x + stripBox!.width + 2);
+    expect(originBox!.y).toBeGreaterThanOrEqual(stripBox!.y - 2);
+    expect(originBox!.y + originBox!.height).toBeLessThanOrEqual(stripBox!.y + stripBox!.height + 2);
+
+    // Verify destination marker lies inside strip bbox
+    expect(destBox!.x).toBeGreaterThanOrEqual(stripBox!.x - 2);
+    expect(destBox!.x + destBox!.width).toBeLessThanOrEqual(stripBox!.x + stripBox!.width + 2);
+    expect(destBox!.y).toBeGreaterThanOrEqual(stripBox!.y - 2);
+    expect(destBox!.y + destBox!.height).toBeLessThanOrEqual(stripBox!.y + stripBox!.height + 2);
+  });
+
+  test('9. Finding 4 & 5: Dynamic Demo sources list signals without hardcoded fallbacks; compact lunch card height <= 1.3 screens', async ({
+    page,
+  }, testInfo) => {
+    const width = testInfo.project.name === 'mobile' ? 390 : 1280;
+    const height = testInfo.project.name === 'mobile' ? 844 : 800;
+    await page.setViewportSize({ width, height });
+
+    // In away-lunch scene:
+    await page.goto('/?dev=1');
+    await page.waitForSelector('.app-layout');
+    await openDemoPanel(page);
+    await page.locator('#scene-select').selectOption('away-lunch');
+    await closeDemoPanel(page);
+
+    // Finding 5: compact lunch Now card height
+    const lunchNowCard = page.locator('.v2-candidates-hero');
+    await expect(lunchNowCard).toBeVisible();
+    const lunchBox = await lunchNowCard.boundingBox();
+    expect(lunchBox).not.toBeNull();
+    if (width === 390) {
+      // At 390x844, primary decision (Accept/Adjust/Why) reachable within about 1.3-1.4 screens (844 * 1.4 = ~1181px)
+      // fa61c09 was 1348px (button top y≈1523); compact top candidate card + strip is ~900px with button top y≈1130.
+      expect(lunchBox!.height).toBeLessThanOrEqual(950);
+      const actionRow = page.locator('.now-actions-container');
+      const actionBox = await actionRow.boundingBox();
+      expect(actionBox).not.toBeNull();
+      expect(actionBox!.y).toBeLessThanOrEqual(1150);
+    }
+
+    // Top candidate compact row checks
+    await expect(page.locator('.v2-candidate-compact-list .v2-candidate-card')).toHaveCount(1);
+    await expect(page.locator('.v2-view-detail-link').first()).toContainText('+2 more options');
+
+    // Finding 4: click context status pill in away-lunch
+    await page.locator('#pill-context-status').click();
+    await page.waitForSelector('#why-sheet-backdrop .sources-modal-card');
+    const sourcesCard = page.locator('#why-sheet-backdrop .sources-modal-card');
+    const sourcesText = await sourcesCard.innerText();
+
+    // In away-lunch, signals are location/away, schedule window, meal timing, and nearby places
+    expect(sourcesText).toContain('Sources & Provenance · Demo');
+    expect(sourcesText).not.toContain('Piano');
+    expect(sourcesText).not.toContain('Rain');
+
+    // Close sources view
+    await page.locator('#btn-close-why').click();
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+
+    // In rain scene:
+    await openDemoPanel(page);
+    await page.locator('#scene-select').selectOption('rain');
+    await closeDemoPanel(page);
+
+    await page.locator('#pill-context-status').click();
+    await page.waitForSelector('#why-sheet-backdrop .sources-modal-card');
+    const rainSourcesText = await page.locator('#why-sheet-backdrop .sources-modal-card').innerText();
+    expect(rainSourcesText).toContain('Rain');
+    await page.locator('#btn-close-why').click();
+  });
 });

@@ -2317,6 +2317,46 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   box-shadow: 0 4px 12px rgba(45, 106, 79, 0.12);
 }
 
+.v2-candidate-card.compact-hero-card {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px;
+}
+
+.compact-hero-thumb {
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.compact-hero-thumb svg {
+  width: 100%;
+  height: 100%;
+}
+
+.compact-hero-thumb .v2-illustration-badge {
+  top: 4px;
+  right: 4px;
+  font-size: 9px;
+  padding: 1px 4px;
+}
+
+.compact-hero-card .v2-candidate-info {
+  padding: 0;
+  gap: 4px;
+}
+
+.compact-hero-card .v2-candidate-name {
+  font-size: 0.9375rem;
+  margin: 0;
+}
+
 .v2-candidate-art {
   position: relative;
   width: 100%;

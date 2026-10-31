@@ -430,6 +430,9 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     await selectDemoScene(page, 'rain');
     await page.waitForTimeout(300);
 
+    // Weather callout lives in Trip Details (Finding 1)
+    await page.locator('#btn-view-trip-details').click();
+
     // Locate the weather callout rect and text
     const rect = page.locator('.v2-map-canvas svg g:has(text) > rect, .v2-map-canvas svg g rect').first();
     const text = page.locator('.v2-map-canvas svg g text').first();
@@ -446,6 +449,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     // Verify text is completely inside rect horizontally with positive margins
     expect(textBox!.x).toBeGreaterThanOrEqual(rectBox!.x);
     expect(textBox!.x + textBox!.width).toBeLessThanOrEqual(rectBox!.x + rectBox!.width);
+    await page.locator('#trip-detail-back-btn').click();
   });
 
   test('V3 390px Mobile Hero: single-line ask-bar placeholder, header chip, and section heading with ask-bar height <= 56px', async ({
@@ -534,7 +538,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     for (const testScene of ['rain', 'clear', 'away-lunch']) {
       await selectDemoScene(page, testScene);
       await page.waitForTimeout(200);
-      const svgTexts = page.locator('.v2-map-canvas svg text');
+      const svgTexts = page.locator('.v2-map-card svg text, .v2-map-canvas svg text');
       const textCount = await svgTexts.count();
       expect(textCount).toBeGreaterThan(0);
       for (let i = 0; i < textCount; i++) {
@@ -562,11 +566,11 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
         await selectDemoScene(page, testScene);
         await page.waitForTimeout(200);
 
-        const svgEl = page.locator('.v2-map-canvas svg');
+        const svgEl = page.locator('.compact-canvas svg, .v2-map-canvas svg').first();
         const svgBox = await svgEl.boundingBox();
         expect(svgBox).not.toBeNull();
 
-        const svgTexts = page.locator('.v2-map-canvas svg text');
+        const svgTexts = page.locator('.v2-map-card svg text, .v2-map-canvas svg text');
         const count = await svgTexts.count();
         const textBoxes: { label: string; box: { x: number; y: number; width: number; height: number } }[] = [];
 

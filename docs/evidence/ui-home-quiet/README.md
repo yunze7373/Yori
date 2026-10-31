@@ -36,7 +36,7 @@ Governed by Task `[TID:INBOX-20261031-24FF42-REV-675f669d]` (Rev3 UI Redesign Sl
 - **Compact Now Card Layout**:
   - Category row: icon + `TRAVEL` (or `LUNCH` / `FUEL`) + relative time (`in 40m` / `in 55m` / `nearby · 12:15 PM`) + `SIMULATED` badge.
   - Serif headline: `Piano lesson at 3:00 PM` (Clear & Rain) or candidate name (Lunch).
-  - Bold reason line (`#now-title`): `Get ready at 2:05 PM, leave by 2:25 PM · Drive · 30 min` (Clear) or `Get ready at 2:10 PM, leave by 2:30 PM · Drive · 25 min` (Rain).
+  - Bold reason line (`#now-title`): `Get ready at 2:05 PM, leave by 2:25 PM` (Clear) or `Get ready at 2:10 PM, leave by 2:30 PM` (Rain).
   - One-line rationale: `Rain forecast · Umbrella needed` (Rain) or `Typical traffic · 5m margin` (Clear).
   - Schematic route map strip: compact map strip <= 140px tall, labelled `Schematic · simulated`.
   - Single row of primary actions: `Accept`, `Adjust`, `Why?` at equal height (>= 44px), `flex: 1`, fitting 390px mobile viewports without line wrapping.
@@ -52,18 +52,18 @@ Governed by Task `[TID:INBOX-20261031-24FF42-REV-675f669d]` (Rev3 UI Redesign Sl
 
 ## 3. The 6 Intentional A9 Truth Differences (Mockup vs. Real Runtime)
 
-1. **Greeting and Profile Avatar**:
-   The mockup depicts a personalized `"Good afternoon, Han"` with a personal letter monogram; the real runtime uses a temporal greeting (`"Good afternoon"`) with an honest status subheading (`"I've already looked ahead for you."` / `"Nothing needs you right now."`) and a neutral person SVG avatar button (`#btn-header-avatar`) routing to profile and settings (Me tab), eliminating personal identifier leaks.
-2. **Context Status Pill**:
-   The mockup omits sensor and source provenance; the real runtime includes a single compact context pill (`#pill-context-status`) displaying truthful active feeds (`Demo · simulated scenes` vs `Device clock`). Tapping the pill opens a dedicated Sources view with truthful live feeds (Device clock, Weather, Location, Calendar `Not connected`, Memory `Local only`) without fabricating events.
-3. **Grounded Now Card Hierarchy**:
-   The mockup presents ungrounded visual elements; the real runtime enforces strict domain grounding with category badge (`TRAVEL`), relative timing (`in 40m` / `in 55m`), serif appointment headline, bold departure schedule (`#now-title`), one-line rationale, and a compact schematic map strip (<= 140px tall) labelled `Schematic · simulated`.
-4. **Action Row & Trip Details Disclosure**:
-   The mockup inlines complex multi-step timelines directly on Home; the real runtime provides a compact single row of 3 equal-height primary buttons (`Accept`, `Adjust`, `Why?`) fitting 390px without wrapping, plus secondary text links (`Details →` and `Dismiss`), cleanly moving the full 4-step timeline, mode options, and habit note behind the dedicated `TripDetail` view.
-5. **Ergonomic Composer (No Mic Fabrications)**:
-   The mockup positions a search bar at the top with a microphone icon; the real runtime implements a bottom-docked Ask bar (`#ask-bar`) for one-handed mobile reach, with text input only (no fabricated microphone/voice input before speech hardware ports exist).
-6. **Isolated Presentation Demo Panel**:
-   The mockup intermixes presentation elements with consumer UI; the real runtime cleanly detaches presentation demo controls (`#scene-select`, `#btn-mode-demo`, `#btn-mode-live`, etc.) from consumer DOM, providing a discreet developer affordance (`#btn-dev-demo-controls`) gated behind `?dev=1` to host presentation controls in an accessible bottom sheet.
+1. **User Name & Avatar**:
+   The reference mockup (`yori_proactive_life_assistant_mockup.png`, sha256 `ef4cf701…`) depicts `"Good afternoon, Yuna."` with a photo avatar. The real runtime uses a temporal greeting (`"Good afternoon"`) without personal names, an honest status subheading (`"I've already looked ahead for you."` / `"Nothing needs you right now."`), and a neutral person SVG avatar button (`#btn-header-avatar`) with `aria-label="Profile and settings"` routing to profile and settings (Me tab).
+2. **Context Status Line & Truthful Feeds**:
+   The mockup displays `"Live context › Location · Calendar · Weather · Memories"`. In the real runtime, the context pill subline lists truthful active sources only (in Live mode: `Device clock: Live`, with Calendar and Memory omitted or truthfully marked as `Not connected` / `Local only`; never claiming active connections before connectors are wired in Slice 2). Tapping the pill opens the dedicated Sources sheet showing verified runtime statuses.
+3. **Dining Venue & Photo Artifacts**:
+   The mockup depicts `"Naoki Bay"` with a `"12 min away"` ETA claim and a stock food photo. The real runtime uses verified demo fixture venues (`Demo Place A · Ramen`, etc.) explicitly labelled `SIMULATED` with locally synthesized SVG illustration tiles (never unverified live merchant claims, external photographic assets, or fabricated commercial ratings).
+4. **Memory Proposal Card & Media**:
+   The mockup displays an interactive memory card `"Is this still correct? Chopin"` with a photo of a piano. The real runtime provides confirmed-only memory proposals under the For You tab/cards with provenance citations strictly requiring explicit user confirmation before applying any preference mutations (never ungrounded memory mutations or stock photography).
+5. **Composer & Speech Input**:
+   The mockup features a bottom composer reading `"Ask Yori anything…"` with a microphone icon for voice input. The real runtime implements a bottom-docked Ask bar (`#ask-bar`) for ergonomic thumb-reach, but intentionally omits the microphone icon because no speech recognition hardware or audio input engine is configured in this slice.
+6. **Integration Connectors Posture**:
+   The mockup depicts external connectors (Calendar, Weather, Location, Memories) as all having `"Connected"` statuses. The real runtime maintains strict truthfulness: unverified services are never presented as connected facts; without configured providers, integrations are reported truthfully as `Not connected` / `Off` / `Local only` until fully wired in Slice 2.
 
 ---
 

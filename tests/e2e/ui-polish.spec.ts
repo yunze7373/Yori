@@ -45,6 +45,9 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
     ]) {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto('/?ui=v2&scene=rain&test=1');
+      const detailsBtn = page.locator('#btn-view-trip-details');
+      await expect(detailsBtn).toBeVisible();
+      await detailsBtn.click();
       await page.waitForSelector('.v2-map-weather-callout');
 
       const calloutRect = page.locator('.v2-map-weather-callout rect');
@@ -66,6 +69,7 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
 
       await checkZeroHorizontalOverflow(page, `map-callout-${vp.name}`);
       await checkAxeWcag(page, `map-callout-${vp.name}`);
+      await page.click('#trip-detail-back-btn');
     }
   });
 
@@ -74,7 +78,6 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
     await page.goto('/?ui=v2&scene=rain&test=1');
     await page.waitForSelector('.ask-bar-dock');
     await page.waitForSelector('.v2-map-card');
-    await page.waitForSelector('.v2-timeline-step');
 
     // Scroll to the absolute bottom of the document
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -82,31 +85,41 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
 
     const askBar = page.locator('#ask-bar');
     const mapCard = page.locator('.v2-map-card');
-    const lastStep = page.locator('.v2-timeline-step').last();
+    const lastCardRow = page.locator('.now-card, .v2-journey-card').last();
 
     const askBox = await askBar.boundingBox();
     const mapBox = await mapCard.boundingBox();
-    const stepBox = await lastStep.boundingBox();
+    const cardBox = await lastCardRow.boundingBox();
 
     expect(askBox).not.toBeNull();
     expect(mapBox).not.toBeNull();
-    expect(stepBox).not.toBeNull();
+    expect(cardBox).not.toBeNull();
 
-    // Clearance check: bottom of map card and last timeline step must be above the floating ask bar
+    // Clearance check: bottom of map card and last card element must be above the floating ask bar
     const mapIntersectsAsk =
       mapBox!.x < askBox!.x + askBox!.width &&
       mapBox!.x + mapBox!.width > askBox!.x &&
       mapBox!.y < askBox!.y + askBox!.height &&
       mapBox!.y + mapBox!.height > askBox!.y;
 
-    const stepIntersectsAsk =
-      stepBox!.x < askBox!.x + askBox!.width &&
-      stepBox!.x + stepBox!.width > askBox!.x &&
-      stepBox!.y < askBox!.y + askBox!.height &&
-      stepBox!.y + stepBox!.height > askBox!.y;
+    const cardIntersectsAsk =
+      cardBox!.x < askBox!.x + askBox!.width &&
+      cardBox!.x + cardBox!.width > askBox!.x &&
+      cardBox!.y < askBox!.y + askBox!.height &&
+      cardBox!.y + cardBox!.height > askBox!.y;
 
     expect(mapIntersectsAsk, 'Ask bar overlaps map card at 1440x900 viewport bottom').toBe(false);
-    expect(stepIntersectsAsk, 'Ask bar overlaps last timeline step at 1440x900 viewport bottom').toBe(false);
+    expect(cardIntersectsAsk, 'Ask bar overlaps card at 1440x900 viewport bottom').toBe(false);
+
+    // Also verify timeline steps in TripDetail view where timeline now lives (Finding 1)
+    const detailsBtn = page.locator('#btn-view-trip-details');
+    await expect(detailsBtn).toBeVisible();
+    await detailsBtn.click();
+    await page.waitForSelector('.v2-timeline-step');
+    const lastStep = page.locator('.v2-timeline-step').last();
+    await expect(lastStep).toBeVisible();
+    const backBtn = page.locator('#trip-detail-back-btn');
+    await backBtn.click();
 
     // Assert main container has at least 160px reserved bottom padding
     const paddingBottom = await page.evaluate(() => {
@@ -157,9 +170,9 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
   test('(d) lunch card distance chip "139 m (straight-line)" stays on a single line at 390x844', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/?ui=v2&scene=away-lunch&test=1');
-    await page.waitForSelector('.v2-distance-chip');
+    await page.waitForSelector('.v2-candidate-compact-list .v2-distance-chip');
 
-    const chips = page.locator('.v2-distance-chip');
+    const chips = page.locator('.v2-candidate-compact-list .v2-distance-chip');
     const count = await chips.count();
     expect(count).toBeGreaterThan(0);
 
@@ -225,18 +238,20 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
   test('capture before/after visual evidence for (a)-(e)', async ({ page }) => {
     const suffix = process.env.UI_POLISH_CAPTURE_MODE === 'before' ? 'before' : 'after';
 
-    // (a) Map Callout on Home Rain
+    // (a) Map Callout on Home Rain (in TripDetail where callout lives)
     for (const vp of [
       { width: 390, height: 844, name: 'mobile' },
       { width: 1440, height: 900, name: 'desktop' },
     ]) {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto('/?ui=v2&scene=rain&test=1');
+      await page.click('#btn-view-trip-details');
       await page.waitForSelector('.v2-map-weather-callout');
       await page.screenshot({
         path: path.join(EVIDENCE_DIR, `a-map-callout-${vp.name}-${suffix}.png`),
         fullPage: false,
       });
+      await page.click('#trip-detail-back-btn');
     }
 
     // (b) Ask Bar Clearance on Desktop 1440x900
@@ -274,7 +289,7 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
     ]) {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto('/?ui=v2&scene=away-lunch&test=1');
-      await page.waitForSelector('.v2-distance-chip');
+      await page.waitForSelector('.v2-candidate-compact-list .v2-distance-chip');
       await page.screenshot({
         path: path.join(EVIDENCE_DIR, `d-lunch-distance-${vp.name}-${suffix}.png`),
         fullPage: false,

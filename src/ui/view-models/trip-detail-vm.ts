@@ -62,15 +62,22 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     evidenceBundle,
   } = options;
 
+  const isRain = Boolean(
+    plan?.checklist?.includes('umbrella') ||
+    snapshot?.signals?.some((s: any) => s.kind === 'weather' && (s.value as any)?.condition === 'rain')
+  );
+
   const bundle =
     evidenceBundle ??
-    createRainEvidenceBundle({
-      plan,
-      snapshot: snapshot ? { timezone: snapshot.timezone, signals: snapshot.signals as any } : undefined,
-      timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
-      isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
-      userConfirmedKeys,
-    });
+    (isRain
+      ? createRainEvidenceBundle({
+          plan,
+          snapshot: snapshot ? { timezone: snapshot.timezone, signals: snapshot.signals as any } : undefined,
+          timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
+          isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
+          userConfirmedKeys,
+        })
+      : undefined);
 
   const tz = plan.timezone ?? snapshot?.timezone;
   const apptTime = plan.apptAt ? formatTime(plan.apptAt, tz) : '';

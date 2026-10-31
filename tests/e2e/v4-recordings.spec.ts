@@ -153,8 +153,6 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await selectDemoScene(page, 'rain');
     await expect(page.locator('.v2-insight-title, .rain-banner').first()).toContainText('What changed: rain forecast');
     await expect(page.locator('#chip-umbrella').first()).toContainText('Umbrella');
-    await expect(page.locator('.v2-map-weather-callout')).toContainText('Rain forecast · simulated');
-    await expect(page.locator('.v2-map-weather-callout')).toContainText('Issued 1:35 PM');
     await recordStep(
       'Change (Weather Shift)',
       'Switch scenario picker to Rain Re-Plan (D2)',
@@ -163,8 +161,13 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     );
     await page.waitForTimeout(2500);
 
-    // 3. Route Options (Drive vs Bus)
-    const optionCards = page.locator('.v2-option-card');
+    // 3. Route Options (Drive vs Bus) in Trip Details (Finding 1)
+    await page.locator('#btn-view-trip-details').click();
+    await expect(page.locator('.v2-map-weather-callout')).toContainText('Rain forecast · simulated');
+    await expect(page.locator('.v2-map-weather-callout')).toContainText('Issued 1:35 PM');
+    await page.locator('#trip-detail-back-btn').click();
+
+    const optionCards = page.locator('.v2-trip-details-shelf .v2-option-card');
     await expect(optionCards).toHaveCount(2);
     const driveCard = optionCards.nth(0);
     await expect(driveCard.locator('.v2-option-label')).toHaveText('Drive · leave 2:30 PM');
@@ -177,7 +180,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(busCard.locator('.v2-option-meta')).toHaveText('40 min bus + 5m margin');
     await recordStep(
       'Route Options (Drive vs Bus)',
-      'Compare primary Drive recommendation against alternative Bus option',
+      'Compare primary Drive recommendation against alternative Bus option in Trip Details',
       'Drive (25m drive + 5m margin, leave 2:30 PM) vs Bus (40m bus + 5m margin, leave 2:15 PM)',
       'Basis: "Ranked by habit: Rain travel habit (Demo profile · sample)"'
     );

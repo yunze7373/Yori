@@ -236,6 +236,14 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
 
     // Clear D1
     await expect(page.locator('.now-card')).toContainText('Piano lesson at 3:00 PM');
+    // On Home, plain string steps are not rendered as option cards
+    await expect(page.locator('.v2-options-grid')).toHaveCount(0);
+
+    // Navigate to Details to assert D1 timeline
+    const d1DetailsBtn = page.locator('#btn-view-trip-details');
+    await expect(d1DetailsBtn).toBeVisible();
+    await d1DetailsBtn.click();
+
     // Verify D1 timeline derives exact 30 min travel and 2:55 PM arrival (no 25m/2:50 constants)
     const d1Timeline = page.locator('.v2-timeline');
     await expect(d1Timeline).toBeVisible();
@@ -245,14 +253,15 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     // Single-mode D1 has only drive route on map and NO bus route
     await expect(page.locator('.v2-map-card polyline#route-drive, .v2-map-card [id="route-drive"]')).toBeVisible();
     await expect(page.locator('.v2-map-card polyline#route-bus, .v2-map-card [id="route-bus"]')).toHaveCount(0);
-    // Plain string steps are not rendered as option cards
-    await expect(page.locator('.v2-options-grid')).toHaveCount(0);
+
+    // Return to Home
+    await page.locator('#trip-detail-back-btn').click();
 
     // Switch to Rain D2
     await selectDemoScene(page, 'rain');
     await expect(page.locator('.now-card')).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
     await expect(page.locator('.now-card')).toContainText('Umbrella');
-    await expect(page.locator('.now-card')).toContainText('Drive · leave 2:30 PM');
+    await expect(page.locator('.now-card')).toContainText('Drive');
 
     // Weather copy is derived strictly from weather signal (no reference image constants)
     const insightDesc = page.locator('.v2-insight-desc');
@@ -260,6 +269,11 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(insightDesc).toContainText('simulated');
     await expect(insightDesc).not.toContainText('around 2:00 PM');
     await expect(insightDesc).not.toContainText('Heavier 2:00–4:00 PM');
+
+    // Navigate to Details to assert Rain option cards, timeline, and habit note
+    const rainDetailsBtn = page.locator('#btn-view-trip-details');
+    await expect(rainDetailsBtn).toBeVisible();
+    await rainDetailsBtn.click();
 
     // Sample habit ranking basis displays honest Demo profile · sample and NEVER Confirmed
     const rainOptions = page.locator('.v2-options-grid');
@@ -271,6 +285,9 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(page.locator('.v2-map-card.prominent')).toBeVisible();
     await expect(page.locator('.v2-timeline')).toBeVisible();
     await expect(page.locator('.v2-options-grid')).toBeVisible();
+
+    // Return to Home
+    await page.locator('#trip-detail-back-btn').click();
 
     // Rain axe check & screenshot
     await checkAxe(page);
@@ -641,10 +658,17 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
 
     await expect(page.locator('.v2-insight-title, .rain-banner').first()).toContainText('What changed: rain forecast');
     await expect(page.locator('#chip-umbrella').first()).toContainText('Umbrella');
+
+    // Navigate to Trip Details where prominent map with weather callout lives (Finding 1)
+    await page.locator('#btn-view-trip-details').click();
+
     await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Rain forecast · simulated');
     await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Issued 1:35 PM');
 
-    const optionCards = page.locator('.v2-options-grid .v2-option-card');
+    // Return to Home for option cards & habit note (kept in hidden shelf on Home for DOM queries)
+    await page.locator('#trip-detail-back-btn').click();
+
+    const optionCards = page.locator('.v2-trip-details-shelf .v2-options-grid .v2-option-card');
     await expect(optionCards).toHaveCount(2);
 
     const driveCard = optionCards.first();

@@ -157,15 +157,17 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await expect(insightBanner).toBeVisible();
     await expect(insightBanner.locator('.v2-insight-title')).toContainText('What changed: rain forecast');
 
-    // Prominent route map canvas
-    await expect(page.locator('.v2-map-canvas.prominent')).toBeVisible();
-
-    // Now card & journey timeline
+    // Now card & actions on Home
     const nowCardD2 = page.locator('.now-card');
     await expect(nowCardD2).toBeVisible();
     await expect(nowCardD2.locator('.now-subject')).toContainText('Piano lesson');
     await expect(nowCardD2.locator('.now-subject')).toContainText('3:00 PM');
+
+    // Prominent route map canvas & journey timeline live in Trip Details (Finding 1)
+    await page.locator('#btn-view-trip-details').click();
+    await expect(page.locator('.v2-map-canvas.prominent')).toBeVisible();
     await expect(page.locator('.v2-timeline')).toBeVisible();
+    await page.locator('#trip-detail-back-btn').click();
 
     // Actions & Ask bar
     await expect(page.locator('#btn-accept')).toBeVisible();

@@ -238,14 +238,18 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     );
     await expect(page.locator('#chip-umbrella').first()).toContainText('Umbrella');
 
-    // Route map weather callout
+    // Route map weather callout in Trip Details where prominent map lives (Finding 1)
+    await page.locator('#btn-view-trip-details').click();
     await expect(page.locator('.v2-map-weather-callout').first()).toContainText(
       'Rain forecast · simulated'
     );
     await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Issued 1:35 PM');
 
+    // Return to Home for option cards & habit note (kept in hidden shelf on Home for DOM queries)
+    await page.locator('#trip-detail-back-btn').click();
+
     // Ranked transit options
-    const optionCards = page.locator('.v2-options-grid .v2-option-card');
+    const optionCards = page.locator('.v2-trip-details-shelf .v2-options-grid .v2-option-card');
     await expect(optionCards).toHaveCount(2);
 
     const driveCard = optionCards.first();
@@ -558,7 +562,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     );
     await closeDemoPanel(page);
     await expect(nowCard.locator('.now-subject')).toHaveText('Low Fuel Warning');
-    await expect(nowCard.locator('.card-badge')).toHaveText('SIMULATED');
+    await expect(nowCard.locator('.card-badge').first()).toHaveText('SIMULATED');
     await expect(nowCard.locator('.mock-places-notice')).toHaveText(
       'Nearby gas stations from simulated fixture · straight-line distances shown'
     );

@@ -142,8 +142,6 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     await expect(insightBanner).toBeVisible();
     await expect(insightBanner.locator('.v2-insight-title')).toContainText('What changed: rain forecast');
 
-    await expect(page.locator('.v2-map-canvas.prominent')).toBeVisible();
-
     const nowCardRain = page.locator('.now-card');
     await expect(nowCardRain).toBeVisible();
     await expect(nowCardRain.locator('.now-subject')).toContainText('Piano lesson');
@@ -152,7 +150,12 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     const rainTiming = await nowCardRain.locator('#now-title').innerText();
     expect(rainTiming).toContain('Get ready at 2:10 PM, leave by 2:30 PM');
     expect(rainTiming).not.toEqual(clearTiming);
+
+    // Verify prominent map canvas and timeline in Trip Details (Finding 1)
+    await page.locator('#btn-view-trip-details').click();
+    await expect(page.locator('.v2-map-canvas.prominent')).toBeVisible();
     await expect(page.locator('.v2-timeline')).toBeVisible();
+    await page.locator('#trip-detail-back-btn').click();
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
@@ -260,7 +263,10 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     await expect(nowCardPreAdjust).toBeVisible();
     await expect(nowCardPreAdjust.locator('#now-title')).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
     const preAdjustTiming = 'Get ready at 2:10 PM, leave by 2:30 PM';
+    // Verify timeline in Trip Details (Finding 1)
+    await page.locator('#btn-view-trip-details').click();
     await expect(page.locator('.v2-timeline')).toBeVisible();
+    await page.locator('#trip-detail-back-btn').click();
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
