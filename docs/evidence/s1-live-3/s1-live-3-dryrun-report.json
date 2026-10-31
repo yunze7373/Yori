@@ -1,0 +1,143 @@
+{
+  "timestamp": "2026-10-31T01:53:55.290Z",
+  "providerHost": "api.meta.ai",
+  "modelName": "muse-spark-1.3",
+  "authorizedCap": 6,
+  "preRunLedgerCount": 0,
+  "lifetimeRemaining": 44,
+  "lifetimeCap": 50,
+  "totalCallsDispatched": 6,
+  "ledgerCallCount": 6,
+  "ledgerDelta": 6,
+  "ledgerReconciled": true,
+  "ledgerPath": ".yori-runtime/dryrun-command-ledger-36472-1793411635278.json",
+  "executionStatus": "completed",
+  "hostList": [
+    "api.meta.ai"
+  ],
+  "calls": [
+    {
+      "index": 1,
+      "endpoint": "command",
+      "description": "Command valid shift (\"Can I leave later?\")",
+      "httpStatus": 200,
+      "latencyMs": 15,
+      "promptTokens": 180,
+      "completionTokens": 65,
+      "totalTokens": 245,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted",
+      "audit": {
+        "closedIntent": true,
+        "validReasonCodes": true,
+        "factKeyParity": true,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 2,
+      "endpoint": "command",
+      "description": "Command valid earlier shift (\"Leave 15 minutes earlier\")",
+      "httpStatus": 200,
+      "latencyMs": 15,
+      "promptTokens": 175,
+      "completionTokens": 60,
+      "totalTokens": 235,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted",
+      "audit": {
+        "closedIntent": true,
+        "validReasonCodes": true,
+        "factKeyParity": true,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 3,
+      "endpoint": "command",
+      "description": "Command suppression (\"I already ate lunch today, don't suggest lunch\")",
+      "httpStatus": 200,
+      "latencyMs": 15,
+      "promptTokens": 150,
+      "completionTokens": 40,
+      "totalTokens": 190,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted",
+      "audit": {
+        "closedIntent": true,
+        "validReasonCodes": true,
+        "factKeyParity": true,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 4,
+      "endpoint": "command",
+      "description": "Command route mode switch (\"Take the bus instead\")",
+      "httpStatus": 200,
+      "latencyMs": 15,
+      "promptTokens": 190,
+      "completionTokens": 70,
+      "totalTokens": 260,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted",
+      "audit": {
+        "closedIntent": true,
+        "validReasonCodes": true,
+        "factKeyParity": true,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 5,
+      "endpoint": "command",
+      "description": "Command out-of-scope refusal (\"Book a flight to Hawaii for next weekend\")",
+      "httpStatus": 200,
+      "latencyMs": 15,
+      "promptTokens": 160,
+      "completionTokens": 45,
+      "totalTokens": 205,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted",
+      "audit": {
+        "closedIntent": true,
+        "validReasonCodes": true,
+        "factKeyParity": true,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 6,
+      "endpoint": "command",
+      "description": "Command citation discipline probe (\"Can I leave later?\" with unconfirmed fact)",
+      "httpStatus": 200,
+      "latencyMs": 15,
+      "promptTokens": 185,
+      "completionTokens": 55,
+      "totalTokens": 240,
+      "finishReason": "stop",
+      "usedFallback": true,
+      "fallbackReason": "invented_fact_key",
+      "factCheckOutcome": "discarded",
+      "audit": {
+        "closedIntent": false,
+        "validReasonCodes": true,
+        "factKeyParity": false,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    }
+  ],
+  "keyOccurrenceCount": 0,
+  "d1ToD6ParityPass": true
+}

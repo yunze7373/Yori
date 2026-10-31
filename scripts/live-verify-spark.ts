@@ -79,6 +79,12 @@ import {
   MODEL_PER_RUN_MAX_CALLS,
 } from '../src/adapters/model/server-proxy.js';
 import type { RejectedReasonCodeTelemetry } from '../src/adapters/model/types.js';
+import {
+  evaluateCommandAcceptance,
+  COMMAND_PER_RUN_MAX_CALLS,
+  type CommandEvaluationContext,
+  type CommandAcceptanceAudit,
+} from '../src/adapters/model/command-acceptance-evaluator.js';
 import { runPipeline } from '../src/core/pipeline/index.js';
 import {
   createScenarioPlayer,
@@ -223,7 +229,575 @@ function computeSha256(data: unknown): string {
   return crypto.createHash('sha256').update(json).digest('hex');
 }
 
-async function runDryRunAudit(): Promise<boolean> {
+async function runCommandDryRunAudit(): Promise<boolean> {
+  console.log('======================================================================');
+  console.log('🚀 YORI LIVING CONTEXT — S1-LIVE-3 COMMAND DRY RUN (DECISION_COMMAND)');
+  console.log('======================================================================\n');
+
+  // 1. Verify preconditions from REVIEW_OUTBOX
+  const decisions = loadReviewDecisions();
+  const preconditionsOk = verifyPreconditions(decisions);
+  if (!preconditionsOk) {
+    console.error('❌ Dry run aborted: One or more required preconditions failed verification.');
+    return false;
+  }
+
+  // 2. Set up isolated temp ledger (never touches real ledger)
+  resetProcessLiveCallCount();
+  const dryRunLedgerPath = path.resolve(
+    projectRoot,
+    '.yori-runtime',
+    `dryrun-command-ledger-${process.pid}-${Date.now()}.json`
+  );
+  const prevLedgerEnv = process.env.MODEL_LIVE_LEDGER_PATH;
+  process.env.MODEL_LIVE_LEDGER_PATH = dryRunLedgerPath;
+  resetLedger(dryRunLedgerPath);
+  const preRunLedger = readLedgerState(dryRunLedgerPath);
+
+  process.env.MODEL_API_KEY = 'sk-mock-spark-dryrun-sentinel-key';
+  process.env.MODEL_LIVE_ENABLED = '1';
+  const rawMax = parseInt(process.env.MODEL_LIVE_MAX_CALLS ?? '6', 10) || 6;
+  const effectiveCap = Math.min(rawMax, COMMAND_PER_RUN_MAX_CALLS);
+  process.env.MODEL_LIVE_MAX_CALLS = String(effectiveCap);
+
+  const realLedgerBaselinePath = getDefaultLedgerPath(projectRoot);
+  const realLedgerBaselineSha = fs.existsSync(realLedgerBaselinePath)
+    ? computeSha256(fs.readFileSync(realLedgerBaselinePath, 'utf-8'))
+    : undefined;
+
+  const originalFetch = globalThis.fetch;
+  const recordedCallBodies: unknown[] = [];
+  const results: FactCheckCallResult[] = [];
+  const verificationRecords: LiveVerificationCallRecord[] = [];
+
+  const mockResponses = [
+    // 1. Valid shift command ("Can I leave later?") -> ACCEPTED
+    {
+      ok: true,
+      status: 200,
+      body: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                intent: 'LEAVE_LATER',
+                slots: { deltaMinutes: 20 },
+                citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+                citedFactKeys: ['habit_rain_transit'],
+                reasonCodes: ['weather_adjusted'],
+                explanation: 'Piano Studio depart at 2:45 PM',
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 180, completion_tokens: 65, total_tokens: 245 },
+      },
+    },
+    // 2. Valid earlier shift command ("Leave 15 minutes earlier") -> ACCEPTED
+    {
+      ok: true,
+      status: 200,
+      body: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                intent: 'LEAVE_LATER',
+                slots: { deltaMinutes: 15 },
+                citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+                citedFactKeys: ['habit_rain_transit'],
+                reasonCodes: ['weather_adjusted'],
+                explanation: 'Piano Studio depart at 2:15 PM',
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 175, completion_tokens: 60, total_tokens: 235 },
+      },
+    },
+    // 3. Suppression command ("I already ate lunch today, don't suggest lunch") -> ACCEPTED refusal
+    {
+      ok: true,
+      status: 200,
+      body: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                intent: 'UNSUPPORTED',
+                slots: {},
+                citedSignalIds: [],
+                citedFactKeys: [],
+                reasonCodes: [],
+                explanation: 'Lunch is suppressed for today per user request.',
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 150, completion_tokens: 40, total_tokens: 190 },
+      },
+    },
+    // 4. Mode switch command ("Take the bus instead") -> ACCEPTED
+    {
+      ok: true,
+      status: 200,
+      body: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                intent: 'CHANGE_ROUTE',
+                slots: { mode: 'bus' },
+                citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+                citedFactKeys: ['habit_rain_transit'],
+                reasonCodes: ['weather_adjusted'],
+                situationAttribution: {
+                  signalId: 'weather:2026-10-28T20:35:00.000Z',
+                  reasonCode: 'weather_adjusted',
+                  explanation: 'Transit option selected under rain forecast.',
+                },
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 190, completion_tokens: 70, total_tokens: 260 },
+      },
+    },
+    // 5. Out-of-scope / adversarial command ("Book a flight to Hawaii for next weekend") -> Refusal ACCEPTED
+    {
+      ok: true,
+      status: 200,
+      body: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                intent: 'UNSUPPORTED',
+                slots: {},
+                citedSignalIds: [],
+                citedFactKeys: [],
+                reasonCodes: [],
+                explanation: 'Flight booking is outside Yori living context capabilities.',
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 160, completion_tokens: 45, total_tokens: 205 },
+      },
+    },
+    // 6. Invalid citation probe ("Can I leave later?" with hallucinated key) -> DISCARDED
+    {
+      ok: true,
+      status: 200,
+      body: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                intent: 'LEAVE_LATER',
+                slots: { deltaMinutes: 10 },
+                citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+                citedFactKeys: ['unconfirmed_secret_fact_xyz'],
+                reasonCodes: ['matches_confirmed_preference'],
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 185, completion_tokens: 55, total_tokens: 240 },
+      },
+    },
+  ];
+
+  let mockCallIndex = 0;
+  let lastFetchMeta: {
+    status: number;
+    latencyMs: number;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    finishReason?: string;
+  } | null = null;
+
+  globalThis.fetch = async (_input: unknown, init?: RequestInit): Promise<Response> => {
+    if (init?.body && typeof init.body === 'string') {
+      try {
+        recordedCallBodies.push(JSON.parse(init.body));
+      } catch {
+        recordedCallBodies.push(init.body);
+      }
+    }
+    const mock = mockResponses[mockCallIndex++];
+    if (!mock) {
+      throw new Error(`Unexpected live fetch call beyond mock pool index: ${mockCallIndex}`);
+    }
+    lastFetchMeta = {
+      status: mock.status,
+      latencyMs: 15,
+      promptTokens: mock.body.usage?.prompt_tokens,
+      completionTokens: mock.body.usage?.completion_tokens,
+      totalTokens: mock.body.usage?.total_tokens,
+      finishReason: mock.body.choices?.[0]?.finish_reason,
+    };
+    return {
+      ok: mock.ok,
+      status: mock.status,
+      json: async () => mock.body,
+      text: async () => JSON.stringify(mock.body),
+      clone: () => ({
+        json: async () => mock.body,
+        text: async () => JSON.stringify(mock.body),
+      }),
+    } as unknown as Response;
+  };
+
+  const commandPrompts = [
+    // Call 1
+    {
+      description: 'Command valid shift ("Can I leave later?")',
+      facts: {
+        utterance: 'Can I leave later?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+        confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
+        validTimes: ['2:45 PM', '2:50 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      evalContext: {
+        utterance: 'Can I leave later?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+        confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
+        validTimes: ['2:45 PM', '2:50 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      expectedOutcome: 'accepted' as const,
+    },
+    // Call 2
+    {
+      description: 'Command valid earlier shift ("Leave 15 minutes earlier")',
+      facts: {
+        utterance: 'Leave 15 minutes earlier',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:15 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      evalContext: {
+        utterance: 'Leave 15 minutes earlier',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:15 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      expectedOutcome: 'accepted' as const,
+    },
+    // Call 3
+    {
+      description: 'Command suppression ("I already ate lunch today, don\'t suggest lunch")',
+      facts: {
+        utterance: "I already ate lunch today, don't suggest lunch",
+        availableModes: ['walk'],
+        knownFactKeys: ['taste_lunch_japanese'],
+        confirmedFactKeys: ['taste_lunch_japanese'],
+        availableSignalIds: ['calendar:2026-10-28T09:00:00.000Z'],
+        validTimes: ['12:15 PM'],
+        validPlaces: ['Green Bowl'],
+        currentPlanIntent: 'lunch',
+      },
+      evalContext: {
+        utterance: "I already ate lunch today, don't suggest lunch",
+        availableModes: ['walk'],
+        knownFactKeys: ['taste_lunch_japanese'],
+        confirmedFactKeys: ['taste_lunch_japanese'],
+        availableSignalIds: ['calendar:2026-10-28T09:00:00.000Z'],
+        validTimes: ['12:15 PM'],
+        validPlaces: ['Green Bowl'],
+        currentPlanIntent: 'lunch',
+        activeSuppressions: [
+          {
+            code: 'user_suppressed',
+            targetIntent: 'lunch',
+            scope: 'today',
+            reason: 'User suppressed lunch for today',
+          },
+        ],
+        isDismissalOrSuppression: true,
+      },
+      expectedOutcome: 'accepted' as const,
+    },
+    // Call 4
+    {
+      description: 'Command route mode switch ("Take the bus instead")',
+      facts: {
+        utterance: 'Take the bus instead',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:30 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      evalContext: {
+        utterance: 'Take the bus instead',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:30 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      expectedOutcome: 'accepted' as const,
+    },
+    // Call 5
+    {
+      description: 'Command out-of-scope refusal ("Book a flight to Hawaii for next weekend")',
+      facts: {
+        utterance: 'Book a flight to Hawaii for next weekend',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:30 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      evalContext: {
+        utterance: 'Book a flight to Hawaii for next weekend',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:30 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      expectedOutcome: 'accepted' as const,
+    },
+    // Call 6
+    {
+      description: 'Command citation discipline probe ("Can I leave later?" with unconfirmed fact)',
+      facts: {
+        utterance: 'Can I leave later?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:45 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      evalContext: {
+        utterance: 'Can I leave later?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:45 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      expectedOutcome: 'discarded' as const,
+    },
+  ];
+
+  try {
+    const proxy = new ModelDevProxy();
+    const plannedCount = Math.min(commandPrompts.length, effectiveCap);
+
+    for (let i = 0; i < plannedCount; i++) {
+      const def = commandPrompts[i]!;
+      const callRes = await proxy.handleCommand(def.facts);
+      const meta = lastFetchMeta as {
+        status: number;
+        latencyMs: number;
+        promptTokens?: number;
+        completionTokens?: number;
+        totalTokens?: number;
+        finishReason?: string;
+      } | null;
+
+      const evalOutcome = evaluateCommandAcceptance({
+        result: callRes.result,
+        usedFallback: callRes.usedFallback,
+        fallbackReason: callRes.fallbackReason,
+        finishReason: meta?.finishReason,
+        rejectedReasonCodes: callRes.rejectedReasonCodes,
+        context: def.evalContext,
+      });
+
+      const actualOutcome = evalOutcome.accepted ? 'accepted' : 'discarded';
+      const reasonCode = evalOutcome.failureReason ?? callRes.fallbackReason;
+
+      results.push({
+        index: i + 1,
+        endpoint: 'command',
+        description: def.description,
+        expectedOutcome: def.expectedOutcome,
+        actualOutcome,
+        reasonCode,
+        fallbackPreserved: callRes.result !== null || callRes.usedFallback,
+      });
+
+      verificationRecords.push({
+        index: i + 1,
+        endpoint: 'command',
+        description: def.description,
+        httpStatus: meta?.status ?? 200,
+        latencyMs: meta?.latencyMs ?? 15,
+        promptTokens: meta?.promptTokens,
+        completionTokens: meta?.completionTokens,
+        totalTokens: meta?.totalTokens,
+        finishReason: meta?.finishReason,
+        usedFallback: callRes.usedFallback,
+        fallbackReason: reasonCode,
+        factCheckOutcome: actualOutcome,
+        rejectedReasonCodes: callRes.rejectedReasonCodes,
+        audit: evalOutcome.audit,
+      });
+    }
+
+    // Ledger reconciliation check
+    const postRunLedger = readLedgerState(dryRunLedgerPath);
+    const postCount = postRunLedger.status === 'ok' ? postRunLedger.callCount : 0;
+    const ledgerDelta = postCount - (preRunLedger.status === 'ok' ? preRunLedger.callCount : 0);
+    const ledgerReconciled = plannedCount === ledgerDelta;
+
+    // Verify real ledger was not touched
+    const realLedgerPostSha = fs.existsSync(realLedgerBaselinePath)
+      ? computeSha256(fs.readFileSync(realLedgerBaselinePath, 'utf-8'))
+      : undefined;
+    const realLedgerUntouched = realLedgerBaselineSha === realLedgerPostSha;
+
+    console.log('----------------------------------------------------------------------');
+    console.log('📊 COMMAND EVALUATION PASS-RATE & AUDIT REPORT');
+    console.log('----------------------------------------------------------------------');
+    for (const r of results) {
+      const matchStatus = r.actualOutcome === r.expectedOutcome ? '✅' : '❌';
+      const detail = r.reasonCode ? ` (reason: ${r.reasonCode})` : '';
+      console.log(
+        `  Call #${r.index.toString().padStart(2, ' ')} [COMMAND]: ${r.actualOutcome.toUpperCase()}${detail} — ${r.description} ${matchStatus}`
+      );
+    }
+
+    const acceptedCount = results.filter((r) => r.actualOutcome === 'accepted').length;
+    const discardedCount = results.filter((r) => r.actualOutcome === 'discarded').length;
+    const passRate = ((acceptedCount / results.length) * 100).toFixed(1);
+
+    console.log('\n--- Pass-Rate Statistics ---');
+    console.log(`Planned Calls Executed: ${results.length} / ${effectiveCap}`);
+    console.log(`Accepted Calls:         ${acceptedCount} (${passRate}%)`);
+    console.log(`Discarded (Fallback):   ${discardedCount} (${(100 - Number(passRate)).toFixed(1)}%)`);
+
+    console.log('\n--- Ledger Isolation & Reservation Math ---');
+    console.log(`Temp Ledger Dispatches: ${plannedCount}`);
+    console.log(`Temp Ledger Delta:      ${ledgerDelta}`);
+    console.log(`Ledger Reconciled:      ${ledgerReconciled ? 'MATCH ✅' : 'MISMATCH ❌'}`);
+    console.log(`Real Ledger Untouched:  ${realLedgerUntouched ? 'YES (SHA256 identical) ✅' : 'MODIFIED ❌'}`);
+
+    // D1-D6 byte-identity check
+    const d1ToD6ParityPass = verifyD1ToD6Parity();
+
+    // Prepare report
+    const testResultsDir = path.resolve(projectRoot, 'test-results/s1-live-3');
+    if (!fs.existsSync(testResultsDir)) {
+      fs.mkdirSync(testResultsDir, { recursive: true });
+    }
+    const reportMdPath = path.resolve(testResultsDir, 'S1_LIVE_3_DRYRUN_REPORT.md');
+    const reportJsonPath = path.resolve(testResultsDir, 's1-live-3-dryrun-report.json');
+
+    const dryRunReport: LiveVerificationReport = {
+      timestamp: new Date().toISOString(),
+      providerHost: 'api.meta.ai',
+      modelName: 'muse-spark-1.3',
+      authorizedCap: effectiveCap,
+      preRunLedgerCount: 0,
+      lifetimeRemaining: MODEL_LIFETIME_MAX_CALLS - postCount,
+      lifetimeCap: MODEL_LIFETIME_MAX_CALLS,
+      totalCallsDispatched: plannedCount,
+      ledgerCallCount: postCount,
+      ledgerDelta,
+      ledgerReconciled,
+      ledgerPath: path.relative(projectRoot, dryRunLedgerPath),
+      executionStatus: 'completed',
+      hostList: ['api.meta.ai'],
+      calls: verificationRecords,
+      keyOccurrenceCount: 0,
+      d1ToD6ParityPass,
+    };
+
+    const mdContent = generateMarkdownReport(dryRunReport);
+    fs.writeFileSync(reportMdPath, mdContent, 'utf-8');
+    fs.writeFileSync(reportJsonPath, JSON.stringify(dryRunReport, null, 2), 'utf-8');
+
+    // If UPDATE_EVIDENCE=1, write copy to docs/evidence/s1-live-3/
+    if (process.env.UPDATE_EVIDENCE === '1') {
+      const evidenceDir = path.resolve(projectRoot, 'docs/evidence/s1-live-3');
+      if (!fs.existsSync(evidenceDir)) {
+        fs.mkdirSync(evidenceDir, { recursive: true });
+      }
+      fs.writeFileSync(path.resolve(evidenceDir, 'S1_LIVE_3_DRYRUN_REPORT.md'), mdContent, 'utf-8');
+      fs.writeFileSync(
+        path.resolve(evidenceDir, 's1-live-3-dryrun-report.json'),
+        JSON.stringify(dryRunReport, null, 2),
+        'utf-8'
+      );
+      console.log(`Evidence Updated:        ${path.relative(projectRoot, evidenceDir)}`);
+    }
+
+    // Security & key hygiene
+    let keyCount = 0;
+    const sentinelKey = 'sk-mock-spark-dryrun-sentinel-key';
+    keyCount += countKeyOccurrences(sentinelKey, [reportMdPath, reportJsonPath]);
+    keyCount += countKeyOccurrences('Authorization', [reportMdPath, reportJsonPath]);
+
+    console.log('\n----------------------------------------------------------------------');
+    console.log('🛡️ SECURITY & KEY HYGIENE AUDIT');
+    console.log('----------------------------------------------------------------------');
+    console.log(`Sentinel / Auth Leaks:   ${keyCount} (must be 0) ${keyCount === 0 ? '✅ CLEAN' : '❌ LEAK DETECTED'}`);
+    console.log(`Report Written:          ${path.relative(projectRoot, reportMdPath)}`);
+    console.log(`JSON Written:            ${path.relative(projectRoot, reportJsonPath)}`);
+
+    if (keyCount > 0) {
+      throw new Error(`[SECURITY ALERT] Sentinel key or Authorization header leaked! Occurrences: ${keyCount}`);
+    }
+
+    const allMatches = results.every((r) => r.actualOutcome === r.expectedOutcome);
+    return allMatches && ledgerReconciled && realLedgerUntouched && d1ToD6ParityPass;
+  } finally {
+    globalThis.fetch = originalFetch;
+    delete process.env.MODEL_API_KEY;
+    delete process.env.MODEL_LIVE_ENABLED;
+    delete process.env.MODEL_LIVE_MAX_CALLS;
+    resetProcessLiveCallCount();
+    try {
+      resetLedger(dryRunLedgerPath);
+      if (fs.existsSync(dryRunLedgerPath)) {
+        fs.unlinkSync(dryRunLedgerPath);
+      }
+    } catch {}
+    if (prevLedgerEnv !== undefined) {
+      process.env.MODEL_LIVE_LEDGER_PATH = prevLedgerEnv;
+    } else {
+      delete process.env.MODEL_LIVE_LEDGER_PATH;
+    }
+  }
+}
+
+export async function runDryRunAudit(options?: { only?: 'command' | 'refine' | 'reason' | 'all' }): Promise<boolean> {
+  const isCommandOnly =
+    options?.only === 'command' ||
+    (process.argv.includes('--only') && process.argv[process.argv.indexOf('--only') + 1] === 'command');
+  if (isCommandOnly) {
+    return runCommandDryRunAudit();
+  }
   console.log('======================================================================');
   console.log('🚀 YORI LIVING CONTEXT — LIVE VERIFICATION DRY RUN (SPARK / META)');
   console.log('======================================================================\n');
@@ -871,6 +1445,7 @@ export interface LiveVerificationCallRecord {
   readonly factCheckOutcome: 'accepted' | 'discarded';
   readonly rejectedReasonCodes?: readonly RejectedReasonCodeTelemetry[];
   readonly error?: string;
+  readonly audit?: CommandAcceptanceAudit;
 }
 
 export interface LiveVerificationReport {
@@ -972,6 +1547,7 @@ export interface LiveVerificationOptions {
   tempLedgerPath?: string;
   mockFetch?: typeof fetch;
   skipPreconditions?: boolean;
+  only?: 'command' | 'refine' | 'reason' | 'all';
 }
 
 export async function runLiveVerification(options?: LiveVerificationOptions): Promise<{ ok: boolean; report: LiveVerificationReport }> {
@@ -994,9 +1570,14 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     throw new Error('REFUSING EXECUTION: MODEL_LIVE_ENABLED !== "1"');
   }
 
+  const isCommandOnly =
+    options?.only === 'command' ||
+    (process.argv.includes('--only') && process.argv[process.argv.indexOf('--only') + 1] === 'command');
+
+  const perRunCapLimit = isCommandOnly ? COMMAND_PER_RUN_MAX_CALLS : MODEL_PER_RUN_MAX_CALLS;
   const rawMax = parseInt(process.env.MODEL_LIVE_MAX_CALLS ?? '', 10);
-  if (Number.isNaN(rawMax) || rawMax > MODEL_PER_RUN_MAX_CALLS || rawMax < 1) {
-    throw new Error(`REFUSING EXECUTION: MODEL_LIVE_MAX_CALLS must be between 1 and ${MODEL_PER_RUN_MAX_CALLS} (got ${process.env.MODEL_LIVE_MAX_CALLS})`);
+  if (Number.isNaN(rawMax) || rawMax > perRunCapLimit || rawMax < 1) {
+    throw new Error(`REFUSING EXECUTION: MODEL_LIVE_MAX_CALLS must be between 1 and ${perRunCapLimit} (got ${process.env.MODEL_LIVE_MAX_CALLS})`);
   }
 
   const isConfirmedBilled = options?.confirmBilled ?? process.argv.includes('--confirm-billed');
@@ -1149,9 +1730,9 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   const maxTokensConfig = maxTokensOverride ?? 300;
   const maxTokensDisplay = isDefaultTokens ? 'endpoint defaults (150/250/300; max 300)' : `${maxTokensConfig}`;
 
-  // Runtime spend bounds: best-case (3 accepted calls) vs worst-case (effectiveCap dispatches @ maxTokensConfig)
-  const effectiveCap = Math.min(MODEL_PER_RUN_MAX_CALLS, rawMax);
-  const bestCaseTokens = isDefaultTokens ? (150 + 250 + 300) : (3 * maxTokensConfig);
+  // Runtime spend bounds: best-case vs worst-case (effectiveCap dispatches @ maxTokensConfig)
+  const effectiveCap = Math.min(perRunCapLimit, rawMax);
+  const bestCaseTokens = isDefaultTokens ? (isCommandOnly ? 300 : (150 + 250 + 300)) : (isCommandOnly ? maxTokensConfig : 3 * maxTokensConfig);
   const bestCaseSpend = (bestCaseTokens * 0.000002).toFixed(4);
   const worstCaseTokens = effectiveCap * maxTokensConfig;
   const worstCaseSpend = (worstCaseTokens * 0.000002).toFixed(4);
@@ -1159,19 +1740,183 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   console.log('----------------------------------------------------------------------');
   console.log('📋 PRE-DISPATCH BUDGET & SAFETY SUMMARY');
   console.log('----------------------------------------------------------------------');
-  console.log(`Planned Calls:          ${effectiveCap} (up to 3 accepted, 1 per objective)`);
-  console.log(`Per-Run Call Cap:       ${rawMax} (valid 1..${MODEL_PER_RUN_MAX_CALLS})`);
+  console.log(`Planned Calls:          ${effectiveCap} (${isCommandOnly ? 'command-only verification' : 'up to 3 accepted, 1 per objective'})`);
+  console.log(`Per-Run Call Cap:       ${rawMax} (valid 1..${perRunCapLimit})`);
   console.log(`Lifetime Cap:           ${MODEL_LIFETIME_MAX_CALLS}`);
   console.log(`Lifetime Calls Used:    ${lifetimeUsed}`);
   console.log(`Lifetime Remaining:     ${lifetimeRemaining}`);
   console.log(`Per-Call max_tokens:    ${maxTokensDisplay}`);
-  console.log(`Spend Range Estimate:   $${bestCaseSpend} - $${worstCaseSpend} (assumes ~$2.00/1M tokens [$0.000002/tok] [UNVERIFIED], best-case 3 accepts to worst-case ${effectiveCap} dispatches @ up to ${maxTokensConfig} tok/call)`);
+  console.log(`Spend Range Estimate:   $${bestCaseSpend} - $${worstCaseSpend} (assumes ~$2.00/1M tokens [$0.000002/tok] [UNVERIFIED], best-case ${isCommandOnly ? '1 accept' : '3 accepts'} to worst-case ${effectiveCap} dispatches @ up to ${maxTokensConfig} tok/call)`);
   console.log('----------------------------------------------------------------------\n');
 
   // 4. Planned Call Definitions
-  const plannedCalls: Array<{
+  const commandCalls: Array<{
     endpoint: 'refine' | 'reason' | 'command';
     description: string;
+    evalContext?: CommandEvaluationContext;
+    execute: () => Promise<{ usedFallback: boolean; fallbackReason?: string; wording?: string; result?: any }>;
+  }> = [
+    // 1. Valid shift command
+    {
+      endpoint: 'command',
+      description: 'Command valid shift ("Can I leave later?")',
+      evalContext: {
+        utterance: 'Can I leave later?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+        confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
+        validTimes: ['2:45 PM', '2:50 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      execute: () =>
+        proxy.handleCommand({
+          utterance: 'Can I leave later?',
+          availableModes: ['drive', 'bus'],
+          knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+          confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
+          validTimes: ['2:45 PM', '2:50 PM'],
+          validPlaces: ['Piano Studio'],
+        }),
+    },
+    // 2. Valid earlier shift command
+    {
+      endpoint: 'command',
+      description: 'Command valid earlier shift ("Leave 15 minutes earlier")',
+      evalContext: {
+        utterance: 'Leave 15 minutes earlier',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:15 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      execute: () =>
+        proxy.handleCommand({
+          utterance: 'Leave 15 minutes earlier',
+          availableModes: ['drive', 'bus'],
+          knownFactKeys: ['habit_rain_transit'],
+          confirmedFactKeys: ['habit_rain_transit'],
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          validTimes: ['2:15 PM'],
+          validPlaces: ['Piano Studio'],
+        }),
+    },
+    // 3. Suppression command
+    {
+      endpoint: 'command',
+      description: 'Command suppression ("I already ate lunch today, don\'t suggest lunch")',
+      evalContext: {
+        utterance: "I already ate lunch today, don't suggest lunch",
+        availableModes: ['walk'],
+        knownFactKeys: ['taste_lunch_japanese'],
+        confirmedFactKeys: ['taste_lunch_japanese'],
+        availableSignalIds: ['calendar:2026-10-28T09:00:00.000Z'],
+        validTimes: ['12:15 PM'],
+        validPlaces: ['Green Bowl'],
+        currentPlanIntent: 'lunch',
+        activeSuppressions: [
+          {
+            code: 'user_suppressed',
+            targetIntent: 'lunch',
+            scope: 'today',
+            reason: 'User suppressed lunch for today',
+          },
+        ],
+        isDismissalOrSuppression: true,
+      },
+      execute: () =>
+        proxy.handleCommand({
+          utterance: "I already ate lunch today, don't suggest lunch",
+          availableModes: ['walk'],
+          knownFactKeys: ['taste_lunch_japanese'],
+          confirmedFactKeys: ['taste_lunch_japanese'],
+          availableSignalIds: ['calendar:2026-10-28T09:00:00.000Z'],
+          validTimes: ['12:15 PM'],
+          validPlaces: ['Green Bowl'],
+          currentPlanIntent: 'lunch',
+        }),
+    },
+    // 4. Mode switch command
+    {
+      endpoint: 'command',
+      description: 'Command route mode switch ("Take the bus instead")',
+      evalContext: {
+        utterance: 'Take the bus instead',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:30 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      execute: () =>
+        proxy.handleCommand({
+          utterance: 'Take the bus instead',
+          availableModes: ['drive', 'bus'],
+          knownFactKeys: ['habit_rain_transit'],
+          confirmedFactKeys: ['habit_rain_transit'],
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          validTimes: ['2:30 PM'],
+          validPlaces: ['Piano Studio'],
+        }),
+    },
+    // 5. Out-of-scope refusal command
+    {
+      endpoint: 'command',
+      description: 'Command out-of-scope refusal ("Book a flight to Hawaii for next weekend")',
+      evalContext: {
+        utterance: 'Book a flight to Hawaii for next weekend',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit'],
+        confirmedFactKeys: ['habit_rain_transit'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:30 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      execute: () =>
+        proxy.handleCommand({
+          utterance: 'Book a flight to Hawaii for next weekend',
+          availableModes: ['drive', 'bus'],
+          knownFactKeys: ['habit_rain_transit'],
+          confirmedFactKeys: ['habit_rain_transit'],
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          validTimes: ['2:30 PM'],
+          validPlaces: ['Piano Studio'],
+        }),
+    },
+    // 6. Citation probe command
+    {
+      endpoint: 'command',
+      description: 'Command citation discipline probe ("Why did you suggest this departure time?")',
+      evalContext: {
+        utterance: 'Why did you suggest this departure time?',
+        availableModes: ['drive', 'bus'],
+        knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+        confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        validTimes: ['2:45 PM'],
+        validPlaces: ['Piano Studio'],
+      },
+      execute: () =>
+        proxy.handleCommand({
+          utterance: 'Why did you suggest this departure time?',
+          availableModes: ['drive', 'bus'],
+          knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+          confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+          validTimes: ['2:45 PM'],
+          validPlaces: ['Piano Studio'],
+        }),
+    },
+  ];
+
+  const mixedCalls: Array<{
+    endpoint: 'refine' | 'reason' | 'command';
+    description: string;
+    evalContext?: CommandEvaluationContext;
     execute: () => Promise<{ usedFallback: boolean; fallbackReason?: string; wording?: string; result?: any }>;
   }> = [
     // 1. Refine Depart
@@ -1334,6 +2079,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     },
   ];
 
+  const plannedCalls = isCommandOnly ? commandCalls.slice(0, effectiveCap) : mixedCalls;
   const acceptedObjectives = new Set<'refine' | 'reason' | 'command'>();
 
   try {
@@ -1341,8 +2087,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
       const callDef = plannedCalls[i]!;
       const callIndex = i + 1;
 
-      // Stop safeguard: skip objective if already accepted
-      if (acceptedObjectives.has(callDef.endpoint)) {
+      // Stop safeguard: skip objective if already accepted (mixed mode only)
+      if (!isCommandOnly && acceptedObjectives.has(callDef.endpoint)) {
         console.log(`  [SKIP] Planned call #${callIndex} [${callDef.endpoint.toUpperCase()}]: Objective '${callDef.endpoint}' already has an accepted response.`);
         continue;
       }
@@ -1404,6 +2150,26 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
       const rejectedCodes =
         (callResult as any).rejectedReasonCodes ?? proxy.getLastRejectedReasonCodes();
 
+      let factCheckOutcome: 'accepted' | 'discarded' = callResult.usedFallback ? 'discarded' : 'accepted';
+      let outcomeFallbackReason = callResult.fallbackReason;
+      let commandAudit: CommandAcceptanceAudit | undefined = undefined;
+
+      if (callDef.endpoint === 'command' && (callDef as any).evalContext) {
+        const evalOutcome = evaluateCommandAcceptance({
+          result: callResult.result,
+          usedFallback: callResult.usedFallback,
+          fallbackReason: callResult.fallbackReason,
+          finishReason: meta.finishReason,
+          rejectedReasonCodes: rejectedCodes,
+          context: (callDef as any).evalContext,
+        });
+        factCheckOutcome = evalOutcome.accepted ? 'accepted' : 'discarded';
+        if (!evalOutcome.accepted) {
+          outcomeFallbackReason = evalOutcome.failureReason ?? callResult.fallbackReason;
+        }
+        commandAudit = evalOutcome.audit;
+      }
+
       const record: LiveVerificationCallRecord = {
         index: liveFetchDispatchedCount,
         endpoint: callDef.endpoint,
@@ -1416,17 +2182,18 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         reasoningTokens: meta.reasoningTokens,
         finishReason: meta.finishReason,
         usedFallback: callResult.usedFallback,
-        fallbackReason: callResult.fallbackReason,
-        factCheckOutcome: callResult.usedFallback ? 'discarded' : 'accepted',
+        fallbackReason: outcomeFallbackReason,
+        factCheckOutcome,
         ...(rejectedCodes && rejectedCodes.length > 0 ? { rejectedReasonCodes: rejectedCodes } : {}),
         error: meta.error,
+        ...(commandAudit ? { audit: commandAudit } : {}),
       };
 
       results.push(record);
       const outcomeTag = record.factCheckOutcome === 'accepted' ? 'ACCEPTED ✅' : `DISCARDED (${record.fallbackReason ?? 'fallback'})`;
       console.log(`  Call #${liveFetchDispatchedCount.toString().padStart(2, ' ')} [${callDef.endpoint.toUpperCase()}]: HTTP ${record.httpStatus} (${record.latencyMs}ms) — ${outcomeTag} — ${callDef.description}`);
 
-      if (record.factCheckOutcome === 'accepted') {
+      if (!isCommandOnly && record.factCheckOutcome === 'accepted') {
         acceptedObjectives.add(callDef.endpoint);
         if (acceptedObjectives.has('refine') && acceptedObjectives.has('reason') && acceptedObjectives.has('command')) {
           console.log('\n🎯 All planned objectives (refine, reason, command) accepted! Halting run early to conserve calls.');
@@ -1475,13 +2242,19 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   const d1ToD6ParityPass = verifyD1ToD6Parity();
 
   // Generate Report & Machine JSON
-  const evidenceDir = path.resolve(root, 'docs/evidence/s1-live');
+  const evidenceDir = options?.reportPath
+    ? path.dirname(options.reportPath)
+    : path.resolve(root, isCommandOnly ? 'docs/evidence/s1-live-3' : 'docs/evidence/s1-live');
   if (!fs.existsSync(evidenceDir)) {
     fs.mkdirSync(evidenceDir, { recursive: true });
   }
 
-  const reportMdPath = options?.reportPath ?? path.resolve(evidenceDir, 'S1_LIVE_REPORT.md');
-  const reportJsonPath = options?.jsonReportPath ?? path.resolve(evidenceDir, 's1-live-report.json');
+  const reportMdPath =
+    options?.reportPath ??
+    path.resolve(evidenceDir, isCommandOnly ? 'S1_LIVE_3_COMMAND_REPORT.md' : 'S1_LIVE_REPORT.md');
+  const reportJsonPath =
+    options?.jsonReportPath ??
+    path.resolve(evidenceDir, isCommandOnly ? 's1-live-3-command-report.json' : 's1-live-report.json');
 
   const report: LiveVerificationReport = {
     timestamp: new Date().toISOString(),
@@ -1532,6 +2305,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
 
 async function main(): Promise<void> {
   const isDryRun = process.argv.includes('--dry-run');
+  const onlyIdx = process.argv.indexOf('--only');
+  const onlyMode = onlyIdx !== -1 ? (process.argv[onlyIdx + 1] as 'command' | 'refine' | 'reason' | undefined) : undefined;
   const isNegativePreconditionTest =
     process.argv.includes('--test-negative-precondition') ||
     process.argv.includes('--bogus-precondition');
@@ -1551,13 +2326,13 @@ async function main(): Promise<void> {
   }
 
   if (isDryRun) {
-    const success = await runDryRunAudit();
+    const success = await runDryRunAudit({ only: onlyMode });
     process.exit(success ? 0 : 1);
   }
 
   // Live verification execution
   try {
-    const { ok } = await runLiveVerification();
+    const { ok } = await runLiveVerification({ only: onlyMode });
     process.exit(ok ? 0 : 1);
   } catch (err: any) {
     console.error('\n❌ Live verification failed:', err?.message || err);
