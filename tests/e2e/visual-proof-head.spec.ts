@@ -142,6 +142,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `01-d2-rain-home-${viewName}.png`),
+      fullPage: true,
     });
 
     // -------------------------------------------------------------------------
@@ -279,6 +280,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `05-d3-lunch-home-${viewName}.png`),
+      fullPage: true,
     });
 
     // -------------------------------------------------------------------------
@@ -337,15 +339,21 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     });
 
     // -------------------------------------------------------------------------
-    // Capture 08: Lunch Suppression Accepted -> Lunch Card Strictly Absent
+    // Capture 08: Lunch Suppression Accepted -> Promoted to Confirmed in Me Tab
     // -------------------------------------------------------------------------
     const confirmProposalBtn = lunchProposal.locator('.btn-confirm-proposal');
     await expect(confirmProposalBtn).toBeVisible();
     await confirmProposalBtn.click();
 
+    // Verify proposal is no longer pending in FOR YOU
     await expect(lunchProposal).not.toBeVisible();
-    await expect(page.locator('.now-card:has-text("Lunch options")')).toHaveCount(0);
-    await expect(page.locator('.quiet-title')).toHaveText('Nothing needs your attention right now.');
+
+    // Navigate to Me tab to assert and capture sovereign memory confirmation
+    await navigateToMe(page, isMobile);
+    const confirmedSuppression = page.locator('#fact-suppress_lunch_recommendations');
+    await expect(confirmedSuppression).toBeVisible();
+    await expect(confirmedSuppression.locator('.badge-confirmed')).toHaveText('Confirmed');
+    await expect(confirmedSuppression).toContainText('Source: you confirmed');
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
