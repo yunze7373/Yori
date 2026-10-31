@@ -242,6 +242,57 @@ export class GeolocationAdapter implements LocationPort {
     this.lastNotice = undefined;
   }
 
+  public async acquireSessionFix(options?: PositionOptions): Promise<LocationStatus> {
+    this.grantConsent();
+    const now = Date.now();
+    const geo =
+      this.geolocationProvider ??
+      (typeof navigator !== 'undefined' ? navigator.geolocation : undefined);
+
+    if (!geo || typeof geo.getCurrentPosition !== 'function') {
+      this.lastNotice = 'Browser geolocation not supported in this environment';
+      return {
+        status: 'unavailable',
+        source: 'geolocation',
+        updatedAt: new Date().toISOString(),
+        notice: this.lastNotice,
+      };
+    }
+
+    this.requestCount++;
+    this.lastRequestTime = now;
+
+    return new Promise<LocationStatus>((resolve) => {
+      geo.getCurrentPosition(
+        (pos) => {
+          this.cachedCoords = {
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+          };
+          this.cachedAccuracy = pos.coords.accuracy;
+          this.cachedTimestamp = pos.timestamp || Date.now();
+          resolve({
+            status: 'available',
+            coords: this.cachedCoords,
+            accuracy: this.cachedAccuracy,
+            source: 'geolocation',
+            updatedAt: new Date(this.cachedTimestamp).toISOString(),
+          });
+        },
+        (err) => {
+          this.lastNotice = err?.message || 'Failed to acquire location fix';
+          resolve({
+            status: err.code === 1 ? 'denied' : 'unavailable',
+            source: 'geolocation',
+            updatedAt: new Date().toISOString(),
+            notice: this.lastNotice,
+          });
+        },
+        options
+      );
+    });
+  }
+
   public async requestCurrentPosition(options?: PositionOptions): Promise<LocationStatus> {
     // 1. Consent guard
     if (this.consentStatus !== 'granted') {

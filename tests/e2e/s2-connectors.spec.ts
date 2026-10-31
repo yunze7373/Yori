@@ -498,4 +498,88 @@ test.describe('S2-CONNECTORS: Settings > Connectors Screen', () => {
     await expect(page.locator('#connectors-page')).toHaveCount(0);
     await expect(meConnectorsBtn).toBeFocused();
   });
+
+  test('10. Demo & Live Separation: Settings Location Connect Never Blends Into Simulated Demo Scenes', async ({
+    page,
+    context,
+  }) => {
+    // Grant geolocation permission with real Tokyo coordinates
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 35.6895, longitude: 139.6917 });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/?dev=1');
+    await page.waitForSelector('.app-layout');
+
+    // 10a. Connect Location from Settings > Connectors while in Demo mode
+    await page.locator('#btn-header-avatar').click();
+    await page.locator('#btn-me-connectors').click();
+
+    const locRow = page.locator('#connector-row-location');
+    const connectBtn = locRow.locator('#btn-connect-location');
+    await expect(connectBtn).toBeVisible();
+    await connectBtn.click();
+
+    // Verify Connected in Settings
+    await expect(locRow.locator('#status-pill-location')).toContainText('Connected');
+    await expect(locRow.locator('#connector-detail-location')).toContainText('Shared this session');
+
+    // 10b. Return to Home in Demo mode
+    await page.locator('#btn-connectors-back').click();
+    await page.locator('#tab-home').click();
+
+    // 10c. Verify Demo lunch scene: NOT broken, does NOT fail closed, preserves fixture restaurants
+    await page.locator('#btn-dev-demo-controls').click();
+    await page.locator('#scene-select').selectOption('lunch');
+    await page.locator('#btn-close-demo-panel').click();
+
+    const lunchNowCard = page.locator('.now-card');
+    await expect(lunchNowCard).toBeVisible();
+    await expect(lunchNowCard).not.toContainText('No Lunch Places Nearby');
+    await expect(lunchNowCard).not.toContainText('fails closed');
+    await expect(lunchNowCard).toContainText('Lunch');
+
+    // 10d. Verify Demo fuel scene: NOT broken, preserves fuel recommendations
+    await page.locator('#btn-dev-demo-controls').click();
+    await page.locator('#scene-select').selectOption('fuel');
+    await page.locator('#btn-close-demo-panel').click();
+
+    const fuelNowCard = page.locator('.now-card');
+    await expect(fuelNowCard).toBeVisible();
+    await expect(fuelNowCard).toContainText('Low Fuel Warning');
+
+    // 10e. Verify Demo Sources sheet lists ONLY simulated fixtures
+    const contextPill = page.locator('#pill-context-status');
+    await expect(contextPill).toBeVisible();
+    await contextPill.click();
+
+    const sourcesModal = page.locator('.sources-modal-card');
+    await expect(sourcesModal).toBeVisible();
+    await expect(sourcesModal.locator('#sources-derivation-text')).toContainText('Demo fixtures · simulated context');
+    // Ensure all badges are simulated
+    const liveBadges = sourcesModal.locator('.signal-badge.live-badge');
+    await expect(liveBadges).toHaveCount(0);
+    const simBadges = sourcesModal.locator('.signal-badge.simulated-badge');
+    expect(await simBadges.count()).toBeGreaterThan(0);
+
+    await page.locator('#btn-close-why').click();
+    await expect(sourcesModal).toHaveCount(0);
+
+    // 10f. Switch to Live mode: fix is reflected in Sources as Shared this session and pill includes Location
+    await page.locator('#btn-dev-demo-controls').click();
+    await page.locator('#btn-mode-live').click();
+    await page.locator('#btn-close-demo-panel').click();
+
+    // Pill subline includes Location
+    const pillSubline = page.locator('#pill-subline');
+    await expect(pillSubline).toContainText('Location');
+
+    // Live Sources sheet shows Location with Shared this session
+    await contextPill.click();
+    await expect(sourcesModal).toBeVisible();
+    const liveLocItem = sourcesModal.locator('#source-item-location');
+    await expect(liveLocItem.locator('.signal-badge')).toContainText('Shared this session');
+
+    await page.locator('#btn-close-why').click();
+  });
 });

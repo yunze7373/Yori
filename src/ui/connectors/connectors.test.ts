@@ -11,7 +11,8 @@ import { XMemoConnectorPort } from './ports/xmemo-port.js';
 import { NotificationsConnectorPort } from './ports/notifications-port.js';
 import { getAllConnectorsStatus } from './index.js';
 import { renderConnectorsView } from './connectors-view.js';
-import { defaultLocationPort } from '../../adapters/providers/location-port.js';
+import { defaultLocationPort, DEFAULT_DEMO_COORDS } from '../../adapters/providers/location-port.js';
+import { computeSceneState } from '../living-context/app.js';
 
 describe('Connectors Suite', () => {
   const originalNavigator = globalThis.navigator;
@@ -200,6 +201,21 @@ describe('Connectors Suite', () => {
       const status = await port.status();
       expect(status.state).toBe('connected');
       expect(status.detail).toBe('Open-Meteo · Aomori, Japan · fixed demo city (not your location)');
+    });
+
+    it('returns connected with location not reported when demoCity is missing', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          enabled: true,
+          provider: 'open-meteo',
+        }),
+      } as any);
+
+      const port = new WeatherConnectorPort();
+      const status = await port.status();
+      expect(status.state).toBe('connected');
+      expect(status.detail).toBe('Open-Meteo · fixed demo city (location not reported)');
     });
 
     it('returns unavailable when fetch rejects or returns non-200', async () => {
@@ -396,6 +412,51 @@ describe('Connectors Suite', () => {
       expect(html).toContain('btn-revoke-location');
       expect(html).toContain('btn-connect-xmemo');
       expect(html).toContain('btn-connect-notifications');
+    });
+  });
+
+  describe('Demo Scene Builder Location Invariant', () => {
+    it('preserves clean simulated demo scenes and never blends a device fix into demo scenes', () => {
+      // 1. Baseline without device fix (standard demo fixture state)
+      defaultLocationPort.clearSessionFix?.();
+      defaultLocationPort.setLocation('available', DEFAULT_DEMO_COORDS);
+      const baselineLunch = computeSceneState('lunch');
+      const baselineFuel = computeSceneState('fuel');
+      const baselineAwayLunch = computeSceneState('away-lunch');
+
+      // 2. Simulate acquiring a real device fix (e.g. Tokyo via geolocation)
+      defaultLocationPort.clearManualLocation?.();
+      defaultLocationPort.grantConsent?.();
+      (defaultLocationPort as any).cachedCoords = { lat: 35.68, lng: 139.77 };
+      (defaultLocationPort as any).cachedAccuracy = 15;
+      (defaultLocationPort as any).cachedTimestamp = Date.now();
+
+      // 3. Re-run scene builder
+      const withDeviceFixLunch = computeSceneState('lunch');
+      const withDeviceFixFuel = computeSceneState('fuel');
+      const withDeviceFixAwayLunch = computeSceneState('away-lunch');
+
+      // 4. Assert that demo scene location signal remains 'fixture' with DEFAULT_DEMO_COORDS
+      const lunchLocSig = withDeviceFixLunch.snapshot.signals.find(s => s.kind === 'location_status');
+      expect((lunchLocSig?.value as any)?.source).toBe('fixture');
+      expect((lunchLocSig?.value as any)?.lat).toBe(DEFAULT_DEMO_COORDS.lat);
+      expect((lunchLocSig?.value as any)?.lng).toBe(DEFAULT_DEMO_COORDS.lng);
+
+      const fuelLocSig = withDeviceFixFuel.snapshot.signals.find(s => s.kind === 'location_status');
+      expect((fuelLocSig?.value as any)?.source).toBe('fixture');
+      expect((fuelLocSig?.value as any)?.lat).toBe(DEFAULT_DEMO_COORDS.lat);
+      expect((fuelLocSig?.value as any)?.lng).toBe(DEFAULT_DEMO_COORDS.lng);
+
+      // 5. Assert that output recommendations are identical to baseline and NOT broken
+      expect(withDeviceFixLunch.pipelineResult.livingContext.now?.headline).toBe(baselineLunch.pipelineResult.livingContext.now?.headline);
+      expect(withDeviceFixFuel.pipelineResult.livingContext.now?.headline).toBe(baselineFuel.pipelineResult.livingContext.now?.headline);
+      expect(withDeviceFixAwayLunch.pipelineResult.livingContext.now?.headline).toBe(baselineAwayLunch.pipelineResult.livingContext.now?.headline);
+
+      // Clean up
+      if (defaultLocationPort.clearSessionFix) {
+        defaultLocationPort.clearSessionFix();
+      }
+      defaultLocationPort.setLocation('available', DEFAULT_DEMO_COORDS);
     });
   });
 });

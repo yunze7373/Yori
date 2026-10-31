@@ -102,14 +102,14 @@ export class LocationConnectorPort implements ConnectorPort {
 
   public async connect(): Promise<ConnectorStatus> {
     // User-gesture one-shot acquisition via consented adapter
-    if (typeof (defaultLocationPort as any).setSimulated === 'function') {
-      (defaultLocationPort as any).setSimulated(false);
-    }
-    if (typeof (defaultLocationPort as any).setLiveEnabled === 'function') {
-      (defaultLocationPort as any).setLiveEnabled(true);
-    }
-
-    if (typeof defaultLocationPort.consentAndRequest === 'function') {
+    // Does NOT toggle global simulated/live flags (preserves Demo simulation invariants)
+    if (typeof defaultLocationPort.acquireSessionFix === 'function') {
+      try {
+        await defaultLocationPort.acquireSessionFix();
+      } catch {
+        // Fall through to status re-read
+      }
+    } else if (typeof defaultLocationPort.consentAndRequest === 'function') {
       try {
         await defaultLocationPort.consentAndRequest();
       } catch {

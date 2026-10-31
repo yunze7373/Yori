@@ -33,17 +33,20 @@ export class WeatherConnectorPort implements ConnectorPort {
       const data = await res.json();
       const rawCity = data?.demoCity;
       const cityName =
-        typeof rawCity === 'object' && rawCity?.name
-          ? rawCity.name
-          : typeof rawCity === 'string'
-            ? rawCity
-            : 'San Francisco, CA';
+        typeof rawCity === 'object' && rawCity?.name && typeof rawCity.name === 'string' && rawCity.name.trim().length > 0
+          ? rawCity.name.trim()
+          : typeof rawCity === 'string' && rawCity.trim().length > 0
+            ? rawCity.trim()
+            : undefined;
 
       if (data?.enabled === true) {
+        const detail = cityName
+          ? `Open-Meteo · ${cityName} · fixed demo city (not your location)`
+          : 'Open-Meteo · fixed demo city (location not reported)';
         return {
           id: this.id,
           state: 'connected',
-          detail: `Open-Meteo · ${cityName} · fixed demo city (not your location)`,
+          detail,
           source: '/api/weather/status',
           updatedAt,
         };

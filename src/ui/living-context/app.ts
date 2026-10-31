@@ -91,7 +91,7 @@ import {
   createFuelEvidenceBundle,
   type EvidenceBundle,
 } from '../view-models/index.js';
-import { defaultLocationPort, DEFAULT_DEMO_COORDS } from '../../adapters/providers/location-port.js';
+import { defaultLocationPort, DEFAULT_DEMO_COORDS, type LocationPort, type LocationStatus } from '../../adapters/providers/location-port.js';
 import { mockFuelAdapter } from '../../plugins/fuel/adapter.js';
 import { mockLunchAdapter } from '../../plugins/lunch/adapter.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
@@ -192,7 +192,8 @@ export function computeSceneState(
   scene: DemoSceneId,
   storage?: YoriStorage,
   liveWeatherSignal?: ContextSignal | null,
-  externalMemoryFacts?: readonly MemoryFact[]
+  externalMemoryFacts?: readonly MemoryFact[],
+  locationPort?: LocationPort
 ): {
   pipelineResult: PipelineResult;
   spatialMapEvidence: SpatialMapEvidence | null;
@@ -206,6 +207,21 @@ export function computeSceneState(
 } {
   const plugins = staticPluginRegistry.getAll();
   const effectiveStorage = storage ?? new YoriStorage(new WebStorageDriver());
+
+  const effectiveLocationPort = locationPort ?? defaultLocationPort;
+  const rawLocStatus = effectiveLocationPort.getLocation();
+  // In demo scenes, NEVER blend real device geolocation coordinates into simulated scenes.
+  // If the adapter holds a live device fix (status === 'available' and source === 'geolocation'),
+  // demo scenes use the fixture location instead of device coordinates.
+  const locPortStatus: LocationStatus =
+    rawLocStatus.status === 'available' && rawLocStatus.source === 'geolocation'
+      ? {
+          status: 'available',
+          coords: DEFAULT_DEMO_COORDS,
+          source: 'fixture',
+          updatedAt: rawLocStatus.updatedAt,
+        }
+      : rawLocStatus;
 
   function injectWeather(snap: ContextSnapshot): ContextSnapshot {
     if (!liveWeatherSignal || scene === 'missing-weather') return snap;
@@ -425,7 +441,6 @@ export function computeSceneState(
     }
 
     case 'lunch': {
-      const locPortStatus = defaultLocationPort.getLocation();
       const isLocationAvailable = locPortStatus.status === 'available' && locPortStatus.coords;
 
       const locSig = createSimulatedSignal({
@@ -777,7 +792,6 @@ export function computeSceneState(
     }
 
     case 'fuel': {
-      const locPortStatus = defaultLocationPort.getLocation();
       const isLocationAvailable = locPortStatus.status === 'available' && locPortStatus.coords;
 
       const locSig = createSimulatedSignal({
@@ -1475,13 +1489,16 @@ export function renderApp(
         ? 'Demo · simulated scenes'
         : (() => {
             const parts = ['Device clock'];
-            if (weatherStatus.enabled && liveWeatherSignal) {
-              parts.push('Weather');
-            }
-            if (liveLocationStatus.status === 'available') {
+            const locConn = latestConnectorStatuses?.location;
+            if (locConn?.state === 'connected' || liveLocationStatus.status === 'available') {
               parts.push('Location');
             }
-            if (xmemoStatus.enabled && xmemoStatus.connected) {
+            const weatherConn = latestConnectorStatuses?.weather;
+            if (weatherConn?.state === 'connected' || (weatherStatus.enabled && liveWeatherSignal)) {
+              parts.push('Weather');
+            }
+            const xmemoConn = latestConnectorStatuses?.xmemo;
+            if (xmemoConn?.state === 'connected' || (xmemoStatus.enabled && xmemoStatus.connected)) {
               parts.push('Memories');
             }
             return parts.join(' · ');
@@ -2343,7 +2360,7 @@ export function renderApp(
                       <span class="context-pill-title">${contextMode === 'live' ? STRINGS.header.livePill : STRINGS.header.demoPill}</span>
                       <span class="context-pill-chevron" aria-hidden="true">›</span>
                     </div>
-                    <div class="context-pill-subtitle">${escapeHtml(sourcesSubline)}</div>
+                    <div class="context-pill-subtitle" id="pill-subline">${escapeHtml(sourcesSubline)}</div>
                   </div>
                 </button>
               </div>
@@ -2659,25 +2676,27 @@ export function renderApp(
     // 0a. Context Mode Switcher [Demo scenes | Live context]
     const modeDemoBtn = root.querySelector('#btn-mode-demo') as HTMLButtonElement | null;
     if (modeDemoBtn) {
-      modeDemoBtn.addEventListener('click', () => {
+      modeDemoBtn.addEventListener('click', async () => {
         if (contextMode === 'demo') return;
         contextMode = 'demo';
-        defaultLocationPort.setLocation('available', DEFAULT_DEMO_COORDS);
-        defaultLocationPort.setSimulated(true);
         defaultModelCommandInterpreter.setMode('scripted_fixture');
         liveLocationStatus = defaultLocationPort.getLocation();
+        await refreshConnectorStatuses();
         update();
       });
     }
 
     const modeLiveBtn = root.querySelector('#btn-mode-live') as HTMLButtonElement | null;
     if (modeLiveBtn) {
-      modeLiveBtn.addEventListener('click', () => {
+      modeLiveBtn.addEventListener('click', async () => {
         if (contextMode === 'live') return;
         contextMode = 'live';
-        defaultLocationPort.setLocation('prompt');
+        if (!defaultLocationPort.hasSessionFix?.()) {
+          defaultLocationPort.setLocation('prompt');
+        }
         defaultModelCommandInterpreter.setMode('live');
         liveLocationStatus = defaultLocationPort.getLocation();
+        await refreshConnectorStatuses();
         update();
       });
     }
@@ -2694,6 +2713,7 @@ export function renderApp(
         } else {
           liveLocationStatus = defaultLocationPort.getLocation();
         }
+        await refreshConnectorStatuses();
         update();
       });
     }

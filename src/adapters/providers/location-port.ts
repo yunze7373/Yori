@@ -34,6 +34,7 @@ export interface LocationPort {
   consentAndRequest?(options?: PositionOptions): Promise<LocationStatus>;
   hasSessionFix?(): boolean;
   clearSessionFix?(): void;
+  acquireSessionFix?(options?: PositionOptions): Promise<LocationStatus>;
 }
 
 /**
