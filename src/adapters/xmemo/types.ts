@@ -12,9 +12,10 @@
 import type { MemoryFact } from '../../core/contracts/index.js';
 
 export interface MemoryPortStatus {
-  readonly adapter: 'local' | 'xmemo_remote';
+  readonly adapter: 'local' | 'xmemo_remote' | 'composite';
   readonly isRemoteConfigured: boolean;
   readonly statusText: string;
+  readonly connectionState?: 'off' | 'connected-mock' | 'error-fallback';
 }
 
 /**

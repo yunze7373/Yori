@@ -25,20 +25,27 @@ export class XMemoRemoteAdapter implements MemoryPort {
   private readonly fetchFn: typeof fetch;
 
   constructor(configOrToken?: string | RemoteMemoryAdapterConfig) {
+    const isBrowser = typeof window !== 'undefined';
+    const defaultFetch =
+      typeof window !== 'undefined' && typeof window.fetch === 'function'
+        ? window.fetch.bind(window)
+        : typeof fetch !== 'undefined'
+        ? fetch
+        : (() => Promise.reject(new Error('fetch unavailable'))) as any;
+
     if (typeof configOrToken === 'string') {
-      this.appAuthToken = configOrToken;
+      // Guard: Browser talks only to same-origin proxy without client-side bearer tokens
+      this.appAuthToken = isBrowser ? undefined : configOrToken;
       this.proxyEndpoint = '/api/xmemo';
-      this.fetchFn = typeof fetch !== 'undefined' ? fetch : (() => Promise.reject(new Error('fetch unavailable'))) as any;
+      this.fetchFn = defaultFetch;
     } else if (configOrToken) {
-      this.appAuthToken = configOrToken.appAuthToken;
+      this.appAuthToken = isBrowser ? undefined : configOrToken.appAuthToken;
       this.oauthConfig = configOrToken.oauth;
       this.proxyEndpoint = configOrToken.proxyEndpoint || '/api/xmemo';
-      this.fetchFn =
-        configOrToken.fetchFn ||
-        (typeof fetch !== 'undefined' ? fetch : (() => Promise.reject(new Error('fetch unavailable'))) as any);
+      this.fetchFn = configOrToken.fetchFn || defaultFetch;
     } else {
       this.proxyEndpoint = '/api/xmemo';
-      this.fetchFn = typeof fetch !== 'undefined' ? fetch : (() => Promise.reject(new Error('fetch unavailable'))) as any;
+      this.fetchFn = defaultFetch;
     }
   }
 
@@ -71,7 +78,9 @@ export class XMemoRemoteAdapter implements MemoryPort {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      if (this.appAuthToken) {
+      // Browser talks only to same-origin proxy without client-side bearer tokens
+      const isBrowser = typeof window !== 'undefined';
+      if (this.appAuthToken && !isBrowser) {
         headers['Authorization'] = `Bearer ${this.appAuthToken}`;
       }
 
@@ -175,7 +184,9 @@ export class XMemoRemoteAdapter implements MemoryPort {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      if (this.appAuthToken) {
+      // Browser talks only to same-origin proxy without client-side bearer tokens
+      const isBrowser = typeof window !== 'undefined';
+      if (this.appAuthToken && !isBrowser) {
         headers['Authorization'] = `Bearer ${this.appAuthToken}`;
       }
 

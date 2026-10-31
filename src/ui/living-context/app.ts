@@ -66,7 +66,7 @@ import { renderAdjustDialog, type AdjustDialogValues } from '../review/adjust-di
 import { renderDismissDialog } from '../review/dismiss-dialog.js';
 import { attachModalAccessibility, restoreInvokingFocus } from '../review/modal-accessibility.js';
 import { renderMeView } from '../me/me-view.js';
-import { createMemoryPort, type MemoryPort } from '../../adapters/xmemo/index.js';
+import { createCompositeMemoryPort, type MemoryPort } from '../../adapters/xmemo/index.js';
 import { DEFAULT_DAILY_PROMPT_BUDGET } from '../../core/policy/index.js';
 import { coordinateReasoning } from '../../app/reasoning-coordinator.js';
 import { createActionStateStore, type ActionStateStore } from '../action-state/index.js';
@@ -167,7 +167,8 @@ export interface AppState {
 export function computeSceneState(
   scene: DemoSceneId,
   storage?: YoriStorage,
-  liveWeatherSignal?: ContextSignal | null
+  liveWeatherSignal?: ContextSignal | null,
+  externalMemoryFacts?: readonly MemoryFact[]
 ): {
   pipelineResult: PipelineResult;
   spatialMapEvidence: SpatialMapEvidence | null;
@@ -207,6 +208,14 @@ export function computeSceneState(
   const storedConfirmedFacts = loadedEnvelope?.payload.memoryFacts ?? [];
 
   const activeConfirmedFacts: MemoryFact[] = [...storedConfirmedFacts.filter(f => f.status === 'confirmed')];
+  if (externalMemoryFacts && externalMemoryFacts.length > 0) {
+    const localKeys = new Set(activeConfirmedFacts.map(f => f.key));
+    for (const ef of externalMemoryFacts) {
+      if (ef.status === 'confirmed' && !localKeys.has(ef.key)) {
+        activeConfirmedFacts.push(ef);
+      }
+    }
+  }
   const userPrep = activeConfirmedFacts.find(f => f.key === 'prep_buffer_preference');
   if (userPrep && typeof userPrep.value === 'object' && userPrep.value !== null) {
     const val = userPrep.value as { prepMinutes?: number; bufferMinutes?: number };
@@ -1051,7 +1060,8 @@ export function renderApp(
     });
   }
   const sharedStorage = customStorage ?? new YoriStorage(new WebStorageDriver());
-  const memoryPort = customMemoryPort ?? createMemoryPort(sharedStorage);
+  const memoryPort = customMemoryPort ?? createCompositeMemoryPort(sharedStorage);
+  let activeLoadedFacts: readonly MemoryFact[] = [];
   const actionStore: ActionStateStore = createActionStateStore();
   let conversationCleanup: (() => void) | null = null;
 
@@ -1105,9 +1115,15 @@ export function renderApp(
     rationales: Record<string, string>;
   } | null = null;
 
-  let xmemoStatus: { enabled: boolean; connected: boolean; statusText?: string } = {
+  let xmemoStatus: {
+    enabled: boolean;
+    connected: boolean;
+    statusText?: string;
+    connectionState?: 'off' | 'connected-mock' | 'error-fallback';
+  } = {
     enabled: false,
     connected: false,
+    connectionState: 'off',
   };
 
   let weatherStatus: {
@@ -1131,12 +1147,30 @@ export function renderApp(
         const resp = await fetch('/api/xmemo/status', { cache: 'no-store' });
         if (resp.ok) {
           const newStatus = (await resp.json()) as { enabled: boolean; connected: boolean; statusText?: string };
-          xmemoStatus = newStatus;
+          xmemoStatus = {
+            ...newStatus,
+            connectionState: newStatus.enabled && newStatus.connected ? 'connected-mock' : 'off',
+          };
+          activeLoadedFacts = await memoryPort.loadFacts();
+          const portStatus = memoryPort.getStatus();
+          if (portStatus.connectionState) {
+            xmemoStatus.connectionState = portStatus.connectionState;
+          }
           update();
         }
       }
     } catch {
-      // Ignore network errors
+      // Fallback silently
+      try {
+        activeLoadedFacts = await memoryPort.loadFacts();
+        const portStatus = memoryPort.getStatus();
+        if (portStatus.connectionState) {
+          xmemoStatus.connectionState = portStatus.connectionState;
+        }
+      } catch {
+        // ignore
+      }
+      update();
     }
   }
 
@@ -1185,7 +1219,8 @@ export function renderApp(
     } = computeSceneState(
       currentScene,
       sharedStorage,
-      weatherStatus.enabled ? liveWeatherSignal : null
+      weatherStatus.enabled ? liveWeatherSignal : null,
+      activeLoadedFacts
     );
 
     currentEvidenceBundle = evidenceBundle;
@@ -1301,7 +1336,9 @@ export function renderApp(
     let mainContentHtml = '';
 
     if (activeTab === 'me') {
-      const memoryFacts = storedEnvelope?.payload.memoryFacts ?? [];
+      const memoryFacts = activeLoadedFacts.length > 0
+        ? activeLoadedFacts
+        : (storedEnvelope?.payload.memoryFacts ?? []);
       const storedProposals = storedEnvelope?.payload.proposals ?? [];
       const pendingFromMemory = combinedMemory.filter(
         m => m.status === 'pending' && !storedProposals.some(p => p.key === m.key)
@@ -2596,6 +2633,7 @@ export function renderApp(
           memoryPort,
           snapshotAsOf
         );
+        activeLoadedFacts = await memoryPort.loadFacts();
         actionFeedbackMessage = outcome.message;
         update();
       });
@@ -2651,6 +2689,14 @@ export function renderApp(
         return;
       }
       sharedStorage.reset();
+      try {
+        activeLoadedFacts = [];
+        void memoryPort.loadFacts().then(f => {
+          activeLoadedFacts = f;
+        });
+      } catch {
+        activeLoadedFacts = [];
+      }
       confirmingReset = false;
       actionFeedbackMessage = STRINGS.me.resetNotice;
       currentScene = 'clear';
@@ -2686,7 +2732,12 @@ export function renderApp(
         try {
           const res = await fetch('/api/xmemo/disconnect', { method: 'POST' });
           if (res.ok) {
-            xmemoStatus = { enabled: true, connected: false };
+            xmemoStatus = { enabled: true, connected: false, connectionState: 'off' };
+            try {
+              activeLoadedFacts = await memoryPort.loadFacts();
+            } catch {
+              activeLoadedFacts = [];
+            }
             actionFeedbackMessage = 'XMemo disconnected';
             update();
           }

@@ -6,6 +6,7 @@
 import type { MemoryPort, RemoteMemoryAdapterConfig } from './types.js';
 import { LocalMemoryAdapter } from './local-adapter.js';
 import { XMemoRemoteAdapter } from './remote-adapter.js';
+import { CompositeMemoryAdapter, type CompositeMemoryAdapterOptions } from './composite-adapter.js';
 import type { YoriStorage } from '../../core/storage/index.js';
 
 export function createMemoryPort(
@@ -18,6 +19,18 @@ export function createMemoryPort(
   return new LocalMemoryAdapter(storage);
 }
 
+export function createCompositeMemoryPort(
+  storage?: YoriStorage,
+  options?: Partial<CompositeMemoryAdapterOptions>
+): CompositeMemoryAdapter {
+  return new CompositeMemoryAdapter({
+    storage,
+    ...options,
+  });
+}
+
 export * from './types.js';
 export * from './local-adapter.js';
 export * from './remote-adapter.js';
+export * from './composite-adapter.js';
+export * from './key-contract.js';

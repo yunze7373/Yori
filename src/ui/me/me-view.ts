@@ -52,6 +52,7 @@ export interface MeViewState {
     readonly enabled: boolean;
     readonly connected: boolean;
     readonly statusText?: string;
+    readonly connectionState?: 'off' | 'connected-mock' | 'error-fallback';
   };
 }
 
@@ -194,16 +195,30 @@ export function renderMeView(state: MeViewState): string {
       ${
         state.xmemoStatus?.enabled === true
           ? `
-      <section class="card me-card" aria-labelledby="me-xmemo-title">
+      <section class="card me-card" aria-labelledby="me-xmemo-title" data-xmemo-status="${state.xmemoStatus.connectionState || (state.xmemoStatus.connected ? 'connected' : 'disconnected')}">
         <div class="me-card-header">
           <h2 id="me-xmemo-title" class="section-label" data-slot="chrome" data-slot-reason="XMemo sync section label">${escapeHtml(STRINGS.xmemo.title)}</h2>
-          <span class="card-badge ${state.xmemoStatus.connected ? 'badge-confirmed' : 'badge-pending'}" data-slot="chrome" data-slot-reason="XMemo status badge">
-            ${escapeHtml(state.xmemoStatus.connected ? STRINGS.xmemo.connectedBadge : STRINGS.xmemo.disconnectedBadge)}
+          <span class="card-badge ${
+            state.xmemoStatus.connectionState === 'error-fallback'
+              ? 'badge-pending badge-fallback'
+              : state.xmemoStatus.connected
+              ? 'badge-confirmed'
+              : 'badge-pending'
+          }" data-slot="chrome" data-slot-reason="XMemo status badge">
+            ${escapeHtml(
+              state.xmemoStatus.connectionState === 'error-fallback'
+                ? 'Fallback (local only)'
+                : state.xmemoStatus.connected
+                ? STRINGS.xmemo.connectedBadge
+                : STRINGS.xmemo.disconnectedBadge
+            )}
           </span>
         </div>
         <p class="me-card-desc" data-slot="chrome" data-slot-reason="XMemo status description">
           ${escapeHtml(
-            state.xmemoStatus.connected
+            state.xmemoStatus.connectionState === 'error-fallback'
+              ? 'Remote memory vault is unavailable. Operating safely in local storage fallback mode.'
+              : state.xmemoStatus.connected
               ? STRINGS.xmemo.connectedDesc
               : STRINGS.xmemo.disconnectedDesc
           )}
@@ -223,6 +238,9 @@ export function renderMeView(state: MeViewState): string {
       <!-- 6. Data Controls & Storage (INV-110) -->
       <section class="card me-card" aria-labelledby="me-data-title">
         <h2 id="me-data-title" class="section-label" data-slot="chrome" data-slot-reason="Data controls section label">${escapeHtml(STRINGS.me.dataControlsTitle)}</h2>
+        <p class="me-card-desc" data-slot="chrome" data-slot-reason="Data controls description">
+          Resetting storage clears local browser preferences and history only. Remote XMemo vault records are preserved and never deleted from this client.
+        </p>
         <div class="data-actions-row">
           <button type="button" class="btn btn-secondary" id="btn-me-export" data-slot="chrome" data-slot-reason="Export raw data button">
             ${escapeHtml(STRINGS.me.exportBtn)}
