@@ -18,6 +18,7 @@ import {
   type DemoCityCoordinate,
 } from './weather-types.js';
 import { OpenMeteoWeatherAdapter } from './open-meteo-adapter.js';
+import { isAllowlistedLoopbackHost } from '../xmemo/loopback-allowlist.js';
 
 export interface WeatherProxyConfig {
   readonly enabled: boolean;
@@ -88,20 +89,24 @@ export function createWeatherProxyMiddleware(
     res: ServerResponse,
     next: () => void
   ): Promise<void> {
+    const hostHeader = req.headers['host'];
+    let baseUrl = 'http://127.0.0.1:5173';
+    if (hostHeader) {
+      if (!isAllowlistedLoopbackHost(hostHeader) && process.env.DEV_DEVICE_TESTING !== 'true') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Access forbidden: allowlisted loopback host required' }));
+        return;
+      }
+      if (isAllowlistedLoopbackHost(hostHeader)) {
+        baseUrl = `http://${hostHeader.trim()}`;
+      }
+    }
     const urlStr = req.url || '';
-    const parsedUrl = new URL(urlStr, 'http://127.0.0.1:5173');
+    const parsedUrl = new URL(urlStr, baseUrl);
     const pathname = parsedUrl.pathname;
 
     if (!pathname.startsWith('/api/weather')) {
       return next();
-    }
-
-    // Security Guard: Host header check
-    const hostHeader = req.headers['host'];
-    if (!isLocalHost(hostHeader) && process.env.DEV_DEVICE_TESTING !== 'true') {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Access forbidden: loopback host required' }));
-      return;
     }
 
     // Security Guard: Sec-Fetch-Site / Cross-site check

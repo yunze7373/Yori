@@ -133,16 +133,26 @@ export function resolveLifetimeMaxCalls(
   return Math.min(parsed, MODEL_LIFETIME_MAX_CALLS);
 }
 
+import {
+  DEFAULT_LIVE_MODEL_TIMEOUT_MS,
+  MIN_MODEL_TIMEOUT_MS,
+  MAX_MODEL_TIMEOUT_MS,
+  resolveModelTimeoutMs,
+} from './timeout-config.js';
+
+export {
+  DEFAULT_LIVE_MODEL_TIMEOUT_MS,
+  MIN_MODEL_TIMEOUT_MS,
+  MAX_MODEL_TIMEOUT_MS,
+  resolveModelTimeoutMs,
+};
+
 /**
- * Resolves MODEL_TIMEOUT_MS with strict clamp [500, 20000].
- * Default: 2000 ms. NaN/negative/empty -> 2000.
+ * Resolves MODEL_TIMEOUT_MS with strict clamp [2000, 30000].
+ * Default: 15000 ms (APP-LIVE-RUNTIME / AC-LIVE-1). NaN/negative/empty -> 15000.
  */
 export function resolveTimeoutMs(env: Record<string, string | undefined> = process.env): number {
-  const raw = env['MODEL_TIMEOUT_MS'];
-  if (raw === undefined || raw.trim() === '') return 2000;
-  const parsed = parseInt(raw, 10);
-  if (isNaN(parsed) || parsed < 0) return 2000;
-  return Math.max(500, Math.min(20000, parsed));
+  return resolveModelTimeoutMs(env['MODEL_TIMEOUT_MS']);
 }
 
 /**
@@ -765,9 +775,9 @@ export class ModelDevProxy {
               `Invalid timeoutMs: cannot exceed ${MAX_VERIFICATION_TIMEOUT_MS}ms for verification (got ${customConfig.timeoutMs}ms)`
             );
           }
-          timeoutMs = Math.max(500, Math.min(MAX_VERIFICATION_TIMEOUT_MS, customConfig.timeoutMs));
+          timeoutMs = Math.max(MIN_MODEL_TIMEOUT_MS, Math.min(MAX_VERIFICATION_TIMEOUT_MS, customConfig.timeoutMs));
         } else {
-          timeoutMs = Math.max(500, Math.min(20000, customConfig.timeoutMs));
+          timeoutMs = Math.max(MIN_MODEL_TIMEOUT_MS, Math.min(MAX_MODEL_TIMEOUT_MS, customConfig.timeoutMs));
         }
       }
 

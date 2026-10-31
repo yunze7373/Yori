@@ -90,7 +90,7 @@ import {
   createFuelEvidenceBundle,
   type EvidenceBundle,
 } from '../view-models/index.js';
-import { defaultLocationPort } from '../../adapters/providers/location-port.js';
+import { defaultLocationPort, DEFAULT_DEMO_COORDS } from '../../adapters/providers/location-port.js';
 import { mockFuelAdapter } from '../../plugins/fuel/adapter.js';
 import { mockLunchAdapter } from '../../plugins/lunch/adapter.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
@@ -1161,6 +1161,20 @@ export function renderApp(
     enabled: false,
   };
   let liveWeatherSignal: RealSignal<WeatherData> | null = null;
+  let contextMode: 'demo' | 'live' = 'demo';
+  if (typeof window !== 'undefined' && window.location?.search) {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('mode') === 'live') {
+        contextMode = 'live';
+        defaultLocationPort.setLocation('prompt');
+        defaultModelCommandInterpreter.setMode('live');
+      }
+    } catch {
+      // ignore
+    }
+  }
+  let liveLocationStatus = defaultLocationPort.getLocation();
 
   if (typeof window !== 'undefined' && window.location?.search?.includes('xmemo=connected')) {
     actionFeedbackMessage = 'XMemo account connected successfully';
@@ -1370,16 +1384,28 @@ export function renderApp(
           }
         : undefined;
 
+    const effectiveNowIso = contextMode === 'live' ? new Date().toISOString() : snapshotAsOf;
+    const effectiveTz =
+      contextMode === 'live'
+        ? (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'America/Los_Angeles')
+        : snapshotTimezone;
+    const baseGreeting = getGreeting(effectiveNowIso, effectiveTz);
+    const greeting =
+      contextMode === 'live'
+        ? {
+            greeting: baseGreeting.greeting,
+            subheading: `Live context · Device time ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
+          }
+        : baseGreeting;
+
     actionStore.setCommandContext({
-      plan: nowPlan ?? null,
-      candidate: admittedCandidate,
+      plan: contextMode === 'live' ? null : (nowPlan ?? null),
+      candidate: contextMode === 'live' ? undefined : admittedCandidate,
       snapshot,
       memory: combinedMemory,
-      sceneId: currentScene,
+      sceneId: contextMode === 'live' ? 'live' : currentScene,
       userConfirmedKeys,
     });
-
-    const greeting = getGreeting(snapshotAsOf, snapshotTimezone);
     const nowPresentation = nowPlan ? formatNowPlan(nowPlan) : null;
     const isNowAccepted = nowPlan ? acceptedPlanIds.includes(nowPlan.id) : false;
 
@@ -1459,6 +1485,141 @@ export function renderApp(
           return { key: f.key, title, basis, value: f.value };
         });
         v2BodyHtml = renderForYouView(proposalsVM);
+      } else if (contextMode === 'live') {
+        v2BodyHtml = `
+          <section class="live-context-container" aria-label="Live Context Dashboard">
+            <!-- Calendar Section -->
+            <div class="live-card live-notice-card" id="notice-calendar-disconnected" role="status">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h2 class="live-card-title">Calendar</h2>
+                    <span class="live-source-chip">Provenance: System Calendar</span>
+                  </div>
+                  <p class="live-card-desc">No calendar connected</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Weather Section -->
+            ${
+              weatherStatus.enabled && liveWeatherSignal
+                ? `
+              <div class="live-card" id="live-weather-card">
+                <div class="live-card-row">
+                  <div class="live-card-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+                    </svg>
+                  </div>
+                  <div class="live-card-body">
+                    <div class="live-card-header">
+                      <h2 class="live-card-title">Live Weather</h2>
+                      <span class="live-source-chip">Source: Open-Meteo API (Live)</span>
+                    </div>
+                    <p class="live-card-desc">${escapeHtml(
+                      (liveWeatherSignal.value as any)?.summary ||
+                      `${(liveWeatherSignal.value as any)?.temperature ?? 65}°F · ${(liveWeatherSignal.value as any)?.condition ?? 'Clear'}`
+                    )}</p>
+                  </div>
+                </div>
+              </div>
+              `
+                : `
+              <div class="live-card live-notice-card" id="notice-weather-off" role="status">
+                <div class="live-card-row">
+                  <div class="live-card-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+                    </svg>
+                  </div>
+                  <div class="live-card-body">
+                    <div class="live-card-header">
+                      <h2 class="live-card-title">Weather</h2>
+                      <span class="live-source-chip">Provenance: Offline Default</span>
+                    </div>
+                    <p class="live-card-desc">Live weather is off</p>
+                  </div>
+                </div>
+              </div>
+              `
+            }
+
+            <!-- Location Section -->
+            ${
+              liveLocationStatus.status === 'available' && liveLocationStatus.coords
+                ? `
+              <div class="live-card" id="live-location-card">
+                <div class="live-card-row">
+                  <div class="live-card-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                      <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                  </div>
+                  <div class="live-card-body">
+                    <div class="live-card-header">
+                      <h2 class="live-card-title">Location</h2>
+                      <span class="live-source-chip">Source: Browser Geolocation (Consented)</span>
+                    </div>
+                    <p class="live-card-desc">Coarse coordinates: ${liveLocationStatus.coords.lat.toFixed(2)}°, ${liveLocationStatus.coords.lng.toFixed(2)}° (accuracy ~${Math.round(liveLocationStatus.accuracy ?? 100)}m)</p>
+                  </div>
+                </div>
+              </div>
+              `
+                : liveLocationStatus.status === 'denied' || liveLocationStatus.status === 'unavailable'
+                ? `
+              <div class="live-card live-notice-card" id="notice-location-denied" role="status">
+                <div class="live-card-row">
+                  <div class="live-card-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                      <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                  </div>
+                  <div class="live-card-body">
+                    <div class="live-card-header">
+                      <h2 class="live-card-title">Location</h2>
+                      <span class="live-source-chip">Provenance: Consented Geolocation</span>
+                    </div>
+                    <p class="live-card-desc">Location not shared</p>
+                  </div>
+                </div>
+              </div>
+              `
+                : `
+              <div class="live-card" id="live-location-prompt-card">
+                <div class="live-card-row">
+                  <div class="live-card-icon" aria-hidden="true">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                      <circle cx="12" cy="10" r="3"></circle>
+                    </svg>
+                  </div>
+                  <div class="live-card-body">
+                    <div class="live-card-header">
+                      <h2 class="live-card-title">Location</h2>
+                      <span class="live-source-chip">Source: Consented Geolocation (One-shot)</span>
+                    </div>
+                    <p class="live-card-desc">Connect location to enable local departures and recommendations.</p>
+                    <div class="live-card-actions">
+                      <button type="button" class="btn btn-primary btn-sm" id="btn-connect-location">Connect location</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              `
+            }
+          </section>
+        `;
       } else {
         const v2Composition = buildHomeComposition({
           plan: nowPlan,
@@ -1781,6 +1942,13 @@ export function renderApp(
         <header class="header-bar" role="banner">
           <div class="main-container" style="padding-bottom: 0;">
             <div class="top-meta">
+              <div class="mode-switch-group" role="group" aria-label="Context Mode Switch">
+                <button type="button" class="btn-mode-toggle ${contextMode === 'demo' ? 'active' : ''}" id="btn-mode-demo" aria-pressed="${contextMode === 'demo' ? 'true' : 'false'}">Demo scenes</button>
+                <button type="button" class="btn-mode-toggle ${contextMode === 'live' ? 'active' : ''}" id="btn-mode-live" aria-pressed="${contextMode === 'live' ? 'true' : 'false'}">Live context</button>
+              </div>
+              ${
+                contextMode === 'demo'
+                  ? `
               <span class="demo-chip" aria-label="Simulation Status">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12A10 10 0 0 1 12 2z"/>
@@ -1788,6 +1956,14 @@ export function renderApp(
                 </svg>
                 ${escapeHtml(STRINGS.header.demoChip)}
               </span>
+              `
+                  : `
+              <span class="live-context-chip" id="chip-live-context" aria-label="Live Runtime Active">
+                <span class="live-dot" aria-hidden="true"></span>
+                Live context
+              </span>
+              `
+              }
               ${
                 uiVersion === 'v2'
                   ? `
@@ -1836,6 +2012,9 @@ export function renderApp(
                 }
               </nav>
 
+              ${
+                contextMode === 'demo'
+                  ? `
               <div class="scene-switcher">
                 <label for="scene-select" class="scene-select-label">Demo Scene:</label>
                 <select id="scene-select" class="scene-select" aria-label="Switch Demo Scenario">
@@ -1855,6 +2034,13 @@ export function renderApp(
                     : ''
                 }
               </div>
+              `
+                  : `
+              <div class="live-runtime-badge-container">
+                <span class="live-runtime-pill" id="pill-live-runtime">Live Runtime · Device Clock</span>
+              </div>
+              `
+              }
             </div>
 
             <div class="greeting-section">
@@ -1985,6 +2171,48 @@ export function renderApp(
     // -------------------------------------------------------------
     // EVENT BINDINGS
     // -------------------------------------------------------------
+
+    // 0a. Context Mode Switcher [Demo scenes | Live context]
+    const modeDemoBtn = root.querySelector('#btn-mode-demo') as HTMLButtonElement | null;
+    if (modeDemoBtn) {
+      modeDemoBtn.addEventListener('click', () => {
+        if (contextMode === 'demo') return;
+        contextMode = 'demo';
+        defaultLocationPort.setLocation('available', DEFAULT_DEMO_COORDS);
+        defaultLocationPort.setSimulated(true);
+        defaultModelCommandInterpreter.setMode('scripted_fixture');
+        liveLocationStatus = defaultLocationPort.getLocation();
+        update();
+      });
+    }
+
+    const modeLiveBtn = root.querySelector('#btn-mode-live') as HTMLButtonElement | null;
+    if (modeLiveBtn) {
+      modeLiveBtn.addEventListener('click', () => {
+        if (contextMode === 'live') return;
+        contextMode = 'live';
+        defaultLocationPort.setLocation('prompt');
+        defaultModelCommandInterpreter.setMode('live');
+        liveLocationStatus = defaultLocationPort.getLocation();
+        update();
+      });
+    }
+
+    // 0b. Connect Location (One-shot Consented Browser Geolocation)
+    const connectLocBtn = root.querySelector('#btn-connect-location') as HTMLButtonElement | null;
+    if (connectLocBtn) {
+      connectLocBtn.addEventListener('click', async () => {
+        connectLocBtn.disabled = true;
+        defaultLocationPort.setSimulated(false);
+        defaultLocationPort.setLiveEnabled(true);
+        if (typeof defaultLocationPort.consentAndRequest === 'function') {
+          liveLocationStatus = await defaultLocationPort.consentAndRequest();
+        } else {
+          liveLocationStatus = defaultLocationPort.getLocation();
+        }
+        update();
+      });
+    }
 
     // 1. Scene Switcher
     const selectEl = root.querySelector('#scene-select') as HTMLSelectElement | null;

@@ -24,6 +24,8 @@ import { mockLunchAdapter } from '../../plugins/lunch/adapter.js';
 import {
   type CommandInterpreter,
   type SituationAttribution,
+  type InterpretedCommand,
+  type CommandInterpretationContext,
 } from '../conversation/grammar.js';
 import { defaultModelCommandInterpreter } from '../conversation/model-interpreter.js';
 import {
@@ -149,6 +151,18 @@ export class DefaultActionStateStore implements ActionStateStore {
 
   public setInterpreter(interpreter: CommandInterpreter): void {
     this.interpreter = interpreter;
+  }
+
+  public isInFlight(): boolean {
+    return (this.interpreter as any)?.isInFlight?.() ?? false;
+  }
+
+  public cancelInFlight(): void {
+    (this.interpreter as any)?.cancelInFlight?.();
+  }
+
+  public isLiveMode(): boolean {
+    return (this.interpreter as any)?.isLiveMode?.() ?? false;
   }
 
   public setCommandContext(ctx: ActionCommandContext): void {
@@ -469,6 +483,9 @@ export class DefaultActionStateStore implements ActionStateStore {
     text: string,
     contextOverride?: ActionCommandContext
   ): { collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan } {
+    if (this.isInFlight()) {
+      return { collapsed: false, rule: 'unsupported_ask', response: '' };
+    }
     const trimmed = text.trim();
     if (!trimmed) {
       return { collapsed: false, rule: 'unsupported_ask', response: '' };
@@ -482,6 +499,63 @@ export class DefaultActionStateStore implements ActionStateStore {
       timestamp: now,
     });
 
+    const { ctx, interpCtx } = this.buildInterpretationContext(contextOverride);
+    const cmd = this.interpreter.interpret(trimmed, interpCtx);
+    return this.applyCommand(trimmed, cmd, ctx, now);
+  }
+
+  public async submitMessageAsync(
+    text: string,
+    contextOverride?: ActionCommandContext
+  ): Promise<{ collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan }> {
+    if (this.isInFlight()) {
+      return { collapsed: false, rule: 'unsupported_ask', response: '' };
+    }
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return { collapsed: false, rule: 'unsupported_ask', response: '' };
+    }
+
+    const now = new Date().toISOString();
+    this.transcriptList.push({
+      id: `msg-${Date.now()}-u`,
+      sender: 'user',
+      text: trimmed,
+      timestamp: now,
+    });
+
+    const inflightId = `msg-${Date.now()}-inflight`;
+    this.transcriptList.push({
+      id: inflightId,
+      sender: 'assistant',
+      text: 'Thinking… live model',
+      timestamp: now,
+      inFlight: true,
+    });
+    this.notify();
+
+    const { ctx, interpCtx } = this.buildInterpretationContext(contextOverride);
+    let cmd: InterpretedCommand;
+    try {
+      if (typeof (this.interpreter as any).interpretAsync === 'function') {
+        cmd = await (this.interpreter as any).interpretAsync(trimmed, interpCtx);
+      } else {
+        cmd = this.interpreter.interpret(trimmed, interpCtx);
+      }
+    } finally {
+      const idx = this.transcriptList.findIndex(m => m.id === inflightId);
+      if (idx !== -1) {
+        this.transcriptList.splice(idx, 1);
+      }
+    }
+
+    return this.applyCommand(trimmed, cmd, ctx, now);
+  }
+
+  private buildInterpretationContext(contextOverride?: ActionCommandContext): {
+    ctx: ActionCommandContext | undefined;
+    interpCtx: CommandInterpretationContext;
+  } {
     const ctx = contextOverride ?? this.commandContext;
 
     // Available modes from current plan options
@@ -570,18 +644,28 @@ export class DefaultActionStateStore implements ActionStateStore {
       if ((ctx.plan as any).destination) validPlaces.push((ctx.plan as any).destination);
     }
 
-    // Interpret command using configured interpreter (ModelCommandInterpreter or Deterministic)
-    const cmd = this.interpreter.interpret(trimmed, {
-      availableModes: availableModes.length > 0 ? availableModes : ['drive', 'bus'],
-      currentPlanIntent: ctx?.plan?.intentId,
-      availableSignalIds,
-      knownFactKeys,
-      confirmedFactKeys,
-      validTimes,
-      validPlaces,
-      sceneId: ctx?.sceneId,
-      evidenceBundle,
-    });
+    return {
+      ctx,
+      interpCtx: {
+        availableModes: availableModes.length > 0 ? availableModes : ['drive', 'bus'],
+        currentPlanIntent: ctx?.plan?.intentId,
+        availableSignalIds,
+        knownFactKeys,
+        confirmedFactKeys,
+        validTimes,
+        validPlaces,
+        sceneId: ctx?.sceneId,
+        evidenceBundle,
+      },
+    };
+  }
+
+  private applyCommand(
+    trimmed: string,
+    cmd: InterpretedCommand,
+    ctx?: ActionCommandContext,
+    now: string = new Date().toISOString()
+  ): { collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan } {
 
     if (cmd.situationAttribution) {
       this.currentSituationAttribution = {

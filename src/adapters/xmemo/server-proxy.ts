@@ -28,6 +28,19 @@ import {
   RateLimiter,
   loadEnvLocal,
 } from '../model/server-proxy.js';
+import {
+  isAllowlistedLoopbackHost,
+  resolveXMemoRedirectUri,
+  ALLOWLISTED_LOOPBACK_PORTS,
+  ALLOWLISTED_LOOPBACK_HOSTNAMES,
+} from './loopback-allowlist.js';
+
+export {
+  isAllowlistedLoopbackHost,
+  resolveXMemoRedirectUri,
+  ALLOWLISTED_LOOPBACK_PORTS,
+  ALLOWLISTED_LOOPBACK_HOSTNAMES,
+};
 
 /**
  * Isolated UNVERIFIED XMemo MCP Tool Mapping
@@ -373,7 +386,7 @@ export function resolveXMemoConfig(
   // Strict: remove 'yori-dev-client' placeholder fallback
   const clientId = env['XMEMO_CLIENT_ID'] || undefined;
   const clientSecret = env['XMEMO_CLIENT_SECRET'];
-  const redirectUri = env['XMEMO_REDIRECT_URI'] || 'http://127.0.0.1:5173/api/xmemo/callback';
+  const redirectUri = resolveXMemoRedirectUri(undefined, env);
 
   // XKEY01: Server-only owner-key demo mode configuration
   const authMode = env['XMEMO_AUTH_MODE'] || 'oauth';
@@ -1517,6 +1530,14 @@ export class XMemoDevProxy {
         return true;
       }
 
+      const hostHeader = (req.headers?.['host'] as string) || undefined;
+      if (hostHeader && !process.env.XMEMO_REDIRECT_URI && !isAllowlistedLoopbackHost(hostHeader)) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.end('<h1>400 Bad Request: Disallowed host header</h1>');
+        return true;
+      }
+
       const queryIdx = rawUrl.indexOf('?');
       const queryParams = new URLSearchParams(queryIdx >= 0 ? rawUrl.slice(queryIdx + 1) : '');
       const code = queryParams.get('code');
@@ -1627,6 +1648,13 @@ export class XMemoDevProxy {
         res.end(JSON.stringify({ error: 'Method Not Allowed' }));
         return true;
       }
+      const hostHeader = (req.headers?.['host'] as string) || undefined;
+      if (hostHeader && !process.env.XMEMO_REDIRECT_URI && !isAllowlistedLoopbackHost(hostHeader)) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Disallowed host header' }));
+        return true;
+      }
       if (
         this.config.enabled &&
         !this.clientId &&
@@ -1637,7 +1665,19 @@ export class XMemoDevProxy {
         await this.ensureRegistered();
       }
       try {
-        const result = this.createAuthUrl();
+        const hostHeader = (req.headers?.['host'] as string) || undefined;
+        let redirectUriOverride: string | undefined;
+        if (hostHeader) {
+          try {
+            redirectUriOverride = resolveXMemoRedirectUri(hostHeader, process.env);
+          } catch (err: unknown) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: (err as Error).message }));
+            return true;
+          }
+        }
+        const result = this.createAuthUrl(redirectUriOverride);
         res.statusCode = 200;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify(result));
@@ -1655,6 +1695,13 @@ export class XMemoDevProxy {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return true;
+      }
+      const hostHeader = (req.headers?.['host'] as string) || undefined;
+      if (hostHeader && !process.env.XMEMO_REDIRECT_URI && !isAllowlistedLoopbackHost(hostHeader)) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Disallowed host header' }));
         return true;
       }
       const result = await this.disconnect();
@@ -1697,6 +1744,13 @@ export class XMemoDevProxy {
         res.end(JSON.stringify({ error: 'Method Not Allowed' }));
         return true;
       }
+      const hostHeader = (req.headers?.['host'] as string) || undefined;
+      if (hostHeader && !process.env.XMEMO_REDIRECT_URI && !isAllowlistedLoopbackHost(hostHeader)) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Disallowed host header' }));
+        return true;
+      }
       const { code, state } = (payload as any) || {};
       if (typeof code !== 'string' || typeof state !== 'string') {
         res.statusCode = 400;
@@ -1718,6 +1772,13 @@ export class XMemoDevProxy {
         res.statusCode = 405;
         res.setHeader('Content-Type', 'application/json');
         res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return true;
+      }
+      const hostHeader = (req.headers?.['host'] as string) || undefined;
+      if (hostHeader && !process.env.XMEMO_REDIRECT_URI && !isAllowlistedLoopbackHost(hostHeader)) {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Disallowed host header' }));
         return true;
       }
 

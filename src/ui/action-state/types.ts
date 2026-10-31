@@ -73,6 +73,7 @@ export interface MessageItem {
   text: string;
   timestamp: string;
   isPlaceholder?: boolean;
+  inFlight?: boolean;
   needsConfirmation?: boolean;
   pendingPlan?: PreparedPlan;
   workingDetail?: string;
@@ -121,6 +122,9 @@ export interface ActionStateStore {
   getEngineStatusLabel(): string;
   getSituationAttribution(): SituationAttribution | undefined;
   setInterpreter(interpreter: CommandInterpreter): void;
+  isInFlight(): boolean;
+  cancelInFlight(): void;
+  isLiveMode(): boolean;
 
   setCommandContext(ctx: ActionCommandContext): void;
   getCommandContext(): ActionCommandContext | undefined;
@@ -147,6 +151,10 @@ export interface ActionStateStore {
     text: string,
     contextOverride?: ActionCommandContext
   ): { collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan };
+  submitMessageAsync?(
+    text: string,
+    contextOverride?: ActionCommandContext
+  ): Promise<{ collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan }>;
   pushHistory(snapshot: ActionHistorySnapshot): void;
   undo(): ActionHistorySnapshot | null;
 

@@ -17,9 +17,27 @@ import type {
 } from './types.js';
 import { validateFactsInWording } from './fact-checker.js';
 import { getTemplate } from './template-registry.js';
+import { resolveModelTimeoutMs } from './timeout-config.js';
+
+export * from './timeout-config.js';
 
 export class ClientModelPort implements ModelPort {
-  constructor(private readonly proxyEndpoint: string = '/api/model') {}
+  private readonly timeoutMs: number;
+
+  constructor(
+    private readonly proxyEndpoint: string = '/api/model',
+    timeoutMs?: number
+  ) {
+    const envVal =
+      typeof process !== 'undefined' && process.env?.MODEL_TIMEOUT_MS
+        ? process.env.MODEL_TIMEOUT_MS
+        : undefined;
+    this.timeoutMs = resolveModelTimeoutMs(timeoutMs ?? envVal);
+  }
+
+  public getTimeoutMs(): number {
+    return this.timeoutMs;
+  }
 
   public async getDiagnostics(): Promise<ModelPortDiagnostics> {
     try {
@@ -49,7 +67,7 @@ export class ClientModelPort implements ModelPort {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
       const resp = await fetch(`${this.proxyEndpoint}/refine`, {
         method: 'POST',

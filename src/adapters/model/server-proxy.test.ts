@@ -551,28 +551,28 @@ describe('S1-PREP-PROVIDER: MODEL_TIMEOUT_MS clamping & enforcement', () => {
     resetLedger(suiteLedgerPath);
   });
 
-  it('verifies timeout clamp values: 100->500, 99999->20000, "abc"->2000, negative->2000, empty->2000', () => {
-    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '100' })).toBe(500);
-    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '99999' })).toBe(20000);
-    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: 'abc' })).toBe(2000);
-    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '-500' })).toBe(2000);
-    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '' })).toBe(2000);
-    expect(resolveTimeoutMs({})).toBe(2000);
+  it('verifies timeout clamp values: 100->2000, 99999->30000, "abc"->15000, negative->15000, empty->15000', () => {
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '100' })).toBe(2000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '99999' })).toBe(30000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: 'abc' })).toBe(15000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '-500' })).toBe(15000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '' })).toBe(15000);
+    expect(resolveTimeoutMs({})).toBe(15000);
     expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '5000' })).toBe(5000);
   });
 
-  it('proves app path without allowExtendedVerificationTimeout still clamps at 20000ms even when higher timeout is passed', () => {
-    // 1. resolveTimeoutMs strictly clamps to 20000
-    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '30000' })).toBe(20000);
-    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '45000' })).toBe(20000);
-    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '60000' })).toBe(20000);
+  it('proves app path without allowExtendedVerificationTimeout still clamps at 30000ms even when higher timeout is passed', () => {
+    // 1. resolveTimeoutMs strictly clamps to 30000
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '30000' })).toBe(30000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '45000' })).toBe(30000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '60000' })).toBe(30000);
 
-    // 2. ModelDevProxy without allowExtendedVerificationTimeout clamps customConfig.timeoutMs to 20000
+    // 2. ModelDevProxy without allowExtendedVerificationTimeout clamps customConfig.timeoutMs to 30000
     const proxyApp = new ModelDevProxy({ timeoutMs: 45000 });
-    expect(proxyApp.getConfig().timeoutMs).toBe(20000);
+    expect(proxyApp.getConfig().timeoutMs).toBe(30000);
 
     const proxyApp60k = new ModelDevProxy({ timeoutMs: 60000 });
-    expect(proxyApp60k.getConfig().timeoutMs).toBe(20000);
+    expect(proxyApp60k.getConfig().timeoutMs).toBe(30000);
   });
 
   it('proves script path with allowExtendedVerificationTimeout accepts up to 60000ms and rejects >60000ms', () => {

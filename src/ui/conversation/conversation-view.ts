@@ -109,6 +109,28 @@ export function renderTranscriptItems(
       const isLatestMessage = idx === transcript.length - 1;
       const canInteract = isInteractive && isLatestMessage;
 
+      if (msg.inFlight) {
+        return `
+        <article class="chat-bubble-wrapper chat-bubble-assistant is-inflight" id="${escapeHtml(msg.id)}">
+          <div class="chat-avatar-mark" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" fill="#16382F"/>
+              <path d="M7 12l3 3 7-7" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="chat-bubble">
+            <div class="chat-inflight-row">
+              <span class="chat-inflight-spinner" aria-hidden="true"></span>
+              <p class="chat-text chat-inflight-text" id="inflight-status-text">${escapeHtml(msg.text)}</p>
+              <button type="button" class="btn btn-outline btn-xs btn-cancel-inflight" id="btn-cancel-inflight" aria-label="Cancel live model request">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </article>
+        `;
+      }
+
       return `
         <article class="chat-bubble-wrapper ${isUser ? 'chat-bubble-user' : 'chat-bubble-assistant'}" id="${escapeHtml(msg.id)}">
           ${
@@ -262,6 +284,16 @@ export function attachConversationEvents(
   const wireTranscriptButtons = () => {
     if (!transcriptEl) return;
 
+    const cancelBtn = transcriptEl.querySelector<HTMLButtonElement>(
+      '#btn-cancel-inflight'
+    );
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        store.cancelInFlight();
+      });
+    }
+
     const confirmBtn = transcriptEl.querySelector<HTMLButtonElement>(
       '#btn-chat-confirm:not([disabled]):not(.is-stale)'
     );
@@ -407,13 +439,44 @@ export function attachConversationEvents(
   }
 
   if (form && input) {
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (store.isInFlight()) return; // block double submit
       const text = input.value.trim();
       if (!text) return;
 
       input.value = '';
-      const result = store.submitMessage(text);
+
+      let result: { collapsed: boolean; rule: any; response: string; plan?: any };
+      const sendBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+
+      if (store.isLiveMode() && typeof store.submitMessageAsync === 'function') {
+        input.disabled = true;
+        if (sendBtn) sendBtn.disabled = true;
+
+        const unsubscribe = store.subscribe(() => {
+          if (transcriptEl) {
+            transcriptEl.innerHTML = renderTranscriptItems(
+              store.getTranscript(),
+              store.getActionState().status === 'needs-confirmation'
+            );
+            updateStatusChip();
+            updateDecisionLogDrawer();
+            transcriptEl.scrollTop = transcriptEl.scrollHeight;
+            wireTranscriptButtons();
+          }
+        });
+
+        try {
+          result = await store.submitMessageAsync(text);
+        } finally {
+          unsubscribe();
+          input.disabled = false;
+          if (sendBtn) sendBtn.disabled = false;
+        }
+      } else {
+        result = store.submitMessage(text);
+      }
 
       if (transcriptEl) {
         transcriptEl.innerHTML = renderTranscriptItems(

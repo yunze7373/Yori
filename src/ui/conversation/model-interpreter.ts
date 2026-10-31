@@ -37,6 +37,19 @@ import {
 export { CLOSED_DECISION_INTENTS, CLOSED_DECISION_INTENTS as CLOSED_INTENTS } from '../../adapters/model/reasoning.js';
 import { validateFactsInWording } from '../../adapters/model/fact-checker.js';
 import {
+  DEFAULT_LIVE_MODEL_TIMEOUT_MS,
+  MIN_MODEL_TIMEOUT_MS,
+  MAX_MODEL_TIMEOUT_MS,
+  resolveModelTimeoutMs,
+} from '../../adapters/model/timeout-config.js';
+
+export {
+  DEFAULT_LIVE_MODEL_TIMEOUT_MS,
+  MIN_MODEL_TIMEOUT_MS,
+  MAX_MODEL_TIMEOUT_MS,
+  resolveModelTimeoutMs,
+};
+import {
   type ModelCommandDecisionOutput,
   FIXTURE_CMD_LEAVE_LATER_GENERIC,
   FIXTURE_CMD_LEAVE_15_MIN,
@@ -116,7 +129,7 @@ function normalizeKey(str: string): string {
 }
 
 export class ModelCommandInterpreter implements CommandInterpreter {
-  private readonly mode: ModelInterpreterMode;
+  private mode: ModelInterpreterMode;
   private readonly fixtures: Record<string, ModelCommandDecisionOutput>;
   private readonly fallbackInterpreter: CommandInterpreter;
   private readonly logger: DecisionLogger;
@@ -124,6 +137,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
   private readonly timeoutMs: number;
   private consecutiveFailures = 0;
   private isPaused = false;
+  private activeAbortController: AbortController | null = null;
 
   constructor(options: ModelInterpreterOptions = {}) {
     this.mode = options.mode ?? 'scripted_fixture';
@@ -131,7 +145,36 @@ export class ModelCommandInterpreter implements CommandInterpreter {
     this.fallbackInterpreter = options.fallbackInterpreter ?? defaultCommandInterpreter;
     this.logger = options.logger ?? globalDecisionLogger;
     this.endpoint = options.endpoint ?? '/api/model/command';
-    this.timeoutMs = options.timeoutMs ?? 2000;
+    const envVal =
+      typeof process !== 'undefined' && process.env?.MODEL_TIMEOUT_MS
+        ? process.env.MODEL_TIMEOUT_MS
+        : undefined;
+    this.timeoutMs = options.timeoutMs !== undefined
+      ? resolveModelTimeoutMs(options.timeoutMs)
+      : resolveModelTimeoutMs(envVal);
+  }
+
+  public isLiveMode(): boolean {
+    return this.mode === 'live';
+  }
+
+  public setMode(mode: ModelInterpreterMode): void {
+    this.mode = mode;
+  }
+
+  public getTimeoutMs(): number {
+    return this.timeoutMs;
+  }
+
+  public isInFlight(): boolean {
+    return this.activeAbortController !== null;
+  }
+
+  public cancelInFlight(): void {
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      this.activeAbortController = null;
+    }
   }
 
   public isModelPaused(): boolean {
@@ -710,6 +753,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
 
     try {
       const controller = new AbortController();
+      this.activeAbortController = controller;
       const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
       const resp = await fetch(this.endpoint, {
@@ -732,6 +776,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       });
 
       clearTimeout(timeoutId);
+      this.activeAbortController = null;
       const latencyMs = Date.now() - startTime;
 
       if (!resp.ok) {
@@ -787,6 +832,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
         engineStatus: 'meta_model_live',
       };
     } catch (err: unknown) {
+      this.activeAbortController = null;
       this.consecutiveFailures++;
       const reachedPauseThreshold = this.consecutiveFailures >= 3;
       if (reachedPauseThreshold && !this.isPaused) {

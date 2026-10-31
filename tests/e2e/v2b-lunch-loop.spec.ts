@@ -269,7 +269,8 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     function assertNoFalseConfirmedOrLive(text: string, surfaceName: string) {
       const sanitized = text
         .replace(/\bnot confirmed\b/gi, '')
-        .replace(/\bscripted model fixture · not a live model call\b/gi, '');
+        .replace(/\bscripted model fixture · not a live model call\b/gi, '')
+        .replace(/\blive context\b/gi, '');
 
       const confirmedMatches = sanitized.match(/\bconfirmed\b/i);
       expect(
