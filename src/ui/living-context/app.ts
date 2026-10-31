@@ -52,6 +52,7 @@ import type { WeatherData } from '../../adapters/providers/weather-types.js';
 import {
   escapeHtml,
   getGreeting,
+  formatTime,
   formatNowPlan,
   formatAheadPlan,
   formatNoticeMessage,
@@ -70,7 +71,7 @@ import { renderMeView } from '../me/me-view.js';
 import { createCompositeMemoryPort, type MemoryPort } from '../../adapters/xmemo/index.js';
 import { DEFAULT_DAILY_PROMPT_BUDGET } from '../../core/policy/index.js';
 import { coordinateReasoning } from '../../app/reasoning-coordinator.js';
-import { createActionStateStore, type ActionStateStore } from '../action-state/index.js';
+import { createActionStateStore, computePlanDiff, type ActionStateStore, type PlanDiff } from '../action-state/index.js';
 import {
   renderAskBar,
   attachAskBarEvents,
@@ -1264,11 +1265,17 @@ export function renderApp(
     }
   }
 
+  let isWeatherLoading = false;
+  let weatherError: string | null = null;
+
   async function checkWeatherStatus() {
     try {
       if (typeof fetch !== 'undefined') {
+        isWeatherLoading = true;
+        update();
         const resp = await fetch('/api/weather/status', { cache: 'no-store' });
         if (resp.ok) {
+          weatherError = null;
           const data = await resp.json();
           if (data.enabled) {
             weatherStatus = data;
@@ -1285,10 +1292,15 @@ export function renderApp(
               // fail-closed
             }
           }
+        } else if (resp.status >= 500) {
+          weatherError = 'Weather service unavailable · showing your last plan';
         }
       }
     } catch {
       // Ignore network errors
+    } finally {
+      isWeatherLoading = false;
+      update();
     }
   }
 
@@ -1403,8 +1415,11 @@ export function renderApp(
     const living = pipelineResult.livingContext;
     const baseNowPlan = reasoningState && reasoningState.scene === currentScene ? reasoningState.now : living.now;
     const actionState = actionStore.getActionState();
+    const isPlanSuppressed = actionState.plan
+      ? storedSuppressions.some(s => s.targetIntent === actionState.plan?.intentId || (s as any).intentId === actionState.plan?.intentId)
+      : false;
     const storePlan =
-      actionState.status === 'updated' || (actionState.status === 'working' && actionState.plan)
+      !isPlanSuppressed && (actionState.status === 'updated' || (actionState.status === 'working' && actionState.plan))
         ? actionState.plan
         : undefined;
     const nowPlan = storePlan ?? baseNowPlan;
@@ -1758,6 +1773,32 @@ export function renderApp(
           </section>
         `;
       } else {
+        let currentPlanDiff: PlanDiff | null = null;
+        if (actionStore.canUndo()) {
+          const lastSnapshot = actionStore.getLastHistorySnapshot();
+          if (lastSnapshot?.planState && nowPlan) {
+            const priorOpt = lastSnapshot.planState.optionsOrSteps?.find(
+              (o: any) => typeof o === 'object' && o !== null && Boolean(o.isSelected)
+            ) as any;
+            const currentOpt = nowPlan.optionsOrSteps?.find(
+              (o: any) => typeof o === 'object' && o !== null && Boolean(o.isSelected)
+            ) as any;
+            const prior = {
+              headline: lastSnapshot.planState.headline,
+              leaveTimeStr: lastSnapshot.planState.leaveAt ? formatTime(lastSnapshot.planState.leaveAt, lastSnapshot.planState.timezone) : undefined,
+              prepareTimeStr: lastSnapshot.planState.prepareAt ? formatTime(lastSnapshot.planState.prepareAt, lastSnapshot.planState.timezone) : undefined,
+              mode: priorOpt?.mode,
+            };
+            const current = {
+              headline: nowPlan.headline,
+              leaveTimeStr: nowPlan.leaveAt ? formatTime(nowPlan.leaveAt, nowPlan.timezone) : undefined,
+              prepareTimeStr: nowPlan.prepareAt ? formatTime(nowPlan.prepareAt, nowPlan.timezone) : undefined,
+              mode: currentOpt?.mode,
+            };
+            currentPlanDiff = computePlanDiff(prior, current);
+          }
+        }
+
         const v2Composition = buildHomeComposition({
           plan: nowPlan,
           spatialEvidence: spatialMapEvidence,
@@ -1768,6 +1809,9 @@ export function renderApp(
           snapshot: effectiveSnapshot,
           canUndo: actionStore.canUndo(),
           evidenceBundle: effectiveEvidenceBundle,
+          planDiff: currentPlanDiff,
+          weatherError: weatherError ?? undefined,
+          isLoading: isWeatherLoading,
         });
         v2BodyHtml = renderV2Home(v2Composition);
       }
@@ -3268,6 +3312,36 @@ export function renderApp(
       const closeAdjustBtn = root.querySelector('#btn-close-adjust');
       if (closeAdjustBtn) closeAdjustBtn.addEventListener('click', closeModal);
 
+      const applyTimingAdjustment = (planToAdjust: PreparedPlan, prepMinutes: number, bufferMinutes: number) => {
+        const priorBuffer = timingOverrides[planToAdjust.id]?.bufferMinutes ?? 5;
+        timingOverrides[planToAdjust.id] = { prepMinutes, bufferMinutes };
+        if (planToAdjust.apptAt && planToAdjust.leaveAt) {
+          const travelMinutes = Math.max(
+            5,
+            Math.round((Date.parse(planToAdjust.apptAt) - Date.parse(planToAdjust.leaveAt)) / 60_000) - priorBuffer
+          );
+          const newLeaveMs = Date.parse(planToAdjust.apptAt) - (travelMinutes + bufferMinutes) * 60_000;
+          const newPrepMs = newLeaveMs - prepMinutes * 60_000;
+          const tz = planToAdjust.timezone;
+          const newLeaveIso = new Date(newLeaveMs).toISOString();
+          const newPrepIso = new Date(newPrepMs).toISOString();
+          const newLeaveStr = formatTime(newLeaveIso, tz);
+          const newPrepStr = formatTime(newPrepIso, tz);
+          const newHeadline = `Get ready at ${newPrepStr}, leave by ${newLeaveStr}`;
+
+          const updatedPlan: PreparedPlan = {
+            ...planToAdjust,
+            leaveAt: newLeaveIso,
+            prepareAt: newPrepIso,
+            headline: newHeadline,
+          };
+          actionStore.applyPlanAdjustment(
+            updatedPlan,
+            `Adjusted timing: prep ${prepMinutes}m, buffer ${bufferMinutes}m`
+          );
+        }
+      };
+
       const adjustForTodayBtn = root.querySelector('#btn-adjust-for-today');
       if (adjustForTodayBtn && activeModal?.type === 'adjust') {
         const planToAdjust = activeModal.plan;
@@ -3277,7 +3351,7 @@ export function renderApp(
           const prepMinutes = prepInput ? parseInt(prepInput.value, 10) || 20 : 20;
           const bufferMinutes = bufferInput ? parseInt(bufferInput.value, 10) || 5 : 5;
 
-          timingOverrides[planToAdjust.id] = { prepMinutes, bufferMinutes };
+          applyTimingAdjustment(planToAdjust, prepMinutes, bufferMinutes);
           closeModal();
         });
       }
@@ -3320,7 +3394,7 @@ export function renderApp(
             snapshotAsOf
           );
 
-          timingOverrides[planToAdjust.id] = { prepMinutes, bufferMinutes };
+          applyTimingAdjustment(planToAdjust, prepMinutes, bufferMinutes);
           closeModal();
         });
       }
@@ -3397,6 +3471,7 @@ export function renderApp(
             snapshotAsOf
           );
 
+          actionStore.resetToIdle();
           closeModal();
         });
       }

@@ -295,7 +295,7 @@ export function renderWhySheet(
 
   return `
     <div class="modal-backdrop" id="why-sheet-backdrop" role="presentation">
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="why-sheet-title">
+      <div class="modal-card" id="why-sheet" role="dialog" aria-modal="true" aria-labelledby="why-sheet-title">
         <div class="modal-header">
           <h2 id="why-sheet-title" class="modal-title" tabindex="-1" data-slot="chrome" data-slot-reason="Why sheet title">${escapeHtml(STRINGS.whySheet.title)}</h2>
           <button type="button" class="btn-close" id="btn-close-why" aria-label="${escapeHtml(STRINGS.whySheet.close)}" data-slot="chrome" data-slot-reason="Modal close button">&times;</button>

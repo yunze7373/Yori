@@ -179,6 +179,17 @@ export interface HomeCompositionVM {
   readonly aheadItems: readonly AheadItemVM[];
   readonly proposals: readonly ProposalItemVM[];
 
+  // Microinteraction state (S3-MICRO)
+  readonly planDiff?: {
+    fieldName: string;
+    priorValue: string;
+    newValue: string;
+    diffSummary: string;
+    ariaLiveText: string;
+  } | null;
+  readonly weatherError?: string;
+  readonly isLoading?: boolean;
+
   // Grounding
   readonly evidenceBundle?: EvidenceBundle;
   readonly sourceRef?: SourceRef;

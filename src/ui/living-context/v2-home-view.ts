@@ -271,6 +271,9 @@ function renderActionRow(vm: HomeCompositionVM): string {
           <button type="button" class="btn btn-primary btn-now-action" id="btn-accept" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Accept plan button">
             ${escapeHtml(STRINGS.actions.accept)}
           </button>
+          <button type="button" class="btn btn-outline btn-now-action" id="btn-adjust" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Adjust plan button">
+            ${escapeHtml(STRINGS.actions.adjust)}
+          </button>
           <button type="button" class="btn btn-outline btn-now-action" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Undo action button">
             ${escapeHtml(STRINGS.actions.undo)}
           </button>
@@ -281,6 +284,9 @@ function renderActionRow(vm: HomeCompositionVM): string {
         <div class="now-actions-secondary">
           <button type="button" class="btn-secondary-link v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Trip details action button">
             Details →
+          </button>
+          <button type="button" class="btn-secondary-link" id="btn-dismiss" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Dismiss plan button">
+            ${escapeHtml(STRINGS.actions.dismiss)}
           </button>
         </div>
       </div>
@@ -418,11 +424,48 @@ export function renderLocationControls(vm: HomeCompositionVM): string {
   `;
 }
 
+function renderStateNotices(vm: HomeCompositionVM): string {
+  const parts: string[] = [];
+  if (vm.isLoading) {
+    parts.push(`
+      <div class="skeleton-loader" id="loading-skeleton" aria-label="Loading updates...">
+        <div class="skeleton-row title"></div>
+        <div class="skeleton-row subtitle"></div>
+        <div class="skeleton-row map"></div>
+      </div>
+    `);
+  }
+  if (vm.weatherError) {
+    parts.push(`
+      <div class="degraded-notice-banner" id="weather-error-notice" role="alert">
+        <svg class="notice-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span>${escapeHtml(vm.weatherError)}</span>
+      </div>
+    `);
+  }
+  return parts.join('');
+}
+
+function renderPlanDiffBanner(diff?: HomeCompositionVM['planDiff']): string {
+  if (!diff) return '';
+  return `
+    <div class="plan-diff-banner" id="plan-diff-banner" role="status" aria-live="polite" aria-label="${escapeHtml(diff.ariaLiveText)}">
+      <span class="plan-diff-badge">UPDATED</span>
+      <span class="plan-diff-text">${escapeHtml(diff.diffSummary)}</span>
+    </div>
+  `;
+}
+
 export function renderV2Home(vm: HomeCompositionVM): string {
   // 1. Quiet State
   if (vm.layoutKind === 'quiet') {
     return `
       <div class="v2-home-container quiet">
+        ${renderStateNotices(vm)}
         <section class="card quiet-card" aria-label="Quiet State">
           <div class="quiet-icon" aria-hidden="true">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -444,6 +487,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
   if (vm.layoutKind === 'journey') {
     return `
       <div class="v2-home-container journey">
+        ${renderStateNotices(vm)}
         <!-- Weather / Insight Alert Banner -->
         ${
           vm.isRain && vm.rainBanner
@@ -493,6 +537,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
         <!-- Responsive Hero Structure (NOW Card with Inline Map) -->
         <div class="v2-journey-grid">
           <section class="card now-card v2-journey-card" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}">
+            ${renderPlanDiffBanner(vm.planDiff)}
             <div class="v2-card-header">
               <!-- Compact Category Row (Finding P2) -->
               <div class="now-category-row">
@@ -524,11 +569,11 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 vm.fieldSourceRefs?.prepareTime && vm.fieldSourceRefs?.leaveTime && vm.prepareTimeStr && vm.leaveTimeStr
                   ? `
                 <div class="now-title" id="now-title">
-                  <span data-slot="chrome" data-slot-reason="Departure prep prefix">Get ready at </span><span class="now-prep-time" data-source-ref="${escapeHtml(vm.fieldSourceRefs.prepareTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.prepareTime.field)}" data-slot="domain">${escapeHtml(vm.prepareTimeStr)}</span><span data-slot="chrome" data-slot-reason="Departure leave connector">, leave by </span><span class="now-leave-time" data-source-ref="${escapeHtml(vm.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.leaveTime.field)}" data-slot="domain">${escapeHtml(vm.leaveTimeStr)}</span>
+                  <span data-slot="chrome" data-slot-reason="Departure prep prefix">Get ready at </span><span class="now-prep-time ${vm.planDiff?.fieldName === 'prepareTime' ? 'plan-diff-highlight' : ''}" data-source-ref="${escapeHtml(vm.fieldSourceRefs.prepareTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.prepareTime.field)}" data-slot="domain">${escapeHtml(vm.prepareTimeStr)}</span><span data-slot="chrome" data-slot-reason="Departure leave connector">, leave by </span><span class="now-leave-time ${vm.planDiff?.fieldName === 'leaveTime' ? 'plan-diff-highlight' : ''}" data-source-ref="${escapeHtml(vm.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.leaveTime.field)}" data-slot="domain">${escapeHtml(vm.leaveTimeStr)}</span>
                 </div>
               `
                   : `
-                <div class="now-title" id="now-title" data-slot="chrome" data-slot-reason="Departure schedule headline">${escapeHtml(vm.headline)}</div>
+                <div class="now-title ${vm.planDiff ? 'plan-diff-highlight' : ''}" id="now-title" data-slot="chrome" data-slot-reason="Departure schedule headline">${escapeHtml(vm.headline)}</div>
               `
               }
               <div class="now-rationale-line">
@@ -579,7 +624,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
   // 3. Candidates Layout (Lunch Away)
   return `
     <div class="v2-home-container candidates">
+      ${renderStateNotices(vm)}
       <section class="card now-card v2-candidates-hero" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}">
+        ${renderPlanDiffBanner(vm.planDiff)}
         <div class="v2-card-header">
           <!-- Compact Category Row (Finding P2) -->
           <div class="now-category-row">
@@ -596,12 +643,12 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           ${
             vm.fieldSourceRefs?.topCandidateName && vm.fieldSourceRefs?.topCandidateDistance && vm.topCandidateName && vm.topCandidateDistance
               ? `
-            <div class="now-title" id="now-title">
+            <div class="now-title ${vm.planDiff ? 'plan-diff-highlight' : ''}" id="now-title">
               <span class="hero-candidate-name" data-source-ref="${escapeHtml(vm.fieldSourceRefs.topCandidateName.recordId)}.${escapeHtml(vm.fieldSourceRefs.topCandidateName.field)}" data-slot="domain">${escapeHtml(vm.topCandidateName)}</span><span data-slot="chrome" data-slot-reason="Hero candidate separator"> · </span><span class="hero-candidate-dist" data-source-ref="${escapeHtml(vm.fieldSourceRefs.topCandidateDistance.recordId)}.${escapeHtml(vm.fieldSourceRefs.topCandidateDistance.field)}" data-slot="domain">${escapeHtml(vm.topCandidateDistance)}</span>
             </div>
           `
               : `
-            <div class="now-title" id="now-title" data-slot="chrome" data-slot-reason="Candidates hero headline">${escapeHtml(vm.headline)}</div>
+            <div class="now-title ${vm.planDiff ? 'plan-diff-highlight' : ''}" id="now-title" data-slot="chrome" data-slot-reason="Candidates hero headline">${escapeHtml(vm.headline)}</div>
           `
           }
           <div class="mock-places-notice" data-slot="chrome" data-slot-reason="Places disclosure notice">${escapeHtml(

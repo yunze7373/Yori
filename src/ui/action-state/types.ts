@@ -157,6 +157,9 @@ export interface ActionStateStore {
   ): Promise<{ collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan }>;
   pushHistory(snapshot: ActionHistorySnapshot): void;
   undo(): ActionHistorySnapshot | null;
+  getHistory(): readonly ActionHistorySnapshot[];
+  getLastHistorySnapshot(): ActionHistorySnapshot | null;
+  applyPlanAdjustment(plan: PreparedPlan, summary: string, override?: UserRequestOverride): void;
 
   subscribe(listener: (snapshot: ActionStoreSnapshot) => void): () => void;
 }

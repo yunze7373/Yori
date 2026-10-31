@@ -85,9 +85,12 @@
   --space-8: 32px;
   --space-12: 48px;
 
-  /* Micro-Motion Tokens */
+  /* Micro-Motion Tokens (S3-MICRO) */
+  /* RESERVED: --motion-fast */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
   /* RESERVED: --duration-instant */
-  --duration-instant: 0ms;
+  --duration-instant: 0s;
   --duration-micro: 120ms;
   --duration-medium: 200ms;
   --duration-page: 320ms;
@@ -122,14 +125,19 @@ html, body {
 /* Prefers reduced motion */
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --duration-micro: var(--duration-instant, 0.001ms) !important;
-    --duration-medium: var(--duration-instant, 0.001ms) !important;
-    --duration-page: var(--duration-instant, 0.001ms) !important;
+    --motion-fast: 0s !important;
+    --motion-base: 0s !important;
+    --duration-instant: 0s !important;
+    --duration-micro: 0s !important;
+    --duration-medium: 0s !important;
+    --duration-page: 0s !important;
   }
   *, *::before, *::after {
-    animation-duration: 0.001ms !important;
+    animation-duration: 0s !important;
+    animation: none !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
+    transition-duration: 0s !important;
+    transition: none !important;
     scroll-behavior: auto !important;
   }
 }
@@ -4463,6 +4471,142 @@ button.v2-view-detail-link:focus-visible {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* ==========================================================================
+   S3-MICRO: Plan Diff, Micro-interactions, Skeleton & Degraded Error Notices
+   ========================================================================== */
+
+/* Plan Diff Banner on Now Card */
+.plan-diff-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: 6px 12px;
+  background-color: var(--color-chip-bg, #EDF7F0);
+  border: 1px solid var(--color-chip-border, #CAD6D0);
+  border-radius: var(--radius-btn, 12px);
+  margin-bottom: var(--space-3, 12px);
+  font-size: var(--text-caption, 0.8125rem);
+  color: var(--color-chip-text, #16382F);
+  animation: fadeIn var(--motion-base, 200ms) var(--ease-standard);
+  transition: opacity var(--motion-base, 200ms) var(--ease-standard);
+}
+
+.plan-diff-badge {
+  font-weight: 700;
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: var(--color-primary-btn, #16382F);
+  color: #FFFFFF;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.plan-diff-text {
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+}
+
+/* Plan Field Diff Highlight */
+.plan-diff-highlight {
+  display: inline-block;
+  background-color: rgba(47, 111, 100, 0.15);
+  color: var(--color-ink, #162824);
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(47, 111, 100, 0.3);
+  transition: background-color var(--motion-base, 200ms) var(--ease-standard);
+}
+
+/* Context Chip in Conversation Header */
+.conversation-context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: var(--radius-chip, 9999px);
+  background-color: var(--color-chip-bg, #EDF7F0);
+  border: 1px solid var(--color-chip-border, #CAD6D0);
+  color: var(--color-chip-text, #16382F);
+  text-transform: none;
+}
+
+.conversation-context-chip.demo-chip {
+  background-color: #EDF7F0;
+  color: #16382F;
+}
+
+.conversation-context-chip.live-chip {
+  background-color: #E2ECE6;
+  color: #16382F;
+}
+
+/* Loading Skeleton */
+.skeleton-loader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  padding: var(--space-4, 16px);
+  background-color: var(--color-card-bg, #FFFFFF);
+  border: 1px solid var(--color-card-border, #E1E6E0);
+  border-radius: var(--radius-card, 18px);
+  margin-bottom: var(--space-4, 16px);
+  box-shadow: var(--shadow-card);
+}
+
+.skeleton-row {
+  height: 16px;
+  background: linear-gradient(90deg, #F0F4F2 25%, #E4ECE7 50%, #F0F4F2 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.5s infinite;
+  border-radius: 4px;
+}
+
+.skeleton-row.title {
+  height: 24px;
+  width: 60%;
+}
+
+.skeleton-row.subtitle {
+  height: 16px;
+  width: 85%;
+}
+
+.skeleton-row.map {
+  height: 100px;
+  width: 100%;
+  border-radius: 8px;
+}
+
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Fail-Closed Degraded Error Notice (keeping prior plan visible) */
+.degraded-notice-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  background-color: var(--color-notice-bg, #FEF7ED);
+  border: 1px solid var(--color-notice-border, #F7D7A4);
+  border-radius: var(--radius-btn, 12px);
+  color: var(--color-notice-text, #78350F);
+  font-size: var(--text-body, 0.9375rem);
+  font-weight: 500;
+  margin-bottom: var(--space-4, 16px);
+}
+
+.degraded-notice-banner .notice-icon {
+  flex-shrink: 0;
+  color: var(--color-notice-text, #78350F);
 }
 
 

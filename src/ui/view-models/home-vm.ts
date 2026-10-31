@@ -52,9 +52,12 @@ export interface BuildHomeCompositionOptions {
   snapshot?: ContextSnapshot | null;
   canUndo?: boolean;
   evidenceBundle?: EvidenceBundle;
+  planDiff?: HomeCompositionVM['planDiff'];
+  weatherError?: string;
+  isLoading?: boolean;
 }
 
-export function buildHomeComposition(options: BuildHomeCompositionOptions): HomeCompositionVM {
+function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompositionVM {
   const {
     plan,
     spatialEvidence,
@@ -779,4 +782,14 @@ function compileProposals(
       title: humanizeProposalTitle(prop.key),
     }))
   );
+}
+
+export function buildHomeComposition(options: BuildHomeCompositionOptions): HomeCompositionVM {
+  const raw = compileHomeComposition(options);
+  return {
+    ...raw,
+    planDiff: options.planDiff ?? null,
+    weatherError: options.weatherError,
+    isLoading: Boolean(options.isLoading),
+  };
 }

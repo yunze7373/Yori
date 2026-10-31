@@ -36,6 +36,7 @@ export function renderConversationOverlay(store: ActionStateStore): string {
               <h2 class="conversation-title" id="conversation-title">${escapeHtml(STRINGS.conversation.title)}</h2>
               <div class="conversation-subtitle-row">
                 <span class="v2-offline-badge" id="conversation-status-badge">Offline demo · simulated</span>
+                <span class="context-chip conversation-context-chip ${store.isLiveMode() ? 'live-chip' : 'demo-chip'}" id="conversation-context-chip">${store.isLiveMode() ? 'Live context' : 'Demo scene · simulated'}</span>
                 <span class="engine-status-chip" id="engine-status-chip">${escapeHtml(engineStatusLabel)}</span>
               </div>
             </div>
@@ -281,6 +282,19 @@ export function attachConversationEvents(
     }
   };
 
+  const unsubscribeStore = store.subscribe(() => {
+    if (transcriptEl && !isClosed) {
+      transcriptEl.innerHTML = renderTranscriptItems(
+        store.getTranscript(),
+        store.getActionState().status === 'needs-confirmation'
+      );
+      updateStatusChip();
+      updateDecisionLogDrawer();
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+      wireTranscriptButtons();
+    }
+  });
+
   const wireTranscriptButtons = () => {
     if (!transcriptEl) return;
 
@@ -525,6 +539,7 @@ export function attachConversationEvents(
 
   // Return cleanup function
   return () => {
+    unsubscribeStore();
     window.removeEventListener('popstate', handlePopState);
     document.removeEventListener('keydown', handleKeyDown);
     overlay?.removeEventListener('click', handleOverlayClick);

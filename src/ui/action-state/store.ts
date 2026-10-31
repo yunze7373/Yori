@@ -159,6 +159,8 @@ export class DefaultActionStateStore implements ActionStateStore {
 
   public cancelInFlight(): void {
     (this.interpreter as any)?.cancelInFlight?.();
+    this.transcriptList = this.transcriptList.filter(m => !m.inFlight);
+    this.notify();
   }
 
   public isLiveMode(): boolean {
@@ -1478,6 +1480,38 @@ export class DefaultActionStateStore implements ActionStateStore {
 
   public pushHistory(snapshot: ActionHistorySnapshot): void {
     this.historyStack.push(snapshot);
+    this.notify();
+  }
+
+  public getHistory(): readonly ActionHistorySnapshot[] {
+    return [...this.historyStack];
+  }
+
+  public getLastHistorySnapshot(): ActionHistorySnapshot | null {
+    return this.historyStack.length > 0 ? (this.historyStack[this.historyStack.length - 1] ?? null) : null;
+  }
+
+  public applyPlanAdjustment(plan: PreparedPlan, summary: string, override?: UserRequestOverride): void {
+    const priorPlan = this.actionState.plan ?? this.commandContext?.plan ?? null;
+    this.pushHistory({
+      planState: priorPlan,
+      sceneId: this.commandContext?.sceneId ?? 'current',
+      actionState: { ...this.actionState },
+      override: this.currentOverride,
+      evidenceBundle: this.activeEvidenceBundle,
+      snapshot: this.activeSnapshot,
+      timestamp: new Date().toISOString(),
+    });
+    if (override) {
+      this.currentOverride = override;
+    }
+    this.actionState = {
+      status: 'updated',
+      resultSummary: summary,
+      plan,
+      override: this.currentOverride,
+      timestamp: new Date().toISOString(),
+    };
     this.notify();
   }
 

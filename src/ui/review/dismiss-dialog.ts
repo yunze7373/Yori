@@ -14,7 +14,7 @@ import { STRINGS } from '../living-context/strings.js';
 export function renderDismissDialog(intentId: string): string {
   return `
     <div class="modal-backdrop" id="dismiss-dialog-backdrop" role="presentation">
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="dismiss-dialog-title">
+      <div class="modal-card" id="dismiss-dialog" role="dialog" aria-modal="true" aria-labelledby="dismiss-dialog-title">
         <div class="modal-header">
           <h2 id="dismiss-dialog-title" class="modal-title" tabindex="-1">${escapeHtml(STRINGS.dismissDialog.title)}</h2>
           <button type="button" class="btn-close" id="btn-close-dismiss" aria-label="${escapeHtml(STRINGS.actions.cancel)}">&times;</button>

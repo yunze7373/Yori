@@ -20,7 +20,7 @@ export interface AdjustDialogValues {
 export function renderAdjustDialog(currentValues: AdjustDialogValues): string {
   return `
     <div class="modal-backdrop" id="adjust-dialog-backdrop" role="presentation">
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="adjust-dialog-title">
+      <div class="modal-card" id="adjust-dialog" role="dialog" aria-modal="true" aria-labelledby="adjust-dialog-title">
         <div class="modal-header">
           <h2 id="adjust-dialog-title" class="modal-title" tabindex="-1">${escapeHtml(STRINGS.adjustDialog.title)}</h2>
           <button type="button" class="btn-close" id="btn-close-adjust" aria-label="${escapeHtml(STRINGS.actions.cancel)}">&times;</button>
