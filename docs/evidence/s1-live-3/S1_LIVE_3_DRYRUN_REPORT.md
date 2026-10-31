@@ -1,10 +1,10 @@
-# S1-LIVE: Real Billed Meta Model API Verification Report
+# S1-LIVE-3: Real Billed Meta Model API Verification Report
 
 ## 1. Executive Summary
 
 | Parameter | Value |
 |---|---|
-| **Timestamp** | 2026-10-31T02:11:45.361Z |
+| **Timestamp** | 2026-10-31T04:00:31.160Z |
 | **Provider Host** | `api.meta.ai` |
 | **Model** | `muse-spark-1.3` |
 | **Authorized Per-Run Cap** | `9` |
@@ -15,7 +15,7 @@
 | **Durable Ledger Count** | `9 / 50` |
 | **Ledger Delta** | `9` |
 | **Ledger Reconciled** | `MATCH (dispatched == ledger delta) ✅` |
-| **Durable Ledger File** | `.yori-runtime/dryrun-command-ledger-46068-1793412705347.json` |
+| **Durable Ledger File** | `.yori-runtime/dryrun-command-ledger-1134-1793419231149.json` |
 | **Execution Status** | `COMPLETED` |
 | **Target Host Compliance** | `api.meta.ai ONLY ✅` |
 | **D1–D6 Deterministic Parity** | `6/6 BYTE-IDENTICAL ✅` |
@@ -34,6 +34,20 @@
 | 7 | `command` | Command citation discipline probe ("Why did you suggest this departure time?" with unconfirmed fact) | 200 | 15 | 185 / 55 / 240 | - | `stop` | Yes | `invented_fact_key` | DISCARDED ❌ |
 | 8 | `command` | Command adversarial compliance probe ("Book a flight to Hawaii" returning LEAVE_LATER) | 200 | 15 | 160 / 40 / 200 | - | `stop` | No | `wrong_intent` | DISCARDED ❌ |
 | 9 | `command` | Command missing finish_reason probe ("Can I leave later?" omitting finish_reason) | 200 | 15 | 180 / 50 / 230 | - | - | No | `missing_finish_reason` | DISCARDED ❌ |
+
+### 2.1. Command Structured Evidence & Invariant Audit
+
+| # | Description | Expected Intent | Actual Intent | Expected Slots | Actual Slots | Reason Codes | Cited Facts | Cited Signals | Situation Attribution | Verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | Command valid shift ("Can I leave later?") | `LEAVE_LATER` | `LEAVE_LATER` | - | `{"deltaMinutes":20}` | `weather_adjusted` | `habit_rain_transit` | `weather:2026-10-28T20:35:00.000Z` | - | ACCEPTED ✅ |
+| 2 | Command valid explicit shift ("Leave 15 minutes later") | `LEAVE_LATER` | `LEAVE_LATER` | `{"deltaMinutes":15}` | `{"deltaMinutes":15}` | `weather_adjusted` | `habit_rain_transit, prep_buffer_minutes` | `weather:2026-10-28T20:35:00.000Z` | - | ACCEPTED ✅ |
+| 3 | Command suppression ("I already ate lunch today, don't suggest lunch") | `UNSUPPORTED` | `UNSUPPORTED` | - | `{}` | - | - | - | - | ACCEPTED ✅ |
+| 4 | Command route mode switch ("Take the bus instead") | `CHANGE_ROUTE` | `CHANGE_ROUTE` | `{"mode":"bus"}` | `{"mode":"bus"}` | `weather_adjusted` | `habit_rain_transit` | `weather:2026-10-28T20:35:00.000Z` | `weather_adjusted` | ACCEPTED ✅ |
+| 5 | Command out-of-scope refusal ("Book a flight to Hawaii for next weekend") | `UNSUPPORTED` | `UNSUPPORTED` | - | `{}` | - | - | - | - | ACCEPTED ✅ |
+| 6 | Command citation explanation probe ("Why did you suggest this departure time?") | `WHY` | `WHY` | - | `{}` | `weather_adjusted` | `habit_rain_transit` | `weather:2026-10-28T20:35:00.000Z` | `weather_adjusted` | ACCEPTED ✅ |
+| 7 | Command citation discipline probe ("Why did you suggest this departure time?" with unconfirmed fact) | `WHY` | `WHY` | - | `{}` | `weather_adjusted` | `unconfirmed_secret_fact_xyz` | `weather:2026-10-28T20:35:00.000Z` | - | DISCARDED (invented_fact_key) ❌ |
+| 8 | Command adversarial compliance probe ("Book a flight to Hawaii" returning LEAVE_LATER) | `UNSUPPORTED` | `LEAVE_LATER` | - | `{"deltaMinutes":15}` | - | - | - | - | DISCARDED (wrong_intent) ❌ |
+| 9 | Command missing finish_reason probe ("Can I leave later?" omitting finish_reason) | `LEAVE_LATER` | `LEAVE_LATER` | - | `{"deltaMinutes":10}` | `weather_adjusted` | `habit_rain_transit` | `weather:2026-10-28T20:35:00.000Z` | - | DISCARDED (missing_finish_reason) ❌ |
 
 ## 4. Security & Sentinel Scrub Audit
 

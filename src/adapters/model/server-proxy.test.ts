@@ -19,6 +19,7 @@ import {
   resolveModelConfig,
   resolveMaxCalls,
   resolveTimeoutMs,
+  MAX_VERIFICATION_TIMEOUT_MS,
   resolveMaxTokensOverride,
   resolveLedgerPath,
   getDefaultLedgerPath,
@@ -558,6 +559,39 @@ describe('S1-PREP-PROVIDER: MODEL_TIMEOUT_MS clamping & enforcement', () => {
     expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '' })).toBe(2000);
     expect(resolveTimeoutMs({})).toBe(2000);
     expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '5000' })).toBe(5000);
+  });
+
+  it('proves app path without allowExtendedVerificationTimeout still clamps at 20000ms even when higher timeout is passed', () => {
+    // 1. resolveTimeoutMs strictly clamps to 20000
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '30000' })).toBe(20000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '45000' })).toBe(20000);
+    expect(resolveTimeoutMs({ MODEL_TIMEOUT_MS: '60000' })).toBe(20000);
+
+    // 2. ModelDevProxy without allowExtendedVerificationTimeout clamps customConfig.timeoutMs to 20000
+    const proxyApp = new ModelDevProxy({ timeoutMs: 45000 });
+    expect(proxyApp.getConfig().timeoutMs).toBe(20000);
+
+    const proxyApp60k = new ModelDevProxy({ timeoutMs: 60000 });
+    expect(proxyApp60k.getConfig().timeoutMs).toBe(20000);
+  });
+
+  it('proves script path with allowExtendedVerificationTimeout accepts up to 60000ms and rejects >60000ms', () => {
+    // 1. Accepts up to 60000ms
+    const proxy45k = new ModelDevProxy({ timeoutMs: 45000, allowExtendedVerificationTimeout: true });
+    expect(proxy45k.getConfig().timeoutMs).toBe(45000);
+
+    const proxy60k = new ModelDevProxy({ timeoutMs: 60000, allowExtendedVerificationTimeout: true });
+    expect(proxy60k.getConfig().timeoutMs).toBe(60000);
+    expect(proxy60k.getConfig().timeoutMs).toBe(MAX_VERIFICATION_TIMEOUT_MS);
+
+    // 2. Rejects > 60000ms
+    expect(() => {
+      new ModelDevProxy({ timeoutMs: 60001, allowExtendedVerificationTimeout: true });
+    }).toThrow(/cannot exceed 60000ms for verification/);
+
+    expect(() => {
+      new ModelDevProxy({ timeoutMs: 99999, allowExtendedVerificationTimeout: true });
+    }).toThrow(/cannot exceed 60000ms for verification/);
   });
 
   it('triggers fallbackReason: "timeout" across refine, reason, and command fetch paths', async () => {

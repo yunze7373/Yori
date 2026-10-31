@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-31T02:11:45.361Z",
+  "timestamp": "2026-10-31T04:00:31.160Z",
   "providerHost": "api.meta.ai",
   "modelName": "muse-spark-1.3",
   "authorizedCap": 9,
@@ -10,7 +10,7 @@
   "ledgerCallCount": 9,
   "ledgerDelta": 9,
   "ledgerReconciled": true,
-  "ledgerPath": ".yori-runtime/dryrun-command-ledger-46068-1793412705347.json",
+  "ledgerPath": ".yori-runtime/dryrun-command-ledger-1134-1793419231149.json",
   "executionStatus": "completed",
   "hostList": [
     "api.meta.ai"
@@ -36,7 +36,21 @@
         "factKeyParity": true,
         "stopFinishReason": true,
         "suppressionHonoured": true
-      }
+      },
+      "expectedIntent": "LEAVE_LATER",
+      "intent": "LEAVE_LATER",
+      "slots": {
+        "deltaMinutes": 20
+      },
+      "reasonCodes": [
+        "weather_adjusted"
+      ],
+      "citedFactKeys": [
+        "habit_rain_transit"
+      ],
+      "citedSignalIds": [
+        "weather:2026-10-28T20:35:00.000Z"
+      ]
     },
     {
       "index": 2,
@@ -58,7 +72,25 @@
         "factKeyParity": true,
         "stopFinishReason": true,
         "suppressionHonoured": true
-      }
+      },
+      "expectedIntent": "LEAVE_LATER",
+      "expectedSlots": {
+        "deltaMinutes": 15
+      },
+      "intent": "LEAVE_LATER",
+      "slots": {
+        "deltaMinutes": 15
+      },
+      "reasonCodes": [
+        "weather_adjusted"
+      ],
+      "citedFactKeys": [
+        "habit_rain_transit",
+        "prep_buffer_minutes"
+      ],
+      "citedSignalIds": [
+        "weather:2026-10-28T20:35:00.000Z"
+      ]
     },
     {
       "index": 3,
@@ -80,7 +112,13 @@
         "factKeyParity": true,
         "stopFinishReason": true,
         "suppressionHonoured": true
-      }
+      },
+      "expectedIntent": "UNSUPPORTED",
+      "intent": "UNSUPPORTED",
+      "slots": {},
+      "reasonCodes": [],
+      "citedFactKeys": [],
+      "citedSignalIds": []
     },
     {
       "index": 4,
@@ -102,6 +140,26 @@
         "factKeyParity": true,
         "stopFinishReason": true,
         "suppressionHonoured": true
+      },
+      "expectedIntent": "CHANGE_ROUTE",
+      "expectedSlots": {
+        "mode": "bus"
+      },
+      "intent": "CHANGE_ROUTE",
+      "slots": {
+        "mode": "bus"
+      },
+      "reasonCodes": [
+        "weather_adjusted"
+      ],
+      "citedFactKeys": [
+        "habit_rain_transit"
+      ],
+      "citedSignalIds": [
+        "weather:2026-10-28T20:35:00.000Z"
+      ],
+      "situationAttribution": {
+        "reasonCode": "weather_adjusted"
       }
     },
     {
@@ -124,7 +182,13 @@
         "factKeyParity": true,
         "stopFinishReason": true,
         "suppressionHonoured": true
-      }
+      },
+      "expectedIntent": "UNSUPPORTED",
+      "intent": "UNSUPPORTED",
+      "slots": {},
+      "reasonCodes": [],
+      "citedFactKeys": [],
+      "citedSignalIds": []
     },
     {
       "index": 6,
@@ -146,6 +210,21 @@
         "factKeyParity": true,
         "stopFinishReason": true,
         "suppressionHonoured": true
+      },
+      "expectedIntent": "WHY",
+      "intent": "WHY",
+      "slots": {},
+      "reasonCodes": [
+        "weather_adjusted"
+      ],
+      "citedFactKeys": [
+        "habit_rain_transit"
+      ],
+      "citedSignalIds": [
+        "weather:2026-10-28T20:35:00.000Z"
+      ],
+      "situationAttribution": {
+        "reasonCode": "weather_adjusted"
       }
     },
     {
@@ -169,7 +248,19 @@
         "factKeyParity": false,
         "stopFinishReason": true,
         "suppressionHonoured": true
-      }
+      },
+      "expectedIntent": "WHY",
+      "intent": "WHY",
+      "slots": {},
+      "reasonCodes": [
+        "weather_adjusted"
+      ],
+      "citedFactKeys": [
+        "unconfirmed_secret_fact_xyz"
+      ],
+      "citedSignalIds": [
+        "weather:2026-10-28T20:35:00.000Z"
+      ]
     },
     {
       "index": 8,
@@ -192,7 +283,15 @@
         "factKeyParity": true,
         "stopFinishReason": true,
         "suppressionHonoured": true
-      }
+      },
+      "expectedIntent": "UNSUPPORTED",
+      "intent": "LEAVE_LATER",
+      "slots": {
+        "deltaMinutes": 15
+      },
+      "reasonCodes": [],
+      "citedFactKeys": [],
+      "citedSignalIds": []
     },
     {
       "index": 9,
@@ -214,9 +313,24 @@
         "factKeyParity": false,
         "stopFinishReason": false,
         "suppressionHonoured": true
-      }
+      },
+      "expectedIntent": "LEAVE_LATER",
+      "intent": "LEAVE_LATER",
+      "slots": {
+        "deltaMinutes": 10
+      },
+      "reasonCodes": [
+        "weather_adjusted"
+      ],
+      "citedFactKeys": [
+        "habit_rain_transit"
+      ],
+      "citedSignalIds": [
+        "weather:2026-10-28T20:35:00.000Z"
+      ]
     }
   ],
   "keyOccurrenceCount": 0,
-  "d1ToD6ParityPass": true
+  "d1ToD6ParityPass": true,
+  "isCommandOnly": true
 }

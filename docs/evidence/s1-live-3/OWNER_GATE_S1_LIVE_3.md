@@ -1,10 +1,10 @@
 # S1-LIVE-3: Owner Gate Clearance & Live Verification Runbook
 
 **Date**: 2026-10-31  
-**Task ID**: `INBOX-20261031-713D79` / `INBOX-20261031-EA3AFB`  
-**Target Slice**: `S1-LIVE-3` (`decision_command` live model verification)  
+**Task ID**: `INBOX-20261031-713D79` / `INBOX-20261031-EA3AFB` / `INBOX-20261031-DA6678`  
+**Target Slice**: `S1-LIVE-3` (`decision_command` live model verification completion)  
 **Target Model**: `muse-spark-1.3` on `https://api.meta.ai/v1/chat/completions`  
-**Current Real Ledger State**: 18 / 50 calls used (32 remaining); SHA256 `8f42a1d445e9f8ba864c0d4f354bf4494daf912e7b02498fe9e3584688558175`  
+**Current Real Ledger State**: 22 / 50 calls used (28 remaining); SHA256 `5a65c5fcbc53874e2bd27c2f64cb4c875aa05f0fb61b8b10069752451f7203a5`  
 
 ---
 
@@ -14,36 +14,55 @@ This document establishes the owner authorization requirements, budget limits, a
 
 In `S1-LIVE-2`, live verification successfully validated the `refine` and `reason` endpoints (Run 1 & Run 2, 7 calls dispatched total). `S1-LIVE-3` targets the remaining model interaction surface: **command interpretation and situation attribution**.
 
-As of `S1-LIVE-3-PREP`, the offline test harness, code-acceptance evaluator, mock sink, and ledger isolation layers are fully implemented and verified green. **ZERO live calls have been made.**
+As of `S1-LIVE-3-COMPLETE-PREP`, the offline test harness, code-acceptance evaluator, timeout ceiling (up to 60,000 ms verification-only), structured evidence schema, prompt filter (`--prompts route,refusal,why`), and ledger isolation layers are fully implemented and verified green. **ZERO live calls have been made in this prep slice.**
 
 ---
 
-## 2. Exact Live Verification Command
+## 2. Live Verification History & Execution Runbooks
 
-When cleared by the owner, live verification must be executed using the exact command line below:
-
-```bash
-MODEL_LIVE_ENABLED=1 MODEL_LIVE_MAX_CALLS=5 MODEL_MAX_TOKENS=4096 MODEL_TIMEOUT_MS=20000 npm run verify:live:spark -- --only command --confirm-billed
-```
-
-> [!IMPORTANT]
-> The verification script enforces fail-closed gates:
-> 1. Strictly refuses execution without `MODEL_LIVE_ENABLED=1`.
-> 2. Strictly refuses execution without explicit `--confirm-billed` flag.
-> 3. Clamps and refuses any per-run call count $> 6$ in command mode (`COMMAND_PER_RUN_MAX_CALLS = 6`).
-> 4. Strictly refuses execution if `MODEL_MAX_TOKENS < 4096` in command mode (`MIN_COMMAND_LIVE_MAX_TOKENS = 4096`).
-> 5. Strictly refuses execution if `MODEL_TIMEOUT_MS < 20000` in command mode (`MIN_COMMAND_LIVE_TIMEOUT_MS = 20000`).
-> 6. Strictly refuses execution if `MODEL_API_KEY` or `META_API_KEY` is missing from the environment.
-> 7. Strictly aborts if destination host is not `api.meta.ai`.
-
----
-
-## 2.1. Run 1 Record & Remaining Authorized Budget
+### 2.1. Run 1 & Run 2 Records
 
 - **Run 1 Execution (2026-10-31)**: Exactly 1 call was dispatched (`Can I leave later?`) under owner authorization `msg_91396bb0`. The call aborted at 2005 ms due to unset `MODEL_TIMEOUT_MS` (falling back to server proxy default ~2s instead of the required 20000 ms).
-- **Hard Stop Honoured**: The fail-closed network error HARD STOP immediately halted further dispatches, preserving remaining budget.
-- **Ledger Progression**: Real ledger atomically incremented 17 $\rightarrow$ 18 / 50 calls (SHA256 `8f42a1d445e9f8ba864c0d4f354bf4494daf912e7b02498fe9e3584688558175`).
-- **Remaining Authorized Budget**: Under owner authorization (`msg_91396bb0`, up to 6 additional calls total), 1 call was consumed and up to **5 calls remain**. Projected post-run lifetime ledger count $\le 23 / 50$ calls (lifetime remaining $\ge 27$ calls).
+  - **Hard Stop Honoured**: The fail-closed network error HARD STOP immediately halted further dispatches, preserving remaining budget.
+  - **Ledger Progression**: Real ledger atomically incremented 17 $\rightarrow$ 18 / 50 calls (SHA256 `8f42a1d445e9f8ba864c0d4f354bf4494daf912e7b02498fe9e3584688558175`).
+
+- **Run 2 Execution (2026-10-31)**: Under owner authorization `msg_91396bb0` (with 5 calls remaining), 4 calls were dispatched:
+  - Call #1: `"Can I leave later?"` $\rightarrow$ `LEAVE_LATER` (ACCEPTED ✅)
+  - Call #2: `"Leave 15 minutes later"` $\rightarrow$ `LEAVE_LATER` (slots: `deltaMinutes=15`) (ACCEPTED ✅)
+  - Call #3: `"I already ate lunch today, don't suggest lunch"` $\rightarrow$ `UNSUPPORTED` (suppression honoured) (ACCEPTED ✅)
+  - Call #4: `"Take the bus instead"` $\rightarrow$ Aborted at 20,008 ms due to the 20s proxy timeout ceiling.
+  - **Hard Stop Honoured**: Timed out call halted the run cleanly.
+  - **Ledger Progression**: Real ledger atomically incremented 18 $\rightarrow$ 22 / 50 calls (SHA256 `5a65c5fcbc53874e2bd27c2f64cb4c875aa05f0fb61b8b10069752451f7203a5`). 0 key leaks.
+  - **Remaining Calls from `msg_91396bb0`**: Exactly 1 call was left unused. **The 1 call remaining from prior authorization is NOT enough on its own** to verify the 3 remaining unverified prompts (`route`, `refusal`, `why`).
+
+---
+
+## 2.2. Completion Run (Owner-Gated)
+
+To complete the live verification of `decision_command` without risking timeouts or wasting calls:
+1. The verification timeout ceiling is raised to 45,000 ms (`MODEL_TIMEOUT_MS=45000`, verification script path accepts $\le 60000$ ms while runtime app remains clamped to 20,000 ms).
+2. The run is filtered via `--prompts route,refusal,why` to execute only the 3 unverified prompts:
+   - `route`: `"Take the bus instead"` (`CHANGE_ROUTE`, mode: bus)
+   - `refusal`: `"Book a flight to Hawaii for next weekend"` (`UNSUPPORTED`)
+   - `why`: `"Why did you suggest this departure time?"` (`WHY`)
+3. The run is strictly capped at 4 calls (3 planned prompts + 1 spare for a single timeout).
+4. Per-call structured evidence (`expectedIntent`, `expectedSlots`, `intent`, `slots`, `reasonCodes`, `citedFactKeys`, `citedSignalIds`, `situationAttribution.reasonCode`) is captured and persisted in the report, strictly excluding free-text explanations.
+
+### Exact Completion Run Command
+
+```bash
+MODEL_LIVE_ENABLED=1 MODEL_LIVE_MAX_CALLS=4 MODEL_MAX_TOKENS=4096 MODEL_TIMEOUT_MS=45000 npm run verify:live:spark -- --only command --prompts route,refusal,why --confirm-billed
+```
+
+### Ledger Projection
+- Pre-run ledger count: **22 / 50 calls** (SHA256 `5a65c5fcbc53874e2bd27c2f64cb4c875aa05f0fb61b8b10069752451f7203a5`)
+- Planned calls: **$\le 4$ calls** (3 prompts + 1 spare for a single timeout)
+- Projected post-run ledger count: **$22 \rightarrow \le 26 / 50$ calls** (at least **24 lifetime calls remaining** in durable ledger).
+
+### Required Owner Sentence
+To authorize this completion run, the owner must provide the following exact sentence:
+
+> **"I authorize up to 4 live calls for S1-LIVE-3 completion with MODEL_MAX_TOKENS=4096, MODEL_TIMEOUT_MS=45000 on prompts route, refusal, why from funding source Meta API."**
 
 ---
 
@@ -149,4 +168,4 @@ The verification runner will immediately abort execution and halt further dispat
   - `docs/evidence/s1-live-3/S1_LIVE_3_COMMAND_REPORT.md`
   - `docs/evidence/s1-live-3/s1-live-3-command-report.json`
 - Production Ledger:
-  - `.yori-runtime/model-live-ledger.json` (Untouched at SHA256 `46aa6fa9...`)
+  - `.yori-runtime/model-live-ledger.json` (Untouched at SHA256 `5a65c5fcbc53874e2bd27c2f64cb4c875aa05f0fb61b8b10069752451f7203a5`, 22 / 50 calls)

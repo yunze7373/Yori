@@ -84,6 +84,7 @@ export interface ModelProxyConfig {
   readonly maxTokensOverride?: number;
   readonly reasoningEffort?: ReasoningEffort;
   readonly ledgerPath: string;
+  readonly allowExtendedVerificationTimeout?: boolean;
 }
 
 let processLiveCallCount = 0;
@@ -143,6 +144,13 @@ export function resolveTimeoutMs(env: Record<string, string | undefined> = proce
   if (isNaN(parsed) || parsed < 0) return 2000;
   return Math.max(500, Math.min(20000, parsed));
 }
+
+/**
+ * Verification-only timeout ceiling for live test harnesses (S1-LIVE-3-COMPLETE-PREP).
+ * Allows live test verification scripts to wait up to 60000ms for large token generation / reasoning.
+ * The production/app path remains strictly clamped to [500, 20000] via resolveTimeoutMs.
+ */
+export const MAX_VERIFICATION_TIMEOUT_MS = 60000;
 
 /**
  * Operational maximum completion token ceiling for Meta Model API (api.meta.ai).
@@ -727,8 +735,8 @@ export class ModelDevProxy {
   ) {
     const resolved = resolveModelConfig(this.logger);
     if (customConfig) {
-      const apiKey = customConfig.apiKey;
-      const keySource = customConfig.keySource ?? (apiKey ? 'MODEL_API_KEY' : 'none');
+      const apiKey = customConfig.apiKey ?? resolved.apiKey;
+      const keySource = customConfig.keySource ?? (customConfig.apiKey ? 'MODEL_API_KEY' : resolved.keySource);
       let liveEnabled = resolved.liveEnabled;
       if (customConfig.liveEnabled !== undefined) {
         liveEnabled = customConfig.liveEnabled;
@@ -749,10 +757,19 @@ export class ModelDevProxy {
           ? Math.min(customConfig.lifetimeMaxCalls, MODEL_LIFETIME_MAX_CALLS)
           : resolved.lifetimeMaxCalls;
 
-      const timeoutMs =
-        customConfig.timeoutMs !== undefined
-          ? Math.max(500, Math.min(20000, customConfig.timeoutMs))
-          : resolved.timeoutMs;
+      let timeoutMs = resolved.timeoutMs;
+      if (customConfig.timeoutMs !== undefined) {
+        if (customConfig.allowExtendedVerificationTimeout) {
+          if (customConfig.timeoutMs > MAX_VERIFICATION_TIMEOUT_MS) {
+            throw new Error(
+              `Invalid timeoutMs: cannot exceed ${MAX_VERIFICATION_TIMEOUT_MS}ms for verification (got ${customConfig.timeoutMs}ms)`
+            );
+          }
+          timeoutMs = Math.max(500, Math.min(MAX_VERIFICATION_TIMEOUT_MS, customConfig.timeoutMs));
+        } else {
+          timeoutMs = Math.max(500, Math.min(20000, customConfig.timeoutMs));
+        }
+      }
 
       const maxTokensOverride =
         customConfig.maxTokensOverride !== undefined
@@ -778,6 +795,7 @@ export class ModelDevProxy {
         maxTokensOverride,
         reasoningEffort,
         ledgerPath,
+        allowExtendedVerificationTimeout: customConfig.allowExtendedVerificationTimeout,
       };
     } else {
       this.config = resolved;

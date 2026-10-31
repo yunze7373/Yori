@@ -77,6 +77,7 @@ import {
   loadEnvLocal,
   resolveMaxTokensOverride,
   resolveTimeoutMs,
+  MAX_VERIFICATION_TIMEOUT_MS,
   MODEL_LIFETIME_MAX_CALLS,
   MODEL_PER_RUN_MAX_CALLS,
 } from '../src/adapters/model/server-proxy.js';
@@ -88,6 +89,7 @@ import {
   MIN_COMMAND_LIVE_TIMEOUT_MS,
   type CommandEvaluationContext,
   type CommandAcceptanceAudit,
+  type CommandExpectedSlots,
 } from '../src/adapters/model/command-acceptance-evaluator.js';
 import { runPipeline } from '../src/core/pipeline/index.js';
 import {
@@ -146,6 +148,7 @@ export const REQUIRED_PRECONDITIONS: readonly PreconditionRequirement[] = [
 
 export interface CanonicalCommandPrompt {
   readonly index: number;
+  readonly key: string;
   readonly title: string;
   readonly description: string;
   readonly utterance: string;
@@ -173,6 +176,7 @@ export const CANONICAL_COMMAND_PROMPTS: readonly CanonicalCommandPrompt[] = [
   // 1. Valid shift command
   {
     index: 1,
+    key: 'shift',
     title: 'Valid Shift Command',
     description: 'Command valid shift ("Can I leave later?")',
     utterance: 'Can I leave later?',
@@ -200,6 +204,7 @@ export const CANONICAL_COMMAND_PROMPTS: readonly CanonicalCommandPrompt[] = [
   // 2. Valid explicit shift command
   {
     index: 2,
+    key: 'explicit_shift',
     title: 'Valid Explicit Shift Command',
     description: 'Command valid explicit shift ("Leave 15 minutes later")',
     utterance: 'Leave 15 minutes later',
@@ -229,6 +234,7 @@ export const CANONICAL_COMMAND_PROMPTS: readonly CanonicalCommandPrompt[] = [
   // 3. Suppression command
   {
     index: 3,
+    key: 'suppression',
     title: 'Suppression Command',
     description: 'Command suppression ("I already ate lunch today, don\'t suggest lunch")',
     utterance: "I already ate lunch today, don't suggest lunch",
@@ -269,6 +275,7 @@ export const CANONICAL_COMMAND_PROMPTS: readonly CanonicalCommandPrompt[] = [
   // 4. Mode switch command
   {
     index: 4,
+    key: 'route',
     title: 'Mode Switch Command',
     description: 'Command route mode switch ("Take the bus instead")',
     utterance: 'Take the bus instead',
@@ -298,6 +305,7 @@ export const CANONICAL_COMMAND_PROMPTS: readonly CanonicalCommandPrompt[] = [
   // 5. Out-of-scope refusal command
   {
     index: 5,
+    key: 'refusal',
     title: 'Out-of-Scope / Adversarial Command',
     description: 'Command out-of-scope refusal ("Book a flight to Hawaii for next weekend")',
     utterance: 'Book a flight to Hawaii for next weekend',
@@ -325,6 +333,7 @@ export const CANONICAL_COMMAND_PROMPTS: readonly CanonicalCommandPrompt[] = [
   // 6. Citation explanation probe
   {
     index: 6,
+    key: 'why',
     title: 'Citation / Explanation Probe',
     description: 'Command citation explanation probe ("Why did you suggest this departure time?")',
     utterance: 'Why did you suggest this departure time?',
@@ -350,6 +359,26 @@ export const CANONICAL_COMMAND_PROMPTS: readonly CanonicalCommandPrompt[] = [
     },
   },
 ];
+
+export function selectCommandPrompts(
+  selectedKeys?: readonly string[] | string
+): readonly CanonicalCommandPrompt[] {
+  if (!selectedKeys) return CANONICAL_COMMAND_PROMPTS;
+  const rawArray: readonly string[] = typeof selectedKeys === 'string'
+    ? selectedKeys.split(',')
+    : selectedKeys;
+  const keysArray = rawArray
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (keysArray.length === 0) return CANONICAL_COMMAND_PROMPTS;
+  const selected = CANONICAL_COMMAND_PROMPTS.filter((p) => keysArray.includes(p.key));
+  if (selected.length === 0) {
+    throw new Error(
+      `Unknown prompt selection: ${keysArray.join(', ')}. Available keys: ${CANONICAL_COMMAND_PROMPTS.map((p) => p.key).join(', ')}`
+    );
+  }
+  return selected;
+}
 
 export function loadReviewDecisions(outboxPath?: string): Map<string, any> {
   const filePath = outboxPath ?? path.resolve(projectRoot, '.progress/review/REVIEW_OUTBOX.jsonl');
@@ -440,7 +469,7 @@ function computeSha256(data: unknown): string {
   return crypto.createHash('sha256').update(json).digest('hex');
 }
 
-async function runCommandDryRunAudit(): Promise<boolean> {
+async function runCommandDryRunAudit(options?: { prompts?: string | readonly string[] }): Promise<boolean> {
   console.log('======================================================================');
   console.log('🚀 YORI LIVING CONTEXT — S1-LIVE-3 COMMAND DRY RUN (DECISION_COMMAND)');
   console.log('======================================================================\n');
@@ -451,6 +480,20 @@ async function runCommandDryRunAudit(): Promise<boolean> {
   if (!preconditionsOk) {
     console.error('❌ Dry run aborted: One or more required preconditions failed verification.');
     return false;
+  }
+
+  // Parse prompt filter if supplied via options or CLI
+  let promptsFilter: string | readonly string[] | undefined = options?.prompts;
+  if (!promptsFilter) {
+    const promptsIdx = process.argv.indexOf('--prompts');
+    if (promptsIdx !== -1 && process.argv[promptsIdx + 1] && !process.argv[promptsIdx + 1]?.startsWith('--')) {
+      promptsFilter = process.argv[promptsIdx + 1];
+    } else {
+      const promptsEq = process.argv.find((a) => a.startsWith('--prompts='));
+      if (promptsEq) {
+        promptsFilter = promptsEq.split('=')[1];
+      }
+    }
   }
 
   // 2. Set up isolated temp ledger (never touches real ledger)
@@ -467,22 +510,9 @@ async function runCommandDryRunAudit(): Promise<boolean> {
 
   process.env.MODEL_API_KEY = 'sk-mock-spark-dryrun-sentinel-key';
   process.env.MODEL_LIVE_ENABLED = '1';
-  const effectiveCap = 9;
-  process.env.MODEL_LIVE_MAX_CALLS = String(effectiveCap);
 
-  const realLedgerBaselinePath = getDefaultLedgerPath(projectRoot);
-  const realLedgerBaselineSha = fs.existsSync(realLedgerBaselinePath)
-    ? computeSha256(fs.readFileSync(realLedgerBaselinePath, 'utf-8'))
-    : undefined;
-
-  const originalFetch = globalThis.fetch;
-  const recordedCallBodies: unknown[] = [];
-  const results: FactCheckCallResult[] = [];
-  const verificationRecords: LiveVerificationCallRecord[] = [];
-
-  const mockResponses = [
-    // 1. Valid shift command ("Can I leave later?") -> ACCEPTED
-    {
+  const mockResponsesByKey: Record<string, { ok: boolean; status: number; body: any }> = {
+    shift: {
       ok: true,
       status: 200,
       body: {
@@ -504,8 +534,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         usage: { prompt_tokens: 180, completion_tokens: 65, total_tokens: 245 },
       },
     },
-    // 2. Valid explicit shift command ("Leave 15 minutes later") -> ACCEPTED
-    {
+    explicit_shift: {
       ok: true,
       status: 200,
       body: {
@@ -527,8 +556,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         usage: { prompt_tokens: 175, completion_tokens: 60, total_tokens: 235 },
       },
     },
-    // 3. Suppression command ("I already ate lunch today, don't suggest lunch") -> ACCEPTED refusal
-    {
+    suppression: {
       ok: true,
       status: 200,
       body: {
@@ -550,8 +578,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         usage: { prompt_tokens: 150, completion_tokens: 40, total_tokens: 190 },
       },
     },
-    // 4. Mode switch command ("Take the bus instead") -> ACCEPTED
-    {
+    route: {
       ok: true,
       status: 200,
       body: {
@@ -577,8 +604,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         usage: { prompt_tokens: 190, completion_tokens: 70, total_tokens: 260 },
       },
     },
-    // 5. Out-of-scope / adversarial command ("Book a flight to Hawaii for next weekend") -> Refusal ACCEPTED
-    {
+    refusal: {
       ok: true,
       status: 200,
       body: {
@@ -600,8 +626,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         usage: { prompt_tokens: 160, completion_tokens: 45, total_tokens: 205 },
       },
     },
-    // 6. Citation explanation probe ("Why did you suggest this departure time?") -> ACCEPTED
-    {
+    why: {
       ok: true,
       status: 200,
       body: {
@@ -627,73 +652,148 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         usage: { prompt_tokens: 185, completion_tokens: 55, total_tokens: 240 },
       },
     },
-    // 7. Negative probe 1: Citation discipline probe with hallucinated fact key -> DISCARDED (invented_fact_key)
-    {
-      ok: true,
-      status: 200,
-      body: {
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                intent: 'WHY',
-                slots: {},
-                citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-                citedFactKeys: ['unconfirmed_secret_fact_xyz'],
-                reasonCodes: ['weather_adjusted'],
-              }),
-            },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: { prompt_tokens: 185, completion_tokens: 55, total_tokens: 240 },
+  };
+
+  type CommandPromptItem = {
+    key: string;
+    description: string;
+    facts: Record<string, unknown>;
+    evalContext: CommandEvaluationContext;
+    expectedOutcome: 'accepted' | 'discarded';
+  };
+
+  let commandPrompts: CommandPromptItem[];
+  let mockResponses: Array<{ ok: boolean; status: number; body: any }>;
+  let effectiveCap: number;
+
+  if (promptsFilter) {
+    const selected = selectCommandPrompts(promptsFilter);
+    effectiveCap = Math.min(4, selected.length);
+    commandPrompts = selected.map((p) => ({
+      key: p.key,
+      description: p.description,
+      facts: p.facts,
+      evalContext: p.evalContext,
+      expectedOutcome: 'accepted' as const,
+    }));
+    mockResponses = selected.map((p) => mockResponsesByKey[p.key]!);
+  } else {
+    effectiveCap = 9;
+    commandPrompts = [
+      ...CANONICAL_COMMAND_PROMPTS.map((p) => ({
+        key: p.key,
+        description: p.description,
+        facts: p.facts,
+        evalContext: p.evalContext,
+        expectedOutcome: 'accepted' as const,
+      })),
+      // Call 7: Negative probe 1: Invented fact key
+      {
+        key: 'probe_invented_fact',
+        description: 'Command citation discipline probe ("Why did you suggest this departure time?" with unconfirmed fact)',
+        facts: CANONICAL_COMMAND_PROMPTS[5]!.facts,
+        evalContext: CANONICAL_COMMAND_PROMPTS[5]!.evalContext,
+        expectedOutcome: 'discarded' as const,
       },
-    },
-    // 8. Negative probe 2: Adversarial compliance / wrong intent probe -> DISCARDED (wrong_intent)
-    {
-      ok: true,
-      status: 200,
-      body: {
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                intent: 'LEAVE_LATER',
-                slots: { deltaMinutes: 15 },
-                citedSignalIds: [],
-                citedFactKeys: [],
-                reasonCodes: [],
-              }),
-            },
-            finish_reason: 'stop',
-          },
-        ],
-        usage: { prompt_tokens: 160, completion_tokens: 40, total_tokens: 200 },
+      // Call 8: Negative probe 2: Adversarial compliance / wrong intent
+      {
+        key: 'probe_wrong_intent',
+        description: 'Command adversarial compliance probe ("Book a flight to Hawaii" returning LEAVE_LATER)',
+        facts: CANONICAL_COMMAND_PROMPTS[4]!.facts,
+        evalContext: CANONICAL_COMMAND_PROMPTS[4]!.evalContext,
+        expectedOutcome: 'discarded' as const,
       },
-    },
-    // 9. Negative probe 3: Missing finish_reason probe -> DISCARDED (missing_finish_reason)
-    {
-      ok: true,
-      status: 200,
-      body: {
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                intent: 'LEAVE_LATER',
-                slots: { deltaMinutes: 10 },
-                citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-                citedFactKeys: ['habit_rain_transit'],
-                reasonCodes: ['weather_adjusted'],
-              }),
-            },
-            // finish_reason intentionally omitted
-          },
-        ],
-        usage: { prompt_tokens: 180, completion_tokens: 50, total_tokens: 230 },
+      // Call 9: Negative probe 3: Missing finish_reason
+      {
+        key: 'probe_missing_finish_reason',
+        description: 'Command missing finish_reason probe ("Can I leave later?" omitting finish_reason)',
+        facts: CANONICAL_COMMAND_PROMPTS[0]!.facts,
+        evalContext: CANONICAL_COMMAND_PROMPTS[0]!.evalContext,
+        expectedOutcome: 'discarded' as const,
       },
-    },
-  ];
+    ];
+    mockResponses = [
+      ...CANONICAL_COMMAND_PROMPTS.map((p) => mockResponsesByKey[p.key]!),
+      // 7. Negative probe 1: Citation discipline probe with hallucinated fact key -> DISCARDED (invented_fact_key)
+      {
+        ok: true,
+        status: 200,
+        body: {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  intent: 'WHY',
+                  slots: {},
+                  citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+                  citedFactKeys: ['unconfirmed_secret_fact_xyz'],
+                  reasonCodes: ['weather_adjusted'],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 185, completion_tokens: 55, total_tokens: 240 },
+        },
+      },
+      // 8. Negative probe 2: Adversarial compliance / wrong intent probe -> DISCARDED (wrong_intent)
+      {
+        ok: true,
+        status: 200,
+        body: {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  intent: 'LEAVE_LATER',
+                  slots: { deltaMinutes: 15 },
+                  citedSignalIds: [],
+                  citedFactKeys: [],
+                  reasonCodes: [],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 160, completion_tokens: 40, total_tokens: 200 },
+        },
+      },
+      // 9. Negative probe 3: Missing finish_reason probe -> DISCARDED (missing_finish_reason)
+      {
+        ok: true,
+        status: 200,
+        body: {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  intent: 'LEAVE_LATER',
+                  slots: { deltaMinutes: 10 },
+                  citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+                  citedFactKeys: ['habit_rain_transit'],
+                  reasonCodes: ['weather_adjusted'],
+                }),
+              },
+              // finish_reason intentionally omitted
+            },
+          ],
+          usage: { prompt_tokens: 180, completion_tokens: 50, total_tokens: 230 },
+        },
+      },
+    ];
+  }
+
+  process.env.MODEL_LIVE_MAX_CALLS = String(effectiveCap);
+
+  const realLedgerBaselinePath = getDefaultLedgerPath(projectRoot);
+  const realLedgerBaselineSha = fs.existsSync(realLedgerBaselinePath)
+    ? computeSha256(fs.readFileSync(realLedgerBaselinePath, 'utf-8'))
+    : undefined;
+
+  const originalFetch = globalThis.fetch;
+  const recordedCallBodies: unknown[] = [];
+  const results: FactCheckCallResult[] = [];
+  const verificationRecords: LiveVerificationCallRecord[] = [];
 
   let mockCallIndex = 0;
   let lastFetchMeta: {
@@ -703,6 +803,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
     completionTokens?: number;
     totalTokens?: number;
     finishReason?: string;
+    contentJson?: any;
   } | null = null;
 
   globalThis.fetch = async (_input: unknown, init?: RequestInit): Promise<Response> => {
@@ -717,6 +818,13 @@ async function runCommandDryRunAudit(): Promise<boolean> {
     if (!mock) {
       throw new Error(`Unexpected live fetch call beyond mock pool index: ${mockCallIndex}`);
     }
+    const choiceContent = mock.body.choices?.[0]?.message?.content;
+    let contentJson: any = undefined;
+    if (choiceContent && typeof choiceContent === 'string') {
+      try {
+        contentJson = JSON.parse(choiceContent);
+      } catch {}
+    }
     lastFetchMeta = {
       status: mock.status,
       latencyMs: 15,
@@ -724,6 +832,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
       completionTokens: mock.body.usage?.completion_tokens,
       totalTokens: mock.body.usage?.total_tokens,
       finishReason: (mock.body.choices?.[0] as { finish_reason?: string } | undefined)?.finish_reason,
+      contentJson,
     };
     return {
       ok: mock.ok,
@@ -736,36 +845,6 @@ async function runCommandDryRunAudit(): Promise<boolean> {
       }),
     } as unknown as Response;
   };
-
-  const commandPrompts = [
-    ...CANONICAL_COMMAND_PROMPTS.map((p) => ({
-      description: p.description,
-      facts: p.facts,
-      evalContext: p.evalContext,
-      expectedOutcome: 'accepted' as const,
-    })),
-    // Call 7: Negative probe 1: Invented fact key
-    {
-      description: 'Command citation discipline probe ("Why did you suggest this departure time?" with unconfirmed fact)',
-      facts: CANONICAL_COMMAND_PROMPTS[5]!.facts,
-      evalContext: CANONICAL_COMMAND_PROMPTS[5]!.evalContext,
-      expectedOutcome: 'discarded' as const,
-    },
-    // Call 8: Negative probe 2: Adversarial compliance / wrong intent
-    {
-      description: 'Command adversarial compliance probe ("Book a flight to Hawaii" returning LEAVE_LATER)',
-      facts: CANONICAL_COMMAND_PROMPTS[4]!.facts,
-      evalContext: CANONICAL_COMMAND_PROMPTS[4]!.evalContext,
-      expectedOutcome: 'discarded' as const,
-    },
-    // Call 9: Negative probe 3: Missing finish_reason
-    {
-      description: 'Command missing finish_reason probe ("Can I leave later?" omitting finish_reason)',
-      facts: CANONICAL_COMMAND_PROMPTS[0]!.facts,
-      evalContext: CANONICAL_COMMAND_PROMPTS[0]!.evalContext,
-      expectedOutcome: 'discarded' as const,
-    },
-  ];
 
   try {
     const proxy = new ModelDevProxy();
@@ -781,6 +860,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         completionTokens?: number;
         totalTokens?: number;
         finishReason?: string;
+        contentJson?: any;
       } | null;
 
       const evalOutcome = evaluateCommandAcceptance({
@@ -805,6 +885,10 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         fallbackPreserved: callRes.result !== null || callRes.usedFallback,
       });
 
+      const resData =
+        callRes.result ??
+        (meta?.contentJson && typeof meta.contentJson === 'object' ? meta.contentJson : undefined);
+
       verificationRecords.push({
         index: i + 1,
         endpoint: 'command',
@@ -820,6 +904,16 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         factCheckOutcome: actualOutcome,
         rejectedReasonCodes: callRes.rejectedReasonCodes,
         audit: evalOutcome.audit,
+        expectedIntent: def.evalContext.expectedIntent,
+        expectedSlots: def.evalContext.expectedSlots,
+        intent: resData?.intent,
+        slots: resData?.slots ?? {},
+        reasonCodes: resData?.reasonCodes ?? [],
+        citedFactKeys: resData?.citedFactKeys ?? [],
+        citedSignalIds: resData?.citedSignalIds ?? [],
+        situationAttribution: resData?.situationAttribution?.reasonCode
+          ? { reasonCode: resData.situationAttribution.reasonCode }
+          : undefined,
       });
     }
 
@@ -912,6 +1006,55 @@ async function runCommandDryRunAudit(): Promise<boolean> {
       console.log(`Evidence Updated:        ${path.relative(projectRoot, evidenceDir)}`);
     }
 
+    // Dry-run structured evidence assertion (S1-LIVE-3-COMPLETE-PREP)
+    const parsedReportJson = JSON.parse(fs.readFileSync(reportJsonPath, 'utf-8'));
+    for (const call of parsedReportJson.calls) {
+      if (call.endpoint === 'command') {
+        if (!call.expectedIntent) {
+          throw new Error(`Dry-run assertion failed: Call #${call.index} missing expectedIntent`);
+        }
+        if (call.intent === undefined) {
+          throw new Error(`Dry-run assertion failed: Call #${call.index} missing actual intent`);
+        }
+        if (call.slots === undefined || typeof call.slots !== 'object') {
+          throw new Error(`Dry-run assertion failed: Call #${call.index} missing actual slots object`);
+        }
+        if (!Array.isArray(call.reasonCodes)) {
+          throw new Error(`Dry-run assertion failed: Call #${call.index} missing reasonCodes array`);
+        }
+        if (!Array.isArray(call.citedFactKeys)) {
+          throw new Error(`Dry-run assertion failed: Call #${call.index} missing citedFactKeys array`);
+        }
+        if (!Array.isArray(call.citedSignalIds)) {
+          throw new Error(`Dry-run assertion failed: Call #${call.index} missing citedSignalIds array`);
+        }
+        // Verify strictly zero free-text explanation or personal values in situationAttribution
+        if (call.situationAttribution) {
+          if ('explanation' in call.situationAttribution) {
+            throw new Error(
+              `Dry-run security assertion failed: Call #${call.index} situationAttribution leaked free-text explanation!`
+            );
+          }
+        }
+      }
+    }
+    console.log(
+      'Structured Evidence Audit: PASS ✅ (expectedIntent, slots, reasonCodes, citedFactKeys, citedSignalIds present on all command calls; free-text explanations excluded)'
+    );
+    if (process.env.UPDATE_EVIDENCE === '1') {
+      const evidenceDir = path.resolve(projectRoot, 'docs/evidence/s1-live-3');
+      if (!fs.existsSync(evidenceDir)) {
+        fs.mkdirSync(evidenceDir, { recursive: true });
+      }
+      fs.writeFileSync(path.resolve(evidenceDir, 'S1_LIVE_3_DRYRUN_REPORT.md'), mdContent, 'utf-8');
+      fs.writeFileSync(
+        path.resolve(evidenceDir, 's1-live-3-dryrun-report.json'),
+        JSON.stringify(dryRunReport, null, 2),
+        'utf-8'
+      );
+      console.log(`Evidence Updated:        ${path.relative(projectRoot, evidenceDir)}`);
+    }
+
     // Security & key hygiene
     let keyCount = 0;
     const sentinelKey = 'sk-mock-spark-dryrun-sentinel-key';
@@ -951,12 +1094,15 @@ async function runCommandDryRunAudit(): Promise<boolean> {
   }
 }
 
-export async function runDryRunAudit(options?: { only?: 'command' | 'refine' | 'reason' | 'all' }): Promise<boolean> {
+export async function runDryRunAudit(options?: {
+  only?: 'command' | 'refine' | 'reason' | 'all';
+  prompts?: string | readonly string[];
+}): Promise<boolean> {
   const isCommandOnly =
     options?.only === 'command' ||
     (process.argv.includes('--only') && process.argv[process.argv.indexOf('--only') + 1] === 'command');
   if (isCommandOnly) {
-    return runCommandDryRunAudit();
+    return runCommandDryRunAudit({ prompts: options?.prompts });
   }
   console.log('======================================================================');
   console.log('🚀 YORI LIVING CONTEXT — LIVE VERIFICATION DRY RUN (SPARK / META)');
@@ -1606,6 +1752,14 @@ export interface LiveVerificationCallRecord {
   readonly rejectedReasonCodes?: readonly RejectedReasonCodeTelemetry[];
   readonly error?: string;
   readonly audit?: CommandAcceptanceAudit;
+  readonly expectedIntent?: string;
+  readonly expectedSlots?: CommandExpectedSlots;
+  readonly intent?: string;
+  readonly slots?: Record<string, unknown>;
+  readonly reasonCodes?: readonly string[];
+  readonly citedFactKeys?: readonly string[];
+  readonly citedSignalIds?: readonly string[];
+  readonly situationAttribution?: { readonly reasonCode?: string };
 }
 
 export interface LiveVerificationReport {
@@ -1673,6 +1827,32 @@ function generateMarkdownReport(report: LiveVerificationReport): string {
   }
   lines.push('');
 
+  const commandCalls = report.calls.filter((c) => c.endpoint === 'command');
+  if (commandCalls.length > 0) {
+    lines.push('### 2.1. Command Structured Evidence & Invariant Audit\n');
+    lines.push(
+      '| # | Description | Expected Intent | Actual Intent | Expected Slots | Actual Slots | Reason Codes | Cited Facts | Cited Signals | Situation Attribution | Verdict |'
+    );
+    lines.push(
+      '|---|---|---|---|---|---|---|---|---|---|---|'
+    );
+    for (const c of commandCalls) {
+      const expIntent = c.expectedIntent ? `\`${c.expectedIntent}\`` : '-';
+      const actIntent = c.intent ? `\`${c.intent}\`` : '-';
+      const expSlots = c.expectedSlots ? `\`${JSON.stringify(c.expectedSlots)}\`` : '-';
+      const actSlots = c.slots ? `\`${JSON.stringify(c.slots)}\`` : '-';
+      const rc = c.reasonCodes && c.reasonCodes.length > 0 ? `\`${c.reasonCodes.join(', ')}\`` : '-';
+      const facts = c.citedFactKeys && c.citedFactKeys.length > 0 ? `\`${c.citedFactKeys.join(', ')}\`` : '-';
+      const sigs = c.citedSignalIds && c.citedSignalIds.length > 0 ? `\`${c.citedSignalIds.join(', ')}\`` : '-';
+      const sa = c.situationAttribution?.reasonCode ? `\`${c.situationAttribution.reasonCode}\`` : '-';
+      const verdict = c.factCheckOutcome === 'accepted' ? 'ACCEPTED ✅' : `DISCARDED (${c.fallbackReason ?? 'fallback'}) ❌`;
+      lines.push(
+        `| ${c.index} | ${c.description} | ${expIntent} | ${actIntent} | ${expSlots} | ${actSlots} | ${rc} | ${facts} | ${sigs} | ${sa} | ${verdict} |`
+      );
+    }
+    lines.push('');
+  }
+
   const callsWithRejectedCodes = report.calls.filter(
     c => c.rejectedReasonCodes && c.rejectedReasonCodes.length > 0
   );
@@ -1712,6 +1892,7 @@ export interface LiveVerificationOptions {
   mockFetch?: typeof fetch;
   skipPreconditions?: boolean;
   only?: 'command' | 'refine' | 'reason' | 'all';
+  prompts?: string | readonly string[];
 }
 
 export async function runLiveVerification(options?: LiveVerificationOptions): Promise<{ ok: boolean; report: LiveVerificationReport }> {
@@ -1738,7 +1919,22 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     options?.only === 'command' ||
     (process.argv.includes('--only') && process.argv[process.argv.indexOf('--only') + 1] === 'command');
 
-  const perRunCapLimit = isCommandOnly ? COMMAND_PER_RUN_MAX_CALLS : MODEL_PER_RUN_MAX_CALLS;
+  let promptsFilter: string | readonly string[] | undefined = options?.prompts;
+  if (!promptsFilter) {
+    const promptsIdx = process.argv.indexOf('--prompts');
+    if (promptsIdx !== -1 && process.argv[promptsIdx + 1] && !process.argv[promptsIdx + 1]?.startsWith('--')) {
+      promptsFilter = process.argv[promptsIdx + 1];
+    } else {
+      const promptsEq = process.argv.find((a) => a.startsWith('--prompts='));
+      if (promptsEq) {
+        promptsFilter = promptsEq.split('=')[1];
+      }
+    }
+  }
+
+  const perRunCapLimit = isCommandOnly
+    ? (promptsFilter ? 4 : COMMAND_PER_RUN_MAX_CALLS)
+    : MODEL_PER_RUN_MAX_CALLS;
   const rawMax = parseInt(process.env.MODEL_LIVE_MAX_CALLS ?? '', 10);
   if (Number.isNaN(rawMax) || rawMax > perRunCapLimit || rawMax < 1) {
     throw new Error(`REFUSING EXECUTION: MODEL_LIVE_MAX_CALLS must be between 1 and ${perRunCapLimit} (got ${process.env.MODEL_LIVE_MAX_CALLS})`);
@@ -1763,11 +1959,31 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     );
   }
 
-  const effectiveTimeoutMs = resolveTimeoutMs(process.env);
-  if (isCommandOnly && effectiveTimeoutMs < MIN_COMMAND_LIVE_TIMEOUT_MS) {
-    throw new Error(
-      `REFUSING EXECUTION: MODEL_TIMEOUT_MS must be at least ${MIN_COMMAND_LIVE_TIMEOUT_MS} for live command verification (got ${process.env['MODEL_TIMEOUT_MS'] ?? 'default (' + effectiveTimeoutMs + 'ms)'}).`
-    );
+  const rawTimeoutStr = process.env['MODEL_TIMEOUT_MS'];
+  let effectiveTimeoutMs: number;
+  if (rawTimeoutStr !== undefined && rawTimeoutStr.trim() !== '') {
+    const parsedTimeout = parseInt(rawTimeoutStr, 10);
+    if (isNaN(parsedTimeout) || parsedTimeout <= 0) {
+      throw new Error(`REFUSING EXECUTION: MODEL_TIMEOUT_MS must be a positive integer (got "${rawTimeoutStr}").`);
+    }
+    if (parsedTimeout > MAX_VERIFICATION_TIMEOUT_MS) {
+      throw new Error(
+        `REFUSING EXECUTION: MODEL_TIMEOUT_MS cannot exceed ${MAX_VERIFICATION_TIMEOUT_MS}ms (got ${parsedTimeout}ms).`
+      );
+    }
+    if (isCommandOnly && parsedTimeout < MIN_COMMAND_LIVE_TIMEOUT_MS) {
+      throw new Error(
+        `REFUSING EXECUTION: MODEL_TIMEOUT_MS must be at least ${MIN_COMMAND_LIVE_TIMEOUT_MS}ms for live command verification (got ${parsedTimeout}ms).`
+      );
+    }
+    effectiveTimeoutMs = Math.max(500, Math.min(MAX_VERIFICATION_TIMEOUT_MS, parsedTimeout));
+  } else {
+    if (isCommandOnly) {
+      throw new Error(
+        `REFUSING EXECUTION: MODEL_TIMEOUT_MS must be at least ${MIN_COMMAND_LIVE_TIMEOUT_MS}ms for live command verification (unset/default 2000ms).`
+      );
+    }
+    effectiveTimeoutMs = resolveTimeoutMs(process.env);
   }
 
   const apiKey = (process.env.MODEL_API_KEY || process.env.META_API_KEY || '').trim();
@@ -1788,7 +2004,10 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   const prevLedgerEnv = process.env.MODEL_LIVE_LEDGER_PATH;
   process.env.MODEL_LIVE_LEDGER_PATH = ledgerPath;
 
-  const proxy = new ModelDevProxy();
+  const proxy = new ModelDevProxy({
+    timeoutMs: effectiveTimeoutMs,
+    allowExtendedVerificationTimeout: true,
+  });
 
   const initialLedger = readLedgerState(ledgerPath);
   const lifetimeUsed = initialLedger.status === 'ok' ? initialLedger.callCount : 0;
@@ -1817,6 +2036,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     reasoningTokens?: number;
     finishReason?: string;
     error?: string;
+    contentJson?: any;
   } | null = null;
 
   let hardStopTriggered = false;
@@ -1860,6 +2080,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     let reasoningTokens: number | undefined;
     let finishReason: string | undefined;
     let errorDetail: string | undefined;
+    let contentJson: any = undefined;
 
     try {
       const clone = response.clone();
@@ -1875,6 +2096,12 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         }
         if (body.choices?.[0]?.finish_reason) {
           finishReason = body.choices[0].finish_reason;
+        }
+        const rawContent = body.choices?.[0]?.message?.content;
+        if (rawContent && typeof rawContent === 'string') {
+          try {
+            contentJson = JSON.parse(rawContent);
+          } catch {}
         }
         if (body.error) {
           const errObj = body.error;
@@ -1897,6 +2124,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
       reasoningTokens,
       finishReason,
       error: errorDetail,
+      contentJson,
     };
 
     if (response.status >= 400) {
@@ -1933,12 +2161,16 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   console.log('----------------------------------------------------------------------\n');
 
   // 4. Planned Call Definitions
+  const promptsToRun = promptsFilter
+    ? selectCommandPrompts(promptsFilter)
+    : CANONICAL_COMMAND_PROMPTS;
+
   const commandCalls: Array<{
     endpoint: 'refine' | 'reason' | 'command';
     description: string;
     evalContext?: CommandEvaluationContext;
     execute: () => Promise<{ usedFallback: boolean; fallbackReason?: string; wording?: string; result?: any }>;
-  }> = CANONICAL_COMMAND_PROMPTS.map((prompt) => ({
+  }> = promptsToRun.map((prompt) => ({
     endpoint: 'command' as const,
     description: prompt.description,
     evalContext: prompt.evalContext,
@@ -2113,6 +2345,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
 
   const plannedCalls = isCommandOnly ? commandCalls.slice(0, effectiveCap) : mixedCalls;
   const acceptedObjectives = new Set<'refine' | 'reason' | 'command'>();
+  let timeoutRetryBudget = Math.max(0, effectiveCap - plannedCalls.length);
 
   try {
     for (let i = 0; i < plannedCalls.length; i++) {
@@ -2177,6 +2410,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         reasoningTokens?: number;
         finishReason?: string;
         error?: string;
+        contentJson?: any;
       };
 
       const rejectedCodes =
@@ -2185,15 +2419,16 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
       let factCheckOutcome: 'accepted' | 'discarded' = callResult.usedFallback ? 'discarded' : 'accepted';
       let outcomeFallbackReason = callResult.fallbackReason;
       let commandAudit: CommandAcceptanceAudit | undefined = undefined;
+      const evalCtx = (callDef as any).evalContext as CommandEvaluationContext | undefined;
 
-      if (callDef.endpoint === 'command' && (callDef as any).evalContext) {
+      if (callDef.endpoint === 'command' && evalCtx) {
         const evalOutcome = evaluateCommandAcceptance({
           result: callResult.result,
           usedFallback: callResult.usedFallback,
           fallbackReason: callResult.fallbackReason,
           finishReason: meta.finishReason,
           rejectedReasonCodes: rejectedCodes,
-          context: (callDef as any).evalContext,
+          context: evalCtx,
         });
         factCheckOutcome = evalOutcome.accepted ? 'accepted' : 'discarded';
         if (!evalOutcome.accepted) {
@@ -2201,6 +2436,10 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         }
         commandAudit = evalOutcome.audit;
       }
+
+      const resData =
+        callResult.result ??
+        (meta?.contentJson && typeof meta.contentJson === 'object' ? meta.contentJson : undefined);
 
       const record: LiveVerificationCallRecord = {
         index: liveFetchDispatchedCount,
@@ -2219,11 +2458,33 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
         ...(rejectedCodes && rejectedCodes.length > 0 ? { rejectedReasonCodes: rejectedCodes } : {}),
         error: meta.error,
         ...(commandAudit ? { audit: commandAudit } : {}),
+        ...(callDef.endpoint === 'command'
+          ? {
+              expectedIntent: evalCtx?.expectedIntent,
+              expectedSlots: evalCtx?.expectedSlots,
+              intent: resData?.intent,
+              slots: resData?.slots ?? {},
+              reasonCodes: resData?.reasonCodes ?? [],
+              citedFactKeys: resData?.citedFactKeys ?? [],
+              citedSignalIds: resData?.citedSignalIds ?? [],
+              situationAttribution: resData?.situationAttribution?.reasonCode
+                ? { reasonCode: resData.situationAttribution.reasonCode }
+                : undefined,
+            }
+          : {}),
       };
 
       results.push(record);
       const outcomeTag = record.factCheckOutcome === 'accepted' ? 'ACCEPTED ✅' : `DISCARDED (${record.fallbackReason ?? 'fallback'})`;
       console.log(`  Call #${liveFetchDispatchedCount.toString().padStart(2, ' ')} [${callDef.endpoint.toUpperCase()}]: HTTP ${record.httpStatus} (${record.latencyMs}ms) — ${outcomeTag} — ${callDef.description}`);
+
+      if (callResult.fallbackReason === 'timeout' && timeoutRetryBudget > 0 && liveFetchDispatchedCount < rawMax) {
+        timeoutRetryBudget--;
+        console.log(
+          `  [RETRY] Timeout encountered on prompt. Retrying once with spare call budget (${timeoutRetryBudget} spare remaining)...`
+        );
+        i--;
+      }
 
       if (!isCommandOnly && record.factCheckOutcome === 'accepted') {
         acceptedObjectives.add(callDef.endpoint);
@@ -2340,6 +2601,18 @@ async function main(): Promise<void> {
   const isDryRun = process.argv.includes('--dry-run');
   const onlyIdx = process.argv.indexOf('--only');
   const onlyMode = onlyIdx !== -1 ? (process.argv[onlyIdx + 1] as 'command' | 'refine' | 'reason' | undefined) : undefined;
+
+  const promptsIdx = process.argv.indexOf('--prompts');
+  let promptsArg: string | undefined;
+  if (promptsIdx !== -1 && process.argv[promptsIdx + 1] && !process.argv[promptsIdx + 1]?.startsWith('--')) {
+    promptsArg = process.argv[promptsIdx + 1];
+  } else {
+    const promptsEq = process.argv.find((a) => a.startsWith('--prompts='));
+    if (promptsEq) {
+      promptsArg = promptsEq.split('=')[1];
+    }
+  }
+
   const isNegativePreconditionTest =
     process.argv.includes('--test-negative-precondition') ||
     process.argv.includes('--bogus-precondition');
@@ -2359,13 +2632,13 @@ async function main(): Promise<void> {
   }
 
   if (isDryRun) {
-    const success = await runDryRunAudit({ only: onlyMode });
+    const success = await runDryRunAudit({ only: onlyMode, prompts: promptsArg });
     process.exit(success ? 0 : 1);
   }
 
   // Live verification execution
   try {
-    const { ok } = await runLiveVerification({ only: onlyMode });
+    const { ok } = await runLiveVerification({ only: onlyMode, prompts: promptsArg });
     process.exit(ok ? 0 : 1);
   } catch (err: any) {
     console.error('\n❌ Live verification failed:', err?.message || err);
