@@ -75,6 +75,7 @@ import {
   getProcessLiveCallCount,
   resetLedger,
   loadEnvLocal,
+  resolveMaxTokensOverride,
   MODEL_LIFETIME_MAX_CALLS,
   MODEL_PER_RUN_MAX_CALLS,
 } from '../src/adapters/model/server-proxy.js';
@@ -82,6 +83,7 @@ import type { RejectedReasonCodeTelemetry } from '../src/adapters/model/types.js
 import {
   evaluateCommandAcceptance,
   COMMAND_PER_RUN_MAX_CALLS,
+  MIN_COMMAND_LIVE_MAX_TOKENS,
   type CommandEvaluationContext,
   type CommandAcceptanceAudit,
 } from '../src/adapters/model/command-acceptance-evaluator.js';
@@ -137,6 +139,213 @@ export const REQUIRED_PRECONDITIONS: readonly PreconditionRequirement[] = [
     expectedPrefix: '738751af',
     canonicalTitle: 'Slot-aware grounding audit & per-slot verification',
     summaryTag: 'PRE-S1-B',
+  },
+];
+
+export interface CanonicalCommandPrompt {
+  readonly index: number;
+  readonly title: string;
+  readonly description: string;
+  readonly utterance: string;
+  readonly expectedIntent: string;
+  readonly disallowedIntents?: readonly string[];
+  readonly expectedSlots?: {
+    readonly mode?: string;
+    readonly deltaMinutes?: number;
+    readonly filters?: readonly string[];
+  };
+  readonly facts: {
+    readonly utterance: string;
+    readonly availableModes: readonly string[];
+    readonly knownFactKeys: readonly string[];
+    readonly confirmedFactKeys: readonly string[];
+    readonly availableSignalIds: readonly string[];
+    readonly validTimes: readonly string[];
+    readonly validPlaces: readonly string[];
+    readonly currentPlanIntent?: string;
+  };
+  readonly evalContext: CommandEvaluationContext;
+}
+
+export const CANONICAL_COMMAND_PROMPTS: readonly CanonicalCommandPrompt[] = [
+  // 1. Valid shift command
+  {
+    index: 1,
+    title: 'Valid Shift Command',
+    description: 'Command valid shift ("Can I leave later?")',
+    utterance: 'Can I leave later?',
+    expectedIntent: 'LEAVE_LATER',
+    facts: {
+      utterance: 'Can I leave later?',
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
+      validTimes: ['2:45 PM', '2:50 PM'],
+      validPlaces: ['Piano Studio'],
+    },
+    evalContext: {
+      utterance: 'Can I leave later?',
+      expectedIntent: 'LEAVE_LATER',
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
+      validTimes: ['2:45 PM', '2:50 PM'],
+      validPlaces: ['Piano Studio'],
+    },
+  },
+  // 2. Valid explicit shift command
+  {
+    index: 2,
+    title: 'Valid Explicit Shift Command',
+    description: 'Command valid explicit shift ("Leave 15 minutes later")',
+    utterance: 'Leave 15 minutes later',
+    expectedIntent: 'LEAVE_LATER',
+    expectedSlots: { deltaMinutes: 15 },
+    facts: {
+      utterance: 'Leave 15 minutes later',
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
+      validTimes: ['2:45 PM', '3:00 PM'],
+      validPlaces: ['Piano Studio'],
+    },
+    evalContext: {
+      utterance: 'Leave 15 minutes later',
+      expectedIntent: 'LEAVE_LATER',
+      expectedSlots: { deltaMinutes: 15 },
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
+      validTimes: ['2:45 PM', '3:00 PM'],
+      validPlaces: ['Piano Studio'],
+    },
+  },
+  // 3. Suppression command
+  {
+    index: 3,
+    title: 'Suppression Command',
+    description: 'Command suppression ("I already ate lunch today, don\'t suggest lunch")',
+    utterance: "I already ate lunch today, don't suggest lunch",
+    expectedIntent: 'UNSUPPORTED',
+    disallowedIntents: ['FIND_LUNCH'],
+    facts: {
+      utterance: "I already ate lunch today, don't suggest lunch",
+      availableModes: ['walk'],
+      knownFactKeys: ['taste_lunch_japanese'],
+      confirmedFactKeys: ['taste_lunch_japanese'],
+      availableSignalIds: ['calendar:2026-10-28T09:00:00.000Z'],
+      validTimes: ['12:15 PM'],
+      validPlaces: ['Green Bowl'],
+      currentPlanIntent: 'lunch',
+    },
+    evalContext: {
+      utterance: "I already ate lunch today, don't suggest lunch",
+      expectedIntent: 'UNSUPPORTED',
+      disallowedIntents: ['FIND_LUNCH'],
+      availableModes: ['walk'],
+      knownFactKeys: ['taste_lunch_japanese'],
+      confirmedFactKeys: ['taste_lunch_japanese'],
+      availableSignalIds: ['calendar:2026-10-28T09:00:00.000Z'],
+      validTimes: ['12:15 PM'],
+      validPlaces: ['Green Bowl'],
+      currentPlanIntent: 'lunch',
+      activeSuppressions: [
+        {
+          code: 'user_suppressed',
+          targetIntent: 'lunch',
+          scope: 'today',
+          reason: 'User suppressed lunch for today',
+        },
+      ],
+      isDismissalOrSuppression: true,
+    },
+  },
+  // 4. Mode switch command
+  {
+    index: 4,
+    title: 'Mode Switch Command',
+    description: 'Command route mode switch ("Take the bus instead")',
+    utterance: 'Take the bus instead',
+    expectedIntent: 'CHANGE_ROUTE',
+    expectedSlots: { mode: 'bus' },
+    facts: {
+      utterance: 'Take the bus instead',
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit'],
+      confirmedFactKeys: ['habit_rain_transit'],
+      availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+      validTimes: ['2:30 PM'],
+      validPlaces: ['Piano Studio'],
+    },
+    evalContext: {
+      utterance: 'Take the bus instead',
+      expectedIntent: 'CHANGE_ROUTE',
+      expectedSlots: { mode: 'bus' },
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit'],
+      confirmedFactKeys: ['habit_rain_transit'],
+      availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+      validTimes: ['2:30 PM'],
+      validPlaces: ['Piano Studio'],
+    },
+  },
+  // 5. Out-of-scope refusal command
+  {
+    index: 5,
+    title: 'Out-of-Scope / Adversarial Command',
+    description: 'Command out-of-scope refusal ("Book a flight to Hawaii for next weekend")',
+    utterance: 'Book a flight to Hawaii for next weekend',
+    expectedIntent: 'UNSUPPORTED',
+    facts: {
+      utterance: 'Book a flight to Hawaii for next weekend',
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit'],
+      confirmedFactKeys: ['habit_rain_transit'],
+      availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+      validTimes: ['2:30 PM'],
+      validPlaces: ['Piano Studio'],
+    },
+    evalContext: {
+      utterance: 'Book a flight to Hawaii for next weekend',
+      expectedIntent: 'UNSUPPORTED',
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit'],
+      confirmedFactKeys: ['habit_rain_transit'],
+      availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+      validTimes: ['2:30 PM'],
+      validPlaces: ['Piano Studio'],
+    },
+  },
+  // 6. Citation explanation probe
+  {
+    index: 6,
+    title: 'Citation / Explanation Probe',
+    description: 'Command citation explanation probe ("Why did you suggest this departure time?")',
+    utterance: 'Why did you suggest this departure time?',
+    expectedIntent: 'WHY',
+    facts: {
+      utterance: 'Why did you suggest this departure time?',
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+      validTimes: ['2:45 PM'],
+      validPlaces: ['Piano Studio'],
+    },
+    evalContext: {
+      utterance: 'Why did you suggest this departure time?',
+      expectedIntent: 'WHY',
+      availableModes: ['drive', 'bus'],
+      knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
+      availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+      validTimes: ['2:45 PM'],
+      validPlaces: ['Piano Studio'],
+    },
   },
 ];
 
@@ -256,8 +465,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
 
   process.env.MODEL_API_KEY = 'sk-mock-spark-dryrun-sentinel-key';
   process.env.MODEL_LIVE_ENABLED = '1';
-  const rawMax = parseInt(process.env.MODEL_LIVE_MAX_CALLS ?? '6', 10) || 6;
-  const effectiveCap = Math.min(rawMax, COMMAND_PER_RUN_MAX_CALLS);
+  const effectiveCap = 9;
   process.env.MODEL_LIVE_MAX_CALLS = String(effectiveCap);
 
   const realLedgerBaselinePath = getDefaultLedgerPath(projectRoot);
@@ -294,7 +502,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         usage: { prompt_tokens: 180, completion_tokens: 65, total_tokens: 245 },
       },
     },
-    // 2. Valid earlier shift command ("Leave 15 minutes earlier") -> ACCEPTED
+    // 2. Valid explicit shift command ("Leave 15 minutes later") -> ACCEPTED
     {
       ok: true,
       status: 200,
@@ -306,9 +514,9 @@ async function runCommandDryRunAudit(): Promise<boolean> {
                 intent: 'LEAVE_LATER',
                 slots: { deltaMinutes: 15 },
                 citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-                citedFactKeys: ['habit_rain_transit'],
+                citedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
                 reasonCodes: ['weather_adjusted'],
-                explanation: 'Piano Studio depart at 2:15 PM',
+                explanation: 'Piano Studio depart at 3:00 PM',
               }),
             },
             finish_reason: 'stop',
@@ -390,7 +598,78 @@ async function runCommandDryRunAudit(): Promise<boolean> {
         usage: { prompt_tokens: 160, completion_tokens: 45, total_tokens: 205 },
       },
     },
-    // 6. Invalid citation probe ("Can I leave later?" with hallucinated key) -> DISCARDED
+    // 6. Citation explanation probe ("Why did you suggest this departure time?") -> ACCEPTED
+    {
+      ok: true,
+      status: 200,
+      body: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                intent: 'WHY',
+                slots: {},
+                citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+                citedFactKeys: ['habit_rain_transit'],
+                reasonCodes: ['weather_adjusted'],
+                situationAttribution: {
+                  signalId: 'weather:2026-10-28T20:35:00.000Z',
+                  reasonCode: 'weather_adjusted',
+                  explanation: 'Weather forecast updated to rain.',
+                },
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 185, completion_tokens: 55, total_tokens: 240 },
+      },
+    },
+    // 7. Negative probe 1: Citation discipline probe with hallucinated fact key -> DISCARDED (invented_fact_key)
+    {
+      ok: true,
+      status: 200,
+      body: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                intent: 'WHY',
+                slots: {},
+                citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+                citedFactKeys: ['unconfirmed_secret_fact_xyz'],
+                reasonCodes: ['weather_adjusted'],
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 185, completion_tokens: 55, total_tokens: 240 },
+      },
+    },
+    // 8. Negative probe 2: Adversarial compliance / wrong intent probe -> DISCARDED (wrong_intent)
+    {
+      ok: true,
+      status: 200,
+      body: {
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                intent: 'LEAVE_LATER',
+                slots: { deltaMinutes: 15 },
+                citedSignalIds: [],
+                citedFactKeys: [],
+                reasonCodes: [],
+              }),
+            },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { prompt_tokens: 160, completion_tokens: 40, total_tokens: 200 },
+      },
+    },
+    // 9. Negative probe 3: Missing finish_reason probe -> DISCARDED (missing_finish_reason)
     {
       ok: true,
       status: 200,
@@ -402,14 +681,14 @@ async function runCommandDryRunAudit(): Promise<boolean> {
                 intent: 'LEAVE_LATER',
                 slots: { deltaMinutes: 10 },
                 citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-                citedFactKeys: ['unconfirmed_secret_fact_xyz'],
-                reasonCodes: ['matches_confirmed_preference'],
+                citedFactKeys: ['habit_rain_transit'],
+                reasonCodes: ['weather_adjusted'],
               }),
             },
-            finish_reason: 'stop',
+            // finish_reason intentionally omitted
           },
         ],
-        usage: { prompt_tokens: 185, completion_tokens: 55, total_tokens: 240 },
+        usage: { prompt_tokens: 180, completion_tokens: 50, total_tokens: 230 },
       },
     },
   ];
@@ -442,7 +721,7 @@ async function runCommandDryRunAudit(): Promise<boolean> {
       promptTokens: mock.body.usage?.prompt_tokens,
       completionTokens: mock.body.usage?.completion_tokens,
       totalTokens: mock.body.usage?.total_tokens,
-      finishReason: mock.body.choices?.[0]?.finish_reason,
+      finishReason: (mock.body.choices?.[0] as { finish_reason?: string } | undefined)?.finish_reason,
     };
     return {
       ok: mock.ok,
@@ -457,153 +736,31 @@ async function runCommandDryRunAudit(): Promise<boolean> {
   };
 
   const commandPrompts = [
-    // Call 1
-    {
-      description: 'Command valid shift ("Can I leave later?")',
-      facts: {
-        utterance: 'Can I leave later?',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-        confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
-        validTimes: ['2:45 PM', '2:50 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      evalContext: {
-        utterance: 'Can I leave later?',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-        confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
-        validTimes: ['2:45 PM', '2:50 PM'],
-        validPlaces: ['Piano Studio'],
-      },
+    ...CANONICAL_COMMAND_PROMPTS.map((p) => ({
+      description: p.description,
+      facts: p.facts,
+      evalContext: p.evalContext,
       expectedOutcome: 'accepted' as const,
-    },
-    // Call 2
+    })),
+    // Call 7: Negative probe 1: Invented fact key
     {
-      description: 'Command valid earlier shift ("Leave 15 minutes earlier")',
-      facts: {
-        utterance: 'Leave 15 minutes earlier',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:15 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      evalContext: {
-        utterance: 'Leave 15 minutes earlier',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:15 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      expectedOutcome: 'accepted' as const,
+      description: 'Command citation discipline probe ("Why did you suggest this departure time?" with unconfirmed fact)',
+      facts: CANONICAL_COMMAND_PROMPTS[5]!.facts,
+      evalContext: CANONICAL_COMMAND_PROMPTS[5]!.evalContext,
+      expectedOutcome: 'discarded' as const,
     },
-    // Call 3
+    // Call 8: Negative probe 2: Adversarial compliance / wrong intent
     {
-      description: 'Command suppression ("I already ate lunch today, don\'t suggest lunch")',
-      facts: {
-        utterance: "I already ate lunch today, don't suggest lunch",
-        availableModes: ['walk'],
-        knownFactKeys: ['taste_lunch_japanese'],
-        confirmedFactKeys: ['taste_lunch_japanese'],
-        availableSignalIds: ['calendar:2026-10-28T09:00:00.000Z'],
-        validTimes: ['12:15 PM'],
-        validPlaces: ['Green Bowl'],
-        currentPlanIntent: 'lunch',
-      },
-      evalContext: {
-        utterance: "I already ate lunch today, don't suggest lunch",
-        availableModes: ['walk'],
-        knownFactKeys: ['taste_lunch_japanese'],
-        confirmedFactKeys: ['taste_lunch_japanese'],
-        availableSignalIds: ['calendar:2026-10-28T09:00:00.000Z'],
-        validTimes: ['12:15 PM'],
-        validPlaces: ['Green Bowl'],
-        currentPlanIntent: 'lunch',
-        activeSuppressions: [
-          {
-            code: 'user_suppressed',
-            targetIntent: 'lunch',
-            scope: 'today',
-            reason: 'User suppressed lunch for today',
-          },
-        ],
-        isDismissalOrSuppression: true,
-      },
-      expectedOutcome: 'accepted' as const,
+      description: 'Command adversarial compliance probe ("Book a flight to Hawaii" returning LEAVE_LATER)',
+      facts: CANONICAL_COMMAND_PROMPTS[4]!.facts,
+      evalContext: CANONICAL_COMMAND_PROMPTS[4]!.evalContext,
+      expectedOutcome: 'discarded' as const,
     },
-    // Call 4
+    // Call 9: Negative probe 3: Missing finish_reason
     {
-      description: 'Command route mode switch ("Take the bus instead")',
-      facts: {
-        utterance: 'Take the bus instead',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:30 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      evalContext: {
-        utterance: 'Take the bus instead',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:30 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      expectedOutcome: 'accepted' as const,
-    },
-    // Call 5
-    {
-      description: 'Command out-of-scope refusal ("Book a flight to Hawaii for next weekend")',
-      facts: {
-        utterance: 'Book a flight to Hawaii for next weekend',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:30 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      evalContext: {
-        utterance: 'Book a flight to Hawaii for next weekend',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:30 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      expectedOutcome: 'accepted' as const,
-    },
-    // Call 6
-    {
-      description: 'Command citation discipline probe ("Can I leave later?" with unconfirmed fact)',
-      facts: {
-        utterance: 'Can I leave later?',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:45 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      evalContext: {
-        utterance: 'Can I leave later?',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:45 PM'],
-        validPlaces: ['Piano Studio'],
-      },
+      description: 'Command missing finish_reason probe ("Can I leave later?" omitting finish_reason)',
+      facts: CANONICAL_COMMAND_PROMPTS[0]!.facts,
+      evalContext: CANONICAL_COMMAND_PROMPTS[0]!.evalContext,
       expectedOutcome: 'discarded' as const,
     },
   ];
@@ -1588,6 +1745,17 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   // Load .env.local if not already in env (non-test run)
   loadEnvLocal(root);
 
+  const maxTokensOverride = resolveMaxTokensOverride(process.env);
+  const isDefaultTokens = maxTokensOverride === undefined;
+  const maxTokensConfig = maxTokensOverride ?? 300;
+  const maxTokensDisplay = isDefaultTokens ? 'endpoint defaults (150/250/300; max 300)' : `${maxTokensConfig}`;
+
+  if (isCommandOnly && maxTokensConfig < MIN_COMMAND_LIVE_MAX_TOKENS) {
+    throw new Error(
+      `REFUSING EXECUTION: MODEL_MAX_TOKENS must be at least ${MIN_COMMAND_LIVE_MAX_TOKENS} for live command verification (got ${maxTokensOverride ?? 'endpoint default (300)'}).`
+    );
+  }
+
   const apiKey = (process.env.MODEL_API_KEY || process.env.META_API_KEY || '').trim();
   if (!apiKey) {
     throw new Error('REFUSING EXECUTION: No MODEL_API_KEY or META_API_KEY configured in environment.');
@@ -1605,6 +1773,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   const ledgerPath = options?.tempLedgerPath ?? getDefaultLedgerPath(root);
   const prevLedgerEnv = process.env.MODEL_LIVE_LEDGER_PATH;
   process.env.MODEL_LIVE_LEDGER_PATH = ledgerPath;
+
+  const proxy = new ModelDevProxy();
 
   const initialLedger = readLedgerState(ledgerPath);
   const lifetimeUsed = initialLedger.status === 'ok' ? initialLedger.callCount : 0;
@@ -1724,17 +1894,15 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   };
 
   const results: LiveVerificationCallRecord[] = [];
-  const proxy = new ModelDevProxy();
-  const maxTokensOverride = proxy.getConfig().maxTokensOverride;
-  const isDefaultTokens = maxTokensOverride === undefined;
-  const maxTokensConfig = maxTokensOverride ?? 300;
-  const maxTokensDisplay = isDefaultTokens ? 'endpoint defaults (150/250/300; max 300)' : `${maxTokensConfig}`;
 
   // Runtime spend bounds: best-case vs worst-case (effectiveCap dispatches @ maxTokensConfig)
   const effectiveCap = Math.min(perRunCapLimit, rawMax);
-  const bestCaseTokens = isDefaultTokens ? (isCommandOnly ? 300 : (150 + 250 + 300)) : (isCommandOnly ? maxTokensConfig : 3 * maxTokensConfig);
+  const promptTokensEstimate = 400;
+  const bestCaseTokens = isDefaultTokens
+    ? (isCommandOnly ? 300 : (150 + 250 + 300))
+    : (isCommandOnly ? (1000 + promptTokensEstimate) : 3 * maxTokensConfig);
   const bestCaseSpend = (bestCaseTokens * 0.000002).toFixed(4);
-  const worstCaseTokens = effectiveCap * maxTokensConfig;
+  const worstCaseTokens = effectiveCap * (maxTokensConfig + promptTokensEstimate);
   const worstCaseSpend = (worstCaseTokens * 0.000002).toFixed(4);
 
   console.log('----------------------------------------------------------------------');
@@ -1755,163 +1923,12 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     description: string;
     evalContext?: CommandEvaluationContext;
     execute: () => Promise<{ usedFallback: boolean; fallbackReason?: string; wording?: string; result?: any }>;
-  }> = [
-    // 1. Valid shift command
-    {
-      endpoint: 'command',
-      description: 'Command valid shift ("Can I leave later?")',
-      evalContext: {
-        utterance: 'Can I leave later?',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-        confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
-        validTimes: ['2:45 PM', '2:50 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      execute: () =>
-        proxy.handleCommand({
-          utterance: 'Can I leave later?',
-          availableModes: ['drive', 'bus'],
-          knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-          confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z', 'calendar:2026-10-28T17:00:00.000Z'],
-          validTimes: ['2:45 PM', '2:50 PM'],
-          validPlaces: ['Piano Studio'],
-        }),
-    },
-    // 2. Valid earlier shift command
-    {
-      endpoint: 'command',
-      description: 'Command valid earlier shift ("Leave 15 minutes earlier")',
-      evalContext: {
-        utterance: 'Leave 15 minutes earlier',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:15 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      execute: () =>
-        proxy.handleCommand({
-          utterance: 'Leave 15 minutes earlier',
-          availableModes: ['drive', 'bus'],
-          knownFactKeys: ['habit_rain_transit'],
-          confirmedFactKeys: ['habit_rain_transit'],
-          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-          validTimes: ['2:15 PM'],
-          validPlaces: ['Piano Studio'],
-        }),
-    },
-    // 3. Suppression command
-    {
-      endpoint: 'command',
-      description: 'Command suppression ("I already ate lunch today, don\'t suggest lunch")',
-      evalContext: {
-        utterance: "I already ate lunch today, don't suggest lunch",
-        availableModes: ['walk'],
-        knownFactKeys: ['taste_lunch_japanese'],
-        confirmedFactKeys: ['taste_lunch_japanese'],
-        availableSignalIds: ['calendar:2026-10-28T09:00:00.000Z'],
-        validTimes: ['12:15 PM'],
-        validPlaces: ['Green Bowl'],
-        currentPlanIntent: 'lunch',
-        activeSuppressions: [
-          {
-            code: 'user_suppressed',
-            targetIntent: 'lunch',
-            scope: 'today',
-            reason: 'User suppressed lunch for today',
-          },
-        ],
-        isDismissalOrSuppression: true,
-      },
-      execute: () =>
-        proxy.handleCommand({
-          utterance: "I already ate lunch today, don't suggest lunch",
-          availableModes: ['walk'],
-          knownFactKeys: ['taste_lunch_japanese'],
-          confirmedFactKeys: ['taste_lunch_japanese'],
-          availableSignalIds: ['calendar:2026-10-28T09:00:00.000Z'],
-          validTimes: ['12:15 PM'],
-          validPlaces: ['Green Bowl'],
-          currentPlanIntent: 'lunch',
-        }),
-    },
-    // 4. Mode switch command
-    {
-      endpoint: 'command',
-      description: 'Command route mode switch ("Take the bus instead")',
-      evalContext: {
-        utterance: 'Take the bus instead',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:30 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      execute: () =>
-        proxy.handleCommand({
-          utterance: 'Take the bus instead',
-          availableModes: ['drive', 'bus'],
-          knownFactKeys: ['habit_rain_transit'],
-          confirmedFactKeys: ['habit_rain_transit'],
-          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-          validTimes: ['2:30 PM'],
-          validPlaces: ['Piano Studio'],
-        }),
-    },
-    // 5. Out-of-scope refusal command
-    {
-      endpoint: 'command',
-      description: 'Command out-of-scope refusal ("Book a flight to Hawaii for next weekend")',
-      evalContext: {
-        utterance: 'Book a flight to Hawaii for next weekend',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit'],
-        confirmedFactKeys: ['habit_rain_transit'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:30 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      execute: () =>
-        proxy.handleCommand({
-          utterance: 'Book a flight to Hawaii for next weekend',
-          availableModes: ['drive', 'bus'],
-          knownFactKeys: ['habit_rain_transit'],
-          confirmedFactKeys: ['habit_rain_transit'],
-          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-          validTimes: ['2:30 PM'],
-          validPlaces: ['Piano Studio'],
-        }),
-    },
-    // 6. Citation probe command
-    {
-      endpoint: 'command',
-      description: 'Command citation discipline probe ("Why did you suggest this departure time?")',
-      evalContext: {
-        utterance: 'Why did you suggest this departure time?',
-        availableModes: ['drive', 'bus'],
-        knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-        confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-        availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-        validTimes: ['2:45 PM'],
-        validPlaces: ['Piano Studio'],
-      },
-      execute: () =>
-        proxy.handleCommand({
-          utterance: 'Why did you suggest this departure time?',
-          availableModes: ['drive', 'bus'],
-          knownFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-          confirmedFactKeys: ['habit_rain_transit', 'prep_buffer_minutes'],
-          availableSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
-          validTimes: ['2:45 PM'],
-          validPlaces: ['Piano Studio'],
-        }),
-    },
-  ];
+  }> = CANONICAL_COMMAND_PROMPTS.map((prompt) => ({
+    endpoint: 'command' as const,
+    description: prompt.description,
+    evalContext: prompt.evalContext,
+    execute: () => proxy.handleCommand(prompt.facts),
+  }));
 
   const mixedCalls: Array<{
     endpoint: 'refine' | 'reason' | 'command';

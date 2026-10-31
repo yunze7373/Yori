@@ -13,8 +13,10 @@ import { describe, it, expect } from 'vitest';
 import {
   evaluateCommandAcceptance,
   COMMAND_PER_RUN_MAX_CALLS,
+  MIN_COMMAND_LIVE_MAX_TOKENS,
   type CommandEvaluationContext,
 } from '../../src/adapters/model/command-acceptance-evaluator.js';
+import { CANONICAL_COMMAND_PROMPTS } from '../../scripts/live-verify-spark.js';
 
 describe('Command Acceptance Evaluator (S1-LIVE-3)', () => {
   const baseContext: CommandEvaluationContext = {
@@ -30,6 +32,27 @@ describe('Command Acceptance Evaluator (S1-LIVE-3)', () => {
   describe('Constant Invariants', () => {
     it('enforces COMMAND_PER_RUN_MAX_CALLS <= 6', () => {
       expect(COMMAND_PER_RUN_MAX_CALLS).toBe(6);
+    });
+
+    it('enforces MIN_COMMAND_LIVE_MAX_TOKENS >= 4096', () => {
+      expect(MIN_COMMAND_LIVE_MAX_TOKENS).toBe(4096);
+    });
+
+    it('has exactly 6 canonical command prompts matching S1-LIVE-3 budget', () => {
+      expect(CANONICAL_COMMAND_PROMPTS).toHaveLength(6);
+    });
+
+    it('each canonical prompt defines expectedIntent and valid properties', () => {
+      for (const p of CANONICAL_COMMAND_PROMPTS) {
+        expect(p.expectedIntent).toBeDefined();
+        expect(p.utterance).toBeTruthy();
+        expect(p.evalContext.expectedIntent).toBe(p.expectedIntent);
+      }
+    });
+
+    it('prompt 2 specifies deltaMinutes 15 for leave later', () => {
+      expect(CANONICAL_COMMAND_PROMPTS[1]!.expectedIntent).toBe('LEAVE_LATER');
+      expect(CANONICAL_COMMAND_PROMPTS[1]!.expectedSlots?.deltaMinutes).toBe(15);
     });
   });
 
@@ -61,6 +84,8 @@ describe('Command Acceptance Evaluator (S1-LIVE-3)', () => {
       expect(outcome.error).toBeUndefined();
       expect(outcome.audit).toEqual({
         closedIntent: true,
+        intentMatchesExpectation: true,
+        slotsMatchExpectation: true,
         validReasonCodes: true,
         factKeyParity: true,
         stopFinishReason: true,
@@ -404,6 +429,265 @@ describe('Command Acceptance Evaluator (S1-LIVE-3)', () => {
 
       expect(outcome.accepted).toBe(false);
       expect(outcome.failureReason).toBe('disabled');
+    });
+  });
+
+  describe('Test Case 8: Missing or Non-Stop Finish Reason', () => {
+    it('rejects non-fallback response with missing finish reason', () => {
+      const result = {
+        intent: 'LEAVE_LATER',
+        slots: { deltaMinutes: 15 },
+        citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        citedFactKeys: ['habit_rain_transit'],
+        reasonCodes: ['weather_adjusted'],
+      };
+
+      const outcome = evaluateCommandAcceptance({
+        result,
+        usedFallback: false,
+        finishReason: undefined,
+        context: baseContext,
+      });
+
+      expect(outcome.accepted).toBe(false);
+      expect(outcome.failureReason).toBe('missing_finish_reason');
+      expect(outcome.error).toContain('Missing finish_reason');
+      expect(outcome.audit.stopFinishReason).toBe(false);
+    });
+
+    it('rejects non-fallback response with non-stop finish reason (e.g. content_filter)', () => {
+      const result = {
+        intent: 'LEAVE_LATER',
+        slots: { deltaMinutes: 15 },
+        citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        citedFactKeys: ['habit_rain_transit'],
+        reasonCodes: ['weather_adjusted'],
+      };
+
+      const outcome = evaluateCommandAcceptance({
+        result,
+        usedFallback: false,
+        finishReason: 'content_filter',
+        context: baseContext,
+      });
+
+      expect(outcome.accepted).toBe(false);
+      expect(outcome.failureReason).toBe('truncated');
+      expect(outcome.error).toContain('content_filter');
+      expect(outcome.audit.stopFinishReason).toBe(false);
+    });
+  });
+
+  describe('Test Case 9: Prompt Intent Correspondence (wrong_intent)', () => {
+    it('rejects adversarial prompt when out-of-scope prompt returns LEAVE_LATER instead of UNSUPPORTED', () => {
+      const result = {
+        intent: 'LEAVE_LATER',
+        slots: { deltaMinutes: 15 },
+        citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        citedFactKeys: ['habit_rain_transit'],
+        reasonCodes: ['weather_adjusted'],
+      };
+
+      const outcome = evaluateCommandAcceptance({
+        result,
+        usedFallback: false,
+        finishReason: 'stop',
+        context: {
+          ...baseContext,
+          utterance: 'Book a flight to Hawaii for next weekend',
+          expectedIntent: 'UNSUPPORTED',
+        },
+      });
+
+      expect(outcome.accepted).toBe(false);
+      expect(outcome.failureReason).toBe('wrong_intent');
+      expect(outcome.error).toContain('does not match expected intent "UNSUPPORTED"');
+      expect(outcome.audit.intentMatchesExpectation).toBe(false);
+    });
+
+    it('rejects shift prompt when model returns FIND_LUNCH instead of LEAVE_LATER', () => {
+      const result = {
+        intent: 'FIND_LUNCH',
+        slots: {},
+        citedSignalIds: [],
+        citedFactKeys: [],
+        reasonCodes: ['free_window_fit'],
+      };
+
+      const outcome = evaluateCommandAcceptance({
+        result,
+        usedFallback: false,
+        finishReason: 'stop',
+        context: {
+          ...baseContext,
+          utterance: 'Can I leave later?',
+          expectedIntent: 'LEAVE_LATER',
+        },
+      });
+
+      expect(outcome.accepted).toBe(false);
+      expect(outcome.failureReason).toBe('wrong_intent');
+      expect(outcome.audit.intentMatchesExpectation).toBe(false);
+    });
+
+    it('rejects disallowed intent when model returns suppressed intent', () => {
+      const result = {
+        intent: 'FIND_LUNCH',
+        slots: {},
+        citedSignalIds: [],
+        citedFactKeys: [],
+        reasonCodes: ['free_window_fit'],
+      };
+
+      const outcome = evaluateCommandAcceptance({
+        result,
+        usedFallback: false,
+        finishReason: 'stop',
+        context: {
+          ...baseContext,
+          utterance: 'I already ate lunch today, do not suggest lunch',
+          disallowedIntents: ['FIND_LUNCH'],
+        },
+      });
+
+      expect(outcome.accepted).toBe(false);
+      expect(outcome.failureReason).toBe('wrong_intent');
+      expect(outcome.audit.intentMatchesExpectation).toBe(false);
+      expect(outcome.audit.suppressionHonoured).toBe(false);
+    });
+
+    it('rejects intent when not contained in allowedIntents whitelist', () => {
+      const result = {
+        intent: 'FIND_FUEL',
+        slots: {},
+        citedSignalIds: [],
+        citedFactKeys: [],
+        reasonCodes: ['free_window_fit'],
+      };
+
+      const outcome = evaluateCommandAcceptance({
+        result,
+        usedFallback: false,
+        finishReason: 'stop',
+        context: {
+          ...baseContext,
+          utterance: 'Change the plan',
+          allowedIntents: ['LEAVE_LATER', 'UNDO'],
+        },
+      });
+
+      expect(outcome.accepted).toBe(false);
+      expect(outcome.failureReason).toBe('wrong_intent');
+      expect(outcome.audit.intentMatchesExpectation).toBe(false);
+    });
+  });
+
+  describe('Test Case 10: Slot Constraints Correspondence (wrong_slots)', () => {
+    it('rejects mode mismatch when expected mode is bus but received drive', () => {
+      const result = {
+        intent: 'CHANGE_ROUTE',
+        slots: { mode: 'drive' },
+        citedSignalIds: [],
+        citedFactKeys: [],
+        reasonCodes: ['traffic_avoidance'],
+      };
+
+      const outcome = evaluateCommandAcceptance({
+        result,
+        usedFallback: false,
+        finishReason: 'stop',
+        context: {
+          ...baseContext,
+          utterance: 'Take the bus instead',
+          expectedIntent: 'CHANGE_ROUTE',
+          expectedSlots: { mode: 'bus' },
+        },
+      });
+
+      expect(outcome.accepted).toBe(false);
+      expect(outcome.failureReason).toBe('wrong_slots');
+      expect(outcome.error).toContain('Slot "mode" was "drive", expected "bus"');
+      expect(outcome.audit.slotsMatchExpectation).toBe(false);
+    });
+
+    it('rejects deltaMinutes mismatch when expected deltaMinutes is 15 but received 30', () => {
+      const result = {
+        intent: 'LEAVE_LATER',
+        slots: { deltaMinutes: 30 },
+        citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        citedFactKeys: ['habit_rain_transit'],
+        reasonCodes: ['weather_adjusted'],
+      };
+
+      const outcome = evaluateCommandAcceptance({
+        result,
+        usedFallback: false,
+        finishReason: 'stop',
+        context: {
+          ...baseContext,
+          utterance: 'Leave 15 minutes later',
+          expectedIntent: 'LEAVE_LATER',
+          expectedSlots: { deltaMinutes: 15 },
+        },
+      });
+
+      expect(outcome.accepted).toBe(false);
+      expect(outcome.failureReason).toBe('wrong_slots');
+      expect(outcome.error).toContain('Slot "deltaMinutes" was "30", expected "15"');
+      expect(outcome.audit.slotsMatchExpectation).toBe(false);
+    });
+
+    it('rejects filter mismatch when expected filter is missing', () => {
+      const result = {
+        intent: 'FIND_LUNCH',
+        slots: { filters: ['vegan'] },
+        citedSignalIds: [],
+        citedFactKeys: [],
+        reasonCodes: ['free_window_fit'],
+      };
+
+      const outcome = evaluateCommandAcceptance({
+        result,
+        usedFallback: false,
+        finishReason: 'stop',
+        context: {
+          ...baseContext,
+          utterance: 'Find vegetarian food',
+          expectedIntent: 'FIND_LUNCH',
+          expectedSlots: { filters: ['vegetarian'] },
+        },
+      });
+
+      expect(outcome.accepted).toBe(false);
+      expect(outcome.failureReason).toBe('wrong_slots');
+      expect(outcome.error).toContain('Expected filter "vegetarian" missing');
+      expect(outcome.audit.slotsMatchExpectation).toBe(false);
+    });
+
+    it('accepts matching slots for mode and deltaMinutes', () => {
+      const result = {
+        intent: 'LEAVE_LATER',
+        slots: { deltaMinutes: 15 },
+        citedSignalIds: ['weather:2026-10-28T20:35:00.000Z'],
+        citedFactKeys: ['habit_rain_transit'],
+        reasonCodes: ['weather_adjusted'],
+      };
+
+      const outcome = evaluateCommandAcceptance({
+        result,
+        usedFallback: false,
+        finishReason: 'stop',
+        context: {
+          ...baseContext,
+          utterance: 'Leave 15 minutes later',
+          expectedIntent: 'LEAVE_LATER',
+          expectedSlots: { deltaMinutes: 15 },
+        },
+      });
+
+      expect(outcome.accepted).toBe(true);
+      expect(outcome.audit.intentMatchesExpectation).toBe(true);
+      expect(outcome.audit.slotsMatchExpectation).toBe(true);
     });
   });
 });

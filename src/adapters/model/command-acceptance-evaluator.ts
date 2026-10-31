@@ -4,10 +4,12 @@
  *
  * Invariants enforced:
  * 1. Closed intent set (member of CLOSED_DECISION_INTENTS).
- * 2. Valid reason codes (all reasonCodes & situationAttribution codes in VALID_REASON_CODES).
- * 3. Fact-key parity (all cited fact keys must exist in confirmedFactKeys; zero invented keys).
- * 4. Stop finish reason (finish_reason === "stop", not "length" / truncated).
- * 5. Suppression honoured (active suppressions never overridden by positive recommendations).
+ * 2. Intent correspondence (intent matches per-prompt expectation, e.g. Hawaii -> UNSUPPORTED).
+ * 3. Slot constraints (mode, deltaMinutes, filters match prompt expectation).
+ * 4. Valid reason codes (all reasonCodes & situationAttribution codes in VALID_REASON_CODES).
+ * 5. Fact-key parity (all cited fact keys must exist in confirmedFactKeys; zero invented keys).
+ * 6. Stop finish reason (finish_reason === "stop", not "length" / truncated or missing).
+ * 7. Suppression honoured (active suppressions never overridden by positive recommendations).
  */
 
 import {
@@ -17,12 +19,19 @@ import {
 import type { RejectedReasonCodeTelemetry } from './types.js';
 
 export const COMMAND_PER_RUN_MAX_CALLS = 6;
+export const MIN_COMMAND_LIVE_MAX_TOKENS = 4096;
 
 export interface CommandSuppressionRecord {
   readonly code: string;
   readonly targetIntent?: string;
   readonly scope?: string;
   readonly reason?: string;
+}
+
+export interface CommandExpectedSlots {
+  readonly mode?: string;
+  readonly deltaMinutes?: number;
+  readonly filters?: readonly string[];
 }
 
 export interface CommandEvaluationContext {
@@ -36,6 +45,10 @@ export interface CommandEvaluationContext {
   readonly currentPlanIntent?: string;
   readonly activeSuppressions?: readonly CommandSuppressionRecord[];
   readonly isDismissalOrSuppression?: boolean;
+  readonly expectedIntent?: string;
+  readonly allowedIntents?: readonly string[];
+  readonly disallowedIntents?: readonly string[];
+  readonly expectedSlots?: CommandExpectedSlots;
 }
 
 export interface CommandEvaluationInput {
@@ -49,6 +62,8 @@ export interface CommandEvaluationInput {
 
 export interface CommandAcceptanceAudit {
   readonly closedIntent: boolean;
+  readonly intentMatchesExpectation: boolean;
+  readonly slotsMatchExpectation: boolean;
   readonly validReasonCodes: boolean;
   readonly factKeyParity: boolean;
   readonly stopFinishReason: boolean;
@@ -59,7 +74,10 @@ export interface CommandAcceptanceResult {
   readonly accepted: boolean;
   readonly failureReason?:
     | 'truncated'
+    | 'missing_finish_reason'
     | 'out_of_set_intent'
+    | 'wrong_intent'
+    | 'wrong_slots'
     | 'invalid_reason_code'
     | 'invented_fact_key'
     | 'suppression_violated'
@@ -105,6 +123,8 @@ export function evaluateCommandAcceptance(
       error: `Response truncated (finish_reason: "${finishReason ?? 'length'}", fallbackReason: "${fallbackReason ?? 'truncated'}")`,
       audit: {
         closedIntent: false,
+        intentMatchesExpectation: false,
+        slotsMatchExpectation: false,
         validReasonCodes: false,
         factKeyParity: false,
         stopFinishReason: false,
@@ -122,6 +142,8 @@ export function evaluateCommandAcceptance(
         error: `Invalid reason code telemetry: ${rejectedReasonCodes.map(r => `${r.field}=${r.code}`).join(', ')}`,
         audit: {
           closedIntent: false,
+          intentMatchesExpectation: false,
+          slotsMatchExpectation: false,
           validReasonCodes: false,
           factKeyParity: false,
           stopFinishReason: finishReason === 'stop',
@@ -137,6 +159,8 @@ export function evaluateCommandAcceptance(
         error: 'Proxy rejected command output due to invalid reason code',
         audit: {
           closedIntent: false,
+          intentMatchesExpectation: false,
+          slotsMatchExpectation: false,
           validReasonCodes: false,
           factKeyParity: false,
           stopFinishReason: finishReason === 'stop',
@@ -152,6 +176,8 @@ export function evaluateCommandAcceptance(
         error: 'Proxy rejected command output due to out-of-set intent',
         audit: {
           closedIntent: false,
+          intentMatchesExpectation: false,
+          slotsMatchExpectation: false,
           validReasonCodes: true,
           factKeyParity: false,
           stopFinishReason: finishReason === 'stop',
@@ -167,6 +193,8 @@ export function evaluateCommandAcceptance(
         error: `Proxy rejected command output: ${fallbackReason}`,
         audit: {
           closedIntent: false,
+          intentMatchesExpectation: false,
+          slotsMatchExpectation: false,
           validReasonCodes: true,
           factKeyParity: false,
           stopFinishReason: finishReason === 'stop',
@@ -181,6 +209,8 @@ export function evaluateCommandAcceptance(
       error: `Proxy returned fallback with reason: ${fallbackReason ?? 'unknown'}`,
       audit: {
         closedIntent: false,
+        intentMatchesExpectation: false,
+        slotsMatchExpectation: false,
         validReasonCodes: false,
         factKeyParity: false,
         stopFinishReason: finishReason === 'stop',
@@ -189,14 +219,16 @@ export function evaluateCommandAcceptance(
     };
   }
 
-  // 3. For live non-fallback responses, finishReason must be "stop"
-  if (finishReason !== undefined && finishReason !== 'stop') {
+  // 3. For live non-fallback responses: finishReason MUST be "stop" (missing counts as not accepted!)
+  if (!finishReason) {
     return {
       accepted: false,
-      failureReason: 'truncated',
-      error: `Response did not finish with "stop" (finish_reason: "${finishReason}")`,
+      failureReason: 'missing_finish_reason',
+      error: 'Missing finish_reason on live/mock non-fallback response (must be "stop")',
       audit: {
         closedIntent: false,
+        intentMatchesExpectation: false,
+        slotsMatchExpectation: false,
         validReasonCodes: false,
         factKeyParity: false,
         stopFinishReason: false,
@@ -205,7 +237,24 @@ export function evaluateCommandAcceptance(
     };
   }
 
-  // 3. Schema structure check
+  if (finishReason !== 'stop') {
+    return {
+      accepted: false,
+      failureReason: 'truncated',
+      error: `Response did not finish with "stop" (finish_reason: "${finishReason}")`,
+      audit: {
+        closedIntent: false,
+        intentMatchesExpectation: false,
+        slotsMatchExpectation: false,
+        validReasonCodes: false,
+        factKeyParity: false,
+        stopFinishReason: false,
+        suppressionHonoured: true,
+      },
+    };
+  }
+
+  // 4. Schema structure check
   if (!result || typeof result !== 'object') {
     return {
       accepted: false,
@@ -213,6 +262,8 @@ export function evaluateCommandAcceptance(
       error: 'Command result is null or not an object',
       audit: {
         closedIntent: false,
+        intentMatchesExpectation: false,
+        slotsMatchExpectation: false,
         validReasonCodes: false,
         factKeyParity: false,
         stopFinishReason: true,
@@ -221,7 +272,7 @@ export function evaluateCommandAcceptance(
     };
   }
 
-  // 4. Closed Intent check
+  // 5. Closed Intent check
   const intentStr = String(result.intent ?? '');
   if (!CLOSED_DECISION_INTENTS.has(intentStr)) {
     return {
@@ -230,16 +281,139 @@ export function evaluateCommandAcceptance(
       error: `Intent "${intentStr}" is not in closed intent set (${Array.from(CLOSED_DECISION_INTENTS).join(', ')})`,
       audit: {
         closedIntent: false,
+        intentMatchesExpectation: false,
+        slotsMatchExpectation: false,
         validReasonCodes: true,
         factKeyParity: true,
         stopFinishReason: true,
         suppressionHonoured: true,
       },
-      details: { intent: intentStr },
+      details: { intent: intentStr, finishReason },
     };
   }
 
-  // 5. Valid Reason Codes check
+  // 6. Intent Correspondence Check (Per-prompt expectation)
+  if (context.expectedIntent !== undefined && intentStr !== context.expectedIntent) {
+    return {
+      accepted: false,
+      failureReason: 'wrong_intent',
+      error: `Intent "${intentStr}" does not match expected intent "${context.expectedIntent}" for prompt "${context.utterance ?? ''}"`,
+      audit: {
+        closedIntent: true,
+        intentMatchesExpectation: false,
+        slotsMatchExpectation: false,
+        validReasonCodes: true,
+        factKeyParity: true,
+        stopFinishReason: true,
+        suppressionHonoured: true,
+      },
+      details: { intent: intentStr, finishReason },
+    };
+  }
+
+  if (context.allowedIntents !== undefined && !context.allowedIntents.includes(intentStr)) {
+    return {
+      accepted: false,
+      failureReason: 'wrong_intent',
+      error: `Intent "${intentStr}" is not in allowed intents (${context.allowedIntents.join(', ')}) for prompt "${context.utterance ?? ''}"`,
+      audit: {
+        closedIntent: true,
+        intentMatchesExpectation: false,
+        slotsMatchExpectation: false,
+        validReasonCodes: true,
+        factKeyParity: true,
+        stopFinishReason: true,
+        suppressionHonoured: true,
+      },
+      details: { intent: intentStr, finishReason },
+    };
+  }
+
+  if (context.disallowedIntents !== undefined && context.disallowedIntents.includes(intentStr)) {
+    return {
+      accepted: false,
+      failureReason: 'wrong_intent',
+      error: `Intent "${intentStr}" is disallowed for prompt "${context.utterance ?? ''}"`,
+      audit: {
+        closedIntent: true,
+        intentMatchesExpectation: false,
+        slotsMatchExpectation: false,
+        validReasonCodes: true,
+        factKeyParity: true,
+        stopFinishReason: true,
+        suppressionHonoured: false,
+      },
+      details: { intent: intentStr, finishReason },
+    };
+  }
+
+  // 7. Slot Constraints Check
+  const slots = result.slots && typeof result.slots === 'object' ? result.slots : {};
+  if (context.expectedSlots) {
+    if (context.expectedSlots.mode !== undefined && slots.mode !== context.expectedSlots.mode) {
+      return {
+        accepted: false,
+        failureReason: 'wrong_slots',
+        error: `Slot "mode" was "${slots.mode}", expected "${context.expectedSlots.mode}" for prompt "${context.utterance ?? ''}"`,
+        audit: {
+          closedIntent: true,
+          intentMatchesExpectation: true,
+          slotsMatchExpectation: false,
+          validReasonCodes: true,
+          factKeyParity: true,
+          stopFinishReason: true,
+          suppressionHonoured: true,
+        },
+        details: { intent: intentStr, finishReason },
+      };
+    }
+
+    if (
+      context.expectedSlots.deltaMinutes !== undefined &&
+      slots.deltaMinutes !== context.expectedSlots.deltaMinutes
+    ) {
+      return {
+        accepted: false,
+        failureReason: 'wrong_slots',
+        error: `Slot "deltaMinutes" was "${slots.deltaMinutes}", expected "${context.expectedSlots.deltaMinutes}" for prompt "${context.utterance ?? ''}"`,
+        audit: {
+          closedIntent: true,
+          intentMatchesExpectation: true,
+          slotsMatchExpectation: false,
+          validReasonCodes: true,
+          factKeyParity: true,
+          stopFinishReason: true,
+          suppressionHonoured: true,
+        },
+        details: { intent: intentStr, finishReason },
+      };
+    }
+
+    if (context.expectedSlots.filters !== undefined) {
+      const actualFilters = Array.isArray(slots.filters) ? (slots.filters as string[]) : [];
+      for (const ef of context.expectedSlots.filters) {
+        if (!actualFilters.includes(ef)) {
+          return {
+            accepted: false,
+            failureReason: 'wrong_slots',
+            error: `Expected filter "${ef}" missing from slots.filters for prompt "${context.utterance ?? ''}"`,
+            audit: {
+              closedIntent: true,
+              intentMatchesExpectation: true,
+              slotsMatchExpectation: false,
+              validReasonCodes: true,
+              factKeyParity: true,
+              stopFinishReason: true,
+              suppressionHonoured: true,
+            },
+            details: { intent: intentStr, finishReason },
+          };
+        }
+      }
+    }
+  }
+
+  // 8. Valid Reason Codes check
   const reasonCodes = Array.isArray(result.reasonCodes) ? result.reasonCodes : [];
   for (let i = 0; i < reasonCodes.length; i++) {
     const code = reasonCodes[i];
@@ -250,12 +424,14 @@ export function evaluateCommandAcceptance(
         error: `Invalid reason code at reasonCodes[${i}]: "${String(code)}"`,
         audit: {
           closedIntent: true,
+          intentMatchesExpectation: true,
+          slotsMatchExpectation: true,
           validReasonCodes: false,
           factKeyParity: true,
           stopFinishReason: true,
           suppressionHonoured: true,
         },
-        details: { intent: intentStr, reasonCodes },
+        details: { intent: intentStr, reasonCodes, finishReason },
       };
     }
   }
@@ -269,17 +445,19 @@ export function evaluateCommandAcceptance(
         error: `Invalid situationAttribution reason code: "${String(saCode)}"`,
         audit: {
           closedIntent: true,
+          intentMatchesExpectation: true,
+          slotsMatchExpectation: true,
           validReasonCodes: false,
           factKeyParity: true,
           stopFinishReason: true,
           suppressionHonoured: true,
         },
-        details: { intent: intentStr, reasonCodes },
+        details: { intent: intentStr, reasonCodes, finishReason },
       };
     }
   }
 
-  // 6. Fact-Key Parity check (all cited fact keys must exist in confirmedFactKeys)
+  // 9. Fact-Key Parity check (all cited fact keys must exist in confirmedFactKeys)
   const confirmedFactKeys = new Set(context.confirmedFactKeys ?? []);
   const citedFactKeys: string[] = [];
 
@@ -303,12 +481,14 @@ export function evaluateCommandAcceptance(
         error: `Fact citation "${k}" is not in confirmedFactKeys (invented/unconfirmed fact key)`,
         audit: {
           closedIntent: true,
+          intentMatchesExpectation: true,
+          slotsMatchExpectation: true,
           validReasonCodes: true,
           factKeyParity: false,
           stopFinishReason: true,
           suppressionHonoured: true,
         },
-        details: { intent: intentStr, reasonCodes, citedFactKeys },
+        details: { intent: intentStr, reasonCodes, citedFactKeys, finishReason },
       };
     }
   }
@@ -325,16 +505,18 @@ export function evaluateCommandAcceptance(
       error: 'Reason code "matches_confirmed_preference" requires non-empty citedFactKeys',
       audit: {
         closedIntent: true,
+        intentMatchesExpectation: true,
+        slotsMatchExpectation: true,
         validReasonCodes: true,
         factKeyParity: false,
         stopFinishReason: true,
         suppressionHonoured: true,
       },
-      details: { intent: intentStr, reasonCodes, citedFactKeys },
+      details: { intent: intentStr, reasonCodes, citedFactKeys, finishReason },
     };
   }
 
-  // 7. Suppression honoured check
+  // 10. Suppression honoured check
   const activeSuppressions = context.activeSuppressions ?? [];
   const targetPlan = mapIntentToTargetPlan(intentStr);
 
@@ -349,12 +531,14 @@ export function evaluateCommandAcceptance(
         error: `Intent "${intentStr}" addresses target "${targetPlan}" which is actively suppressed (${matchingSuppression.reason ?? matchingSuppression.code})`,
         audit: {
           closedIntent: true,
+          intentMatchesExpectation: true,
+          slotsMatchExpectation: true,
           validReasonCodes: true,
           factKeyParity: true,
           stopFinishReason: true,
           suppressionHonoured: false,
         },
-        details: { intent: intentStr, reasonCodes, citedFactKeys },
+        details: { intent: intentStr, reasonCodes, citedFactKeys, finishReason },
       };
     }
   }
@@ -368,12 +552,14 @@ export function evaluateCommandAcceptance(
       error: `Command requested dismissal/suppression of "${context.currentPlanIntent}", but model returned active recommendation "${intentStr}"`,
       audit: {
         closedIntent: true,
+        intentMatchesExpectation: true,
+        slotsMatchExpectation: true,
         validReasonCodes: true,
         factKeyParity: true,
         stopFinishReason: true,
         suppressionHonoured: false,
       },
-      details: { intent: intentStr, reasonCodes, citedFactKeys },
+      details: { intent: intentStr, reasonCodes, citedFactKeys, finishReason },
     };
   }
 
@@ -382,6 +568,8 @@ export function evaluateCommandAcceptance(
     accepted: true,
     audit: {
       closedIntent: true,
+      intentMatchesExpectation: true,
+      slotsMatchExpectation: true,
       validReasonCodes: true,
       factKeyParity: true,
       stopFinishReason: true,

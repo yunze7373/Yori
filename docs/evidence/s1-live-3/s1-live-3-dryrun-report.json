@@ -1,16 +1,16 @@
 {
-  "timestamp": "2026-10-31T01:53:55.290Z",
+  "timestamp": "2026-10-31T02:11:45.361Z",
   "providerHost": "api.meta.ai",
   "modelName": "muse-spark-1.3",
-  "authorizedCap": 6,
+  "authorizedCap": 9,
   "preRunLedgerCount": 0,
-  "lifetimeRemaining": 44,
+  "lifetimeRemaining": 41,
   "lifetimeCap": 50,
-  "totalCallsDispatched": 6,
-  "ledgerCallCount": 6,
-  "ledgerDelta": 6,
+  "totalCallsDispatched": 9,
+  "ledgerCallCount": 9,
+  "ledgerDelta": 9,
   "ledgerReconciled": true,
-  "ledgerPath": ".yori-runtime/dryrun-command-ledger-36472-1793411635278.json",
+  "ledgerPath": ".yori-runtime/dryrun-command-ledger-46068-1793412705347.json",
   "executionStatus": "completed",
   "hostList": [
     "api.meta.ai"
@@ -30,6 +30,8 @@
       "factCheckOutcome": "accepted",
       "audit": {
         "closedIntent": true,
+        "intentMatchesExpectation": true,
+        "slotsMatchExpectation": true,
         "validReasonCodes": true,
         "factKeyParity": true,
         "stopFinishReason": true,
@@ -39,7 +41,7 @@
     {
       "index": 2,
       "endpoint": "command",
-      "description": "Command valid earlier shift (\"Leave 15 minutes earlier\")",
+      "description": "Command valid explicit shift (\"Leave 15 minutes later\")",
       "httpStatus": 200,
       "latencyMs": 15,
       "promptTokens": 175,
@@ -50,6 +52,8 @@
       "factCheckOutcome": "accepted",
       "audit": {
         "closedIntent": true,
+        "intentMatchesExpectation": true,
+        "slotsMatchExpectation": true,
         "validReasonCodes": true,
         "factKeyParity": true,
         "stopFinishReason": true,
@@ -70,6 +74,8 @@
       "factCheckOutcome": "accepted",
       "audit": {
         "closedIntent": true,
+        "intentMatchesExpectation": true,
+        "slotsMatchExpectation": true,
         "validReasonCodes": true,
         "factKeyParity": true,
         "stopFinishReason": true,
@@ -90,6 +96,8 @@
       "factCheckOutcome": "accepted",
       "audit": {
         "closedIntent": true,
+        "intentMatchesExpectation": true,
+        "slotsMatchExpectation": true,
         "validReasonCodes": true,
         "factKeyParity": true,
         "stopFinishReason": true,
@@ -110,6 +118,8 @@
       "factCheckOutcome": "accepted",
       "audit": {
         "closedIntent": true,
+        "intentMatchesExpectation": true,
+        "slotsMatchExpectation": true,
         "validReasonCodes": true,
         "factKeyParity": true,
         "stopFinishReason": true,
@@ -119,7 +129,29 @@
     {
       "index": 6,
       "endpoint": "command",
-      "description": "Command citation discipline probe (\"Can I leave later?\" with unconfirmed fact)",
+      "description": "Command citation explanation probe (\"Why did you suggest this departure time?\")",
+      "httpStatus": 200,
+      "latencyMs": 15,
+      "promptTokens": 185,
+      "completionTokens": 55,
+      "totalTokens": 240,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "factCheckOutcome": "accepted",
+      "audit": {
+        "closedIntent": true,
+        "intentMatchesExpectation": true,
+        "slotsMatchExpectation": true,
+        "validReasonCodes": true,
+        "factKeyParity": true,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 7,
+      "endpoint": "command",
+      "description": "Command citation discipline probe (\"Why did you suggest this departure time?\" with unconfirmed fact)",
       "httpStatus": 200,
       "latencyMs": 15,
       "promptTokens": 185,
@@ -131,9 +163,56 @@
       "factCheckOutcome": "discarded",
       "audit": {
         "closedIntent": false,
+        "intentMatchesExpectation": false,
+        "slotsMatchExpectation": false,
         "validReasonCodes": true,
         "factKeyParity": false,
         "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 8,
+      "endpoint": "command",
+      "description": "Command adversarial compliance probe (\"Book a flight to Hawaii\" returning LEAVE_LATER)",
+      "httpStatus": 200,
+      "latencyMs": 15,
+      "promptTokens": 160,
+      "completionTokens": 40,
+      "totalTokens": 200,
+      "finishReason": "stop",
+      "usedFallback": false,
+      "fallbackReason": "wrong_intent",
+      "factCheckOutcome": "discarded",
+      "audit": {
+        "closedIntent": true,
+        "intentMatchesExpectation": false,
+        "slotsMatchExpectation": false,
+        "validReasonCodes": true,
+        "factKeyParity": true,
+        "stopFinishReason": true,
+        "suppressionHonoured": true
+      }
+    },
+    {
+      "index": 9,
+      "endpoint": "command",
+      "description": "Command missing finish_reason probe (\"Can I leave later?\" omitting finish_reason)",
+      "httpStatus": 200,
+      "latencyMs": 15,
+      "promptTokens": 180,
+      "completionTokens": 50,
+      "totalTokens": 230,
+      "usedFallback": false,
+      "fallbackReason": "missing_finish_reason",
+      "factCheckOutcome": "discarded",
+      "audit": {
+        "closedIntent": false,
+        "intentMatchesExpectation": false,
+        "slotsMatchExpectation": false,
+        "validReasonCodes": false,
+        "factKeyParity": false,
+        "stopFinishReason": false,
         "suppressionHonoured": true
       }
     }
