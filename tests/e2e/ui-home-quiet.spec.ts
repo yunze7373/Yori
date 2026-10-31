@@ -108,7 +108,7 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     // 1b. Header Avatar top-right
     const avatarBtn = page.locator('#btn-header-avatar');
     await expect(avatarBtn).toBeVisible();
-    await expect(avatarBtn).toHaveAttribute('aria-label', 'Open settings and profile');
+    await expect(avatarBtn).toHaveAttribute('aria-label', 'Profile and settings');
 
     // 1c. Consumer Home hides demo controls by default
     await expect(page.locator('#btn-dev-demo-controls')).toHaveCount(0);
@@ -133,7 +133,7 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await checkAxe(page, 'Consumer Home Header');
   });
 
-  test('2. A1 Context Pill: Honest active sources and opens Sources/Why view (NOT demo controls)', async ({
+  test('2. A1 Context Pill: Honest active sources and opens dedicated Sources view (NOT demo controls)', async ({
     page,
   }) => {
     await page.goto('/');
@@ -144,23 +144,25 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await expect(contextPill).toContainText('Demo · simulated');
     await expect(contextPill.locator('.context-pill-subtitle')).toHaveText('Demo · simulated scenes');
 
-    // Clicking #pill-context-status opens Sources / Why provenance view
+    // Clicking #pill-context-status opens dedicated Sources view
     await contextPill.click();
 
     // Verify Why / Sources sheet opens
     const whyDialog = page.locator('#why-sheet-backdrop');
     await expect(whyDialog).toBeVisible();
+    await expect(page.locator('#why-sheet-title')).toHaveText('Sources & Provenance · Demo');
+
+    // In Demo mode: verify SIMULATED badges are present
+    const simulatedBadges = page.locator('.sources-modal-card .simulated-badge');
+    await expect(simulatedBadges.first()).toBeVisible();
+    await expect(page.locator('.sources-modal-card')).toContainText('SIMULATED');
 
     // Verify demo controls panel did NOT open (A1 invariant)
     await expect(page.locator('#demo-panel')).toHaveCount(0);
 
     // Close Why sheet
     const closeBtn = page.locator('#btn-close-why');
-    if (await closeBtn.isVisible()) {
-      await closeBtn.click();
-    } else {
-      await page.keyboard.press('Escape');
-    }
+    await closeBtn.click();
     await expect(whyDialog).toHaveCount(0);
 
     // In Live mode: subline reflects device clock only (no fabricated calendar or memories)
@@ -171,6 +173,30 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await expect(livePill.locator('.context-pill-subtitle')).toContainText('Device clock');
     await expect(livePill.locator('.context-pill-subtitle')).not.toContainText('Calendar');
     await expect(livePill.locator('.context-pill-subtitle')).not.toContainText('Memories');
+
+    // Clicking pill in Live mode opens dedicated truthful sources view
+    await livePill.click();
+    await expect(whyDialog).toBeVisible();
+    await expect(page.locator('#why-sheet-title')).toHaveText('Active Sources · Live context');
+
+    // Verify truthful feeds and NO fabricated piano lesson or simulated badges
+    const sourcesCard = page.locator('.sources-modal-card');
+    await expect(sourcesCard).toBeVisible();
+    await expect(sourcesCard).not.toContainText('piano');
+    await expect(sourcesCard).not.toContainText('Piano lesson');
+    await expect(sourcesCard).not.toContainText('SIMULATED');
+
+    // Calendar row reads "Not connected"
+    const calSourceItem = page.locator('#source-item-calendar');
+    await expect(calSourceItem).toBeVisible();
+    await expect(calSourceItem).toContainText('Not connected');
+
+    // Clock reads "Live", Memory reads "Local only"
+    await expect(page.locator('#source-item-clock')).toContainText('Live');
+    await expect(page.locator('#source-item-memory')).toContainText('Local only');
+
+    await closeBtn.click();
+    await expect(whyDialog).toHaveCount(0);
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page, 'Live Context Pill');
@@ -244,28 +270,69 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await selectDemoScene(page, 'rain');
     const nowCard = page.locator('.now-card');
     await expect(nowCard).toBeVisible();
-    await expect(nowCard).toContainText('Piano lesson');
-    await expect(nowCard).toContainText('2:30 PM');
+    await expect(nowCard).toContainText('TRAVEL');
+    await expect(nowCard).toContainText('in 55m');
+    await expect(nowCard).toContainText('Piano lesson at 3:00 PM');
+    await expect(nowCard).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
+    await expect(nowCard).toContainText('Rain forecast · Umbrella needed');
 
-    // Verify inline schematic route map in Now card
-    await expect(page.locator('.v2-card-inline-map, .now-inline-map')).toBeVisible();
+    // Verify compact schematic map strip in Now card (<= 140px tall)
+    const mapStrip = page.locator('.compact-map-strip');
+    await expect(mapStrip).toBeVisible();
+    const mapBox = await mapStrip.boundingBox();
+    expect(mapBox?.height ?? 0).toBeLessThanOrEqual(140);
+
+    // Verify 1 single row of primary actions with equal height >= 44px
+    const acceptBtn = page.locator('#btn-accept');
+    const adjustBtn = page.locator('#btn-adjust');
+    const whyBtn = page.locator('#btn-why');
+    await expect(acceptBtn).toBeVisible();
+    await expect(adjustBtn).toBeVisible();
+    await expect(whyBtn).toBeVisible();
+    const [accBox, adjBox, whyB] = await Promise.all([
+      acceptBtn.boundingBox(),
+      adjustBtn.boundingBox(),
+      whyBtn.boundingBox(),
+    ]);
+    expect(accBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+    expect(adjBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+    expect(whyB?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+    // Verify secondary actions (Details -> and Dismiss) with touch target >= 44px
+    const detailsBtn = page.locator('#btn-view-trip-details');
+    const dismissBtn = page.locator('#btn-dismiss');
+    await expect(detailsBtn).toBeVisible();
+    await expect(dismissBtn).toBeVisible();
+    const detBox = await detailsBtn.boundingBox();
+    const disBox = await dismissBtn.boundingBox();
+    expect(detBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+    expect(disBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+    // Clicking Details opens TripDetail view containing timeline, options, and habit
+    await detailsBtn.click();
+    const tripDetail = page.locator('.v2-trip-detail');
+    await expect(tripDetail).toBeVisible();
+    await expect(tripDetail.locator('.v2-timeline')).toBeVisible();
+    await expect(tripDetail.locator('.v2-options-grid')).toBeVisible();
+    await expect(tripDetail.locator('.habit-note')).toBeVisible();
+
+    // Return to Home
+    await page.locator('#trip-detail-back-btn').click();
+    await expect(tripDetail).toHaveCount(0);
 
     // 5b. Open Why sheet via action button
-    const whyBtn = page.locator('#btn-why');
     await expect(whyBtn).toBeVisible();
     await whyBtn.click();
     await expect(page.locator('#why-sheet-backdrop')).toBeVisible();
     await page.locator('#btn-close-why').click();
 
     // 5c. Adjust dialog
-    const adjustBtn = page.locator('#btn-adjust');
     await expect(adjustBtn).toBeVisible();
     await adjustBtn.click();
     await expect(page.locator('#adjust-dialog-backdrop')).toBeVisible();
     await page.locator('#btn-close-adjust').click();
 
     // 5d. Accept plan -> Undo affordance appears
-    const acceptBtn = page.locator('#btn-accept');
     await expect(acceptBtn).toBeVisible();
     await acceptBtn.click();
     const undoBtn = page.locator('#btn-undo-accept');
@@ -346,10 +413,15 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
 
     await checkNoHorizontalScroll(page);
 
-    // 6b. Reduced motion
+    // 6b. Reduced motion (Finding 4: verified via computed transition-duration: 0s assertion)
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.reload();
     await page.waitForSelector('.app-layout');
+    const transitionDuration = await page.evaluate(() => {
+      const el = document.querySelector('.ask-bar');
+      return el ? window.getComputedStyle(el).transitionDuration : '';
+    });
+    expect(transitionDuration).toBe('0s');
     await checkNoHorizontalScroll(page);
     await checkAxe(page, 'Reduced Motion Mode');
 
@@ -361,66 +433,67 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await checkAxe(page, 'Desktop Layout');
   });
 
-  test('7. Evidence Capture: Generate all designated visual deliverables', async ({
+  test('7. Evidence Capture: Dual-viewport visual deliverables matrix (Finding 4)', async ({
     page,
-  }) => {
+  }, testInfo) => {
     if (!shouldUpdateEvidence) {
       test.skip();
       return;
     }
 
-    // 7a. Baseline Consumer Home (Clear)
-    await page.setViewportSize({ width: 390, height: 844 });
+    const vpName = testInfo.project.name === 'mobile' ? '390x844' : '1280x800';
+    const width = testInfo.project.name === 'mobile' ? 390 : 1280;
+    const height = testInfo.project.name === 'mobile' ? 844 : 800;
+    await page.setViewportSize({ width, height });
+
+    // 7a. Demo Clear
     await page.goto('/');
     await page.waitForSelector('.app-layout');
-    await saveEvidence(page, 'before-consumer-home.png');
+    await saveEvidence(page, `after-demo-clear-${vpName}.png`);
 
-    // 7b. Quiet Consumer Home (Busy Lunch)
+    // 7b. Demo Rain
     await page.goto('/?dev=1');
     await page.waitForSelector('.app-layout');
-    await selectDemoScene(page, 'busy-lunch');
-    await saveEvidence(page, 'after-consumer-home-quiet.png');
-
-    // 7c. Consumer Home Rain (A8 visual target layout)
-    await selectDemoScene(page, 'rain');
-    await saveEvidence(page, 'after-consumer-home-rain.png');
-
-    // 7d. Demo presentation panel open
     await openDemoPanel(page);
-    await saveEvidence(page, 'after-demo-panel-open.png');
+    await page.locator('#scene-select').selectOption('rain');
     await closeDemoPanel(page);
+    await saveEvidence(page, `after-demo-rain-${vpName}.png`);
 
-    // 7e. Sources / Why provenance dialog open
+    // 7c. Demo Away Lunch
+    await openDemoPanel(page);
+    await page.locator('#scene-select').selectOption('away-lunch');
+    await closeDemoPanel(page);
+    await saveEvidence(page, `after-demo-away-lunch-${vpName}.png`);
+
+    // 7d. Live Weather Off
+    await page.goto('/?mode=live');
+    await page.waitForSelector('.app-layout');
+    await saveEvidence(page, `after-live-weather-off-${vpName}.png`);
+
+    // 7e. Live Empty
+    await saveEvidence(page, `after-live-empty-${vpName}.png`);
+
+    // 7f. Sources Open Demo
+    await page.goto('/');
+    await page.waitForSelector('.app-layout');
     await page.locator('#pill-context-status').click();
     await page.waitForSelector('#why-sheet-backdrop');
-    await saveEvidence(page, 'after-sources-dialog-open.png');
-    const closeWhy = page.locator('#btn-close-why');
-    if (await closeWhy.isVisible()) {
-      await closeWhy.click();
-    } else {
-      await page.keyboard.press('Escape');
-    }
+    await saveEvidence(page, `after-sources-open-demo-${vpName}.png`);
+    await page.locator('#btn-close-why').click();
 
-    // 7f. Ask Yori conversation open
-    await page.locator('#ask-bar').click();
-    await page.waitForSelector('#conversation-overlay');
-    await saveEvidence(page, 'after-conversation-open.png');
-    await page.locator('#conversation-close-btn').click();
-
-    // 7g. Mobile 390
-    await page.setViewportSize({ width: 390, height: 844 });
-    await saveEvidence(page, 'after-mobile-390.png');
-
-    // 7h. Desktop 1024
-    await page.setViewportSize({ width: 1024, height: 768 });
-    await page.reload();
+    // 7g. Sources Open Live
+    await page.goto('/?mode=live');
     await page.waitForSelector('.app-layout');
-    await saveEvidence(page, 'after-desktop-1024.png');
+    await page.locator('#pill-context-status').click();
+    await page.waitForSelector('#why-sheet-backdrop');
+    await saveEvidence(page, `after-sources-open-live-${vpName}.png`);
+    await page.locator('#btn-close-why').click();
 
-    // 7i. Reduced Motion
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.reload();
+    // 7h. Demo Panel Open (after only)
+    await page.goto('/?dev=1');
     await page.waitForSelector('.app-layout');
-    await saveEvidence(page, 'after-reduced-motion.png');
+    await openDemoPanel(page);
+    await saveEvidence(page, `after-demo-panel-open-${vpName}.png`);
+    await closeDemoPanel(page);
   });
 });

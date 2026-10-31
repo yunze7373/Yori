@@ -1,0 +1,132 @@
+{
+  "schema_version": "1.0.0",
+  "plan": {
+    "id": "yori_rev3_ui_connectors",
+    "phase": "PH-002-ui",
+    "title": "Rev3 UI slices 2-3: Settings > Connectors (truthful status) and microinteractions",
+    "source": "ARCH-REV3-UI-CONNECTORS (design: docs/architecture/REV3_UI_CONNECTORS.plan.md sha256 e425481ce873be0ade66c88b4028e7ccd916db8d4073b3cee3d77c4869b7fb30); slice 1 UI-HOME-QUIET already dispatched and fixed",
+    "created_at": "2026-10-31",
+    "status": "pending",
+    "description": "Slice 2 implements the Connectors screen on the ConnectorStatus UI-adapter contract (no src/core change); slice 3 implements bounded offline microinteractions. Full suite (tsc, unit, golden 18, drills 56, full Playwright, privacy) and dual-viewport evidence at each slice.",
+    "course_correction_summary": "previous_phase: V2 UI approved through V4/V5/G3 | core_delivery: Rev3 connectors + microinteraction slices | deviation: none | INBOX_backlog: 0 P0, 0 P1 | next_phase_focus: slice 2 connectors"
+  },
+  "tasks": [
+    {
+      "id": "S2-CONNECTORS",
+      "slice": 2,
+      "title": "Settings > Connectors: truthful status screen on the ConnectorStatus contract",
+      "priority": "P0",
+      "goal": "Implement 'You control what Yori can access' with Location/Calendar/Weather/XMemo/Notifications rows whose status is read live from the truthful sources in REV3_UI_CONNECTORS.plan.md (Permissions API + one-shot fix; no calendar adapter so permanently unavailable; /api/weather/status with enabling owner-gated; /api/xmemo/status PKCE-only with disconnect clearing local session; Notification.permission per platform). ConnectorStatus/ports live in src/ui/connectors (UI adapter layer, zero src/core change). No phantom connected; denied recoverable; revoke truthfully re-read.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 8,
+      "dependencies": [],
+      "goal_ids": ["G-211", "G-203", "G-204", "G-205"],
+      "acceptance_ids": ["AC-211-1", "AC-203-2", "AC-204-2", "AC-205-1"],
+      "arch_contract_refs": ["ADR-101", "ADR-103"],
+      "phase_plan_ref": "PH-002",
+      "files": ["src/ui/connectors", "src/adapters/providers", "src/adapters/xmemo/remote-adapter.ts", "src/ui/living-context/app.ts"],
+      "checks": [
+        "Full suite green: tsc, unit, golden (report the real total 18, add-only), drills 56, full Playwright, privacy suite; git diff f43c6c1d -- src/core empty",
+        "Connector state matrix tests (mocked Permissions/geolocation/Notification; weather and XMemo status fixtures): every state renders truthfully, status re-read after each flow and on open, no phantom connected, denied recoverable via instructions + re-check, disconnect/revoke reflected by the post-action read",
+        "Calendar row is 'Not available yet' with no connect affordance; weather enabling shows owner_gated while GATE-W1 is unmet; XMemo surface contains no agent token; 390x844 and 1280x800 screenshots of all states committed as evidence",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S2-CONNECTORS --plan-ref docs/architecture/REV3_UI_CONNECTORS.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_REV3UI_A",
+      "title": "📬 INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["S2-CONNECTORS"],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "S3-MICRO",
+      "slice": 3,
+      "title": "Microinteractions: action surfaces, fluid Ask collapse, motion and state patterns",
+      "priority": "P1",
+      "goal": "Bounded offline microinteractions on the approved action-state machine: Accept/Adjust/Why/Dismiss transitions with visible plan diff and Undo; Ask composer expand to context-aware chat and smart collapse back to live-updating cards; tokenized motion with reduced-motion instant swaps; honest loading/empty/error patterns (quiet empty states, fail-closed notices keeping the prior plan visible).",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 6,
+      "dependencies": ["S2-CONNECTORS", "INBOX_CHECK_REV3UI_A"],
+      "goal_ids": ["G-105"],
+      "acceptance_ids": ["AC-105-1", "AC-105-2"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": ["src/ui/conversation", "src/ui/action-state", "src/ui/living-context/styles.css", "src/ui/living-context/presentation.ts"],
+      "checks": [
+        "Full suite green (tsc, unit, golden 18 add-only, drills 56, full Playwright, privacy); core zero diff; interaction e2e home->chat->send->processing->updated home plus accept/adjust/dismiss/why at 390x844 and 1280x800 with per-state screenshots",
+        "Reduced-motion run: all transitions instant, no motion-only information; loading/empty/error states each demonstrated without hiding the prior plan on error",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S3-MICRO --plan-ref docs/architecture/REV3_UI_CONNECTORS.plan.json"
+      ]
+    },
+    {
+      "id": "CLOSEOUT_REV3UI",
+      "slice": "closeout",
+      "title": "Rev3 UI closeout: truthfulness audit over connectors and surfaces",
+      "priority": "P0",
+      "goal": "Clean-checkout full suite plus a truthfulness audit: every status, label and claim rendered by slices 1-3 traces to a live read, a fixture, or an approved record; mock and live truth are never blended; the calendar row still honestly unavailable.",
+      "type": "test",
+      "status": "pending",
+      "agent": "software-test-engineer",
+      "pipeline": "code_quality",
+      "estimated_hours": 3,
+      "dependencies": ["S3-MICRO"],
+      "goal_ids": ["G-101", "G-102", "G-103", "G-104", "G-105", "G-106", "G-107", "G-201", "G-202", "G-203", "G-204", "G-205", "G-211", "G-212", "G-213"],
+      "acceptance_ids": ["AC-101-2", "AC-102-1", "AC-103-1", "AC-104-2", "AC-105-1", "AC-106-2", "AC-EXT-1", "AC-201-3", "AC-202-2", "AC-203-2", "AC-204-2", "AC-205-2", "AC-211-2", "AC-212-2", "AC-213-2"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": ["src/ui/connectors", "src/adapters/providers", "tests/golden"],
+      "checks": [
+        "Full matrix green from a clean checkout with zero credentials; git diff f43c6c1d -- src/core empty (AC-EXT-1)",
+        "Truthfulness audit signed off: no OFF or LIVE-UNVERIFIED capability rendered as live anywhere in the new surfaces",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id CLOSEOUT_REV3UI --plan-ref docs/architecture/REV3_UI_CONNECTORS.plan.json"
+      ]
+    },
+    {
+      "id": "PHASE_R_REV3UI_001",
+      "title": "🔥 Phase R planning + generate next phase plan",
+      "type": "meta",
+      "priority": "critical",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["CLOSEOUT_REV3UI"],
+      "goal": "Rev3 UI slices closed -> Phase R -> assess against the submission timeline (internal 2026-11-04, external 2026-11-05 11:00 JST) and the agent-depth gap list -> draft any next plan and submit for Reviewer plan review AND owner confirmation. All owner gates remain exactly as gated elsewhere; nothing auto-executes.",
+      "phase_r_trigger": {
+        "auto_execute": true,
+        "tasks": [
+          "⚠️ Re-read .progress/AI_INSTRUCTIONS.md (ensure rules are not lost after model switch)",
+          "📬 R1: Read INBOX.md (scan mode command section first, then task section)",
+          "💤 R1.5: Convergence gate (no real pending → standby)",
+          "🎯 R2: Read docs/architecture/goals.yaml and PHASE_PLAN.md, execute target alignment assessment; 运行 phase_r_alignment_check.py 验证架构对齐锚点 (alignment anchor check)",
+          "📊 R3: Phase review: git diff confirm delivery + archive completed tasks + Git Commit",
+          "🗺️ R5: Intelligent planning: draft the next phase plan and submit it for Reviewer plan review AND owner confirmation (guarded autonomy); PH-003 requires the privacy-review gate and must not auto-start",
+          "Update PROGRESS_STATUS.json + TODOS.md",
+          "⏸️ R6: Execute NOTHING from the next plan before the Reviewer + owner gate passes; enter standby and wait for the gate result"
+        ]
+      }
+    }
+  ],
+  "success_criteria": [
+    "Every connector status rendered traces to a same-session live read; calendar honestly unavailable; no phantom connected anywhere",
+    "git diff f43c6c1d -- src/core empty across both slices; full suite green at each slice gate",
+    "No paid calls, deploy, push, or submission; mock and live truth never blended"
+  ]
+}

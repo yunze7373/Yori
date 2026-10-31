@@ -62,6 +62,7 @@ import {
   WebStorageDriver,
 } from '../../core/storage/index.js';
 import { renderWhySheet } from '../review/why-sheet.js';
+import { renderSourcesSheet } from './sources-view.js';
 import { renderAdjustDialog, type AdjustDialogValues } from '../review/adjust-dialog.js';
 import { renderDismissDialog } from '../review/dismiss-dialog.js';
 import { attachModalAccessibility, restoreInvokingFocus } from '../review/modal-accessibility.js';
@@ -1148,6 +1149,7 @@ export function renderApp(
   let activeModal:
     | null
     | { type: 'why'; plan: PreparedPlan }
+    | { type: 'sources'; mode: 'demo' | 'live' }
     | { type: 'adjust'; plan: PreparedPlan; values: AdjustDialogValues }
     | { type: 'dismiss'; plan: PreparedPlan } = null;
   let modalInvokingId: string | null = null;
@@ -2078,9 +2080,12 @@ export function renderApp(
                   type="button"
                   class="header-avatar-btn"
                   id="btn-header-avatar"
-                  aria-label="Open settings and profile"
+                  aria-label="Profile and settings"
                 >
-                  <span aria-hidden="true">H</span>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -2291,7 +2296,7 @@ export function renderApp(
           }
         </nav>
 
-        <!-- Active Modals (Why sheet, Adjust, Dismiss) -->
+        <!-- Active Modals (Why sheet, Adjust, Dismiss, Sources) -->
         ${
           activeModal?.type === 'why'
             ? renderWhySheet(
@@ -2302,6 +2307,8 @@ export function renderApp(
                 actionStore.getSituationAttribution(),
                 syncedKeys
               )
+            : activeModal?.type === 'sources'
+            ? renderSourcesSheet(activeModal.mode, snapshot, weatherStatus.enabled, defaultLocationPort.getLocation())
             : activeModal?.type === 'adjust'
             ? renderAdjustDialog(activeModal.values)
             : activeModal?.type === 'dismiss'
@@ -2442,38 +2449,13 @@ export function renderApp(
     // EVENT BINDINGS
     // -------------------------------------------------------------
 
-    // Rev3 UI-HOME-QUIET: Context Pill (Opens Sources/Why) & Demo Controls Presentation Panel
+    // Rev3 UI-HOME-QUIET: Context Pill (Opens Dedicated Sources & Provenance Sheet)
     const pillStatusBtn = root.querySelector('#pill-context-status');
     if (pillStatusBtn) {
       pillStatusBtn.addEventListener('click', () => {
         modalInvokingId = 'pill-context-status';
         modalInvokingSelector = '#pill-context-status';
-        if (nowPlan) {
-          activeModal = { type: 'why', plan: nowPlan };
-        } else {
-          const dummySourcesPlan: PreparedPlan = {
-            id: 'sources-overview',
-            intentId: 'sources',
-            headline: 'Home Sources & Truth Status',
-            optionsOrSteps: [],
-            requiresConfirmation: false,
-            createdAt: snapshot.asOf,
-            why: {
-              evidenceSignals: snapshot.signals.map(s => ({
-                signalId: `${s.kind}:${s.issuedAt}`,
-                source: s.source,
-                kind: s.kind,
-                issuedAt: s.issuedAt,
-              })),
-              memoryFactsUsed: [],
-              derivation:
-                contextMode === 'live'
-                  ? 'Signals read directly from device clock and consented providers.'
-                  : 'Signals derived from deterministic scenario fixtures.',
-            },
-          };
-          activeModal = { type: 'why', plan: dummySourcesPlan };
-        }
+        activeModal = { type: 'sources', mode: contextMode };
         update();
       });
     }

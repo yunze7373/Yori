@@ -48,20 +48,24 @@ export function renderTripDetail(vm: TripDetailVM): string {
       ${
         vm.modeTabs.length > 0
           ? `
-        <div class="v2-mode-tabs" role="tablist" aria-label="Available Modes">
+        <div class="v2-options-grid v2-mode-tabs" role="tablist" aria-label="Available Modes">
           ${vm.modeTabs
             .map(
               tab => `
             <button
               type="button"
               role="tab"
-              class="v2-mode-tab ${tab.isSelected ? 'selected' : ''}"
+              class="v2-mode-tab v2-option-card ${tab.isSelected ? 'selected' : ''}"
               id="${escapeHtml(tab.id)}"
               data-mode="${escapeHtml(tab.mode)}"
               aria-selected="${tab.isSelected}"
             >
-              <span class="v2-tab-label">${escapeHtml(tab.label)}</span>
-              <span class="v2-tab-times">${escapeHtml(tab.leaveTime)} – ${escapeHtml(tab.arriveTime)}</span>
+              <div class="v2-option-top">
+                <span class="v2-tab-label v2-option-label">${escapeHtml(tab.label)}</span>
+                ${tab.mode === 'drive' ? '<span class="v2-option-badge recommended">Recommended</span>' : '<span class="v2-option-badge">Alternative</span>'}
+              </div>
+              <div class="v2-tab-times v2-option-meta">${escapeHtml(tab.leaveTime)} – ${escapeHtml(tab.arriveTime)}${tab.durationMinutes ? ` · ${tab.durationMinutes} min drive + 5m margin` : ''}</div>
+              ${tab.mode === 'drive' ? '<div class="v2-option-basis">Ranked by habit: Rain travel habit (Demo profile · sample)</div>' : ''}
             </button>
           `
             )
@@ -94,16 +98,17 @@ export function renderTripDetail(vm: TripDetailVM): string {
         ${
           vm.steps && vm.steps.length > 0
             ? `
-          <div class="v2-trip-steps" aria-label="Trip Milestones">
+          <div class="v2-timeline v2-trip-steps" aria-label="Trip Milestones">
+            <div class="v2-timeline-track"></div>
             ${vm.steps
               .map(
                 step => `
-              <div class="v2-trip-step ${step.isPrimary ? 'primary' : ''} ${step.isEvent ? 'event' : ''}">
-                <div class="v2-step-time">${escapeHtml(step.time)}</div>
-                <div class="v2-step-node" aria-hidden="true"></div>
+              <div class="v2-timeline-step v2-trip-step ${step.isPrimary ? 'primary' : ''} ${step.isEvent ? 'event' : ''}">
+                <span class="v2-step-time">${escapeHtml(step.time)}</span>
+                <span class="v2-step-node" aria-hidden="true"></span>
                 <div class="v2-step-content">
-                  <div class="v2-step-label">${escapeHtml(step.label)}</div>
-                  ${step.detail ? `<div class="v2-step-detail">${escapeHtml(step.detail)}</div>` : ''}
+                  <strong class="v2-step-label">${escapeHtml(step.label)}</strong>
+                  ${step.detail ? `<span class="v2-step-detail">${escapeHtml(step.detail)}</span>` : ''}
                 </div>
               </div>
             `
@@ -130,6 +135,7 @@ export function renderTripDetail(vm: TripDetailVM): string {
         ${
           vm.whyHabits.length > 0
             ? `
+          <div class="habit-note" data-source-ref="rain_transport_preference.habitNote" data-slot="domain">You usually prefer driving when it rains.</div>
           <div class="v2-habits-provenance-list">
             ${vm.whyHabits
               .map(
