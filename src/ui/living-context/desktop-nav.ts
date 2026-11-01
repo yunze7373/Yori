@@ -57,12 +57,12 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItemConfig[] = [
   },
 ];
 
-export function renderDesktopLeftNav(activeTab: string, isConnectorsActive = false): string {
+export function renderDesktopLeftNav(activeTab: string, isConnectorsActive = false, includeWordmarkClass = false): string {
   return `
     <aside class="desktop-left-nav" aria-label="Sidebar Navigation">
       <div class="desktop-left-nav-inner">
         <div class="sidebar-brand">
-          <span class="sidebar-brand-wordmark">Yori</span>
+          <span class="sidebar-brand-wordmark ${includeWordmarkClass ? 'v2-brand-wordmark' : ''}">Yori</span>
         </div>
         <nav class="sidebar-nav-list" role="navigation" aria-label="Main Navigation">
           ${SIDEBAR_NAV_ITEMS.map(item => {

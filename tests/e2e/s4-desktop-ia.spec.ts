@@ -31,6 +31,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
+import { openDemoPanel, closeDemoPanel } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('s4-desktop-ia');
 const shouldUpdateEvidence = Boolean(process.env.UPDATE_EVIDENCE === '1');
@@ -114,7 +115,6 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
 
     await checkNoOverflow(page);
     await checkAxe(page, 'Mobile 390px shell');
-    await saveEvidence(page, '08-mobile-single-column-390x844.png');
 
     // --- 2. Tablet Shell (768x1024) ---
     await page.setViewportSize({ width: 768, height: 1024 });
@@ -134,7 +134,6 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
 
     await checkNoOverflow(page);
     await checkAxe(page, 'Tablet 768px rail shell');
-    await saveEvidence(page, '07-tablet-rail-768x1024.png');
 
     // --- 3. Desktop Shell (1280x800) ---
     await page.setViewportSize({ width: 1280, height: 800 });
@@ -191,8 +190,6 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
     await expect(rightPanel.locator('.desktop-candidate-tile')).toHaveCount(0);
     await expect(rightPanel).not.toContainText('Nearby Options & Walking Times');
 
-    await saveEvidence(page, '01-desktop-demo-travel-1440x900.png');
-
     // 2. Open Demo Controls and switch to Lunch scene
     await page.locator('#desktop-nav-settings').click();
     await expect(page.locator('#demo-panel')).toBeVisible();
@@ -209,8 +206,6 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
     await expect(rightPanel.locator('.desktop-map-card, .v2-map-card')).toHaveCount(0);
     await expect(rightPanel).not.toContainText('Route Map');
     await expect(rightPanel).not.toContainText('Destination Weather');
-
-    await saveEvidence(page, '02-desktop-demo-lunch-1440x900.png');
 
     // 3. Aria live announcement check on card selection
     // Selecting another candidate updates panel and aria announcement
@@ -246,16 +241,11 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
     const simulatedText = await rightPanel.getByText('SIMULATED', { exact: false }).count();
     expect(simulatedText).toBe(0);
 
-    // Live empty state evidence
-    await saveEvidence(page, '03-desktop-live-empty-1440x900.png');
-
     // Route unavailable state is honest
     const unavailableCard = rightPanel.locator('#desktop-notice-route-unavailable, #desktop-notice-route-unavailable-quiet');
     await expect(unavailableCard).toBeVisible();
     await expect(unavailableCard).toHaveAttribute('data-provenance', 'none');
     await expect(unavailableCard).toContainText('No route available');
-
-    await saveEvidence(page, '04-desktop-live-route-1440x900.png');
   });
 
   test('Connectors in Desktop Shell: Left Nav Stays Visible, Connectors Renders in Center Column', async ({
@@ -283,7 +273,6 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
     await expect(page.locator('#desktop-right-panel .desktop-panel-section[data-panel-type="quiet"]')).toBeVisible();
 
     await checkAxe(page, 'Connectors in desktop shell');
-    await saveEvidence(page, '05-desktop-connectors-1440x900.png');
 
     // Navigating back to Home from sidebar works cleanly
     await page.locator('#desktop-nav-home').click();
@@ -312,8 +301,6 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
     await expect(page.locator('.desktop-left-nav')).toBeVisible();
     await expect(page.locator('#desktop-right-panel')).toBeVisible();
     await checkNoOverflow(page);
-
-    await saveEvidence(page, '06-desktop-ask-expanded-1440x900.png');
   });
 
   test('Keyboard Navigation: Arrow Keys Cycle Sidebar Items with Focus Wrap', async ({
@@ -390,5 +377,120 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
     await expect(page.locator('.bottom-tab-bar')).toBeHidden();
 
     await checkNoOverflow(page);
+  });
+
+  test('Demo -> Live Switch: Zero Demo/Fixture Leakage in Desktop Panel Across All Scenes at 1280 and 1440', async ({
+    page,
+  }) => {
+    test.setTimeout(60000);
+
+    const forbiddenStrings = [
+      'Lunch options near you',
+      'places matching your tastes',
+      'Rain re-plan',
+      'Piano lesson',
+      'SIMULATED',
+      'Schematic · simulated',
+      'data-provenance="fixture"',
+    ];
+
+    for (const width of [1280, 1440]) {
+      const height = width === 1280 ? 800 : 900;
+      await page.setViewportSize({ width, height });
+
+      for (const scene of ['clear', 'rain', 'lunch', 'away-lunch', 'fuel']) {
+        await page.goto(`/?ui=v2&scene=${scene}`);
+        await page.waitForSelector('.app-layout');
+
+        // Switch to Live mode cleanly via demo panel
+        await openDemoPanel(page);
+        await page.locator('#btn-mode-live').click();
+        await closeDemoPanel(page);
+        await page.waitForTimeout(100);
+
+        const rightPanel = page.locator('#desktop-right-panel');
+        await expect(rightPanel).toBeVisible();
+
+        // 1. Provenance check
+        await expect(rightPanel.locator('.desktop-panel-titlebar')).toHaveAttribute('data-provenance', 'live');
+        const fixtureCount = await rightPanel.locator('[data-provenance="fixture"]').count();
+        expect(fixtureCount).toBe(0);
+
+        // 2. Forbidden strings check
+        const panelHtml = await rightPanel.innerHTML();
+        for (const forbidden of forbiddenStrings) {
+          expect(panelHtml).not.toContain(forbidden);
+        }
+
+        // 3. Panel kind check
+        await expect(rightPanel.locator('.desktop-panel-section[data-panel-type="quiet"]')).toBeVisible();
+
+        // 4. Honest notices present
+        await expect(rightPanel.locator('#desktop-notice-route-unavailable-quiet')).toBeVisible();
+        await expect(rightPanel.locator('#desktop-notice-places-disabled-quiet')).toBeVisible();
+      }
+    }
+  });
+
+  test('Evidence Capture Matrix: 6 States Across 3 Viewports + Tablet Rail (19 Deliverables)', async ({
+    page,
+  }) => {
+    test.setTimeout(90000);
+
+    const viewports = [
+      { width: 390, height: 844, suffix: '390x844' },
+      { width: 1280, height: 800, suffix: '1280x800' },
+      { width: 1440, height: 900, suffix: '1440x900' },
+    ];
+
+    for (const vp of viewports) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+
+      // 1. Demo Travel (Rain scene)
+      await page.goto('/?ui=v2&scene=rain');
+      await page.waitForSelector('.app-layout');
+      await page.waitForTimeout(100);
+      await saveEvidence(page, `01-travel-${vp.suffix}.png`);
+
+      // 2. Demo Lunch (Away Lunch scene)
+      await page.goto('/?ui=v2&scene=away-lunch');
+      await page.waitForSelector('.app-layout');
+      await page.waitForTimeout(100);
+      await saveEvidence(page, `02-lunch-${vp.suffix}.png`);
+
+      // 3. Live Empty (No destination)
+      await page.goto('/?ui=v2');
+      await page.waitForSelector('.app-layout');
+      await openDemoPanel(page);
+      await page.locator('#btn-mode-live').click();
+      await closeDemoPanel(page);
+      await page.waitForTimeout(100);
+      await saveEvidence(page, `03-live-empty-${vp.suffix}.png`);
+
+      // 4. Live Route Unavailable
+      await saveEvidence(page, `04-live-route-${vp.suffix}.png`);
+
+      // 5. Connectors in Shell
+      await page.goto('/?ui=v2&detail=connectors');
+      await page.waitForSelector('.app-layout');
+      await page.waitForTimeout(100);
+      await saveEvidence(page, `05-connectors-${vp.suffix}.png`);
+
+      // 6. Ask Bar Expanded
+      await page.goto('/?ui=v2');
+      await page.waitForSelector('.app-layout');
+      await page.locator('#ask-bar').click();
+      await page.waitForSelector('#conversation-input');
+      await page.locator('#conversation-input').fill('What time is my piano lesson?');
+      await page.waitForTimeout(100);
+      await saveEvidence(page, `06-ask-expanded-${vp.suffix}.png`);
+    }
+
+    // 7. Tablet Rail (768x1024)
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto('/?ui=v2');
+    await page.waitForSelector('.app-layout');
+    await page.waitForTimeout(100);
+    await saveEvidence(page, '07-tablet-rail-768x1024.png');
   });
 });

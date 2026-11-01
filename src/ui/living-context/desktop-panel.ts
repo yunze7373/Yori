@@ -174,14 +174,18 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                   .replace(/v2-map-marker/g, 'desktop-map-marker')
                   .replace(/v2-map-canvas/g, 'desktop-map-canvas')
                   .replace(/v2-map-weather-callout/g, 'desktop-map-weather-callout')
-                  .replace(/map-header/g, 'desktop-map-header')
-                  .replace(/v2-heading-desktop/g, 'desktop-heading-desktop')
-                  .replace(/v2-heading-mobile/g, 'desktop-heading-mobile')
+                  .replace(
+                    /<div class="map-header">[\s\S]*?<\/div>/,
+                    `<div class="desktop-map-header">
+                      <span class="section-label">Route Map</span>
+                      <span class="card-badge" data-provenance="fixture">Schematic · simulated</span>
+                    </div>`
+                  )
               : `
           <div class="card desktop-map-card prominent" data-provenance="fixture">
-            <div class="map-header">
+            <div class="desktop-map-header">
               <span class="section-label">Route Map</span>
-              <span class="card-badge">Schematic · simulated</span>
+              <span class="card-badge" data-provenance="fixture">Schematic · simulated</span>
             </div>
             <div class="map-place-info">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -281,6 +285,23 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
     if (isLive) {
       panelBodyHtml = `
         <div class="desktop-panel-section" data-panel-type="quiet">
+          <div class="live-card live-notice-card" id="desktop-live-quiet-summary" role="status" data-provenance="live" data-source="device_clock" data-fetched-at="${escapeHtml(nowIso)}">
+            <div class="live-card-row">
+              <div class="live-card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+              </div>
+              <div class="live-card-body">
+                <div class="live-card-header">
+                  <h3 class="live-card-title">Live Context</h3>
+                  <span class="live-source-chip">Live · Neutral</span>
+                </div>
+                <p class="live-card-desc">Nothing selected. Real-time providers ready.</p>
+              </div>
+            </div>
+          </div>
           <div class="live-card live-notice-card notice-route-unavailable" id="desktop-notice-route-unavailable-quiet" role="status" data-provenance="none" data-no-route-reason="no_destination">
             <div class="live-card-row">
               <div class="live-card-icon" aria-hidden="true">
@@ -295,6 +316,22 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                   <span class="live-source-chip">No Route</span>
                 </div>
                 <p class="live-card-desc">No route available · no destination set</p>
+              </div>
+            </div>
+          </div>
+          <div class="live-card live-notice-card notice-places-disabled" id="desktop-notice-places-disabled-quiet" role="status" data-provenance="none">
+            <div class="live-card-row">
+              <div class="live-card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 2v20M21 2v6a3 3 0 0 1-3 3M15 2v6a3 3 0 0 0 3 3M3 2v7a4 4 0 0 0 4 4v9M7 2v20"></path>
+                </svg>
+              </div>
+              <div class="live-card-body">
+                <div class="live-card-header">
+                  <h3 class="live-card-title">Nearby Places</h3>
+                  <span class="live-source-chip">Owner Gated</span>
+                </div>
+                <p class="live-card-desc">Nearby places · not enabled (owner setting)</p>
               </div>
             </div>
           </div>
@@ -321,6 +358,16 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
     }
   }
 
+  const titlebarSubtitle = isLive
+    ? (opts.cardKind === 'travel' && opts.liveDestination
+        ? 'Live Route'
+        : 'Live Context')
+    : (opts.cardKind === 'travel'
+        ? 'Route & Travel'
+        : opts.cardKind === 'lunch'
+          ? 'Nearby Dining'
+          : 'Schedule');
+
   return `
     <aside
       class="desktop-right-panel"
@@ -331,9 +378,9 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
       tabindex="0"
     >
       <div class="desktop-panel-inner">
-        <div class="desktop-panel-titlebar">
+        <div class="desktop-panel-titlebar" ${isLive ? `data-provenance="live" data-source="device_clock" data-fetched-at="${escapeHtml(nowIso)}"` : 'data-provenance="fixture"'}>
           <h2 class="desktop-panel-heading">Contextual Detail</h2>
-          <span class="desktop-panel-subtitle">${escapeHtml(opts.cardKind === 'travel' ? 'Route & Travel' : opts.cardKind === 'lunch' ? 'Nearby Dining' : 'Schedule')}</span>
+          <span class="desktop-panel-subtitle">${escapeHtml(titlebarSubtitle)}</span>
         </div>
         ${opts.ariaAnnouncement ? `<div class="sr-only" role="status" id="desktop-panel-announcement">${escapeHtml(opts.ariaAnnouncement)}</div>` : ''}
         ${panelBodyHtml}

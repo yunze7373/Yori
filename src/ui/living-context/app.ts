@@ -134,7 +134,6 @@ import {
   determineCardKind,
   createInitialPanelState,
   panelSelectionReducer,
-  type CardKind,
   type CardSelectionState,
 } from './desktop-ia.js';
 import { renderDesktopLeftNav } from './desktop-nav.js';
@@ -1126,6 +1125,7 @@ export function renderApp(
     originatingElementId?: string;
   } | null = null;
   let selectedCardState: CardSelectionState | null = null;
+  let desktopResizeListenerAttached = false;
 
   let demoPanelOpen = false;
   let demoPanelCleanup: (() => void) | null = null;
@@ -1534,6 +1534,7 @@ export function renderApp(
   void refreshConnectorStatuses();
 
   function update() {
+    const isDesktopLayout = typeof window !== 'undefined' && window.innerWidth >= 1024;
     const {
       pipelineResult,
       spatialMapEvidence,
@@ -1633,22 +1634,44 @@ export function renderApp(
         ? actionState.plan
         : undefined;
     const nowPlan = storePlan ?? baseNowPlan;
+    const nowPresentation = nowPlan ? formatNowPlan(nowPlan) : null;
+    const cleanNowTitle =
+      nowPresentation?.title ||
+      (nowPlan as any)?.subjectTitle ||
+      (nowPlan?.intentId === 'depart'
+        ? 'Piano lesson'
+        : nowPlan?.intentId === 'lunch'
+          ? 'Lunch options near you'
+          : (nowPlan?.headline || 'Plan'));
 
-    if (!selectedCardState) {
-      if (contextMode === 'live') {
-        const liveHeroKind: CardKind = (liveRoute && liveDestination) ? 'travel' : (liveDestination ? 'travel' : 'quiet');
+    if (contextMode === 'live') {
+      if (liveRoute && liveDestination) {
         selectedCardState = {
-          selectedId: 'hero-live',
-          cardKind: liveHeroKind,
-          label: 'Live context',
+          selectedId: 'hero-live-route',
+          cardKind: 'travel',
+          label: `Route to ${liveDestination.name}`,
+        };
+      } else if (liveDestination) {
+        selectedCardState = {
+          selectedId: 'hero-live-dest',
+          cardKind: 'travel',
+          label: `Destination ${liveDestination.name}`,
         };
       } else {
+        selectedCardState = {
+          selectedId: 'live-quiet',
+          cardKind: 'quiet',
+          label: 'Live context',
+        };
+      }
+    } else {
+      if (!selectedCardState || selectedCardState.selectedId.startsWith('live-') || selectedCardState.selectedId.startsWith('hero-live')) {
         const heroKind = determineCardKind(nowPlan);
         selectedCardState = {
           selectedId: nowPlan?.id || 'hero',
           cardKind: heroKind,
           planId: nowPlan?.id,
-          label: (nowPlan as any)?.title || nowPlan?.headline || 'Now plan',
+          label: cleanNowTitle,
         };
       }
     }
@@ -1756,7 +1779,6 @@ export function renderApp(
       sceneId: contextMode === 'live' ? 'live' : currentScene,
       userConfirmedKeys,
     });
-    const nowPresentation = nowPlan ? formatNowPlan(nowPlan) : null;
     const isNowAccepted = nowPlan ? acceptedPlanIds.includes(nowPlan.id) : false;
 
     // Build Main Content based on activeTab
@@ -2524,7 +2546,7 @@ export function renderApp(
     if (activeDetail?.type === 'connectors') {
       root.innerHTML = `
         <div class="app-layout" data-ui-version="${uiVersion}">
-          ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, true) : ''}
+          ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, true, isDesktopLayout) : ''}
           <div class="desktop-center-column">
             ${renderConnectorsView(latestConnectorStatuses)}
           </div>
@@ -2714,22 +2736,23 @@ export function renderApp(
       return;
     }
 
+    const isLive = contextMode === 'live';
     let panelState = createInitialPanelState(selectedCardState);
 
     const rightPanelOpts = {
       contextMode,
-      panelKind: panelState.activePanel,
-      cardKind: selectedCardState?.cardKind || 'quiet',
-      planId: selectedCardState?.planId ?? nowPlan?.id,
-      planTitle: (nowPlan as any)?.title,
-      planHeadline: nowPlan?.headline,
+      panelKind: isLive && (!liveDestination && !liveRoute) ? 'quiet' : panelState.activePanel,
+      cardKind: isLive && (!liveDestination && !liveRoute) ? 'quiet' : (selectedCardState?.cardKind || 'quiet'),
+      planId: isLive ? undefined : (selectedCardState?.planId ?? nowPlan?.id),
+      planTitle: isLive ? undefined : cleanNowTitle,
+      planHeadline: isLive ? undefined : nowPlan?.headline,
       destinationName:
         contextMode === 'live'
           ? liveDestination?.name
           : ((spatialMapEvidence?.placeOrRoute as any)?.name || (nowPlan?.optionsOrSteps?.[0] as any)?.title || 'Piano Studio'),
-      departureTime: nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
-      map: currentV2Composition?.map,
-      candidateCards: currentV2Composition?.candidateCards,
+      departureTime: !isLive && nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
+      map: isLive ? undefined : currentV2Composition?.map,
+      candidateCards: isLive ? undefined : currentV2Composition?.candidateCards,
       liveRoute,
       liveRouteStatus,
       liveLocationStatus,
@@ -2737,12 +2760,16 @@ export function renderApp(
       liveWeatherSignal,
       weatherStatusEnabled: weatherStatus.enabled,
       noRouteReason: getLiveNoRouteReason(),
-      ariaAnnouncement: panelState.ariaAnnouncement,
+      ariaAnnouncement: isLive
+        ? (liveRoute && liveDestination
+            ? `Selected Live route to ${liveDestination.name}.`
+            : 'Live context. No item selected.')
+        : panelState.ariaAnnouncement,
     };
 
     root.innerHTML = `
       <div class="app-layout" data-ui-version="${uiVersion}">
-        ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, false) : ''}
+        ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, false, isDesktopLayout) : ''}
         <div class="desktop-center-column">
           <header class="header-bar" role="banner">
             <div class="main-container" style="padding-bottom: 0;">
@@ -2751,7 +2778,7 @@ export function renderApp(
                   ? `
               <div class="v2-header-row">
                 <div class="header-left">
-                  <span class="v2-brand-wordmark">Yori</span>
+                  ${!isDesktopLayout ? `<span class="v2-brand-wordmark">Yori</span>` : ''}
                 </div>
                 <div class="header-right">
                 ${
@@ -3219,6 +3246,7 @@ export function renderApp(
       modeDemoBtn.addEventListener('click', async () => {
         if (contextMode === 'demo') return;
         contextMode = 'demo';
+        selectedCardState = null;
         defaultModelCommandInterpreter.setMode('scripted_fixture');
         liveLocationStatus = defaultLocationPort.getLocation();
         await refreshConnectorStatuses();
@@ -3231,6 +3259,7 @@ export function renderApp(
       modeLiveBtn.addEventListener('click', async () => {
         if (contextMode === 'live') return;
         contextMode = 'live';
+        selectedCardState = null;
         if (!defaultLocationPort.hasSessionFix?.()) {
           defaultLocationPort.setLocation('prompt');
         }
@@ -3455,18 +3484,18 @@ export function renderApp(
       if (panelEl) {
         const newHtml = renderDesktopRightPanel({
           contextMode,
-          panelKind: panelState.activePanel,
-          cardKind: selectedCardState.cardKind,
-          planId: selectedCardState.planId ?? nowPlan?.id,
-          planTitle: (nowPlan as any)?.title,
-          planHeadline: nowPlan?.headline,
+          panelKind: isLive && (!liveDestination && !liveRoute) ? 'quiet' : panelState.activePanel,
+          cardKind: isLive && (!liveDestination && !liveRoute) ? 'quiet' : selectedCardState.cardKind,
+          planId: isLive ? undefined : (selectedCardState.planId ?? nowPlan?.id),
+          planTitle: isLive ? undefined : cleanNowTitle,
+          planHeadline: isLive ? undefined : nowPlan?.headline,
           destinationName:
             contextMode === 'live'
               ? liveDestination?.name
               : ((spatialMapEvidence?.placeOrRoute as any)?.name || (nowPlan?.optionsOrSteps?.[0] as any)?.title || 'Piano Studio'),
-          departureTime: nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
-          map: currentV2Composition?.map,
-          candidateCards: currentV2Composition?.candidateCards,
+          departureTime: !isLive && nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
+          map: isLive ? undefined : currentV2Composition?.map,
+          candidateCards: isLive ? undefined : currentV2Composition?.candidateCards,
           liveRoute,
           liveRouteStatus,
           liveLocationStatus,
@@ -3474,7 +3503,11 @@ export function renderApp(
           liveWeatherSignal,
           weatherStatusEnabled: weatherStatus.enabled,
           noRouteReason: getLiveNoRouteReason(),
-          ariaAnnouncement: panelState.ariaAnnouncement,
+          ariaAnnouncement: isLive
+            ? (liveRoute && liveDestination
+                ? `Selected Live route to ${liveDestination.name}.`
+                : 'Live context. No item selected.')
+            : panelState.ariaAnnouncement,
         });
         const temp = document.createElement('div');
         temp.innerHTML = newHtml;
@@ -3492,11 +3525,19 @@ export function renderApp(
           selectedId: nowPlan.id || 'hero',
           cardKind: determineCardKind(nowPlan),
           planId: nowPlan.id,
-          label: (nowPlan as any)?.title || nowPlan.headline || 'Now plan',
+          label: cleanNowTitle,
         });
       };
       nowCardEl.addEventListener('focusin', onSelectNow);
       nowCardEl.addEventListener('click', onSelectNow);
+    }
+
+    if (typeof window !== 'undefined' && !desktopResizeListenerAttached) {
+      desktopResizeListenerAttached = true;
+      const mql = window.matchMedia('(min-width: 1024px)');
+      mql.addEventListener('change', () => {
+        update();
+      });
     }
 
     root.querySelectorAll<HTMLElement>('.v2-candidate-card').forEach(card => {

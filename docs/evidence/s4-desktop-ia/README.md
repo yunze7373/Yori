@@ -27,15 +27,26 @@ Governed by Architecture Rev3 Live Roadmap slice S4 (`docs/architecture/REV3_LIV
 - **Dynamic Selection**: Selecting or focusing a card immediately updates the right panel in place and announces the transition via `aria-live="polite"`.
 - **Live Mode Truthfulness**: Zero fixture provenance elements (`data-provenance="fixture"`, `SIMULATED`). Live elements carry truthful provider metadata (`data-source`, `data-fetched-at`) or explicit unavailable notices (`data-provenance="none"`).
 
-## Evidence Manifest
+## Evidence Manifest (19 Deliverables Matrix)
 
 | File | Resolution | Description |
 |---|---|---|
-| `01-desktop-demo-travel-1440x900.png` | 1440×900 | Desktop Demo Travel: Hero travel card with route & destination weather panel |
-| `02-desktop-demo-lunch-1440x900.png` | 1440×900 | Desktop Demo Lunch: Nearby options & walking times panel |
-| `03-desktop-live-empty-1440x900.png` | 1440×900 | Desktop Live Mode: Quiet state with honest provenance |
-| `04-desktop-live-route-1440x900.png` | 1440×900 | Desktop Live Mode: Route unavailable panel |
-| `05-desktop-connectors-1440x900.png` | 1440×900 | Connectors in Desktop Shell: Left nav intact with active marker |
-| `06-desktop-ask-expanded-1440x900.png` | 1440×900 | Ask bar expanded on desktop: Multi-zone layout and grid measures preserved |
-| `07-tablet-rail-768x1024.png` | 768×1024 | Tablet 768px: Collapsed 72px icon rail with two-zone shell |
-| `08-mobile-single-column-390x844.png` | 390×844 | Mobile 390px: Single-column Home with bottom tab bar |
+| `01-travel-390x844.png` | 390×844 | Mobile Demo Travel: Single-column Living Context with bottom tabs |
+| `01-travel-1280x800.png` | 1280×800 | Desktop Demo Travel: Three-zone shell with Route & destination weather panel |
+| `01-travel-1440x900.png` | 1440×900 | Desktop Wide Demo Travel: 1440px three-zone shell with comfortable max measure |
+| `02-lunch-390x844.png` | 390×844 | Mobile Demo Lunch: Lunch card with candidate actions |
+| `02-lunch-1280x800.png` | 1280×800 | Desktop Demo Lunch: Nearby dining options & walking times panel |
+| `02-lunch-1440x900.png` | 1440×900 | Desktop Wide Demo Lunch: Contextual dining panel with selection state |
+| `03-live-empty-390x844.png` | 390×844 | Mobile Live Empty: Truthful Live status indicator and quiet context |
+| `03-live-empty-1280x800.png` | 1280×800 | Desktop Live Empty: Neutral Live panel with honest Route & Places status |
+| `03-live-empty-1440x900.png` | 1440×900 | Desktop Wide Live Empty: Neutral Live panel with zero fixture leakage |
+| `04-live-route-390x844.png` | 390×844 | Mobile Live Route: Truthful unavailable notice in Living Context |
+| `04-live-route-1280x800.png` | 1280×800 | Desktop Live Route: Route notice with explicit no-route reason in right panel |
+| `04-live-route-1440x900.png` | 1440×900 | Desktop Wide Live Route: Honest provider-backed metadata and zero fake geometry |
+| `05-connectors-390x844.png` | 390×844 | Mobile Connectors: Settings view in single-column layout |
+| `05-connectors-1280x800.png` | 1280×800 | Desktop Connectors: Left nav intact with active marker, quiet right panel |
+| `05-connectors-1440x900.png` | 1440×900 | Desktop Wide Connectors: Three-zone shell hosting Connectors center view |
+| `06-ask-expanded-390x844.png` | 390×844 | Mobile Ask Expanded: Conversation sheet above single-column context |
+| `06-ask-expanded-1280x800.png` | 1280×800 | Desktop Ask Expanded: Expanded conversation input preserving grid measures |
+| `06-ask-expanded-1440x900.png` | 1440×900 | Desktop Wide Ask Expanded: Conversational surface in 3-zone layout |
+| `07-tablet-rail-768x1024.png` | 768×1024 | Tablet 768px: Collapsed 72px icon rail with two-zone shell and hidden right panel |

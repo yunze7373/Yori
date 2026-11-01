@@ -707,7 +707,8 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   align-self: start;
 }
 
-.map-header {
+.map-header,
+.desktop-map-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -716,7 +717,9 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 }
 
 .map-header .section-label,
-.map-header .card-badge {
+.map-header .card-badge,
+.desktop-map-header .section-label,
+.desktop-map-header .card-badge {
   margin-bottom: 0;
 }
 
@@ -4931,6 +4934,10 @@ button.v2-view-detail-link:focus-visible {
     width: 100%;
     max-width: 680px;
     margin-bottom: 24px;
+  }
+
+  .desktop-center-column .v2-header-row .header-left .v2-brand-wordmark {
+    display: none !important;
   }
 
   /* Right Contextual Detail Panel */
