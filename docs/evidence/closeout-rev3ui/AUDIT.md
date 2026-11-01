@@ -52,10 +52,11 @@ Audit verifying that every rendered claim, status, and label at HEAD traces to a
 
 ## 2. Clean-Checkout Verification Suite Results
 
-Executed from an isolated temporary clone outside the repository (`/tmp/yori-closeout-...`) with:
+Executed from an isolated temporary clone outside the repository with:
 - Zero credentials or environment variables
 - Zero `.env` or `.env.local` files present
 - Clean `npm ci` installation
+- Self-contained test pipeline: `package.json` specifies `"pretest": "vite build"`, ensuring that `npm test` automatically compiles the distribution bundle into `dist/` before Vitest runs `src/adapters/static-check.test.ts`. This guarantees reproducible, zero-manual-step execution on fresh checkouts.
 
 ### Raw Command Summary Outputs
 
@@ -93,12 +94,12 @@ Duration:    7.9m
 6. Privacy Scan
 $ npx tsx scripts/publish/privacy-scan.ts
 === Privacy Scan Results ===
-Total Tracked Files: 797
+Total Tracked Files: 798
 Total Tracked Images: 424
 Emails Scan: [PASS] Disallowed Count: 0
 Local Paths Scan: [PASS] Path Count: 0
 Personal Names Scan: [PASS] Name Count: 0
-Secret Keys Scan: [PASS] Keys Scanned: 0, Leak Count: 0
+Secret Keys Scan: [PASS] Keys Scanned: 2, Leak Count: 0
 Coordinates Scan: [PASS] Non-Fixture Count: 0
 Image Metadata Scan: [PASS] Images with Chunks: 0
 Overall Pass: ✅ PASS
@@ -133,37 +134,36 @@ Production client distribution bundle was compiled via `npm run build` into `dis
 
 The following functional capabilities are intentionally offline, gated, or stubbed at Rev3 closeout, pending explicit owner authorization and provider decisions:
 
-1. **G-ROUTE (Real In-Session Route Computation)**:
-   - *Status*: Offline / Recorded fixture fallback.
-   - *Reason*: Selecting an external live routing engine (OSRM public server vs OpenRouteService API vs self-hosted GraphHopper) requires owner decision regarding rate limits, API keys, and privacy terms. The client seam correctly proxies through `/api/route` and falls back truthfully to recorded geometries or fail-closed "No Route" notices.
-2. **Places / Tiles Provider Decisions**:
-   - *Status*: Seam implemented (`/api/places`); external live endpoint and tile server selection pending.
-   - *Reason*: Client uses loopback proxy seam with rate-limiting and coordinate rounding. Selecting a production vector tile host (Mapbox / Protomaps / OSM raster) or live Overpass instance requires owner infrastructure decisions.
-3. **GATE-LIVE-RUN (Outbound Network Gating)**:
-   - *Status*: Active.
-   - *Reason*: Prevents accidental external network dispatches without explicit execution flags (`--confirm-billed`) and credential environment variables.
-4. **Live-Default Flip**:
-   - *Status*: Pending owner sign-off.
-   - *Reason*: The application currently defaults to Demo mode unless `?mode=live` or `VITE_YORI_DEFAULT_MODE=live` is provided. Preconditions before flipping default to Live:
-     - Gate all `?mode` query parameter overrides behind dev mode.
-     - Add unit tests validating `VITE_YORI_DEFAULT_MODE` fallback behavior in production mode.
-5. **S1-LIVE-3 Completion (Live Model Call Integration)**:
-   - *Status*: Offline contract verified (lifetime model ledger strictly locked at 22/50 calls).
-   - *Reason*: Live outbound model reasoning calls during runtime sessions remain gated behind owner authorization to prevent unexpected billing.
-6. **S2-LIVE (Live XMemo OAuth & Calendar Integration)**:
-   - *Status*: Offline / Mock PKCE flow and honest "Not available yet" notices.
-   - *Reason*: Live OAuth PKCE endpoint against production XMemo vault requires production server infrastructure; Calendar connector provider remains honestly unavailable as planned.
-7. **Desktop Pixel Parity UNVERIFIED**:
-   - *Status*: Unverified against pixel bitmaps; verified against responsive IA specifications.
-   - *Reason*: The concept reference commit sha `667f1ff2...` contains no local pixel artifacts or Figma export renders in the repository for automated pixel-by-pixel image diffing. Desktop layout was verified structurally against the three-zone IA contract (sidebar nav 240px, center column max 680px, contextual right panel 380px) and Axe accessibility rules.
+- **(a) G-ROUTE**: Provider choice (OSRM / OpenRouteService / GraphHopper). Real in-session route computation remains offline with recorded fixture fallback until the owner selects an external routing provider regarding rate limits, API keys, and privacy terms. The client seam correctly proxies through `/api/route` and falls back truthfully to recorded geometries or fail-closed "No Route" notices.
+- **(b) Places / Overpass**: Overpass instance selection / rate policy. Client uses loopback proxy seam (`/api/places`) with rate-limiting and coordinate rounding. Selecting a live Overpass instance and configuring its rate policy requires owner infrastructure decisions.
+- **(c) Tile policy**: Vector tile host (Mapbox / Protomaps / OSM raster). Selecting a production vector tile host or raster tile server requires owner infrastructure decisions.
+- **(d) Live-default ack**: Live-default flip acknowledgment + precondition: gate `?mode` query param overrides behind dev mode, and unit-test `VITE_YORI_DEFAULT_MODE`. The application currently defaults to Demo mode unless `?mode=live` or `VITE_YORI_DEFAULT_MODE=live` is provided. Preconditions before flipping default to Live: gate all `?mode` query parameter overrides behind dev mode, and add unit tests validating `VITE_YORI_DEFAULT_MODE` fallback behavior in production mode.
+- **(e) GATE-LIVE-RUN**: Consented real-run session (authorized location + live providers, independent e2e on REAL provider evidence). Prevents accidental external network dispatches without explicit execution flags (`--confirm-billed`) and credential environment variables.
+- **(f) S1-LIVE-3**: Completion of ≤4 billed calls per runbook §2.2 (prep approved @`aef3b4e`), lifetime ledger 22 → ≤26. Live outbound model reasoning calls during runtime sessions remain gated behind owner authorization to prevent unexpected billing. Lifetime model ledger is strictly locked at 22/50 calls.
+- **(g) S2-LIVE**: Owner's own XMemo login through the existing real PKCE flow (one labelled test fact). Calendar is NOT part of it and has no adapter (out of hackathon scope). Real PKCE OAuth against the owner's personal XMemo account requires owner interactive login. Calendar is not part of this and has no adapter.
+- **(h) Desktop pixel parity UNVERIFIED**: Image reference sha `667f1ff2…` (not a commit sha; no local pixels in repository). Verified against responsive IA specifications (three-zone IA contract: sidebar nav 240px, center column max 680px, contextual right panel 380px) and Axe accessibility rules; no automated pixel-by-pixel image diff is possible because the reference is an image reference sha rather than a commit sha or local bitmap file.
 
 ---
 
 ## 5. Architectural Invariant Audit Verification Summary
 
-- **INV-101 (Offline-First Integrity)**: Preserved. All surfaces render deterministically offline without network access.
-- **INV-102 (Zero Unverified Optimistic Claims)**: Verified. Every connector, source, and data point displays truthful runtime state.
-- **INV-103 (Honest Calendar Status)**: Verified. Calendar row reads "Not available yet" across all surfaces.
-- **INV-104 (Single-Touch / Keyboard Ergonomics)**: Verified. Arrow navigation, focus restoration, and Escape dismissal pass across all views.
-- **AC-EXT-1 (Core Diff Immutability)**: Verified. `git diff --stat f43c6c1d HEAD -- src/core` = 0 lines.
-- **Lifetime Billed Ledger**: Preserved. Strictly 22/50 model calls consumed across the entire lifecycle.
+All invariant definitions are quoted verbatim from `docs/architecture/ARCHITECTURE.md` (§8) and `docs/architecture/LIVING_CONTEXT_V2.md` (§10.6):
+
+| ID | Invariant Definition | Audit Status | Evidence & Assertion Line Reference |
+| :--- | :--- | :--- | :--- |
+| **INV-101** | Every signal is sourced (`simulated`/`real`), timestamped (`issuedAt`), and validity-bounded (`validFor`); snapshots are immutable | Verified | `tests/e2e/closeout-truth-audit.spec.ts:76-88` (Live header verifies `data-provenance="live"`, `data-source="device_clock"`, valid `data-fetched-at` timestamp); `tests/e2e/closeout-truth-audit.spec.ts:285-300` (fixture signals carry explicit simulation source and timestamps). |
+| **INV-102** | Mock/simulated data is labelled everywhere it appears; simulated and real data are never indistinguishable | Verified | `tests/e2e/closeout-truth-audit.spec.ts:58-95` (Live mode renders 0 `SIMULATED` badges and 0 fixture cards); `tests/e2e/closeout-truth-audit.spec.ts:285-339` (Demo mode labels cards with `data-provenance="fixture"` and visible `SIMULATED` badges on Home, Plans, Sources, and Desktop Right Panel). |
+| **INV-103** | No fabricated real-world data: times from the deterministic engine, weather/places only from signals/adapters. The LLM invents nothing (Section 9) | Verified | `tests/e2e/closeout-truth-audit.spec.ts:63-74, 185-189, 243-248` (In Live mode, when weather is off, displays "Live weather is off (owner setting)"; unconfigured route displays fail-closed "No Route"; places displays "Owner Gated"; Calendar displays "Not available yet"; zero fabricated forecasts, coordinates, or routes). |
+| **INV-104** | Booking, payment, or itinerary change requires explicit user confirmation | Not exercised by this audit | Not exercised by this audit (audit verifies read-only live/demo provenance, connectors, navigation, and empty states; no booking or payment workflows are executed in this audit). |
+| **INV-105** | The daily proactive prompt cap (default 3) is enforced by shared policy and measurable in tests and in Me | Verified | `tests/e2e/closeout-truth-audit.spec.ts:154-159` (Me surface verifies Proactive Prompt Budget meter reads "0 / 3 used today" with `data-provenance="live"`). |
+| **INV-106** | Stale or missing signals degrade fail-closed with a visible notice (D6) | Verified | `tests/e2e/closeout-truth-audit.spec.ts:63-74, 243-248` (Missing weather signal shows visible notice "Live weather is off (owner setting)"; unconfigured destination in desktop right panel displays fail-closed notice "No Route · no destination set" with `data-no-route-reason="no_destination"`). |
+| **INV-107** | Memory writes only on user confirm; feedback creates pending proposals, never direct mutation | Verified | `tests/e2e/closeout-truth-audit.spec.ts:130-137, 154-162` (Live For You view shows 0 pending proposals without unprompted writes; Live Me view shows "No confirmed preferences recorded yet"). |
+| **INV-108** | Suppression always records its reason; a user's "don't suggest" is honoured for its scope without a memory write | Not exercised by this audit | Not exercised by this audit (suppression lifecycle is verified in unit/drill suites `tests/drills/degraded-mode.test.ts`, not exercised in this truthfulness audit). |
+| **INV-109** | Scenario plugins touch only detector/preparer/adapter; core pipeline files are closed to plugin changes (AC-EXT-1) | Verified | Verified by clean-checkout command `git diff --stat f43c6c1d HEAD -- src/core` returning 0 lines changed (see Section 2.7). |
+| **INV-110** | Persistence is owned solely by `src/core/storage` (versioned envelope, write-read-back verify). Corrupt or unknown-version data surfaces an explicit error with export/reset — never a silent wipe or default. Memory facts, proposals, same-day suppressions, and the daily prompt-budget counter survive reload. No plugin or UI module persists state privately | Verified | `src/core/storage/storage.test.ts` (passing unit test envelope verification) and `tests/e2e/closeout-truth-audit.spec.ts:154-159` (daily prompt-budget counter correctly reads from storage schema envelope). |
+| **INV-111** | Device coordinates are obtained only through the single consent-gated adapter, one-shot, budgeted, and leave the device only to the P-LOC-approved provider; the demo's simulated switch disables the whole real chain | Verified | `tests/e2e/closeout-truth-audit.spec.ts:68-71, 178-184` (Live Location connector shows "Permission needed · tap Connect to share location for this session"; zero coordinates leaked to window or network without consent; static guard `tests/e2e/closeout-truth-audit.spec.ts` verifies zero unconsented geolocation calls). |
+
+### Additional Architecture Invariants & Budget Limits
+
+- **AC-EXT-1 (Core Diff Immutability)**: Verified. `git diff --stat f43c6c1d HEAD -- src/core` returns 0 files changed, 0 insertions, 0 deletions.
+- **Lifetime Billed Ledger**: Preserved. Strictly 22/50 model calls consumed across the entire project lifecycle.
