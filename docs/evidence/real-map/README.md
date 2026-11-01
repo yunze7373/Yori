@@ -2,44 +2,49 @@
 
 **Task ID**: `[TID:INBOX-20261101-12065C]` [SRC:reviewer] 🟠 [P1] `REAL-MAP: replace the schematic route map with a real interactive map`  
 **Governing Gate**: Preceded by `DESKTOP-PARITY-1` approval at commit `b51c581`. Authorized by Owner feedback (artifact `Nz2Vogz9JH3MMfw7SxpgZ8`, thread `bc18aec5`): *"这个我需要真实的地图。想办法实现。"*  
+**Bridge Directives**:
+1. `aa5d5c9f`: Strict OSM tile policy (standard Referer, cacheable tiles, Leaflet defaults, zero live calls before consent, fallback on 403 / abort).
+2. `af886ec1`: Placement constraint from Owner 08:28 visual addendum (rich interactive Leaflet map placed in contextual expansion surfaces: expanded Trip Details view and desktop right-panel Trip Details; initial mobile Home retains compact $\le$ 140px schematic strip without pushing the plan down).
 **Implementation Date**: 2026-11-02  
 
 ---
 
 ## 1. Executive Summary
 
-This deliverable replaces the static schematic route SVG with a real, interactive raster map built with bundled **Leaflet@1.9.4** and standard **OpenStreetMap** raster tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`).
+This deliverable implements a real, interactive raster map built with bundled **Leaflet@1.9.4** and standard **OpenStreetMap** raster tiles (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`).
 
 Key technical highlights:
-- **Single Shared Component**: One shared real-map component (`src/ui/living-context/real-map.ts`) powers both the center Now card (mobile 390x844 and desktop 1280x800) and the desktop right-panel Trip Details card.
-- **Code-Splitting via Dynamic Import**: Leaflet is loaded dynamically via `import('leaflet')` to ensure zero SSR/Node issues in Vitest, isolating Leaflet into an independent 149.97 kB vendor chunk (`leaflet-src-*.js`, 43.48 kB gzip) while keeping the main JS bundle increase to just +8.26 kB.
+- **Disciplined Placement**: Follows the Owner's visual addendum:
+  - Initial mobile Home retains the compact $\le$ 140px schematic map strip (`renderCompactMapStrip`), ensuring the plan headline and signal inputs remain prominent and unpushed.
+  - Contextual expansion surfaces render the rich interactive Leaflet map: the expanded Trip Details view (`renderTripDetail` via `#btn-view-trip-details`) and the desktop right-panel Trip Details card (`renderDesktopRightPanel`).
+- **Code-Splitting via Dynamic Import**: Leaflet is loaded dynamically via `import('leaflet')` to ensure zero SSR/Node issues in Vitest, isolating Leaflet into an independent 149.97 kB vendor chunk (`leaflet-src-*.js`, 43.48 kB gzip) while keeping the main JS bundle increase to just +8.26 kB (+1.65%).
 - **Strict Network Sandbox**: Zero external network requests occur during tests or CI. E2E tests stub OpenStreetMap tiles locally via `page.route('**/tile.openstreetmap.org/**', ...)`, validated by a zero-request network guard.
+- **Strict OSM Policy & Referer Preservation**: Standard `strict-origin-when-cross-origin` policy preserved with zero query parameters or cache-busting. Zero background prefetching.
 - **Truthful Recorded Sample Geometry**: Uses `RECORDED_ROUTE_COORDINATES` from `tests/fixtures/route-fixtures.ts` for demo mode route polyline (`#route-drive`, `.v2-map-route`), with visible disclosure caption: `"Map © OpenStreetMap · route shape: recorded sample · simulated"`.
 - **Accessible & Non-Hijacking**: Wheel zoom is disabled by default (`scrollWheelZoom: false`) to prevent hijacking page scrolling. Zoom is enabled strictly when focused or clicked, and automatically disabled on blur or `mouseleave`. Keyboard navigation and `prefers-reduced-motion` are fully respected. Axe AA reports 0 violations.
-- **Instant Fallback**: If tile loading fails (offline, CSP block, timeout $\le$ 2800ms), gracefully transitions to the schematic SVG route map with an amber `"Map tiles unavailable · schematic shown"` banner.
+- **Dual Fallback on Network Error or 403 'Access Blocked'**: If tile loading fails (network abort, offline, or HTTP 403 'Access blocked by policy' as simulated in iframe sandboxes, timeout $\le$ 2800ms), gracefully transitions to the schematic SVG route map with an amber `"Map tiles unavailable · schematic shown"` banner within $\le$ 3s.
+- **Live Mode Zero-Leak Consent Guard**: In Live mode (`/?ui=v2&mode=live`), exactly 0 OSM tile requests are initiated before explicit location consent is granted.
 
 ---
 
 ## 2. Deliverable Evidence Captures
 
-The following screenshots capture the real interactive map across both viewports and weather conditions, plus the fallback drill:
-
-| Capture File | Viewport | Scene | Description |
+| Capture File | Viewport | Scene / View | Description |
 |:---|:---:|:---:|:---|
-| [`real-map-clear-1280x800.png`](./real-map-clear-1280x800.png) | 1280x800 | Clear | Desktop view with center Now card real map and right-panel Trip Details real map rendered simultaneously with OSM raster tiles, polyline, markers, and attribution. |
-| [`real-map-clear-390x844.png`](./real-map-clear-390x844.png) | 390x844 | Clear | Mobile viewport with real map strip inside Now card, zero horizontal overflow. |
-| [`real-map-rain-1280x800.png`](./real-map-rain-1280x800.png) | 1280x800 | Rain | Desktop view showing rain re-plan with floating `.v2-map-weather-callout` chip (`Rain forecast · simulated / Issued 1:35 PM`) on map. |
-| [`real-map-rain-390x844.png`](./real-map-rain-390x844.png) | 390x844 | Rain | Mobile view with weather callout chip overlay on compact real map. |
-| [`real-map-fallback.png`](./real-map-fallback.png) | 1280x800 | Fallback | Aborted/failed tile drill demonstrating graceful fallback to schematic SVG with `"Map tiles unavailable · schematic shown"` banner. |
+| [`real-map-clear-1280x800.png`](./real-map-clear-1280x800.png) | 1280x800 | Desktop Clear (Home) | Desktop view with compact schematic in center card and rich real Leaflet map in right-panel Trip Details. |
+| [`real-map-clear-390x844.png`](./real-map-clear-390x844.png) | 390x844 | Mobile Clear (Trip Details) | Expanded Trip Details contextual view at 390x844 displaying rich real interactive map with tiles, polyline, and attribution. |
+| [`real-map-rain-1280x800.png`](./real-map-rain-1280x800.png) | 1280x800 | Desktop Rain (Home) | Desktop right-panel Trip Details showing rain re-plan with floating `.v2-map-weather-callout` chip (`Rain forecast · simulated / Issued 1:35 PM`). |
+| [`real-map-rain-390x844.png`](./real-map-rain-390x844.png) | 390x844 | Mobile Rain (Trip Details) | Mobile expanded Trip Details with floating weather callout chip overlay on real map. |
+| [`real-map-fallback.png`](./real-map-fallback.png) | 1280x800 | Desktop Fallback (HTTP 403) | HTTP 403 'Access blocked' drill demonstrating graceful fallback to schematic SVG with `"Map tiles unavailable · schematic shown"` banner. |
 
 ### SHA256 Checksums (`MANIFEST.sha256`)
 
 ```
-11628a5c660367a3800c097081678415116622e96292b7b9ff24a79eb25c977e  real-map-clear-1280x800.png
-f3b0d85d0dc243019eeb1f62728d5f0c5b1ad6809d3286dbb64a72a07e98cf8f  real-map-clear-390x844.png
-e42992cd5ab5ed7c721df1d213c038558a237031b4b2b2414554fceef0fa2e90  real-map-fallback.png
-ff5084007928e60dde058df0b8f44c1771b3ad20be12e4c12a8633444afa0e8b  real-map-rain-1280x800.png
-f7509790cf0cf56aba52597ef398bd3306c64f8d7a7d2c6d8b042a80cebdeed6  real-map-rain-390x844.png
+9214240ce6eac0c5d0a7e96da0c0b74fb5322dbc520d8dcc7035cd64ff8fb21d  real-map-clear-1280x800.png
+fdb04f265c632be64fd820a0a9b6a26aeeb5fc65cfdb1cc55a31c022866d5b88  real-map-clear-390x844.png
+205ef0b57970bcceef464a31d6bbfd4b835b2e87840c5ce949dc4ff8fb372edb  real-map-fallback.png
+67a59bb039cb850c4481122cadc732c9a08604be49234088469c83444fac0d2c  real-map-rain-1280x800.png
+ac376184a165b100fbff894c9eee8118db193f88cb0b711336c4dbf2306ce6f7  real-map-rain-390x844.png
 ```
 
 ---
@@ -62,7 +67,12 @@ Total production JS downloaded on initial non-map views: 507.40 kB (only +8.26 k
 
 - **Vitest Unit/Contract Tests**: 40/40 test files passed (915/915 tests).
 - **Playwright E2E Tests**:
-  - `tests/e2e/real-map.spec.ts`: 6/6 tests passed.
+  - `tests/e2e/real-map.spec.ts`: 8/8 tests passed.
   - `tests/e2e/desktop-parity.spec.ts`: 18/18 tests passed.
+  - `tests/e2e/video-script.spec.ts`: 4/4 tests passed.
+  - `tests/e2e/closeout-truth-audit.spec.ts`: 34/34 tests passed.
+  - `tests/e2e/s4-desktop-ia.spec.ts`: 18/18 tests passed.
+  - `scripts/submission/check-video-script-sync.ts`: PASS (64/64 asserted UI strings).
+  - `scripts/publish/privacy-scan.ts`: PASS (0 leaks).
 - **Core Immutability**: `git diff --stat f43c6c1d HEAD -- src/core` = 0 lines (clean invariant).
 - **Model Call Ledger**: 22/50 lifetime calls (0 billed calls dispatched during this task).
