@@ -580,13 +580,13 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 ${
                   vm.isRain
                     ? `
-                  <span class="checklist-chip" id="chip-umbrella" data-slot="chrome" data-slot-reason="Checklist chip" style="display: inline-flex; align-items: center; margin-right: 6px;">
+                  <span class="checklist-chip" id="chip-umbrella" data-slot="chrome" data-slot-reason="Checklist chip" style="display: inline-flex; align-items: center;">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right: 4px;">
                       <path d="M23 12a11.05 11.05 0 0 0-22 0zm-5 7a3 3 0 0 1-6 0v-7"></path>
                     </svg>
-                    Take umbrella · Umbrella needed
+                    Umbrella
                   </span>
-                  <span>Rain forecast · Umbrella needed</span>
+                  <span class="now-rationale-forecast">Rain forecast</span>
                 `
                     : `
                   <span>Typical traffic · 5m margin</span>
@@ -597,8 +597,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     ? (() => {
                         const sel = vm.options.find(o => o.isSelected) || vm.options[0];
                         return sel?.mode === 'bus'
-                          ? `<span class="v2-active-mode-badge" data-slot="chrome" data-slot-reason="Active transit mode" style="margin-left: 6px; font-weight: 600;">· Bus</span>`
-                          : `<span class="v2-active-mode-badge" data-slot="chrome" data-slot-reason="Active transit mode" style="margin-left: 6px; font-weight: 600;">· Drive</span>`;
+                          ? `<span class="v2-active-mode-badge" data-slot="chrome" data-slot-reason="Active transit mode" style="font-weight: 600;">·&nbsp;Bus</span>`
+                          : `<span class="v2-active-mode-badge" data-slot="chrome" data-slot-reason="Active transit mode" style="font-weight: 600;">·&nbsp;Drive</span>`;
                       })()
                     : ''
                 }

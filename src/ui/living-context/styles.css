@@ -712,6 +712,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
 }
@@ -3803,6 +3804,7 @@ button.v2-view-detail-link:focus-visible {
 .now-category-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -3853,12 +3855,28 @@ button.v2-view-detail-link:focus-visible {
 
 .now-rationale-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 6px 8px;
   font-size: 0.875rem;
   color: var(--color-muted, #384A43);
   margin-bottom: 10px;
   line-height: 1.35;
+}
+
+.now-rationale-line #chip-umbrella {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.now-rationale-line .v2-active-mode-badge {
+  white-space: nowrap;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.now-rationale-line .now-rationale-forecast {
+  white-space: nowrap;
 }
 
 /* Compact Map Strip (<= 140px tall, Finding P2) */
@@ -3889,6 +3907,8 @@ button.v2-view-detail-link:focus-visible {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-bottom: 4px;
   flex-shrink: 0;
 }
@@ -3926,6 +3946,7 @@ button.v2-view-detail-link:focus-visible {
 
 .now-actions-primary {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   width: 100%;
   align-items: stretch;
@@ -4818,10 +4839,19 @@ button.v2-view-detail-link:focus-visible {
 
 /* 3. Desktop Shell (>= 1024px): Three zones (Left Nav + Center Context + Right Panel) */
 @media (min-width: 1024px) {
+  html, body {
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+    scroll-padding-bottom: 0;
+  }
+
   .app-layout[data-ui-version="v2"] {
     display: grid;
     grid-template-columns: 240px minmax(0, 1fr) 380px;
-    min-height: 100vh;
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
     background-color: var(--color-ground, #F8F6F0);
   }
 
@@ -4838,10 +4868,10 @@ button.v2-view-detail-link:focus-visible {
     background-color: var(--color-surface, #FDFBF7);
     border-right: 1px solid var(--color-border, #E4DCD3);
     padding: 24px 16px;
-    position: sticky;
-    top: 0;
     height: 100vh;
+    max-height: 100vh;
     overflow-y: auto;
+    box-sizing: border-box;
     z-index: 90;
   }
 
@@ -4916,18 +4946,23 @@ button.v2-view-detail-link:focus-visible {
   /* Center Column (Living Context) */
   .desktop-center-column {
     min-width: 0;
+    height: 100vh;
+    max-height: 100vh;
     overflow-y: auto;
-    padding: 32px 40px 80px 40px;
+    overflow-x: hidden;
+    padding: 24px 20px 80px 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
+    box-sizing: border-box;
   }
 
-  .desktop-center-column .main-container {
+  .app-layout[data-ui-version="v2"] .desktop-center-column .main-container {
     width: 100%;
     max-width: 680px;
-    margin: 0;
+    margin: 0 auto;
     padding: 0;
+    box-sizing: border-box;
   }
 
   .desktop-center-column .header-bar {
@@ -4954,11 +4989,12 @@ button.v2-view-detail-link:focus-visible {
     min-width: 380px;
     background-color: var(--color-surface, #FDFBF7);
     border-left: 1px solid var(--color-border, #E4DCD3);
-    position: sticky;
-    top: 0;
     height: 100vh;
+    max-height: 100vh;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 24px 20px 40px 20px;
+    box-sizing: border-box;
     z-index: 85;
   }
 
@@ -5067,6 +5103,16 @@ button.v2-view-detail-link:focus-visible {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    margin-bottom: 12px;
+  }
+
+  .desktop-panel-places-header .section-label {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    margin-bottom: 0;
   }
 
   .desktop-candidate-tile {
@@ -5098,6 +5144,10 @@ button.v2-view-detail-link:focus-visible {
     overflow: hidden;
     position: relative;
     background: var(--color-ground, #F8F6F0);
+  }
+
+  .desktop-candidate-art .desktop-illustration-badge {
+    display: none !important;
   }
 
   .desktop-candidate-art svg {
