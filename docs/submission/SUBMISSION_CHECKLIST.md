@@ -94,7 +94,7 @@ The underlying codebase has passed all required automated verification suites fo
 - ✅ **Golden Scenario Harness**: 18/18 scenarios passing byte-identically (`npm run test:golden`).
 - ✅ **Degradation Drills**: 56/56 fault injection invariance tests passing (`npm run test:drills`).
 - ✅ **Playwright E2E**: 441/444 tests passing across 33 files (`npx playwright test`, 3 skipped for viewport deduplication).
-- ✅ **Truthfulness & Provenance Audit**: 34/34 assertions passing across mobile and desktop (`tests/e2e/closeout-truth-audit.spec.ts`).
+- ✅ **Truthfulness & Provenance Audit**: 34/34 tests passing across mobile and desktop (`tests/e2e/closeout-truth-audit.spec.ts`).
 - ✅ **Current-HEAD Visual Proof**: Verified responsive IA across mobile (390x844) and desktop (1280x800, 1440x900) (`docs/evidence/s4-desktop-ia/`).
 - ✅ **Static Secret Scan**: Zero tokens or keys in `src/`, `dist/`, or browser storage APIs.
 - ✅ **Model Billed Ledger**: Strictly locked at 22/50 lifetime calls (`.yori-runtime/model-live-ledger.json`).

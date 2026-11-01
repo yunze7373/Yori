@@ -342,10 +342,10 @@ if (missingAssertions === 0) {
 console.log('--- 4. Checking Stated Test Counts in VIDEO_SCRIPT.md ---');
 
 const countChecks = [
-  { label: 'Unit tests (756)', regex: /756 unit tests across 31 files/ },
+  { label: 'Unit tests (914)', regex: /914 unit tests across 40 files/ },
   { label: 'Golden fixtures (18)', regex: /18 golden fixtures/ },
   { label: 'Degradation drills (56)', regex: /56 drills/ },
-  { label: 'Playwright e2e (268)', regex: /268 Playwright e2e tests across 21 files/ },
+  { label: 'Playwright e2e (441)', regex: /441 Playwright e2e tests across 33 files/ },
 ];
 
 for (const check of countChecks) {
