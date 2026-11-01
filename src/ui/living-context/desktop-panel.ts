@@ -203,18 +203,7 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
 
           ${
             opts.map
-              ? renderMapCard(opts.map)
-                  .replace(/v2-map-card/g, 'desktop-map-card')
-                  .replace(/v2-map-marker/g, 'desktop-map-marker')
-                  .replace(/v2-map-canvas/g, 'desktop-map-canvas')
-                  .replace(/v2-map-weather-callout/g, 'desktop-map-weather-callout')
-                  .replace(
-                    /<div class="map-header">[\s\S]*?<\/div>/,
-                    `<div class="desktop-map-header">
-                      <span class="section-label">Route Map</span>
-                      <span class="card-badge" data-provenance="fixture">Schematic · simulated</span>
-                    </div>`
-                  )
+              ? renderMapCard(opts.map, { isDesktopPanel: true })
               : `
           <div class="card desktop-map-card prominent" data-provenance="fixture">
             <div class="desktop-map-header">

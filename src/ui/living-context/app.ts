@@ -100,6 +100,7 @@ import { mockLunchAdapter } from '../../plugins/lunch/adapter.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import { renderV2Home } from './v2-home-view.js';
+import { initRealMaps } from './real-map.js';
 import {
   renderTripDetail,
   renderRestaurantDetail,
@@ -3971,7 +3972,7 @@ export function renderApp(
       if (nowCardJourney && nowPlan) {
         nowCardJourney.addEventListener('click', e => {
           const target = e.target as HTMLElement;
-          if (target.closest('button, a, input, select')) return;
+          if (target.closest('button, a, input, select, .real-map-container, .v2-map-canvas')) return;
           activeDetail = {
             type: 'trip',
             planId: nowPlan.id,
@@ -4816,6 +4817,9 @@ export function renderApp(
         });
       }
     }
+
+    // Initialize Leaflet real maps if real map containers are present (TID: INBOX-20261101-12065C)
+    initRealMaps(root).catch(() => {});
 
     // Coordinate reasoning asynchronously after deterministic composition (Requirement 4)
     if (coordinatedScene !== currentScene) {

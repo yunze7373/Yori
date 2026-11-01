@@ -13,7 +13,7 @@
 import { escapeHtml } from './presentation.js';
 import { STRINGS } from './strings.js';
 import type { HomeCompositionVM, MapVM } from '../view-models/index.js';
-
+import { renderRealMapCard, type RealMapRenderOptions } from './real-map.js';
 function renderMapSvg(map: MapVM): string {
   const isProminent = map.sizeHint === 'prominent';
   const viewBoxHeight = isProminent ? 180 : 130;
@@ -190,56 +190,11 @@ function renderCompactMapSvg(map: MapVM): string {
 }
 
 export function renderCompactMapStrip(map: MapVM): string {
-  const isPlacesMap = map.label.toLowerCase().includes('places');
-  const mobileLabel = isPlacesMap
-    ? (STRINGS.map.mobilePlacesLabel || 'Places Map')
-    : (STRINGS.map.mobileLabel || 'Route Map');
-
-  return `
-    <section class="card v2-map-card compact compact-map-strip" aria-label="${escapeHtml(map.label)}" data-provenance="fixture">
-      <div class="map-header map-strip-header">
-        <span class="map-strip-label section-label" data-slot="chrome" data-slot-reason="Map strip label">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-            <circle cx="12" cy="10" r="3"></circle>
-          </svg>
-          <span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span>
-        </span>
-        <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated map badge">Schematic · simulated</span>
-      </div>
-      <div class="v2-map-canvas compact-canvas" role="img" aria-label="${escapeHtml(map.ariaDescription)}">
-        ${renderCompactMapSvg(map)}
-      </div>
-    </section>
-  `;
+  return renderRealMapCard(map, renderCompactMapSvg, { isCompactStrip: true });
 }
 
-export function renderMapCard(map: MapVM): string {
-  const isPlacesMap = map.label.toLowerCase().includes('places');
-  const mobileLabel = isPlacesMap
-    ? (STRINGS.map.mobilePlacesLabel || 'Places Map')
-    : (STRINGS.map.mobileLabel || 'Route Map');
-
-  return `
-    <section class="card v2-map-card ${map.sizeHint}" aria-label="${escapeHtml(map.label)}" data-provenance="fixture">
-      <div class="map-header">
-        <span class="section-label" data-slot="chrome" data-slot-reason="Map section heading"><span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span></span>
-        <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated map badge">${escapeHtml(map.simulatedBadge)}</span>
-      </div>
-      ${renderMapSvg(map)}
-      <div class="map-place-info" ${
-        map.fieldSourceRefs?.destinationName
-          ? `data-source-ref="${escapeHtml(map.fieldSourceRefs.destinationName.recordId)}.${escapeHtml(map.fieldSourceRefs.destinationName.field)}" data-slot="domain"`
-          : `data-slot="chrome" data-slot-reason="Map schematic destination label"`
-      }>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-          <circle cx="12" cy="10" r="3"></circle>
-        </svg>
-        ${escapeHtml(map.destinationName)}
-      </div>
-    </section>
-  `;
+export function renderMapCard(map: MapVM, options?: RealMapRenderOptions): string {
+  return renderRealMapCard(map, renderMapSvg, options);
 }
 
 function renderActionRow(vm: HomeCompositionVM): string {

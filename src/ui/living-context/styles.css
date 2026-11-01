@@ -1,4 +1,5 @@
 @import './fonts.css';
+@import 'leaflet/dist/leaflet.css';
 
 /*
  * Yori Living Context Stylesheet
@@ -2257,6 +2258,206 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   font-family: var(--font-sans);
 }
 
+/* -------------------------------------------------------------
+ * REAL MAP (Leaflet + OpenStreetMap) STYLES (TID: INBOX-20261101-12065C)
+ * ------------------------------------------------------------- */
+.real-map-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-btn);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-card-muted-bg, #F3F4F6);
+}
+
+.real-map-container .leaflet-map-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  outline: none;
+}
+
+.real-map-caption {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--color-text-secondary, #5B6B65);
+  padding: 5px 8px;
+  background: var(--color-card-bg, #FFFFFF);
+  border-top: 1px solid var(--color-card-border, #E1E6E0);
+  text-align: center;
+  flex-shrink: 0;
+  line-height: 1.3;
+}
+
+.schematic-map-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.schematic-map-fallback.hidden {
+  display: none !important;
+}
+
+.map-fallback-active .real-map-caption,
+.map-fallback-active .v2-map-weather-callout {
+  display: none !important;
+}
+
+.map-fallback-active .schematic-map-fallback {
+  display: flex !important;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.schematic-map-fallback svg {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.map-fallback-banner {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #92400E;
+  background: #FEF3C7;
+  border-bottom: 1px solid #FDE68A;
+  padding: 5px 8px;
+  text-align: center;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.map-fallback-banner svg {
+  width: 14px !important;
+  height: 14px !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
+  flex: 0 0 14px !important;
+}
+
+.compact-canvas .map-fallback-banner {
+  font-size: 10px;
+  padding: 3px 6px;
+  line-height: 1.2;
+}
+
+.compact-canvas .map-fallback-banner svg {
+  width: 12px !important;
+  height: 12px !important;
+  flex: 0 0 12px !important;
+}
+
+/* Floating overlay weather callout on Real Map */
+.real-map-container .v2-map-weather-callout {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1000;
+  background: var(--color-primary-btn, #16382F);
+  color: #FFFFFF;
+  padding: 6px 12px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+
+.real-map-container .v2-map-weather-callout .callout-main {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.real-map-container .v2-map-weather-callout .callout-sub {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: #E2EAE5;
+}
+
+/* Leaflet control zoom styling overrides to fit Yori aesthetic */
+.leaflet-control-zoom {
+  border: 1px solid var(--color-card-border, #E1E6E0) !important;
+  box-shadow: var(--shadow-card, 0 1px 3px rgba(0, 0, 0, 0.08)) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.leaflet-control-zoom a {
+  background-color: var(--color-card-bg, #FFFFFF) !important;
+  color: var(--color-ink, #17211F) !important;
+  font-family: var(--font-sans) !important;
+}
+
+.leaflet-control-attribution {
+  font-size: 10px !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  padding: 2px 6px !important;
+}
+
+/* Compact map strip adaptations for Real Map */
+.compact-canvas .real-map-caption {
+  font-size: 9.5px;
+  padding: 2px 6px;
+  line-height: 1.2;
+}
+
+.compact-canvas .v2-map-weather-callout {
+  top: 4px;
+  left: 6px;
+  padding: 3px 8px;
+}
+
+.compact-canvas .v2-map-weather-callout .callout-main {
+  font-size: 11px;
+}
+
+.compact-canvas .v2-map-weather-callout .callout-sub {
+  font-size: 10px;
+}
+
+.compact-canvas .leaflet-control-zoom {
+  margin-top: 4px !important;
+  margin-right: 4px !important;
+}
+
+.compact-canvas .leaflet-control-zoom a {
+  width: 22px !important;
+  height: 22px !important;
+  line-height: 22px !important;
+  font-size: 12px !important;
+}
+
+.compact-canvas .leaflet-control-attribution {
+  font-size: 9px !important;
+}
+
+/* Custom Marker Pins */
+.yori-map-pin.origin .pin-dot {
+  width: 14px;
+  height: 14px;
+  background: #16382F;
+  border: 3px solid #FFFFFF;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.yori-map-pin.destination svg {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
 /* Timeline */
 .v2-timeline {
   display: flex;
@@ -3929,7 +4130,8 @@ button.v2-view-detail-link:focus-visible {
   overflow: hidden;
 }
 
-.now-map-strip .compact-canvas svg {
+.now-map-strip .compact-canvas > svg,
+.now-map-strip .compact-canvas .schematic-map-fallback > svg {
   width: 100%;
   height: 100%;
   display: block;
