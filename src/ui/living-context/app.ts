@@ -130,6 +130,16 @@ import {
   formatDistance,
   formatDuration,
 } from './route-geometry.js';
+import {
+  determineCardKind,
+  createInitialPanelState,
+  panelSelectionReducer,
+  type CardKind,
+  type CardSelectionState,
+} from './desktop-ia.js';
+import { renderDesktopLeftNav } from './desktop-nav.js';
+import { renderDesktopRightPanel } from './desktop-panel.js';
+import type { HomeCompositionVM } from '../view-models/index.js';
 
 export type DemoSceneId =
   | 'clear'
@@ -1115,6 +1125,7 @@ export function renderApp(
     isSaved?: boolean;
     originatingElementId?: string;
   } | null = null;
+  let selectedCardState: CardSelectionState | null = null;
 
   let demoPanelOpen = false;
   let demoPanelCleanup: (() => void) | null = null;
@@ -1541,6 +1552,7 @@ export function renderApp(
     );
 
     currentEvidenceBundle = evidenceBundle;
+    let currentV2Composition: HomeCompositionVM | null = null;
 
     // Ensure initial storage envelope exists if clean
     let storedEnvelope = null;
@@ -1621,6 +1633,25 @@ export function renderApp(
         ? actionState.plan
         : undefined;
     const nowPlan = storePlan ?? baseNowPlan;
+
+    if (!selectedCardState) {
+      if (contextMode === 'live') {
+        const liveHeroKind: CardKind = (liveRoute && liveDestination) ? 'travel' : (liveDestination ? 'travel' : 'quiet');
+        selectedCardState = {
+          selectedId: 'hero-live',
+          cardKind: liveHeroKind,
+          label: 'Live context',
+        };
+      } else {
+        const heroKind = determineCardKind(nowPlan);
+        selectedCardState = {
+          selectedId: nowPlan?.id || 'hero',
+          cardKind: heroKind,
+          planId: nowPlan?.id,
+          label: (nowPlan as any)?.title || nowPlan?.headline || 'Now plan',
+        };
+      }
+    }
 
     const effectiveEvidenceBundle =
       ((nowPlan?.intentId === 'fuel' || nowPlan?.intentId === 'lunch' || nowPlan?.intentId === 'depart')
@@ -2174,6 +2205,7 @@ export function renderApp(
           weatherError: weatherError ?? undefined,
           isLoading: isWeatherLoading,
         });
+        currentV2Composition = v2Composition;
         v2BodyHtml = renderV2Home(v2Composition);
       }
 
@@ -2492,9 +2524,94 @@ export function renderApp(
     if (activeDetail?.type === 'connectors') {
       root.innerHTML = `
         <div class="app-layout" data-ui-version="${uiVersion}">
-          ${renderConnectorsView(latestConnectorStatuses)}
+          ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, true) : ''}
+          <div class="desktop-center-column">
+            ${renderConnectorsView(latestConnectorStatuses)}
+          </div>
+          ${
+            uiVersion === 'v2'
+              ? renderDesktopRightPanel({
+                  contextMode,
+                  panelKind: 'quiet',
+                  cardKind: 'quiet',
+                  ariaAnnouncement: 'Connectors settings view',
+                })
+              : ''
+          }
+          <!-- Bottom Tab Bar (Mobile) -->
+          <nav class="bottom-tab-bar" aria-label="Main Navigation">
+            ${
+              uiVersion === 'v2'
+                ? `
+            <button type="button" class="tab-item" id="tab-home">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+              </svg>
+              <span>Home</span>
+            </button>
+            <button type="button" class="tab-item" id="tab-plans">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+              <span>Plans</span>
+            </button>
+            <button type="button" class="tab-item" id="tab-for-you">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>
+              <span>For You</span>
+            </button>
+            <button type="button" class="tab-item active" id="tab-me" aria-current="page">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="tab-icon">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <span>Me</span>
+            </button>
+            `
+                : ''
+            }
+          </nav>
         </div>
       `;
+
+      const onNavigateAway = (tab: 'today' | 'plans' | 'for-you' | 'me') => {
+        activeTab = tab;
+        activeDetail = null;
+        update();
+      };
+      root.querySelector('#desktop-nav-home')?.addEventListener('click', () => onNavigateAway('today'));
+      root.querySelector('#desktop-nav-plans')?.addEventListener('click', () => onNavigateAway('plans'));
+      root.querySelector('#desktop-nav-for-you')?.addEventListener('click', () => onNavigateAway('for-you'));
+      root.querySelector('#desktop-nav-me')?.addEventListener('click', () => onNavigateAway('me'));
+      root.querySelector('#desktop-nav-settings')?.addEventListener('click', () => {
+        modalInvokingId = 'desktop-nav-settings';
+        demoPanelOpen = true;
+        update();
+      });
+      root.querySelector('#tab-home')?.addEventListener('click', () => onNavigateAway('today'));
+      root.querySelector('#tab-plans')?.addEventListener('click', () => onNavigateAway('plans'));
+      root.querySelector('#tab-for-you')?.addEventListener('click', () => onNavigateAway('for-you'));
+      root.querySelector('#tab-me')?.addEventListener('click', () => onNavigateAway('me'));
+
+      const sidebarItems = Array.from(root.querySelectorAll<HTMLButtonElement>('.desktop-left-nav .sidebar-nav-item'));
+      sidebarItems.forEach((btn, index) => {
+        btn.addEventListener('keydown', (e: KeyboardEvent) => {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const nextIndex = (index + 1) % sidebarItems.length;
+            sidebarItems[nextIndex]?.focus();
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const prevIndex = (index - 1 + sidebarItems.length) % sidebarItems.length;
+            sidebarItems[prevIndex]?.focus();
+          }
+        });
+      });
 
       const backBtn = root.querySelector('#btn-connectors-back');
       if (backBtn) {
@@ -2597,32 +2714,46 @@ export function renderApp(
       return;
     }
 
+    let panelState = createInitialPanelState(selectedCardState);
+
+    const rightPanelOpts = {
+      contextMode,
+      panelKind: panelState.activePanel,
+      cardKind: selectedCardState?.cardKind || 'quiet',
+      planId: selectedCardState?.planId ?? nowPlan?.id,
+      planTitle: (nowPlan as any)?.title,
+      planHeadline: nowPlan?.headline,
+      destinationName:
+        contextMode === 'live'
+          ? liveDestination?.name
+          : ((spatialMapEvidence?.placeOrRoute as any)?.name || (nowPlan?.optionsOrSteps?.[0] as any)?.title || 'Piano Studio'),
+      departureTime: nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
+      map: currentV2Composition?.map,
+      candidateCards: currentV2Composition?.candidateCards,
+      liveRoute,
+      liveRouteStatus,
+      liveLocationStatus,
+      liveDestination,
+      liveWeatherSignal,
+      weatherStatusEnabled: weatherStatus.enabled,
+      noRouteReason: getLiveNoRouteReason(),
+      ariaAnnouncement: panelState.ariaAnnouncement,
+    };
+
     root.innerHTML = `
       <div class="app-layout" data-ui-version="${uiVersion}">
-        <header class="header-bar" role="banner">
-          <div class="main-container" style="padding-bottom: 0;">
-            ${
-              uiVersion === 'v2'
-                ? `
-            <div class="v2-header-row">
-              <div class="header-left">
-                <span class="v2-brand-wordmark">Yori</span>
-              </div>
-              <nav class="v2-desktop-nav desktop-nav" aria-label="Desktop Navigation">
-                <button type="button" class="nav-pill ${activeTab === 'today' || activeTab === 'home' ? 'active' : ''}" data-tab="home" id="desktop-nav-home">
-                  Home
-                </button>
-                <button type="button" class="nav-pill ${activeTab === 'plans' ? 'active' : ''}" data-tab="plans" id="desktop-nav-plans">
-                  Plans
-                </button>
-                <button type="button" class="nav-pill ${activeTab === 'for-you' ? 'active' : ''}" data-tab="for-you" id="desktop-nav-for-you">
-                  For You
-                </button>
-                <button type="button" class="nav-pill ${activeTab === 'me' ? 'active' : ''}" data-tab="me" id="desktop-nav-me">
-                  Me
-                </button>
-              </nav>
-              <div class="header-right">
+        ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, false) : ''}
+        <div class="desktop-center-column">
+          <header class="header-bar" role="banner">
+            <div class="main-container" style="padding-bottom: 0;">
+              ${
+                uiVersion === 'v2'
+                  ? `
+              <div class="v2-header-row">
+                <div class="header-left">
+                  <span class="v2-brand-wordmark">Yori</span>
+                </div>
+                <div class="header-right">
                 ${
                   isDevMode
                     ? `
@@ -2791,6 +2922,9 @@ export function renderApp(
           ${mainContentHtml}
           ${uiVersion === 'v2' && (activeTab === 'today' || activeTab === 'home') && !activeDetail ? renderAskBar() : ''}
         </main>
+      </div>
+
+      ${uiVersion === 'v2' ? renderDesktopRightPanel(rightPanelOpts) : ''}
 
         <!-- Bottom Tab Bar (Mobile) -->
         <nav class="bottom-tab-bar" aria-label="Main Navigation">
@@ -3131,6 +3265,7 @@ export function renderApp(
     if (selectEl) {
       selectEl.addEventListener('change', e => {
         currentScene = (e.target as HTMLSelectElement).value as DemoSceneId;
+        selectedCardState = null;
         actionStore.resetToIdle();
         actionStore.clearOverride();
         actionFeedbackMessage = null;
@@ -3145,6 +3280,7 @@ export function renderApp(
     const replayBeforeYouAskBtn = root.querySelector('#btn-replay-before-you-ask') as HTMLButtonElement | null;
     if (replayBeforeYouAskBtn) {
       replayBeforeYouAskBtn.addEventListener('click', () => {
+        selectedCardState = null;
         actionStore.resetToIdle();
         actionStore.clearOverride();
         actionFeedbackMessage = null;
@@ -3162,6 +3298,7 @@ export function renderApp(
 
         setTimeout(() => {
           currentScene = 'rain';
+          selectedCardState = null;
           actionFeedbackMessage = 'Rain forecast arrived · Umbrella recommended';
           update();
 
@@ -3268,6 +3405,129 @@ export function renderApp(
         await checkXMemoStatus();
       });
     }
+
+    const desktopConnectorsBtn = root.querySelector('#desktop-nav-connectors');
+    if (desktopConnectorsBtn) {
+      desktopConnectorsBtn.addEventListener('click', () => {
+        activeDetail = {
+          type: 'connectors',
+          originatingElementId: 'desktop-nav-connectors',
+        };
+        update();
+      });
+    }
+
+    const desktopSettingsBtn = root.querySelector('#desktop-nav-settings');
+    if (desktopSettingsBtn) {
+      desktopSettingsBtn.addEventListener('click', () => {
+        modalInvokingId = 'desktop-nav-settings';
+        demoPanelOpen = true;
+        update();
+      });
+    }
+
+    const sidebarNavItems = Array.from(root.querySelectorAll<HTMLButtonElement>('.desktop-left-nav .sidebar-nav-item'));
+    sidebarNavItems.forEach((btn, index) => {
+      btn.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          const nextIndex = (index + 1) % sidebarNavItems.length;
+          sidebarNavItems[nextIndex]?.focus();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          const prevIndex = (index - 1 + sidebarNavItems.length) % sidebarNavItems.length;
+          sidebarNavItems[prevIndex]?.focus();
+        }
+      });
+    });
+
+    function updateRightPanel(newCard: CardSelectionState) {
+      if (
+        selectedCardState &&
+        selectedCardState.selectedId === newCard.selectedId &&
+        selectedCardState.cardKind === newCard.cardKind
+      ) {
+        return;
+      }
+      selectedCardState = newCard;
+      panelState = panelSelectionReducer(panelState, { type: 'SELECT_CARD', card: newCard });
+      const panelEl = root.querySelector('#desktop-right-panel');
+      if (panelEl) {
+        const newHtml = renderDesktopRightPanel({
+          contextMode,
+          panelKind: panelState.activePanel,
+          cardKind: selectedCardState.cardKind,
+          planId: selectedCardState.planId ?? nowPlan?.id,
+          planTitle: (nowPlan as any)?.title,
+          planHeadline: nowPlan?.headline,
+          destinationName:
+            contextMode === 'live'
+              ? liveDestination?.name
+              : ((spatialMapEvidence?.placeOrRoute as any)?.name || (nowPlan?.optionsOrSteps?.[0] as any)?.title || 'Piano Studio'),
+          departureTime: nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
+          map: currentV2Composition?.map,
+          candidateCards: currentV2Composition?.candidateCards,
+          liveRoute,
+          liveRouteStatus,
+          liveLocationStatus,
+          liveDestination,
+          liveWeatherSignal,
+          weatherStatusEnabled: weatherStatus.enabled,
+          noRouteReason: getLiveNoRouteReason(),
+          ariaAnnouncement: panelState.ariaAnnouncement,
+        });
+        const temp = document.createElement('div');
+        temp.innerHTML = newHtml;
+        const replacement = temp.firstElementChild;
+        if (replacement) {
+          panelEl.replaceWith(replacement);
+        }
+      }
+    }
+
+    const nowCardEl = root.querySelector<HTMLElement>('.now-card');
+    if (nowCardEl && nowPlan) {
+      const onSelectNow = () => {
+        updateRightPanel({
+          selectedId: nowPlan.id || 'hero',
+          cardKind: determineCardKind(nowPlan),
+          planId: nowPlan.id,
+          label: (nowPlan as any)?.title || nowPlan.headline || 'Now plan',
+        });
+      };
+      nowCardEl.addEventListener('focusin', onSelectNow);
+      nowCardEl.addEventListener('click', onSelectNow);
+    }
+
+    root.querySelectorAll<HTMLElement>('.v2-candidate-card').forEach(card => {
+      const candId = card.getAttribute('data-candidate-id');
+      const onSelectCandidate = () => {
+        updateRightPanel({
+          selectedId: candId || 'candidate',
+          cardKind: 'lunch',
+          candidateId: candId ?? undefined,
+          label: card.querySelector('.v2-candidate-name')?.textContent?.trim() || 'Lunch Option',
+        });
+      };
+      card.addEventListener('focusin', onSelectCandidate);
+      card.addEventListener('click', onSelectCandidate);
+    });
+
+    root.querySelectorAll<HTMLElement>('.v2-ahead-card, .ahead-list .item-row[data-plan-id]').forEach(card => {
+      const planId = card.getAttribute('data-plan-id');
+      const onSelectAhead = () => {
+        const aheadPlan = aheadPlans.find(p => p.id === planId);
+        const aheadKind = determineCardKind(aheadPlan);
+        updateRightPanel({
+          selectedId: planId || 'ahead',
+          cardKind: aheadKind,
+          planId: planId ?? undefined,
+          label: (aheadPlan as any)?.title || aheadPlan?.headline || 'Upcoming moment',
+        });
+      };
+      card.addEventListener('focusin', onSelectAhead);
+      card.addEventListener('click', onSelectAhead);
+    });
 
     // 2b. V2 Detail View Interactions (TripDetail & RestaurantDetail)
     if (uiVersion === 'v2') {
