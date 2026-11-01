@@ -157,6 +157,8 @@ export interface HomeCompositionVM {
   readonly apptTimeStr?: string;
   readonly prepareTimeStr?: string;
   readonly leaveTimeStr?: string;
+  readonly arriveTimeStr?: string;
+  readonly countdownStr?: string;
   readonly weatherIssuedTime?: string;
   readonly topCandidateName?: string;
   readonly topCandidateDistance?: string;

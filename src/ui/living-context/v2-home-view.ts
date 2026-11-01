@@ -548,7 +548,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   <span>THOUGHT AHEAD FOR YOU</span>
                 </span>
                 <div class="hero-header-meta">
-                  <span class="now-relative-time">${vm.isRain ? 'in 55m' : 'in 40m'}</span>
+                  <span class="now-relative-time">${escapeHtml(vm.countdownStr || (vm.isRain ? 'in 55m' : 'in 40m'))}</span>
                   <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
                 </div>
               </div>
@@ -892,10 +892,17 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
   const proposals = vm.proposals || [];
 
   const nowTitle = vm.subjectTitle || vm.title;
-  const nowSubtitle = vm.leaveTimeStr
-    ? `Leave by ${vm.leaveTimeStr} · ${vm.apptTimeStr ? `Arrive ${vm.apptTimeStr}` : '25 min drive'}`
+  const arrivePart = vm.arriveTimeStr ? `Arrive ${vm.arriveTimeStr}` : undefined;
+  const apptPart = vm.apptTimeStr ? `Starts ${vm.apptTimeStr}` : undefined;
+  const timingParts = [
+    vm.leaveTimeStr ? `Leave by ${vm.leaveTimeStr}` : undefined,
+    arrivePart,
+    apptPart,
+  ].filter(Boolean);
+  const nowSubtitle = timingParts.length > 0
+    ? timingParts.join(' · ')
     : (vm.headline || 'Active recommendation for your day');
-  const nowCountdown = vm.isRain ? 'in 55m' : 'in 40m';
+  const nowCountdown = vm.countdownStr || (vm.isRain ? 'in 55m' : 'in 40m');
 
   return `
     <div class="v2-sectioned-feed" id="v2-sectioned-feed">

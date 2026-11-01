@@ -2461,6 +2461,9 @@ export function renderApp(
           }
         }
 
+        const effectiveSceneClock =
+          currentScene === 'clear' ? '2026-10-28T20:45:00.000Z' : effectiveSnapshot?.asOf;
+
         const v2Composition = buildHomeComposition({
           plan: nowPlan,
           spatialEvidence: spatialMapEvidence,
@@ -2474,6 +2477,7 @@ export function renderApp(
           planDiff: currentPlanDiff,
           weatherError: weatherError ?? undefined,
           isLoading: isWeatherLoading,
+          sceneClockIso: effectiveSceneClock,
         });
         currentV2Composition = v2Composition;
         v2BodyHtml = renderV2Home(v2Composition);

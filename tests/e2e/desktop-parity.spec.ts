@@ -8,7 +8,6 @@ import { getEvidenceDir } from './helpers/evidence-dir.js';
 import { selectDemoScene } from './helpers/demo-panel.js';
 
 const EVIDENCE_DIR = getEvidenceDir('desktop-parity-1');
-const shouldUpdateEvidence = Boolean(process.env.UPDATE_EVIDENCE === '1');
 
 test.beforeAll(() => {
   if (!fs.existsSync(EVIDENCE_DIR)) {
@@ -32,14 +31,6 @@ test.afterAll(() => {
   }
 });
 
-async function saveEvidence(page: Page, filename: string): Promise<void> {
-  if (shouldUpdateEvidence) {
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, filename),
-      fullPage: false,
-    });
-  }
-}
 
 async function checkAxe(page: Page, context = 'page'): Promise<void> {
   const rules = ['color-contrast', 'button-name', 'heading-order', 'label', 'region'];
@@ -338,7 +329,6 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
 
     await checkNoOverflow(page);
     await checkAxe(page, 'Mobile Viewport 390x844');
-    await saveEvidence(page, 'mobile-390x844-home.png');
   });
 
   test('Matrix: Viewports (1586x992, 1440x900, 1280x800, 390x844) x Views (clear, rain, away-lunch, multi-candidate, for-you)', async ({
@@ -466,11 +456,75 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
       );
 
       if (compositeBase64) {
-        const compositePath = path.join(EVIDENCE_DIR, 'reference-vs-app-rain-1586x992.png');
+        const gitignoredDir = path.resolve('.yori-runtime/evidence/desktop-parity-1');
+        if (!fs.existsSync(gitignoredDir)) {
+          fs.mkdirSync(gitignoredDir, { recursive: true });
+        }
+        const compositePath = path.join(gitignoredDir, 'reference-vs-app-rain-1586x992.png');
         fs.writeFileSync(compositePath, Buffer.from(compositeBase64, 'base64'));
         expect(fs.existsSync(compositePath)).toBe(true);
         expect(fs.statSync(compositePath).size).toBeGreaterThan(100000);
       }
     }
+  });
+
+  test('Timing Adjustment: Changing buffer +15m drops countdowns by 15m and synchronizes Now row Arrive with Right Panel ARRIVE BY', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/?ui=v2&dev=1');
+    await page.waitForSelector('.app-layout[data-ui-version="v2"]');
+    await selectDemoScene(page, 'clear');
+
+    // 1. Initial clear scene assertions
+    const heroCountdown = page.locator('.now-card .now-relative-time');
+    const feedCountdown = page.locator('#feed-section-now .feed-countdown-pill');
+    const feedDesc = page.locator('#feed-section-now .feed-now-desc');
+    const rightPanel = page.locator('#desktop-right-panel');
+
+    await expect(heroCountdown).toHaveText('in 40m');
+    await expect(feedCountdown).toHaveText('in 40m');
+    await expect(feedDesc).toContainText('Arrive 2:50 PM');
+    await expect(feedDesc).toContainText('Starts 3:00 PM');
+
+    const initialPanelLeave = await rightPanel.locator('.trip-stat-cell').nth(0).locator('.trip-stat-val').textContent();
+    const initialPanelArrive = await rightPanel.locator('.trip-stat-cell').nth(1).locator('.trip-stat-val').textContent();
+    expect(initialPanelLeave?.trim()).toBe('2:25 PM');
+    expect(initialPanelArrive?.trim()).toBe('2:50 PM');
+
+    // 2. Click Adjust button to open the timing dialog
+    const adjustBtn = page.locator('#btn-adjust');
+    await expect(adjustBtn).toBeVisible();
+    await adjustBtn.click();
+
+    const adjustDialog = page.locator('#adjust-dialog');
+    await expect(adjustDialog).toBeVisible();
+
+    // 3. Change buffer from 5 to 20 (+15 minutes earlier departure)
+    const bufferInput = page.locator('#input-buffer-minutes');
+    await bufferInput.fill('20');
+
+    // 4. Submit with "For this time only"
+    const forTodayBtn = page.locator('#btn-adjust-for-today');
+    await forTodayBtn.click();
+    await expect(adjustDialog).toBeHidden();
+
+    // 5. Verify countdowns dropped by 15m (from 40m to 25m)
+    await expect(heroCountdown).toHaveText('in 25m');
+    await expect(feedCountdown).toHaveText('in 25m');
+
+    // 6. Verify feed now subtitle updated with new computed arrive time and preserved starts time
+    await expect(feedDesc).toContainText('Leave by 2:10 PM');
+    await expect(feedDesc).toContainText('Arrive 2:35 PM');
+    await expect(feedDesc).toContainText('Starts 3:00 PM');
+
+    // 7. Verify right panel stats match exactly
+    const updatedPanelLeave = await rightPanel.locator('.trip-stat-cell').nth(0).locator('.trip-stat-val').textContent();
+    const updatedPanelArrive = await rightPanel.locator('.trip-stat-cell').nth(1).locator('.trip-stat-val').textContent();
+    expect(updatedPanelLeave?.trim()).toBe('2:10 PM');
+    expect(updatedPanelArrive?.trim()).toBe('2:35 PM');
+
+    // 8. Equality check: feed Now row 'Arrive' matches panel 'ARRIVE BY'
+    expect(await feedDesc.textContent()).toContain(`Arrive ${updatedPanelArrive?.trim()}`);
   });
 });

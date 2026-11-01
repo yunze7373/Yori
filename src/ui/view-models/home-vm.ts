@@ -55,6 +55,26 @@ export interface BuildHomeCompositionOptions {
   planDiff?: HomeCompositionVM['planDiff'];
   weatherError?: string;
   isLoading?: boolean;
+  sceneClockIso?: string;
+}
+
+export function derivePlanCountdown(
+  leaveAtIso: string | undefined,
+  clockIso: string | undefined
+): string | undefined {
+  if (!leaveAtIso || !clockIso) return undefined;
+  const leaveMs = Date.parse(leaveAtIso);
+  const clockMs = Date.parse(clockIso);
+  if (isNaN(leaveMs) || isNaN(clockMs)) return undefined;
+
+  const diffMinutes = Math.round((leaveMs - clockMs) / 60_000);
+  if (diffMinutes <= 0) return 'now';
+  if (diffMinutes >= 60) {
+    const hours = Math.floor(diffMinutes / 60);
+    const mins = diffMinutes % 60;
+    return mins > 0 ? `in ${hours}h ${mins}m` : `in ${hours}h`;
+  }
+  return `in ${diffMinutes}m`;
 }
 
 function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompositionVM {
@@ -432,6 +452,19 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
     const timeline = deriveTimelineVM(plan, snapshot, undefined, bundle);
     const optionCards = deriveOptionCardVMs(plan, userConfirmedKeys, bundle);
 
+    const selectedOption = (
+      plan.optionsOrSteps?.find(o => typeof o === 'object' && o !== null && (o as any).isSelected) ??
+      plan.optionsOrSteps?.find(o => typeof o === 'object' && o !== null)
+    ) as PlanOption | undefined;
+    const travelMinutes = selectedOption?.travelMinutes ?? (selectedOption as any)?.estimatedMinutes ?? 25;
+    const leaveMs = plan.leaveAt ? Date.parse(plan.leaveAt) : NaN;
+    const arriveTimeStr = !isNaN(leaveMs)
+      ? formatTime(new Date(leaveMs + travelMinutes * 60_000).toISOString(), tz)
+      : undefined;
+
+    const effectiveClock = options.sceneClockIso ?? snapshot?.asOf;
+    const countdownStr = derivePlanCountdown(plan.leaveAt, effectiveClock);
+
     return {
       layoutKind: 'journey',
       planId: plan.id,
@@ -456,6 +489,8 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
       apptTimeStr,
       prepareTimeStr: prepareStr,
       leaveTimeStr: leaveStr,
+      arriveTimeStr,
+      countdownStr,
       weatherIssuedTime,
       sourceRef: { recordId: calRecId, field: 'subjectTitle' },
       fieldSourceRefs: {
