@@ -28,8 +28,28 @@ function escapeHtml(str: string): string {
 }
 
 export function getMapTilesConfig(): 'osm' | 'off' {
+  // Test hook: when in test mode, allow window.__YORI_MAP_TILES__ to override
+  if (
+    typeof window !== 'undefined' &&
+    ((typeof (window as any).__YORI_ENABLE_TEST_HOOKS__ !== 'undefined' && (window as any).__YORI_ENABLE_TEST_HOOKS__) ||
+      (typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined' && __YORI_ENABLE_TEST_HOOKS__) ||
+      (import.meta as any).env?.MODE === 'test')
+  ) {
+    const testOverride = (window as any).__YORI_MAP_TILES__;
+    if (testOverride === 'osm' || testOverride === 'off') {
+      return testOverride;
+    }
+  }
+
   const flag = typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_MAP_TILES;
   if (flag === 'off') return 'off';
+  if (flag === 'osm') return 'osm';
+
+  // In test mode, default to 'off' so no test makes un-stubbed external requests
+  if (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test') {
+    return 'off';
+  }
+
   return 'osm';
 }
 
@@ -104,10 +124,17 @@ export function renderRealMapCard(
     `;
   }
 
-  const containerId = `yori-real-map-container-${++mapIdSequence}`;
+  const containerId = options?.isDesktopPanel
+    ? 'yori-desktop-panel-real-map'
+    : (options?.isCompactStrip ? `yori-compact-strip-map-${++mapIdSequence}` : 'yori-trip-detail-real-map');
   const hostId = `${containerId}-host`;
   const sizeClass = options?.isCompactStrip ? 'compact' : (map.sizeHint || 'prominent');
   const tripName = map.destinationName || map.label || 'Trip';
+
+  const tilesConfig = getMapTilesConfig();
+  const liveBadge = 'Map © OSM · route simulated';
+  const fallbackBadge = 'Schematic · simulated';
+  const initialBadge = tilesConfig === 'osm' ? liveBadge : fallbackBadge;
 
   const weatherCalloutHtml = map.weatherCallout
     ? `
@@ -140,7 +167,7 @@ export function renderRealMapCard(
               : `<span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span>`
           }
         </span>
-        <span class="card-badge" ${options?.isDesktopPanel ? 'data-provenance="fixture"' : 'data-slot="chrome" data-slot-reason="Simulated map badge"'}>${escapeHtml(map.simulatedBadge)}</span>
+        <span class="card-badge" ${options?.isDesktopPanel ? 'data-provenance="fixture"' : 'data-slot="chrome" data-slot-reason="Simulated map badge"'}>${initialBadge}</span>
       </div>
 
       <div class="v2-map-canvas${options?.isDesktopPanel ? ' desktop-map-canvas' : ''}${options?.isCompactStrip ? ' compact-canvas' : ''} ${sizeClass}"
@@ -218,9 +245,9 @@ export async function initRealMaps(root: HTMLElement): Promise<void> {
   }
 
   // Clean up any stale map instances whose host element is no longer in the document
-  for (const [id, mapInstance] of activeMaps.entries()) {
-    const container = root.querySelector(`#${id}`);
-    if (!container) {
+  for (const [id, mapInstance] of Array.from(activeMaps.entries())) {
+    const container = document.getElementById(id);
+    if (!container || !document.contains(container)) {
       try {
         mapInstance.remove();
       } catch {}
@@ -259,6 +286,10 @@ export async function initRealMaps(root: HTMLElement): Promise<void> {
     const triggerFallback = () => {
       container.classList.add('map-fallback-active');
       container.setAttribute('data-map-status', 'fallback');
+      const badgeEl = container.closest('.v2-map-card')?.querySelector('.card-badge');
+      if (badgeEl) {
+        badgeEl.textContent = 'Schematic · simulated';
+      }
       if (fallbackEl) {
         fallbackEl.classList.remove('hidden');
         fallbackEl.removeAttribute('aria-hidden');
@@ -283,12 +314,13 @@ export async function initRealMaps(root: HTMLElement): Promise<void> {
       // Wheel-zoom disabled by default to prevent hijacking page scroll
       const mapInstance = L.map(hostEl, {
         scrollWheelZoom: false,
-        zoomControl: true,
+        zoomControl: false,
         fadeAnimation: !prefersReducedMotion,
         zoomAnimation: !prefersReducedMotion,
         markerZoomAnimation: !prefersReducedMotion,
         attributionControl: true,
       });
+      L.control.zoom({ position: 'topright' }).addTo(mapInstance);
       activeMaps.set(containerId, mapInstance);
       (hostEl as any).__leafletMap = mapInstance;
 
@@ -306,6 +338,10 @@ export async function initRealMaps(root: HTMLElement): Promise<void> {
         if (fallbackTimer) clearTimeout(fallbackTimer);
         container.setAttribute('data-map-status', 'ready');
         container.classList.remove('map-fallback-active');
+        const badgeEl = container.closest('.v2-map-card')?.querySelector('.card-badge');
+        if (badgeEl) {
+          badgeEl.textContent = 'Map © OSM · route simulated';
+        }
         if (fallbackEl) fallbackEl.classList.add('hidden');
       });
 
@@ -341,9 +377,10 @@ export async function initRealMaps(root: HTMLElement): Promise<void> {
         pathEl.classList.add('v2-map-route');
       }
 
-      // 4. Fit bounds to route
+      // 4. Fit bounds to route with generous padding so weather callout does not obscure origin marker
       mapInstance.fitBounds(polyline.getBounds(), {
-        padding: [24, 24],
+        paddingTopLeft: [64, 48],
+        paddingBottomRight: [40, 40],
         maxZoom: 16,
         animate: !prefersReducedMotion,
       });

@@ -7,7 +7,7 @@
     "dev": "vite",
     "pretest": "vite build",
     "build": "tsc --noEmit && vite build",
-    "build:test": "tsc --noEmit && vite build --mode test --outDir dist-test",
+    "build:test": "tsc --noEmit && VITE_MAP_TILES=off vite build --mode test --outDir dist-test",
     "preview": "vite preview",
     "preview:test": "vite preview --outDir dist-test",
     "typecheck": "tsc --noEmit",

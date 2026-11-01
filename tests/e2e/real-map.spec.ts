@@ -136,6 +136,11 @@ test.describe('REAL-MAP: Leaflet + OpenStreetMap Interactive Map (INBOX-20261101
       });
     });
 
+    // Enable test-only tile hook for real-map.spec.ts
+    await page.addInitScript(() => {
+      (window as any).__YORI_MAP_TILES__ = 'osm';
+    });
+
     // Guard against any unauthorized external network calls
     page.on('request', req => {
       const url = req.url();
@@ -162,10 +167,19 @@ test.describe('REAL-MAP: Leaflet + OpenStreetMap Interactive Map (INBOX-20261101
     const box = await homeStrip.boundingBox();
     expect(box?.height ?? 0).toBeLessThanOrEqual(140);
 
+    // Strip DOM check: 0 Leaflet containers inside Home strip; 1 in right panel
+    await expect(page.locator('.compact-map-strip .leaflet-container')).toHaveCount(0);
+    await expect(page.locator('#desktop-right-panel .leaflet-container')).toHaveCount(1);
+
     // The rich interactive Leaflet map renders in the desktop right-panel Trip Details
     const rightPanelMap = page.locator('#desktop-right-panel .real-map-container').first();
     await expect(rightPanelMap).toBeVisible();
     await expect(rightPanelMap).toHaveAttribute('data-map-status', 'ready', { timeout: 10000 });
+
+    // Verify live badge: Map © OSM · route simulated
+    const rightPanelBadge = page.locator('#desktop-right-panel .card-badge').first();
+    await expect(rightPanelBadge).toBeVisible();
+    await expect(rightPanelBadge).toHaveText('Map © OSM · route simulated');
 
     // 1. Verify OSM raster tiles rendered inside leaflet-tile-pane
     const tileImages = rightPanelMap.locator('.leaflet-tile-pane img');
@@ -259,6 +273,9 @@ test.describe('REAL-MAP: Leaflet + OpenStreetMap Interactive Map (INBOX-20261101
     await expect(homeStrip).toBeVisible();
     const box = await homeStrip.boundingBox();
     expect(box?.height ?? 0).toBeLessThanOrEqual(140);
+
+    // Strip DOM check: 0 Leaflet containers inside Home strip on mobile
+    await expect(page.locator('.compact-map-strip .leaflet-container')).toHaveCount(0);
     await checkNoOverflow(page);
 
     // 2. Navigate to contextual expansion surface: Trip Details
@@ -269,6 +286,12 @@ test.describe('REAL-MAP: Leaflet + OpenStreetMap Interactive Map (INBOX-20261101
     const tripMap = page.locator('.v2-trip-detail .real-map-container').first();
     await expect(tripMap).toBeVisible();
     await expect(tripMap).toHaveAttribute('data-map-status', 'ready', { timeout: 10000 });
+    await expect(page.locator('.v2-trip-detail .leaflet-container')).toHaveCount(1);
+
+    // Verify live badge: Map © OSM · route simulated
+    const tripBadge = page.locator('.v2-trip-detail .card-badge').first();
+    await expect(tripBadge).toBeVisible();
+    await expect(tripBadge).toHaveText('Map © OSM · route simulated');
 
     // Verify tiles, polyline, attribution, and caption
     await expect(tripMap.locator('.leaflet-tile-pane img').first()).toBeVisible();
@@ -343,6 +366,11 @@ test.describe('REAL-MAP: Leaflet + OpenStreetMap Interactive Map (INBOX-20261101
     await expect(fallbackBanner).toBeVisible();
     await expect(fallbackBanner).toContainText('Map tiles unavailable · schematic shown');
 
+    // Verify fallback badge updates to 'Schematic · simulated'
+    const fallbackBadge = page.locator('#desktop-right-panel .card-badge').first();
+    await expect(fallbackBadge).toBeVisible();
+    await expect(fallbackBadge).toHaveText('Schematic · simulated');
+
     // Verify schematic SVG fallback is visible
     const schematicFallback = rightPanelMap.locator('.schematic-map-fallback');
     await expect(schematicFallback).toBeVisible();
@@ -373,5 +401,34 @@ test.describe('REAL-MAP: Leaflet + OpenStreetMap Interactive Map (INBOX-20261101
     // Assert: zero OSM tile requests initiated
     expect(osmTileRequests).toHaveLength(0);
     expect(externalRequests).toHaveLength(0);
+  });
+
+  test('Global NetGuard: dist-test home load at 1280 makes zero requests outside 127.0.0.1', async ({
+    page,
+  }) => {
+    const nonLoopbackRequests: string[] = [];
+    page.on('request', req => {
+      const url = req.url();
+      if (
+        !url.startsWith('http://localhost') &&
+        !url.startsWith('http://127.0.0.1')
+      ) {
+        nonLoopbackRequests.push(url);
+      }
+    });
+
+    // In dist-test with VITE_MAP_TILES=off, tiles are OFF by default.
+    // Override initScript so window.__YORI_MAP_TILES__ is not set
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.addInitScript(() => {
+      delete (window as any).__YORI_MAP_TILES__;
+    });
+
+    await page.goto('/?ui=v2&dev=1');
+    await page.waitForSelector('.app-layout[data-ui-version="v2"]');
+    await page.waitForTimeout(1000);
+
+    // Assert: absolutely zero external requests leave 127.0.0.1 / localhost
+    expect(nonLoopbackRequests).toHaveLength(0);
   });
 });
