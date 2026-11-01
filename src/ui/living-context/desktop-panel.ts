@@ -32,6 +32,9 @@ export interface DesktopPanelRenderOptions {
   readonly planHeadline?: string;
   readonly destinationName?: string;
   readonly departureTime?: string;
+  readonly arrivalTime?: string;
+  readonly distanceText?: string;
+  readonly trafficText?: string;
   readonly map?: MapVM;
   readonly candidateCards?: readonly CandidateCardVM[];
   readonly liveRoute?: RouteResult | null;
@@ -176,10 +179,21 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
         `;
       }
     } else {
-      // Demo mode travel panel: schematic map + destination weather
-      const destName = opts.destinationName || opts.map?.destinationName || 'Destination';
+      // Demo mode travel panel: schematic map + stat row + destination weather + lunch recommendations
+      const destName = opts.destinationName || opts.map?.destinationName || 'Piano Studio';
+      const leaveTime = opts.departureTime || '2:25 PM';
+      const arriveTime = opts.arrivalTime || '2:49 PM';
+      const distance = opts.distanceText || '6.8 km';
+      const traffic = opts.trafficText || (opts.planHeadline?.includes('Rain') ? 'Moderate (+6 min)' : 'Typical (+0 min)');
+      const candidates = opts.candidateCards || [];
+
       panelBodyHtml = `
         <div class="desktop-panel-section" data-panel-type="route">
+          <div class="desktop-section-header-row">
+            <h3 class="desktop-section-title">Trip Details</h3>
+            <span class="desktop-status-pill on-time" data-provenance="fixture">🟢 On time</span>
+          </div>
+
           ${
             opts.map
               ? renderMapCard(opts.map)
@@ -211,6 +225,27 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
           `
           }
 
+          <!-- 4 Stat Cells Grid -->
+          <div class="trip-stats-grid" data-provenance="fixture">
+            <div class="trip-stat-cell">
+              <span class="trip-stat-label">LEAVE BY</span>
+              <span class="trip-stat-val">${escapeHtml(leaveTime)}</span>
+            </div>
+            <div class="trip-stat-cell">
+              <span class="trip-stat-label">ARRIVE BY</span>
+              <span class="trip-stat-val">${escapeHtml(arriveTime)}</span>
+            </div>
+            <div class="trip-stat-cell">
+              <span class="trip-stat-label">DISTANCE</span>
+              <span class="trip-stat-val">${escapeHtml(distance)}</span>
+            </div>
+            <div class="trip-stat-cell">
+              <span class="trip-stat-label">TRAFFIC</span>
+              <span class="trip-stat-val ${traffic.includes('+6') ? 'traffic-warn' : ''}">${escapeHtml(traffic)}</span>
+            </div>
+          </div>
+
+          <!-- Section 2: Destination Weather -->
           <div class="card desktop-weather-card" data-provenance="fixture">
             <div class="desktop-card-header">
               <span class="section-label">Destination Weather</span>
@@ -218,11 +253,60 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
             </div>
             <div class="desktop-weather-info">
               <div class="desktop-weather-row">
-                <span class="desktop-weather-time">${escapeHtml(opts.departureTime || 'At departure')}</span>
-                <span class="desktop-weather-desc">${escapeHtml(opts.planHeadline?.includes('Rain') ? '18°C · Rain forecast' : '20°C · Clear sky')}</span>
+                <div class="weather-temp-group">
+                  <span class="desktop-weather-temp">${opts.planHeadline?.includes('Rain') ? '18°C' : '20°C'}</span>
+                  <span class="desktop-weather-desc">${opts.planHeadline?.includes('Rain') ? 'Rain forecast' : 'Clear sky'}</span>
+                </div>
+                <span class="desktop-weather-time">${escapeHtml(leaveTime ? `${leaveTime} – 4:00 PM` : 'At departure')}</span>
               </div>
-              <div class="desktop-weather-dest">Location: ${escapeHtml(destName)}</div>
+              <div class="desktop-weather-dest">Location: ${escapeHtml(destName)} (${escapeHtml(distance)} away)</div>
             </div>
+          </div>
+        </div>
+
+        <!-- Section 3: Nearby Lunch Recommendations -->
+        <div class="desktop-panel-section" data-panel-type="places">
+          <div class="desktop-panel-places-header">
+            <h3 class="section-label">Nearby Lunch Recommendations</h3>
+            <span class="card-badge" data-provenance="fixture">Schematic · simulated</span>
+          </div>
+          <p class="desktop-places-sub">Nearby Options & Walking Times · Curated spots near ${escapeHtml(destName)}</p>
+          <div class="desktop-candidates-list">
+            ${
+              candidates.length > 0
+                ? candidates
+                    .map(
+                      c => `
+              <div class="card desktop-candidate-tile ${c.isSelected ? 'selected' : ''}" data-candidate-id="${escapeHtml(c.id)}" data-provenance="fixture">
+                <div class="desktop-candidate-art" role="img" aria-label="Illustration · simulated - ${escapeHtml(c.photo?.altText || c.name)}">
+                  ${c.photo?.svgMarkup || ''}
+                  <span class="desktop-illustration-badge">${escapeHtml(c.photo?.simulatedBadge || 'Illustration')}</span>
+                </div>
+                <div class="desktop-candidate-details">
+                  <div class="desktop-candidate-header-row">
+                    <h4 class="desktop-candidate-title">${escapeHtml(c.name)}</h4>
+                    <span class="desktop-candidate-dist">${escapeHtml(c.distanceText || '5m away')}</span>
+                  </div>
+                  <div class="desktop-candidate-meta">
+                    ${c.cuisine ? `<span class="v2-cuisine-chip">${escapeHtml(c.cuisine)}</span>` : ''}
+                    ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip">Quiet</span>` : ''}
+                    ${c.vegetarian ? `<span class="v2-veg-chip">Vegetarian</span>` : ''}
+                  </div>
+                  <div class="desktop-candidate-basis">
+                    <span class="sparkle-icon" aria-hidden="true">✨</span>
+                    <span>${escapeHtml(c.basis)}</span>
+                  </div>
+                </div>
+              </div>
+            `
+                    )
+                    .join('')
+                : `
+              <div class="card desktop-quiet-card" data-provenance="fixture">
+                <p>No candidate dining places loaded.</p>
+              </div>
+            `
+            }
           </div>
         </div>
       `;
@@ -448,12 +532,14 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
     } else {
       // Demo mode lunch panel: nearby candidates with walking info
       const candidates = opts.candidateCards || [];
+      const destName = opts.destinationName || opts.map?.destinationName || 'Piano Studio';
       panelBodyHtml = `
         <div class="desktop-panel-section" data-panel-type="places">
           <div class="desktop-panel-places-header">
             <h3 class="section-label">Nearby Options & Walking Times</h3>
             <span class="card-badge" data-provenance="fixture">Schematic · simulated</span>
           </div>
+          <p class="desktop-places-sub">Nearby Lunch Recommendations · Curated spots near ${escapeHtml(destName)}</p>
           <div class="desktop-candidates-list">
             ${
               candidates.length > 0
@@ -461,18 +547,24 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                     .map(
                       c => `
               <div class="card desktop-candidate-tile ${c.isSelected ? 'selected' : ''}" data-candidate-id="${escapeHtml(c.id)}" data-provenance="fixture">
-                <div class="desktop-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
-                  ${c.photo.svgMarkup}
-                  <span class="desktop-illustration-badge">${escapeHtml(c.photo.simulatedBadge)}</span>
+                <div class="desktop-candidate-art" role="img" aria-label="Illustration · simulated - ${escapeHtml(c.photo?.altText || c.name)}">
+                  ${c.photo?.svgMarkup || ''}
+                  <span class="desktop-illustration-badge">${escapeHtml(c.photo?.simulatedBadge || 'Illustration')}</span>
                 </div>
                 <div class="desktop-candidate-details">
-                  <h4 class="desktop-candidate-title">${escapeHtml(c.name)}</h4>
-                  <div class="desktop-candidate-meta">
-                    <span class="v2-cuisine-chip">${escapeHtml(c.cuisine)}</span>
-                    <span class="v2-distance-chip">${escapeHtml(c.distanceText)}</span>
-                    ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip">Quiet</span>` : ''}
+                  <div class="desktop-candidate-header-row">
+                    <h4 class="desktop-candidate-title">${escapeHtml(c.name)}</h4>
+                    <span class="desktop-candidate-dist">${escapeHtml(c.distanceText || '5m away')}</span>
                   </div>
-                  <div class="desktop-candidate-basis">${escapeHtml(c.basis)}</div>
+                  <div class="desktop-candidate-meta">
+                    ${c.cuisine ? `<span class="v2-cuisine-chip">${escapeHtml(c.cuisine)}</span>` : ''}
+                    ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip">Quiet</span>` : ''}
+                    ${c.vegetarian ? `<span class="v2-veg-chip">Vegetarian</span>` : ''}
+                  </div>
+                  <div class="desktop-candidate-basis">
+                    <span class="sparkle-icon" aria-hidden="true">✨</span>
+                    <span>${escapeHtml(c.basis)}</span>
+                  </div>
                 </div>
               </div>
             `

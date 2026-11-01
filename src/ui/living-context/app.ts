@@ -143,7 +143,8 @@ import {
 } from './desktop-ia.js';
 import { renderDesktopLeftNav } from './desktop-nav.js';
 import { renderDesktopRightPanel } from './desktop-panel.js';
-import type { HomeCompositionVM } from '../view-models/index.js';
+import { getLocalIllustration } from '../view-models/photo-vm.js';
+import type { HomeCompositionVM, CandidateCardVM } from '../view-models/index.js';
 
 export type DemoSceneId =
   | 'clear'
@@ -1142,6 +1143,19 @@ export function renderApp(
   if (typeof window !== 'undefined') {
     try {
       const p = new URLSearchParams(window.location.search);
+      const urlTab = p.get('tab');
+      if (urlTab === 'for-you') {
+        activeTab = 'for-you';
+      } else if (urlTab === 'plans') {
+        activeTab = 'plans';
+      } else if (urlTab === 'me') {
+        activeTab = 'me';
+      } else if (urlTab === 'today' || urlTab === 'home') {
+        activeTab = 'today';
+      } else if (urlTab === 'connectors') {
+        activeDetail = { type: 'connectors' };
+      }
+
       const devParam = p.get('dev');
       if (devParam === '1' || p.get('test') === '1') {
         isDevMode = true;
@@ -2973,6 +2987,57 @@ export function renderApp(
     const isLive = contextMode === 'live';
     let panelState = createInitialPanelState(selectedCardState);
 
+    const defaultDemoCandidates: readonly CandidateCardVM[] = [
+      {
+        id: 'candidate-1',
+        name: 'Demo Place A · Ramen',
+        cuisine: 'Ramen',
+        distanceMinutes: 5,
+        distanceText: '5m away',
+        basis: 'Matches lunch window · 5 min walk',
+        photo: getLocalIllustration('japanese', 'Demo Place A · Ramen'),
+        isSelected: true,
+      },
+      {
+        id: 'candidate-2',
+        name: 'Demo Place B · Salad',
+        cuisine: 'Salad',
+        distanceMinutes: 7,
+        distanceText: '7m away',
+        basis: 'Healthy option · 7 min walk',
+        photo: getLocalIllustration('salad', 'Demo Place B · Salad'),
+        isSelected: false,
+        vegetarian: true,
+        noiseLevel: 'quiet',
+      },
+      {
+        id: 'candidate-3',
+        name: 'Demo Place C · Sushi',
+        cuisine: 'Sushi',
+        distanceMinutes: 10,
+        distanceText: '10m away',
+        basis: 'Quiet atmosphere · 10 min walk',
+        photo: getLocalIllustration('japanese', 'Demo Place C · Sushi'),
+        isSelected: false,
+        noiseLevel: 'quiet',
+      },
+    ];
+
+    const locConn = latestConnectorStatuses?.location;
+    const locState = locConn?.state === 'connected' ? 'available' : locConn?.state === 'permission_needed' ? 'prompt' : 'unavailable';
+    const locLabel = locConn?.state === 'connected' ? 'Available' : locConn?.state === 'permission_needed' ? 'Prompt' : locConn?.state === 'denied' ? 'Denied' : 'Unavailable';
+    const calLabel = 'N/A';
+    const weatherLabel = contextMode === 'live'
+      ? (weatherStatus.enabled ? 'Open-Meteo' : 'Off')
+      : (currentScene === 'rain' ? 'Rain forecast' : '20°C');
+    const xmemoConn = latestConnectorStatuses?.xmemo;
+    const xmemoLabel = contextMode === 'live'
+      ? (xmemoConn?.state === 'connected' ? 'Connected' : 'Disconnected')
+      : 'Simulated';
+    const notifConn = latestConnectorStatuses?.notifications;
+    const notifState = notifConn?.state === 'connected' ? 'available' : 'unavailable';
+    const notifLabel = notifConn?.state === 'connected' ? 'On' : 'N/A';
+
     const rightPanelOpts = {
       contextMode,
       panelKind:
@@ -2990,9 +3055,16 @@ export function renderApp(
         contextMode === 'live'
           ? (selectedLivePlace?.name || liveDestination?.name)
           : ((spatialMapEvidence?.placeOrRoute as any)?.name || (nowPlan?.optionsOrSteps?.[0] as any)?.title || 'Piano Studio'),
-      departureTime: !isLive && nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
+      departureTime: !isLive && nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : '2:25 PM',
+      arrivalTime: !isLive && nowPlan?.apptAt ? formatTime(nowPlan.apptAt, snapshotTimezone) : '2:49 PM',
+      distanceText: !isLive ? '6.8 km' : undefined,
+      trafficText: !isLive ? (nowPlan?.headline?.includes('Rain') || currentScene === 'rain' ? 'Moderate (+6 min)' : 'Typical (+0 min)') : undefined,
       map: isLive ? undefined : currentV2Composition?.map,
-      candidateCards: isLive ? undefined : currentV2Composition?.candidateCards,
+      candidateCards: isLive
+        ? undefined
+        : (currentV2Composition?.candidateCards && currentV2Composition.candidateCards.length > 0
+            ? currentV2Composition.candidateCards
+            : defaultDemoCandidates),
       liveRoute,
       liveRouteStatus,
       liveLocationStatus,
@@ -3021,172 +3093,192 @@ export function renderApp(
               ${
                 uiVersion === 'v2'
                   ? `
-              <div class="v2-header-row">
-                <div class="header-left">
-                  ${!isDesktopLayout ? `<span class="v2-brand-wordmark">Yori</span>` : ''}
+              <div class="v2-header-container">
+                <div class="desktop-greeting-row">
+                  <div class="greeting-text-group">
+                    ${!isDesktopLayout ? `<div class="v2-mobile-brand-bar"><span class="v2-brand-wordmark">Yori</span></div>` : ''}
+                    <h1 class="greeting-title" id="desktop-greeting-title">${escapeHtml(greeting.greeting)}</h1>
+                    <p class="greeting-subheading desktop-greeting-sub">${escapeHtml(greeting.subheading)}</p>
+                  </div>
+
+                  <div class="desktop-greeting-right">
+                    <div class="desktop-connector-strip" id="desktop-connector-strip" role="region" aria-label="Connectors Status">
+                      <span class="connector-status-chip location" id="chip-status-location" title="Location: ${escapeHtml(locLabel)}">
+                        <span class="connector-chip-icon" aria-hidden="true">📍</span>
+                        <span class="connector-chip-label">Location</span>
+                        <span class="connector-chip-val ${locState}">${escapeHtml(locLabel)}</span>
+                      </span>
+                      <span class="connector-status-chip calendar" id="chip-status-calendar" title="Calendar: Not available yet">
+                        <span class="connector-chip-icon" aria-hidden="true">📅</span>
+                        <span class="connector-chip-label">Calendar</span>
+                        <span class="connector-chip-val unavailable">${calLabel}</span>
+                      </span>
+                      <span class="connector-status-chip weather" id="chip-status-weather" title="Weather: ${escapeHtml(weatherLabel)}">
+                        <span class="connector-chip-icon" aria-hidden="true">🌤️</span>
+                        <span class="connector-chip-label">Weather</span>
+                        <span class="connector-chip-val">${escapeHtml(weatherLabel)}</span>
+                      </span>
+                      <span class="connector-status-chip xmemo" id="chip-status-xmemo" title="Memory: ${escapeHtml(xmemoLabel)}">
+                        <span class="connector-chip-icon" aria-hidden="true">🧠</span>
+                        <span class="connector-chip-label">XMemo</span>
+                        <span class="connector-chip-val">${escapeHtml(xmemoLabel)}</span>
+                      </span>
+                      <span class="connector-status-chip notifications" id="chip-status-alerts" title="Alerts: ${escapeHtml(notifLabel)}">
+                        <span class="connector-chip-icon" aria-hidden="true">🔔</span>
+                        <span class="connector-chip-label">Alerts</span>
+                        <span class="connector-chip-val ${notifState}">${escapeHtml(notifLabel)}</span>
+                      </span>
+                    </div>
+
+                    <div class="desktop-header-controls">
+                      <button
+                        type="button"
+                        class="context-pill ${contextMode === 'live' ? 'live' : 'demo'}"
+                        id="pill-context-status"
+                        aria-label="View sources and truth status"
+                        ${contextMode === 'live' ? `data-provenance="live" data-source="device_clock" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}
+                      >
+                        <div class="context-pill-content">
+                          <div class="context-pill-header">
+                            <span class="context-pill-dot" aria-hidden="true"></span>
+                            <span class="context-pill-title">${contextMode === 'live' ? STRINGS.header.livePill : STRINGS.header.demoPill}</span>
+                            <span class="context-pill-chevron" aria-hidden="true">›</span>
+                          </div>
+                          <div class="context-pill-subtitle" id="pill-subline">${escapeHtml(sourcesSubline)}</div>
+                        </div>
+                      </button>
+
+                      ${
+                        isDevMode
+                          ? `
+                      <button
+                        type="button"
+                        class="btn-dev-demo-controls"
+                        id="btn-dev-demo-controls"
+                        aria-label="Demo controls for presentation"
+                        title="Demo controls (Presentation)"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="3"></circle>
+                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                        <span>Demo controls</span>
+                      </button>
+                      `
+                          : ''
+                      }
+
+                      <button
+                        type="button"
+                        class="header-avatar-btn"
+                        id="btn-header-avatar"
+                        aria-label="Profile and settings"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                          <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div class="header-right">
+
                 ${
-                  isDevMode
+                  weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || !isWeatherStale(liveWeatherSignal))
                     ? `
-                <button
-                  type="button"
-                  class="btn-dev-demo-controls"
-                  id="btn-dev-demo-controls"
-                  aria-label="Demo controls for presentation"
-                  title="Demo controls (Presentation)"
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                  </svg>
-                  <span>Demo controls</span>
-                </button>
+                <div class="weather-attribution" id="weather-attribution" data-provenance="${contextMode === 'live' ? 'live' : 'fixture'}" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal.issuedAt || (liveWeatherSignal.value as any)?.fetchedAt || new Date().toISOString())}">
+                  <a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</a>
+                </div>
                 `
                     : ''
                 }
-                <button
-                  type="button"
-                  class="header-avatar-btn"
-                  id="btn-header-avatar"
-                  aria-label="Profile and settings"
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
+              </div>
+              `
+                  : `
+              <div class="top-meta">
+                <div class="mode-switch-group" role="group" aria-label="Context Mode Switch">
+                  <button type="button" class="btn-mode-toggle ${contextMode === 'demo' ? 'active' : ''}" id="btn-mode-demo" aria-pressed="${contextMode === 'demo' ? 'true' : 'false'}">Demo scenes</button>
+                  <button type="button" class="btn-mode-toggle ${contextMode === 'live' ? 'active' : ''}" id="btn-mode-live" aria-pressed="${contextMode === 'live' ? 'true' : 'false'}">Live context</button>
+                </div>
+                ${
+                  contextMode === 'demo'
+                    ? `
+                <span class="demo-chip" aria-label="Simulation Status">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12A10 10 0 0 1 12 2z"/>
+                    <path d="M12 6v6l4 2"/>
                   </svg>
-                </button>
-              </div>
-            </div>
-            `
-                : `
-            <div class="top-meta">
-              <div class="mode-switch-group" role="group" aria-label="Context Mode Switch">
-                <button type="button" class="btn-mode-toggle ${contextMode === 'demo' ? 'active' : ''}" id="btn-mode-demo" aria-pressed="${contextMode === 'demo' ? 'true' : 'false'}">Demo scenes</button>
-                <button type="button" class="btn-mode-toggle ${contextMode === 'live' ? 'active' : ''}" id="btn-mode-live" aria-pressed="${contextMode === 'live' ? 'true' : 'false'}">Live context</button>
-              </div>
-              ${
-                contextMode === 'demo'
-                  ? `
-              <span class="demo-chip" aria-label="Simulation Status">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10S2 17.523 2 12A10 10 0 0 1 12 2z"/>
-                  <path d="M12 6v6l4 2"/>
-                </svg>
-                ${escapeHtml(STRINGS.header.demoChip)}
-              </span>
-              `
-                  : `
-              <span class="live-context-chip" id="chip-live-context" aria-label="Live Runtime Active">
-                <span class="live-dot" aria-hidden="true"></span>
-                Live context
-              </span>
-              `
-              }
-              ${
-                weatherStatus.enabled && liveWeatherSignal
-                  ? `
-              <span class="live-weather-chip" id="chip-live-weather" aria-label="Live Weather Active">
-                ${escapeHtml(STRINGS.header.liveWeatherBadge)}
-              </span>
-              `
-                  : ''
-              }
+                  ${escapeHtml(STRINGS.header.demoChip)}
+                </span>
+                `
+                    : `
+                <span class="live-context-chip" id="chip-live-context" aria-label="Live Runtime Active">
+                  <span class="live-dot" aria-hidden="true"></span>
+                  Live context
+                </span>
+                `
+                }
+                ${
+                  weatherStatus.enabled && liveWeatherSignal
+                    ? `
+                <span class="live-weather-chip" id="chip-live-weather" aria-label="Live Weather Active">
+                  ${escapeHtml(STRINGS.header.liveWeatherBadge)}
+                </span>
+                `
+                    : ''
+                }
 
-              <!-- Desktop Navigation Links -->
-              <nav class="desktop-nav" aria-label="Desktop Navigation">
-                <button type="button" class="nav-pill ${activeTab === 'today' ? 'active' : ''}" data-tab="today" id="desktop-nav-today">
-                  ${escapeHtml(STRINGS.tabs.today)}
-                </button>
-                <button type="button" class="nav-pill ${activeTab === 'me' ? 'active' : ''}" data-tab="me" id="desktop-nav-me">
-                  ${escapeHtml(STRINGS.tabs.me)}
-                </button>
-              </nav>
+                <!-- Desktop Navigation Links -->
+                <nav class="desktop-nav" aria-label="Desktop Navigation">
+                  <button type="button" class="nav-pill ${activeTab === 'today' ? 'active' : ''}" data-tab="today" id="desktop-nav-today">
+                    ${escapeHtml(STRINGS.tabs.today)}
+                  </button>
+                  <button type="button" class="nav-pill ${activeTab === 'me' ? 'active' : ''}" data-tab="me" id="desktop-nav-me">
+                    ${escapeHtml(STRINGS.tabs.me)}
+                  </button>
+                </nav>
 
-              ${
-                contextMode === 'demo'
-                  ? `
-              <div class="scene-switcher">
-                <label for="scene-select" class="scene-select-label">Demo Scene:</label>
-                <select id="scene-select" class="scene-select" aria-label="Switch Demo Scenario">
-                  <option value="clear" ${currentScene === 'clear' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.clear)}</option>
-                  <option value="rain" ${currentScene === 'rain' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.rain)}</option>
-                  <option value="away-lunch" ${currentScene === 'away-lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.awayLunch)}</option>
-                  <option value="lunch" ${currentScene === 'lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.lunch)}</option>
-                  <option value="busy-lunch" ${currentScene === 'busy-lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.busyLunch)}</option>
-                  <option value="missing-weather" ${currentScene === 'missing-weather' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.missingWeather)}</option>
-                  <option value="corrupt-storage" ${currentScene === 'corrupt-storage' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.corruptStorage)}</option>
-                  <option value="multi-candidate" ${currentScene === 'multi-candidate' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.multiCandidate)}</option>
-                  <option value="fuel" ${currentScene === 'fuel' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.fuel)}</option>
-                </select>
+                ${
+                  contextMode === 'demo'
+                    ? `
+                <div class="scene-switcher">
+                  <label for="scene-select" class="scene-select-label">Demo Scene:</label>
+                  <select id="scene-select" class="scene-select" aria-label="Switch Demo Scenario">
+                    <option value="clear" ${currentScene === 'clear' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.clear)}</option>
+                    <option value="rain" ${currentScene === 'rain' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.rain)}</option>
+                    <option value="away-lunch" ${currentScene === 'away-lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.awayLunch)}</option>
+                    <option value="lunch" ${currentScene === 'lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.lunch)}</option>
+                    <option value="busy-lunch" ${currentScene === 'busy-lunch' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.busyLunch)}</option>
+                    <option value="missing-weather" ${currentScene === 'missing-weather' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.missingWeather)}</option>
+                    <option value="corrupt-storage" ${currentScene === 'corrupt-storage' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.corruptStorage)}</option>
+                    <option value="multi-candidate" ${currentScene === 'multi-candidate' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.multiCandidate)}</option>
+                    <option value="fuel" ${currentScene === 'fuel' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.fuel)}</option>
+                  </select>
+                </div>
+                `
+                    : `
+                <div class="live-runtime-badge-container">
+                  <span class="live-runtime-pill" id="pill-live-runtime">Live Runtime · Device Clock</span>
+                </div>
+                `
+                }
               </div>
-              `
-                  : `
-              <div class="live-runtime-badge-container">
-                <span class="live-runtime-pill" id="pill-live-runtime">Live Runtime · Device Clock</span>
+
+              <div class="greeting-section">
+                <h1 class="greeting-title">${escapeHtml(greeting.greeting)}</h1>
+                <p class="greeting-subheading">${escapeHtml(greeting.subheading)}</p>
+                ${
+                  weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || !isWeatherStale(liveWeatherSignal))
+                    ? `
+                <div class="weather-attribution" id="weather-attribution" data-provenance="${contextMode === 'live' ? 'live' : 'fixture'}" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal.issuedAt || (liveWeatherSignal.value as any)?.fetchedAt || new Date().toISOString())}">
+                  <a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</a>
+                </div>
+                `
+                    : ''
+                }
               </div>
               `
               }
-            </div>
-            `
-            }
-
-            <div class="greeting-section">
-              ${
-                uiVersion === 'v2'
-                  ? `
-              <div class="v2-botanical-leaf" aria-hidden="true">
-                <svg width="68" height="68" viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.12">
-                  <path d="M50 90 C 50 50, 80 30, 90 10 C 70 20, 50 50, 50 90 Z"/>
-                  <path d="M50 90 C 50 50, 20 30, 10 10 C 30 20, 50 50, 50 90 Z"/>
-                  <path d="M50 90 L 50 15"/>
-                  <path d="M50 70 C 60 60, 70 55, 75 50"/>
-                  <path d="M50 70 C 40 60, 30 55, 25 50"/>
-                  <path d="M50 45 C 60 38, 70 32, 75 28"/>
-                  <path d="M50 45 C 40 38, 30 32, 25 28"/>
-                </svg>
-              </div>
-              `
-                  : ''
-              }
-              <h1 class="greeting-title">${escapeHtml(greeting.greeting)}</h1>
-              <p class="greeting-subheading">${escapeHtml(greeting.subheading)}</p>
-
-              ${
-                uiVersion === 'v2'
-                  ? `
-              <div class="v2-context-pill-container">
-                <button
-                  type="button"
-                  class="context-pill ${contextMode === 'live' ? 'live' : 'demo'}"
-                  id="pill-context-status"
-                  aria-label="View sources and truth status"
-                  ${contextMode === 'live' ? `data-provenance="live" data-source="device_clock" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}
-                >
-                  <div class="context-pill-content">
-                    <div class="context-pill-header">
-                      <span class="context-pill-dot" aria-hidden="true"></span>
-                      <span class="context-pill-title">${contextMode === 'live' ? STRINGS.header.livePill : STRINGS.header.demoPill}</span>
-                      <span class="context-pill-chevron" aria-hidden="true">›</span>
-                    </div>
-                    <div class="context-pill-subtitle" id="pill-subline">${escapeHtml(sourcesSubline)}</div>
-                  </div>
-                </button>
-              </div>
-              `
-                  : ''
-              }
-
-              ${
-                weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || !isWeatherStale(liveWeatherSignal))
-                  ? `
-              <div class="weather-attribution" id="weather-attribution" data-provenance="${contextMode === 'live' ? 'live' : 'fixture'}" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal.issuedAt || (liveWeatherSignal.value as any)?.fetchedAt || new Date().toISOString())}">
-                <a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</a>
-              </div>
-              `
-                  : ''
-              }
-            </div>
           </div>
         </header>
 

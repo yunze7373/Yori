@@ -170,25 +170,24 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
     await checkNoOverflow(page);
   });
 
-  test('Right Panel Coherence: Travel Card -> Route & Weather (NO Lunch), Lunch Card -> Nearby Places (NO Route)', async ({
+  test('Right Panel Structure: Reference Dashboard includes Trip Details, Destination Weather, and Lunch Recommendations', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
 
-    // 1. Initial scene: Clear (Travel plan)
-    // Travel panel must render route schematic + destination weather
+    // 1. Initial scene: Clear (Travel plan with reference desktop parity)
+    // Travel panel must render route schematic + destination weather + lunch recommendations
     const rightPanel = page.locator('#desktop-right-panel');
     await expect(rightPanel).toBeVisible();
     await expect(rightPanel.locator('.desktop-panel-section[data-panel-type="route"]')).toBeVisible();
     await expect(rightPanel.locator('.desktop-map-card')).toBeVisible();
     await expect(rightPanel.locator('.desktop-weather-card')).toBeVisible();
+    await expect(rightPanel.locator('.trip-stats-grid')).toBeVisible();
     await expect(rightPanel).toContainText('Destination Weather');
-
-    // Strict coherence: Travel panel must NEVER contain lunch items
-    await expect(rightPanel.locator('.desktop-candidate-tile')).toHaveCount(0);
-    await expect(rightPanel).not.toContainText('Nearby Options & Walking Times');
+    await expect(rightPanel).toContainText('Nearby Lunch Recommendations');
+    await expect(rightPanel.locator('.desktop-candidate-tile').first()).toBeVisible();
 
     // 2. Open Demo Controls and switch to Lunch scene
     await page.locator('#desktop-nav-settings').click();
@@ -201,11 +200,6 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
     await expect(rightPanel.locator('.desktop-panel-section[data-panel-type="places"]')).toBeVisible();
     await expect(rightPanel).toContainText('Nearby Options & Walking Times');
     await expect(rightPanel.locator('.desktop-candidate-tile').first()).toBeVisible();
-
-    // Strict coherence: Lunch panel must NEVER contain route map or destination weather
-    await expect(rightPanel.locator('.desktop-map-card, .v2-map-card')).toHaveCount(0);
-    await expect(rightPanel).not.toContainText('Route Map');
-    await expect(rightPanel).not.toContainText('Destination Weather');
 
     // 3. Aria live announcement check on card selection
     // Selecting another candidate updates panel and aria announcement

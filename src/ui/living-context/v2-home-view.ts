@@ -539,19 +539,18 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           <section class="card now-card v2-journey-card" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="fixture">
             ${renderPlanDiffBanner(vm.planDiff)}
             <div class="v2-card-header">
-              <!-- Compact Category Row (Finding P2) -->
-              <div class="now-category-row">
-                <span class="now-category-badge">
-                  <svg class="category-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <rect x="1" y="3" width="15" height="13"></rect>
-                    <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
-                    <circle cx="5.5" cy="18.5" r="2.5"></circle>
-                    <circle cx="18.5" cy="18.5" r="2.5"></circle>
+              <!-- Hero Thought Badge & Relative Time -->
+              <div class="hero-thought-header">
+                <span class="hero-thought-badge">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right: 4px;">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
                   </svg>
-                  <span>TRAVEL</span>
+                  <span>THOUGHT AHEAD FOR YOU</span>
                 </span>
-                <span class="now-relative-time">${vm.isRain ? 'in 55m' : 'in 40m'}</span>
-                <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+                <div class="hero-header-meta">
+                  <span class="now-relative-time">${vm.isRain ? 'in 55m' : 'in 40m'}</span>
+                  <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+                </div>
               </div>
 
               ${
@@ -603,6 +602,48 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     : ''
                 }
               </div>
+              <!-- 4 Signal Tiles Grid -->
+              <div class="hero-signals-grid" id="hero-signals-grid" role="group" aria-label="Signal Inputs">
+                <div class="signal-tile" id="signal-tile-weather">
+                  <div class="signal-tile-top">
+                    <div class="signal-icon-circle weather" aria-hidden="true">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line></svg>
+                    </div>
+                    <span class="signal-label">WEATHER</span>
+                  </div>
+                  <div class="signal-value">${escapeHtml(vm.isRain ? 'Rain around 2:50 PM' : 'Clear sky · 20°C')}</div>
+                </div>
+
+                <div class="signal-tile" id="signal-tile-calendar">
+                  <div class="signal-tile-top">
+                    <div class="signal-icon-circle calendar" aria-hidden="true">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    </div>
+                    <span class="signal-label">CALENDAR</span>
+                  </div>
+                  <div class="signal-value">${escapeHtml(vm.apptTimeStr ? `${vm.subjectTitle || 'Piano lesson'} at ${vm.apptTimeStr}` : (vm.title || 'Piano lesson at 3:00 PM'))}</div>
+                </div>
+
+                <div class="signal-tile" id="signal-tile-transit">
+                  <div class="signal-tile-top">
+                    <div class="signal-icon-circle transit" aria-hidden="true">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+                    </div>
+                    <span class="signal-label">TRANSIT</span>
+                  </div>
+                  <div class="signal-value">${escapeHtml(vm.options?.[0]?.detail || vm.options?.[0]?.label || (vm.leaveTimeStr ? `Drive · leave ${vm.leaveTimeStr}` : 'Drive · 25 min drive + 5m margin'))}</div>
+                </div>
+
+                <div class="signal-tile" id="signal-tile-memory">
+                  <div class="signal-tile-top">
+                    <div class="signal-icon-circle memory" aria-hidden="true">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.93 7.07"></path></svg>
+                    </div>
+                    <span class="signal-label">MEMORY</span>
+                  </div>
+                  <div class="signal-value">${escapeHtml(vm.habitNote || (vm.isRain ? 'Prefers driving when it rains' : 'Buffer before leaving'))}</div>
+                </div>
+              </div>
             </div>
 
             <!-- Compact Map Strip (<= 140px tall, Finding P2) -->
@@ -616,7 +657,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           </section>
         </div>
 
-        ${renderCollapsibleSecondary(vm)}
+        ${renderSectionedFeed(vm)}
       </div>
     `;
   }
@@ -628,16 +669,18 @@ export function renderV2Home(vm: HomeCompositionVM): string {
       <section class="card now-card v2-candidates-hero" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="fixture">
         ${renderPlanDiffBanner(vm.planDiff)}
         <div class="v2-card-header">
-          <!-- Compact Category Row (Finding P2) -->
-          <div class="now-category-row">
-            <span class="now-category-badge">
-              <svg class="category-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M18 2v20M21 2v6a3 3 0 0 1-3 3M15 2v6a3 3 0 0 0 3 3M3 2v7a4 4 0 0 0 4 4v9M7 2v20"></path>
+          <!-- Hero Thought Badge & Relative Time -->
+          <div class="hero-thought-header">
+            <span class="hero-thought-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right: 4px;">
+                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
               </svg>
-              <span>${escapeHtml(vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'FUEL' : 'LUNCH')}</span>
+              <span>THOUGHT AHEAD FOR YOU</span>
             </span>
-            <span class="now-relative-time">${vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'nearby' : 'nearby · 12:15 PM'}</span>
-            <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+            <div class="hero-header-meta">
+              <span class="now-relative-time">${vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'nearby' : 'nearby · 12:15 PM'}</span>
+              <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+            </div>
           </div>
           <h2 class="now-subject" data-slot="chrome" data-slot-reason="Candidates hero title">${escapeHtml(vm.title)}</h2>
           ${
@@ -681,6 +724,48 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           `
               : ''
           }
+          <!-- 4 Signal Tiles Grid -->
+          <div class="hero-signals-grid" id="hero-signals-grid" role="group" aria-label="Signal Inputs">
+            <div class="signal-tile" id="signal-tile-weather">
+              <div class="signal-tile-top">
+                <div class="signal-icon-circle weather" aria-hidden="true">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line></svg>
+                </div>
+                <span class="signal-label">WEATHER</span>
+              </div>
+              <div class="signal-value">Clear sky · 20°C</div>
+            </div>
+
+            <div class="signal-tile" id="signal-tile-calendar">
+              <div class="signal-tile-top">
+                <div class="signal-icon-circle calendar" aria-hidden="true">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                </div>
+                <span class="signal-label">CALENDAR</span>
+              </div>
+              <div class="signal-value">${escapeHtml(vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'Drive route · ongoing' : 'Lunch break · 12:15 PM')}</div>
+            </div>
+
+            <div class="signal-tile" id="signal-tile-transit">
+              <div class="signal-tile-top">
+                <div class="signal-icon-circle transit" aria-hidden="true">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+                </div>
+                <span class="signal-label">TRANSIT</span>
+              </div>
+              <div class="signal-value">${escapeHtml(vm.topCandidateDistance || '5m away · walk')}</div>
+            </div>
+
+            <div class="signal-tile" id="signal-tile-memory">
+              <div class="signal-tile-top">
+                <div class="signal-icon-circle memory" aria-hidden="true">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.93 7.07"></path></svg>
+                </div>
+                <span class="signal-label">MEMORY</span>
+              </div>
+              <div class="signal-value">${escapeHtml(vm.title === 'Low Fuel Warning' ? 'Low fuel threshold' : 'Prefers quiet dining')}</div>
+            </div>
+          </div>
         </div>
 
         <!-- Candidate Cards with Local Labelled SVG Illustrations -->
@@ -797,78 +882,111 @@ export function renderV2Home(vm: HomeCompositionVM): string {
         ${renderActionRow(vm)}
       </section>
 
-      ${renderCollapsibleSecondary(vm)}
+      ${renderSectionedFeed(vm)}
     </div>
   `;
 }
 
-function renderCollapsibleSecondary(vm: HomeCompositionVM): string {
+function renderSectionedFeed(vm: HomeCompositionVM): string {
   const ahead = vm.aheadItems || [];
   const proposals = vm.proposals || [];
-  // If both are empty, collapse completely! Zero empty placeholder cards!
-  if (ahead.length === 0 && proposals.length === 0) {
-    return '';
-  }
+
+  const nowTitle = vm.subjectTitle || vm.title;
+  const nowSubtitle = vm.leaveTimeStr
+    ? `Leave by ${vm.leaveTimeStr} · ${vm.apptTimeStr ? `Arrive ${vm.apptTimeStr}` : '25 min drive'}`
+    : (vm.headline || 'Active recommendation for your day');
+  const nowCountdown = vm.isRain ? 'In 55m' : (vm.options?.length ? 'In 40m' : 'In 1 hr 15 min');
 
   return `
-    <div class="secondary-grid v2-secondary">
-      ${
-        ahead.length > 0
-          ? `
-        <section aria-label="${escapeHtml(STRINGS.sections.ahead)}">
-          <div class="v2-section-header-row">
-            <h2 class="section-label" data-slot="chrome" data-slot-reason="Secondary section label">${escapeHtml(STRINGS.sections.ahead)}</h2>
-            <button type="button" class="btn-see-all v2-see-all-link" id="link-ahead-see-all" aria-label="See all upcoming plans">See all ›</button>
+    <div class="v2-sectioned-feed" id="v2-sectioned-feed">
+      <!-- Section 1: Now -->
+      <section class="feed-section feed-section-now" id="feed-section-now" aria-label="Now">
+        <div class="feed-section-header">
+          <div class="feed-section-heading-group">
+            <h2 class="feed-section-title">Now</h2>
+            <span class="feed-section-subtitle">What's happening right now.</span>
           </div>
-          <div class="ahead-list">
-            ${ahead
-              .map(
-                item => `
-              <div class="card ahead-card" data-ahead-id="${escapeHtml(item.id)}" data-provenance="fixture" data-slot="chrome" data-slot-reason="Ahead card container">
-                <h3 class="ahead-title" data-slot="chrome" data-slot-reason="Ahead card title">${escapeHtml(item.title)}</h3>
-                <p class="ahead-subtitle" data-slot="chrome" data-slot-reason="Ahead card subtitle">${escapeHtml(item.subtitle)}</p>
-              </div>
-            `
-              )
-              .join('')}
+        </div>
+        <div class="card feed-now-card" data-provenance="fixture">
+          <div class="feed-now-body">
+            <div class="feed-now-text">
+              <h3 class="feed-now-title">${escapeHtml(nowTitle)}</h3>
+              <p class="feed-now-desc">${escapeHtml(nowSubtitle)}</p>
+            </div>
+            <span class="feed-countdown-pill">${escapeHtml(nowCountdown)}</span>
           </div>
-        </section>
-      `
-          : ''
-      }
+        </div>
+      </section>
 
-      ${
-        proposals.length > 0
-          ? `
-        <section aria-label="${escapeHtml(STRINGS.sections.forYou)}">
-          <div class="v2-section-header-row">
-            <h2 class="section-label" data-slot="chrome" data-slot-reason="Secondary section label">${escapeHtml(STRINGS.sections.forYou)}</h2>
-            <button type="button" class="btn-see-all v2-see-all-link" id="link-foryou-see-all" aria-label="See all memory proposals">See all ›</button>
+      <!-- Section 2: Ahead -->
+      <section class="feed-section feed-section-ahead" id="feed-section-ahead" aria-label="${escapeHtml(STRINGS.sections.ahead)}">
+        <div class="feed-section-header">
+          <div class="feed-section-heading-group">
+            <h2 class="feed-section-title">${escapeHtml(STRINGS.sections.ahead)}</h2>
+            <span class="feed-section-subtitle">What's coming up later.</span>
           </div>
-          <div class="for-you-list">
-            ${proposals
-              .map(
-                prop => `
-              <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.basis?.includes('Confirmed') ? 'user' : 'fixture'}" data-slot="chrome" data-slot-reason="Proposal card container">
-                <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Proposal card title">${escapeHtml(prop.title)}</h3>
-                ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Proposal card basis">${escapeHtml(prop.basis)}</p>` : ''}
-                <div class="proposal-actions" style="margin-top: 12px; display: flex; gap: 8px;">
-                  <button type="button" class="btn btn-sm btn-primary btn-confirm-proposal" data-key="${escapeHtml(prop.key)}" aria-label="Confirm preference: ${escapeHtml(prop.title)}">
-                    Confirm
-                  </button>
-                  <button type="button" class="btn btn-sm btn-outline btn-reject-proposal" data-key="${escapeHtml(prop.key)}" aria-label="Reject preference: ${escapeHtml(prop.title)}">
-                    Reject
-                  </button>
-                </div>
+          <button type="button" class="btn-see-all v2-see-all-link" id="link-ahead-see-all" aria-label="See all upcoming plans">See all ›</button>
+        </div>
+        <div class="ahead-list feed-ahead-grid">
+          ${
+            ahead.length > 0
+              ? ahead
+                  .map(
+                    item => `
+            <div class="card ahead-card" data-ahead-id="${escapeHtml(item.id)}" data-provenance="fixture" data-slot="chrome" data-slot-reason="Ahead card container">
+              <h3 class="ahead-title" data-slot="chrome" data-slot-reason="Ahead card title">${escapeHtml(item.title)}</h3>
+              <p class="ahead-subtitle" data-slot="chrome" data-slot-reason="Ahead card subtitle">${escapeHtml(item.subtitle)}</p>
+            </div>
+          `
+                  )
+                  .join('')
+              : `
+            <div class="card ahead-card feed-empty-card" data-provenance="fixture">
+              <p class="ahead-subtitle" style="color: var(--color-muted);">No other plans scheduled for today.</p>
+            </div>
+          `
+          }
+        </div>
+      </section>
+
+      <!-- Section 3: For You -->
+      <section class="feed-section feed-section-foryou" id="feed-section-foryou" aria-label="${escapeHtml(STRINGS.sections.forYou)}">
+        <div class="feed-section-header">
+          <div class="feed-section-heading-group">
+            <h2 class="feed-section-title">${escapeHtml(STRINGS.sections.forYou)}</h2>
+            <span class="feed-section-subtitle">Personalized suggestions, just for you.</span>
+          </div>
+          <button type="button" class="btn-see-all v2-see-all-link" id="link-foryou-see-all" aria-label="See all memory proposals">See all ›</button>
+        </div>
+        <div class="for-you-list">
+          ${
+            proposals.length > 0
+              ? proposals
+                  .map(
+                    prop => `
+            <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.basis?.includes('Confirmed') ? 'user' : 'fixture'}" data-slot="chrome" data-slot-reason="Proposal card container">
+              <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Proposal card title">${escapeHtml(prop.title)}</h3>
+              ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Proposal card basis">${escapeHtml(prop.basis)}</p>` : ''}
+              <div class="proposal-actions" style="margin-top: 12px; display: flex; gap: 8px;">
+                <button type="button" class="btn btn-sm btn-primary btn-confirm-proposal" data-key="${escapeHtml(prop.key)}" aria-label="Confirm preference: ${escapeHtml(prop.title)}">
+                  Confirm
+                </button>
+                <button type="button" class="btn btn-sm btn-outline btn-reject-proposal" data-key="${escapeHtml(prop.key)}" aria-label="Reject preference: ${escapeHtml(prop.title)}">
+                  Reject
+                </button>
               </div>
-            `
-              )
-              .join('')}
-          </div>
-        </section>
-      `
-          : ''
-      }
+            </div>
+          `
+                  )
+                  .join('')
+              : `
+            <div class="card proposal-card feed-empty-card" data-provenance="fixture">
+              <p class="proposal-basis" style="color: var(--color-muted);">No suggestions pending right now.</p>
+            </div>
+          `
+          }
+        </div>
+      </section>
     </div>
   `;
 }

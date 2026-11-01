@@ -5243,6 +5243,419 @@ button.v2-view-detail-link:focus-visible {
   }
 }
 
+/* ==========================================================================
+   DESKTOP-PARITY-1: Reference Layout Parity (Owner Approved Reference)
+   ========================================================================== */
+
+/* Top Greeting Header Row & Connector Status Strip */
+.v2-header-container {
+  width: 100%;
+}
+
+.desktop-greeting-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: var(--space-3, 12px);
+}
+
+.greeting-text-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.desktop-greeting-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.desktop-connector-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E4DCD3);
+  border-radius: 9999px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.connector-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-ink-muted, #5C6F68);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.connector-chip-icon {
+  font-size: 0.75rem;
+}
+
+.connector-chip-label {
+  font-weight: 500;
+  font-size: 0.6875rem;
+  color: var(--color-ink-light, #4A5D56);
+}
+
+.connector-chip-val {
+  font-size: 0.6875rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--color-ink-muted, #5C6F68);
+  font-weight: 600;
+}
+
+.connector-chip-val.available {
+  background: rgba(46, 125, 50, 0.12);
+  color: #1b5e20;
+}
+
+.connector-chip-val.prompt {
+  background: rgba(230, 81, 0, 0.12);
+  color: #b73d00;
+}
+
+.connector-chip-val.unavailable {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--color-ink-muted, #5C6F68);
+}
+
+.desktop-header-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.v2-mobile-brand-bar {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .desktop-connector-strip {
+    display: none !important;
+  }
+  .v2-mobile-brand-bar {
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .desktop-greeting-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+  .desktop-greeting-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* Hero Card "Thought Ahead For You" Header */
+.hero-thought-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3, 12px);
+}
+
+.hero-thought-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-accent, #2D6A4F);
+}
+
+.hero-header-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-mode-icon {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8px;
+  color: var(--color-ink, #162824);
+  flex-shrink: 0;
+}
+
+/* 4 Signal Tiles Grid */
+.hero-signals-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: var(--space-4, 16px);
+  margin-bottom: var(--space-3, 12px);
+}
+
+@media (max-width: 640px) {
+  .hero-signals-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+}
+
+.signal-tile {
+  background: var(--color-ground, #F8F6F0);
+  border: 1px solid var(--color-border, #E4DCD3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.signal-tile-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.signal-icon-circle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface, #FFFFFF);
+  color: var(--color-ink-muted, #5C6F68);
+  flex-shrink: 0;
+}
+
+.signal-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted, #5C6F68);
+}
+
+.signal-value {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-ink, #162824);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sectioned Feed Below Hero */
+.v2-sectioned-feed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5, 24px);
+  margin-top: var(--space-5, 24px);
+}
+
+.feed-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.feed-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feed-section-heading-group {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.feed-section-title {
+  font-family: var(--font-serif, "Newsreader", "Playfair Display", Georgia, serif);
+  font-size: 1.375rem;
+  font-weight: 500;
+  color: var(--color-ink, #162824);
+  margin: 0;
+}
+
+.feed-section-subtitle {
+  font-size: 0.875rem;
+  color: var(--color-ink-muted, #5C6F68);
+}
+
+.feed-now-card {
+  padding: 16px 20px;
+}
+
+.feed-now-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.feed-now-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-now-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+  margin: 0 0 4px 0;
+}
+
+.feed-now-desc {
+  font-size: 0.875rem;
+  color: var(--color-ink-light, #4A5D56);
+  margin: 0;
+}
+
+.feed-countdown-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: var(--color-ground, #F8F6F0);
+  border: 1px solid var(--color-border, #E4DCD3);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+  white-space: nowrap;
+}
+
+.feed-ahead-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .feed-ahead-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.feed-empty-card {
+  padding: 16px 20px;
+}
+
+/* Right Panel Trip Details Stat Row & Lunch Cards */
+.trip-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 12px;
+  background: var(--color-ground, #F8F6F0);
+  border: 1px solid var(--color-border, #E4DCD3);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.trip-stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trip-stat-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted, #5C6F68);
+}
+
+.trip-stat-val {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trip-stat-val.traffic-warn {
+  color: #c62828;
+}
+
+.desktop-section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.desktop-section-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+  margin: 0;
+}
+
+.desktop-status-pill.on-time {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(46, 125, 50, 0.12);
+  color: #1b5e20;
+}
+
+.desktop-places-sub {
+  font-size: 0.75rem;
+  color: var(--color-ink-muted, #5C6F68);
+  margin: 2px 0 10px 0;
+}
+
+.desktop-candidate-header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.desktop-candidate-dist {
+  font-size: 0.75rem;
+  color: var(--color-ink-muted, #5C6F68);
+  white-space: nowrap;
+}
+
+.desktop-candidate-basis {
+  font-size: 0.75rem;
+  color: var(--color-ink-light, #4A5D56);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sparkle-icon {
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.weather-temp-group {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+
 
 
 

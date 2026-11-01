@@ -4,7 +4,7 @@ import type { DesktopPanelRenderOptions } from './desktop-panel.js';
 import type { RouteResult } from '../../adapters/providers/routing-types.js';
 
 describe('Desktop Contextual Detail Panel (S4-DESKTOP-IA)', () => {
-  it('renders route and destination weather for travel card in demo mode without lunch items', () => {
+  it('renders trip details, destination weather, and nearby lunch recommendations for travel card in demo mode', () => {
     const opts: DesktopPanelRenderOptions = {
       contextMode: 'demo',
       panelKind: 'route',
@@ -38,10 +38,10 @@ describe('Desktop Contextual Detail Panel (S4-DESKTOP-IA)', () => {
     expect(html).toContain('Piano Studio');
     expect(html).toContain('Destination Weather');
     expect(html).toContain('Rain forecast');
-
-    // Strict coherence: travel panel must NEVER contain lunch items
-    expect(html).not.toContain('Demo Place A · Ramen');
-    expect(html).not.toContain('Nearby Options & Walking Times');
+    expect(html).toContain('Nearby Lunch Recommendations');
+    expect(html).toContain('Demo Place A · Ramen');
+    expect(html).toContain('LEAVE BY');
+    expect(html).toContain('ARRIVE BY');
   });
 
   it('renders nearby dining places for lunch card in demo mode without route map', () => {
