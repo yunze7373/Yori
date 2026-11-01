@@ -10,11 +10,17 @@ import type { DestinationInfo } from './routing-types.js';
 
 export interface DestinationPort {
   getLiveDestination(): Promise<DestinationInfo | null>;
+  setDestination?(destination: DestinationInfo | null): void;
 }
 
 export class LiveDestinationAdapter implements DestinationPort {
+  private destination: DestinationInfo | null = null;
+
+  setDestination(destination: DestinationInfo | null): void {
+    this.destination = destination;
+  }
+
   async getLiveDestination(): Promise<DestinationInfo | null> {
-    // Zero invented destinations. Returns null until real calendar or geocoder/places connects.
-    return null;
+    return this.destination;
   }
 }

@@ -7,6 +7,7 @@ import { createXMemoProxyMiddleware } from './src/adapters/xmemo/server-proxy.js
 import {
   createWeatherProxyMiddleware,
   createRouteProxyMiddleware,
+  createPlacesProxyMiddleware,
 } from './src/adapters/providers/server-proxy.js';
 
 function modelProxyPlugin(): Plugin {
@@ -65,6 +66,20 @@ function routeProxyPlugin(): Plugin {
   };
 }
 
+function placesProxyPlugin(): Plugin {
+  const middleware = createPlacesProxyMiddleware();
+
+  return {
+    name: 'places-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
+
 /**
  * Vite Configuration for Yori Living Context
  *
@@ -96,6 +111,7 @@ export default defineConfig(({ mode }) => {
       xmemoProxyPlugin(),
       weatherProxyPlugin(),
       routeProxyPlugin(),
+      placesProxyPlugin(),
     ],
     server: {
       port: 5173,

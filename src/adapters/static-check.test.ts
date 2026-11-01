@@ -306,6 +306,19 @@ describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
     }
   });
 
+  it('ensures production client JS bundle contains zero references to overpass-api.de (FAILS if dist/ is missing)', () => {
+    const distDir = path.resolve('dist');
+    expect(fs.existsSync(distDir), 'Production build directory dist/ must exist. Run npm run build first.').toBe(true);
+    const distFiles = collectFiles(distDir);
+    expect(distFiles.length).toBeGreaterThan(0);
+    for (const filePath of distFiles) {
+      if (filePath.endsWith('.js')) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        expect(content, `Forbidden overpass-api.de reference found in client bundle ${filePath}`).not.toContain('overpass-api.de');
+      }
+    }
+  });
+
   it('ensures isFixtureCoord supports both [lat, lon] and GeoJSON [lon, lat] orders and rejects non-fixture coordinates', () => {
     // San Francisco
     expect(isFixtureCoord(37.7749, -122.4194)).toBe(true);

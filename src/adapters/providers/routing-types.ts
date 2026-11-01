@@ -53,6 +53,8 @@ export interface DestinationInfo {
   readonly coordinate: Coordinate;
   readonly name: string;
   readonly address?: string;
+  readonly osmId?: number | string;
+  readonly source?: string;
 }
 
 export function isRouteStale(

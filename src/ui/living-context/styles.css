@@ -4940,6 +4940,13 @@ button.v2-view-detail-link:focus-visible {
     display: none !important;
   }
 
+  /* Hide center Now-card map strip in Live mode when desktop right panel is present (≥1024px) */
+  .app-layout[data-context-mode="live"] .desktop-center-column .now-map-strip,
+  .app-layout[data-context-mode="live"] .desktop-center-column .compact-map-strip,
+  .app-layout[data-context-mode="live"] .desktop-center-column .hero-grid > .map-card {
+    display: none !important;
+  }
+
   /* Right Contextual Detail Panel */
   .desktop-right-panel {
     display: block !important;

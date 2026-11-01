@@ -26,6 +26,16 @@ import {
 } from './routing-types.js';
 import type { RoutingProvider } from './routing-provider.js';
 import { OSRMRouteAdapter } from './osrm-route-adapter.js';
+import type { PlacesProvider } from './places-types.js';
+import {
+  OverpassPlacesAdapter,
+  OVERPASS_ATTRIBUTION,
+  OVERPASS_MAX_RADIUS_METERS,
+  OVERPASS_MIN_OUTBOUND_INTERVAL_MS,
+  roundCoordinate3Decimals,
+  isAllowedAmenity,
+  ALLOWED_AMENITIES,
+} from './overpass-places-adapter.js';
 
 export interface WeatherProxyConfig {
   readonly enabled: boolean;
@@ -373,6 +383,231 @@ export function createRouteProxyMiddleware(
         res.end(
           JSON.stringify({
             error: err?.message || 'Routing provider error',
+          })
+        );
+      }
+      return;
+    }
+
+    // Method Not Allowed / Not Found
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Endpoint not found' }));
+  };
+}
+
+export interface PlacesProxyConfig {
+  readonly enabled: boolean;
+  readonly provider: 'overpass';
+  readonly attribution: string;
+}
+
+export function resolvePlacesConfig(
+  env: NodeJS.ProcessEnv = process.env
+): PlacesProxyConfig {
+  const enabledVal = env['PLACES_LIVE_ENABLED'] || env['VITE_PLACES_LIVE_ENABLED'];
+  const enabled = enabledVal === 'true' || enabledVal === '1';
+  return {
+    enabled,
+    provider: 'overpass',
+    attribution: OVERPASS_ATTRIBUTION,
+  };
+}
+
+let lastOutboundPlacesQueryMs = 0;
+
+export function resetPlacesRateLimit(): void {
+  lastOutboundPlacesQueryMs = 0;
+}
+
+export function createPlacesProxyMiddleware(
+  configOverride?: Partial<PlacesProxyConfig>,
+  adapterOverride?: PlacesProvider
+) {
+  const baseConfig = resolvePlacesConfig();
+  const config: PlacesProxyConfig = {
+    enabled: configOverride?.enabled ?? baseConfig.enabled,
+    provider: configOverride?.provider ?? baseConfig.provider,
+    attribution: configOverride?.attribution ?? baseConfig.attribution,
+  };
+
+  const placesAdapter = adapterOverride ?? new OverpassPlacesAdapter();
+
+  return async function placesProxyMiddleware(
+    req: IncomingMessage,
+    res: ServerResponse,
+    next: () => void
+  ): Promise<void> {
+    const urlStr = req.url || '';
+    const rawPathname = urlStr.split('?')[0] || '';
+
+    // Path-first guard: only intercept /api/places paths
+    if (!rawPathname.startsWith('/api/places')) {
+      return next();
+    }
+
+    const hostHeader = req.headers['host'];
+    let baseUrl = 'http://127.0.0.1:5173';
+    if (hostHeader) {
+      if (!isAllowlistedLoopbackHost(hostHeader) && process.env.DEV_DEVICE_TESTING !== 'true') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Access forbidden: allowlisted loopback host required' }));
+        return;
+      }
+      if (isAllowlistedLoopbackHost(hostHeader)) {
+        baseUrl = `http://${hostHeader.trim()}`;
+      }
+    }
+
+    // Security Guard: Sec-Fetch-Site / Cross-site check
+    const secFetchSite = req.headers['sec-fetch-site'];
+    if (secFetchSite === 'cross-site') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Cross-site requests forbidden' }));
+      return;
+    }
+
+    // Security Guard: Referer check
+    const referer = req.headers['referer'];
+    if (referer && !isLocalOriginOrReferer(referer) && process.env.DEV_DEVICE_TESTING !== 'true') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Untrusted referer' }));
+      return;
+    }
+
+    const parsedUrl = new URL(urlStr, baseUrl);
+    const pathname = parsedUrl.pathname;
+
+    // Route 1: GET /api/places/status
+    if (pathname === '/api/places/status' && req.method === 'GET') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      });
+      res.end(
+        JSON.stringify({
+          enabled: config.enabled,
+          provider: config.provider,
+          attribution: config.attribution,
+        })
+      );
+      return;
+    }
+
+    // Route 2: GET /api/places
+    if ((pathname === '/api/places' || pathname === '/api/places/') && req.method === 'GET') {
+      if (!config.enabled) {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            enabled: false,
+            error: 'Live places is disabled (set PLACES_LIVE_ENABLED=true)',
+            places: [],
+          })
+        );
+        return;
+      }
+
+      const latParam = parsedUrl.searchParams.get('lat');
+      const lngParam = parsedUrl.searchParams.get('lng');
+      const amenityParam = parsedUrl.searchParams.get('amenity') || 'restaurant';
+      const radiusParam = parsedUrl.searchParams.get('radius');
+
+      if (!latParam || !lngParam) {
+        res.writeHead(400, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            error: 'Missing required query parameters: lat and lng',
+          })
+        );
+        return;
+      }
+
+      const lat = parseFloat(latParam);
+      const lng = parseFloat(lngParam);
+      if (Number.isNaN(lat) || Number.isNaN(lng) || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+        res.writeHead(400, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            error: 'Invalid coordinate format for lat/lng',
+          })
+        );
+        return;
+      }
+
+      // Amenity enum validation
+      if (!isAllowedAmenity(amenityParam)) {
+        res.writeHead(400, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            error: `Invalid amenity filter '${amenityParam}'. Allowed: ${ALLOWED_AMENITIES.join(', ')}`,
+          })
+        );
+        return;
+      }
+
+      // Rate limit check: >=10s between outbound queries per server
+      const now = Date.now();
+      if (now - lastOutboundPlacesQueryMs < OVERPASS_MIN_OUTBOUND_INTERVAL_MS) {
+        res.writeHead(429, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            error: 'Rate limit exceeded: minimum 10 seconds between outbound queries',
+          })
+        );
+        return;
+      }
+
+      // Radius cap (<= 1500m)
+      const parsedRadius = radiusParam ? parseInt(radiusParam, 10) : undefined;
+      const radiusMeters = Math.min(Math.max(parsedRadius ?? OVERPASS_MAX_RADIUS_METERS, 100), OVERPASS_MAX_RADIUS_METERS);
+
+      // Coordinate rounding to 3 decimals (~100m) for privacy
+      const roundedLat = roundCoordinate3Decimals(lat);
+      const roundedLng = roundCoordinate3Decimals(lng);
+
+      lastOutboundPlacesQueryMs = Date.now();
+
+      try {
+        const places = await placesAdapter.searchNearby({
+          location: { lat: roundedLat, lng: roundedLng },
+          category: amenityParam,
+          radiusMeters,
+        });
+
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            enabled: true,
+            places,
+            attribution: config.attribution,
+          })
+        );
+      } catch (err: any) {
+        res.writeHead(500, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            error: err?.message || 'Places provider error',
           })
         );
       }

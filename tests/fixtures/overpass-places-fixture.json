@@ -1,0 +1,63 @@
+{
+  "_comment": "Recorded response from OpenStreetMap Overpass API for testing. License: ODbL (Open Database License) © OpenStreetMap contributors. Zero secrets.",
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62",
+  "elements": [
+    {
+      "type": "node",
+      "id": 1001,
+      "lat": 37.7755,
+      "lon": -122.418,
+      "tags": {
+        "name": "Civic Center Diner",
+        "amenity": "restaurant",
+        "cuisine": "american",
+        "opening_hours": "Mo-Fr 08:00-20:00",
+        "addr:street": "Grove St",
+        "addr:housenumber": "100"
+      }
+    },
+    {
+      "type": "node",
+      "id": 1002,
+      "lat": 37.776,
+      "lon": -122.417,
+      "tags": {
+        "name": "Hayes Valley Ramen",
+        "amenity": "restaurant",
+        "cuisine": "ramen;japanese",
+        "opening_hours": "Mo-Su 11:00-22:00",
+        "addr:street": "Hayes St",
+        "addr:housenumber": "350"
+      }
+    },
+    {
+      "type": "node",
+      "id": 1003,
+      "lat": 37.774,
+      "lon": -122.42,
+      "tags": {
+        "name": "Market Street Cafe",
+        "amenity": "cafe",
+        "cuisine": "coffee_shop",
+        "opening_hours": "24/7",
+        "addr:street": "Market St",
+        "addr:housenumber": "1200"
+      }
+    },
+    {
+      "type": "node",
+      "id": 1004,
+      "lat": 37.777,
+      "lon": -122.416,
+      "tags": {
+        "name": "Mission Taqueria",
+        "amenity": "restaurant",
+        "cuisine": "mexican",
+        "opening_hours": "Tu-Su 11:00-21:00",
+        "addr:street": "Mission St",
+        "addr:housenumber": "800"
+      }
+    }
+  ]
+}

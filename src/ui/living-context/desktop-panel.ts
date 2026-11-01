@@ -16,7 +16,9 @@ import { escapeHtml } from './presentation.js';
 import type { CardKind, PanelKind } from './desktop-ia.js';
 import type { MapVM, CandidateCardVM } from '../view-models/index.js';
 import type { RouteResult, RouteStatus, DestinationInfo, NoRouteReason } from '../../adapters/providers/routing-types.js';
+import { NO_ROUTE_REASON_LABELS } from '../../adapters/providers/routing-types.js';
 import type { LocationStatus } from '../../adapters/providers/location-port.js';
+import type { PlaceItem } from '../../adapters/providers/places-types.js';
 import { renderLiveRouteSvg, formatDistance, formatDuration } from './route-geometry.js';
 import { renderMapCard } from './v2-home-view.js';
 import type { RealSignal } from '../../core/contracts/index.js';
@@ -39,12 +41,23 @@ export interface DesktopPanelRenderOptions {
   readonly liveWeatherSignal?: RealSignal<any> | null;
   readonly weatherStatusEnabled?: boolean;
   readonly noRouteReason?: NoRouteReason;
+  readonly livePlacesEnabled?: boolean;
+  readonly livePlacesList?: readonly PlaceItem[];
+  readonly livePlacesLoading?: boolean;
+  readonly livePlacesError?: boolean;
+  readonly selectedLivePlace?: PlaceItem | null;
   readonly ariaAnnouncement?: string;
 }
 
 export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string {
   const isLive = opts.contextMode === 'live';
   const nowIso = new Date().toISOString();
+  const isLocationAvailable =
+    opts.liveLocationStatus?.status === 'available' ||
+    (opts.liveLocationStatus as any)?.status === 'granted';
+  const hasLocation =
+    isLocationAvailable &&
+    (opts.liveLocationStatus?.coords != null || (opts.liveLocationStatus as any)?.latitude != null);
 
   let panelBodyHtml = '';
 
@@ -152,7 +165,7 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                 </div>
                 <div class="live-card-body">
                   <div class="live-card-header">
-                    <h3 class="live-card-title">Route</h3>
+                    <h3 class="live-card-title">${opts.liveDestination ? `Route to ${escapeHtml(opts.liveDestination.name)}` : 'Route'}</h3>
                     <span class="live-source-chip">No Route</span>
                   </div>
                   <p class="live-card-desc">No route available · ${escapeHtml(reasonDesc)}</p>
@@ -217,26 +230,221 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
   } else if (opts.cardKind === 'lunch') {
     // Lunch panel: Nearby options with walking info (L3 seam)
     if (isLive) {
-      panelBodyHtml = `
-        <div class="desktop-panel-section" data-panel-type="places">
-          <div class="live-card live-notice-card notice-places-disabled" id="desktop-notice-places-disabled" role="status" data-provenance="none">
-            <div class="live-card-row">
-              <div class="live-card-icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 2v20M21 2v6a3 3 0 0 1-3 3M15 2v6a3 3 0 0 0 3 3M3 2v7a4 4 0 0 0 4 4v9M7 2v20"></path>
-                </svg>
-              </div>
-              <div class="live-card-body">
-                <div class="live-card-header">
-                  <h3 class="live-card-title">Nearby Places</h3>
-                  <span class="live-source-chip">Owner Gated</span>
+      const isLocationAvailable =
+        opts.liveLocationStatus?.status === 'available' ||
+        (opts.liveLocationStatus as any)?.status === 'granted';
+      const hasLocation =
+        isLocationAvailable &&
+        (opts.liveLocationStatus?.coords != null || (opts.liveLocationStatus as any)?.latitude != null);
+
+      if (!opts.livePlacesEnabled) {
+        panelBodyHtml = `
+          <div class="desktop-panel-section" data-panel-type="places">
+            <div class="live-card live-notice-card notice-places-disabled" id="desktop-notice-places-disabled" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 2v20M21 2v6a3 3 0 0 1-3 3M15 2v6a3 3 0 0 0 3 3M3 2v7a4 4 0 0 0 4 4v9M7 2v20"></path>
+                  </svg>
                 </div>
-                <p class="live-card-desc">Nearby places · not enabled (owner setting)</p>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h3 class="live-card-title">Nearby Places</h3>
+                    <span class="live-source-chip">Owner Gated</span>
+                  </div>
+                  <p class="live-card-desc">Nearby places · not enabled (owner setting)</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      `;
+        `;
+      } else if (!hasLocation) {
+        panelBodyHtml = `
+          <div class="desktop-panel-section" data-panel-type="places">
+            <div class="live-card live-notice-card notice-places-no-location" id="desktop-notice-places-no-location" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h3 class="live-card-title">Nearby Places</h3>
+                    <span class="live-source-chip">Location Required</span>
+                  </div>
+                  <p class="live-card-desc">Share location to find nearby places</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (opts.livePlacesError) {
+        panelBodyHtml = `
+          <div class="desktop-panel-section" data-panel-type="places">
+            <div class="live-card live-notice-card notice-places-error" id="desktop-notice-places-error" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h3 class="live-card-title">Nearby Places</h3>
+                    <span class="live-source-chip">Provider Error</span>
+                  </div>
+                  <p class="live-card-desc">Nearby places unavailable · provider error</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (opts.livePlacesList && opts.livePlacesList.length === 0 && !opts.livePlacesLoading) {
+        panelBodyHtml = `
+          <div class="desktop-panel-section" data-panel-type="places">
+            <div class="live-card live-notice-card notice-places-empty" id="desktop-notice-places-empty" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h3 class="live-card-title">Nearby Places</h3>
+                    <span class="live-source-chip">Empty</span>
+                  </div>
+                  <p class="live-card-desc">No dining options found nearby</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (opts.livePlacesList && opts.livePlacesList.length > 0) {
+        const places = opts.livePlacesList;
+        const fetchedAt = places[0]?.fetchedAt || nowIso;
+        panelBodyHtml = `
+          <div class="desktop-panel-section" data-panel-type="places">
+            <div class="desktop-panel-places-header">
+              <h3 class="section-label">Nearby Dining</h3>
+              <span class="card-badge" data-provenance="live" data-source="overpass" data-fetched-at="${escapeHtml(fetchedAt)}">OpenStreetMap (ODbL)</span>
+            </div>
+            <div class="desktop-candidates-list">
+              ${places
+                .map(
+                  c => `
+                <div class="card desktop-candidate-tile ${opts.selectedLivePlace?.osmId === c.osmId ? 'selected' : ''}" data-candidate-id="${escapeHtml(c.placeId)}" data-osm-id="${escapeHtml(String(c.osmId))}" data-provenance="live" data-source="overpass" data-fetched-at="${escapeHtml(c.fetchedAt)}" role="button" tabindex="0">
+                  <div class="desktop-candidate-details">
+                    <h4 class="desktop-candidate-title">${escapeHtml(c.name)}</h4>
+                    <div class="desktop-candidate-meta">
+                      ${c.cuisine ? `<span class="v2-cuisine-chip">${escapeHtml(c.cuisine)}</span>` : ''}
+                      <span class="v2-distance-chip">${escapeHtml(c.straightLineDistanceLabel || '')}</span>
+                      ${c.openingStatus === 'open' ? `<span class="v2-open-chip">Open now</span>` : ''}
+                      <span class="v2-source-chip">OpenStreetMap via Overpass (ODbL)</span>
+                    </div>
+                    ${(c as any).rankingExplanation ? `<div class="desktop-candidate-basis">${escapeHtml((c as any).rankingExplanation)}</div>` : ''}
+                  </div>
+                </div>
+              `
+                )
+                .join('')}
+            </div>
+            ${
+              opts.selectedLivePlace || opts.liveDestination
+                ? (() => {
+                    const destName = opts.selectedLivePlace?.name || opts.liveDestination?.name || 'Destination';
+                    if (opts.liveRoute && opts.liveDestination) {
+                      return `
+                        <div class="live-card live-route-card" id="desktop-live-route-card" data-provenance="live" data-source="osrm" data-fetched-at="${escapeHtml(opts.liveRoute.fetchedAt)}">
+                          <div class="live-card-row">
+                            <div class="live-card-icon" aria-hidden="true">
+                              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+                              </svg>
+                            </div>
+                            <div class="live-card-body">
+                              <div class="live-card-header">
+                                <h3 class="live-card-title">Route to ${escapeHtml(destName)}</h3>
+                                <span class="live-source-chip">Live · OSRM</span>
+                              </div>
+                              <div class="live-route-metrics">
+                                <span class="live-route-eta">${formatDuration(opts.liveRoute.durationS)}</span>
+                                <span class="live-route-distance">(${formatDistance(opts.liveRoute.distanceM)})</span>
+                              </div>
+                              <div class="live-route-map-container" role="img" aria-label="Route map from current location to ${escapeHtml(destName)}">
+                                ${renderLiveRouteSvg(opts.liveRoute, {
+                                  originLabel: 'Current Location',
+                                  destLabel: destName,
+                                })}
+                              </div>
+                              <div class="live-route-footer">
+                                <div class="live-route-attribution" data-slot="chrome" data-slot-reason="Routing provider attribution">
+                                  Route © OSRM · data © OpenStreetMap contributors
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      `;
+                    } else {
+                      const reason = opts.noRouteReason || 'provider_disabled';
+                      const reasonDesc = NO_ROUTE_REASON_LABELS[reason] || 'provider disabled';
+                      return `
+                        <div class="live-card live-notice-card notice-route-unavailable" id="desktop-notice-route-unavailable" role="status" data-provenance="none" data-no-route-reason="${reason}">
+                          <div class="live-card-row">
+                            <div class="live-card-icon" aria-hidden="true">
+                              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
+                              </svg>
+                            </div>
+                            <div class="live-card-body">
+                              <div class="live-card-header">
+                                <h3 class="live-card-title">Route to ${escapeHtml(destName)}</h3>
+                                <span class="live-source-chip">No Route</span>
+                              </div>
+                              <p class="live-card-desc">No route available · ${escapeHtml(reasonDesc)}</p>
+                            </div>
+                          </div>
+                        </div>
+                      `;
+                    }
+                  })()
+                : ''
+            }
+          </div>
+        `;
+      } else {
+        // Fallback live quiet
+        panelBodyHtml = `
+          <div class="desktop-panel-section" data-panel-type="places">
+            <div class="live-card live-notice-card notice-places-disabled" id="desktop-notice-places-disabled" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 2v20M21 2v6a3 3 0 0 1-3 3M15 2v6a3 3 0 0 0 3 3M3 2v7a4 4 0 0 0 4 4v9M7 2v20"></path>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h3 class="live-card-title">Nearby Places</h3>
+                    <span class="live-source-chip">Owner Gated</span>
+                  </div>
+                  <p class="live-card-desc">Nearby places · not enabled (owner setting)</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
     } else {
       // Demo mode lunch panel: nearby candidates with walking info
       const candidates = opts.candidateCards || [];
@@ -298,7 +506,7 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                   <h3 class="live-card-title">Live Context</h3>
                   <span class="live-source-chip">Live · Neutral</span>
                 </div>
-                <p class="live-card-desc">Nothing selected. Real-time providers ready.</p>
+                <p class="live-card-desc">Nothing selected. Select a card to see details.</p>
               </div>
             </div>
           </div>
@@ -319,6 +527,9 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
               </div>
             </div>
           </div>
+          ${
+            !opts.livePlacesEnabled
+              ? `
           <div class="live-card live-notice-card notice-places-disabled" id="desktop-notice-places-disabled-quiet" role="status" data-provenance="none">
             <div class="live-card-row">
               <div class="live-card-icon" aria-hidden="true">
@@ -335,6 +546,72 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
               </div>
             </div>
           </div>
+          `
+              : !hasLocation
+              ? `
+          <div class="live-card live-notice-card notice-places-no-location" id="desktop-notice-places-no-location-quiet" role="status" data-provenance="none">
+            <div class="live-card-row">
+              <div class="live-card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+              </div>
+              <div class="live-card-body">
+                <div class="live-card-header">
+                  <h3 class="live-card-title">Nearby Places</h3>
+                  <span class="live-source-chip">Location Required</span>
+                </div>
+                <p class="live-card-desc">Share location to find nearby places</p>
+              </div>
+            </div>
+          </div>
+          `
+              : opts.livePlacesError
+              ? `
+          <div class="live-card live-notice-card notice-places-error" id="desktop-notice-places-error-quiet" role="status" data-provenance="none">
+            <div class="live-card-row">
+              <div class="live-card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+              </div>
+              <div class="live-card-body">
+                <div class="live-card-header">
+                  <h3 class="live-card-title">Nearby Places</h3>
+                  <span class="live-source-chip">Provider Error</span>
+                </div>
+                <p class="live-card-desc">Nearby places unavailable · provider error</p>
+              </div>
+            </div>
+          </div>
+          `
+              : opts.livePlacesList && opts.livePlacesList.length === 0 && !opts.livePlacesLoading
+              ? `
+          <div class="live-card live-notice-card notice-places-empty" id="desktop-notice-places-empty-quiet" role="status" data-provenance="none">
+            <div class="live-card-row">
+              <div class="live-card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+              </div>
+              <div class="live-card-body">
+                <div class="live-card-header">
+                  <h3 class="live-card-title">Nearby Places</h3>
+                  <span class="live-source-chip">Empty</span>
+                </div>
+                <p class="live-card-desc">No dining options found nearby</p>
+              </div>
+            </div>
+          </div>
+          `
+              : ''
+          }
         </div>
       `;
     } else {

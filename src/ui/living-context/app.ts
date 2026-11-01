@@ -125,6 +125,11 @@ import {
   isRouteStale,
 } from '../../adapters/providers/routing-types.js';
 import { LiveDestinationAdapter } from '../../adapters/providers/destination-port.js';
+import type { PlaceItem } from '../../adapters/providers/places-types.js';
+import {
+  rankPlacesByConfirmedPreferences,
+  type RankedPlaceItem,
+} from '../../adapters/providers/overpass-places-adapter.js';
 import {
   renderLiveRouteSvg,
   formatDistance,
@@ -1512,6 +1517,115 @@ export function renderApp(
     return 'no_destination';
   }
 
+  // Live Places Seam (L3-REAL-PLACES)
+  let livePlacesStatus: { enabled: boolean; provider?: string; attribution?: string } = { enabled: false };
+  let livePlacesList: readonly RankedPlaceItem[] = [];
+  let livePlacesLoading = false;
+  let livePlacesError = false;
+  let selectedLivePlace: PlaceItem | null = null;
+
+  async function checkPlacesStatus() {
+    try {
+      if (typeof fetch !== 'undefined') {
+        const resp = await fetch('/api/places/status', { cache: 'no-store' });
+        if (resp.ok) {
+          livePlacesStatus = (await resp.json()) as { enabled: boolean; provider?: string; attribution?: string };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    await refreshLivePlaces();
+  }
+
+  async function refreshLivePlaces() {
+    if (contextMode !== 'live') return;
+    if (!livePlacesStatus.enabled) {
+      livePlacesList = [];
+      update();
+      return;
+    }
+
+    const hasLocation =
+      (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted') &&
+      (liveLocationStatus.coords != null || (liveLocationStatus as any).latitude != null);
+
+    const locCoords: [number, number] | null = liveLocationStatus.coords
+      ? [liveLocationStatus.coords.lat, liveLocationStatus.coords.lng]
+      : typeof (liveLocationStatus as any).latitude === 'number' &&
+        typeof (liveLocationStatus as any).longitude === 'number'
+      ? [(liveLocationStatus as any).latitude, (liveLocationStatus as any).longitude]
+      : null;
+
+    if (!hasLocation || !locCoords) {
+      livePlacesList = [];
+      update();
+      return;
+    }
+
+    const [lat, lng] = locCoords;
+    livePlacesLoading = true;
+    update();
+
+    try {
+      const resp = await fetch(`/api/places?lat=${lat}&lng=${lng}&amenity=restaurant&radius=1500`, { cache: 'no-store' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.enabled && Array.isArray(data.places)) {
+          if (!activeLoadedFacts || activeLoadedFacts.length === 0) {
+            try {
+              activeLoadedFacts = await memoryPort.loadFacts();
+            } catch {
+              // ignore
+            }
+          }
+          const confirmedFacts = activeLoadedFacts.filter(f => f.status === 'confirmed');
+          livePlacesList = rankPlacesByConfirmedPreferences(data.places, confirmedFacts);
+          livePlacesError = false;
+          if (selectedCardState == null && livePlacesList.length > 0) {
+            selectedCardState = {
+              selectedId: 'places',
+              cardKind: 'lunch',
+              label: 'Nearby Dining',
+            };
+          }
+        } else {
+          livePlacesList = [];
+          livePlacesError = false;
+        }
+      } else {
+        livePlacesList = [];
+        livePlacesError = true;
+      }
+    } catch {
+      livePlacesList = [];
+      livePlacesError = true;
+    } finally {
+      livePlacesLoading = false;
+      update();
+    }
+  }
+
+  function selectLivePlace(place: PlaceItem) {
+    selectedLivePlace = place;
+    liveDestination = {
+      coordinate: [place.coords.lat, place.coords.lng],
+      name: place.name,
+      address: place.address,
+      osmId: place.osmId,
+      source: 'user-selected place',
+    };
+    liveDestinationPort.setDestination(liveDestination);
+    selectedCardState = {
+      selectedId: `place-${place.osmId}`,
+      cardKind: 'lunch',
+      planId: `place-${place.osmId}`,
+      label: place.name,
+    };
+    void refreshLiveRoute();
+    update();
+  }
+
   let latestConnectorStatuses: Record<ConnectorId, ConnectorStatus> = {
     location: { id: 'location', state: 'unavailable', detail: 'Checking location...', source: 'navigator.permissions', updatedAt: new Date().toISOString() },
     calendar: { id: 'calendar', state: 'unavailable', detail: 'Not available yet', source: 'None', updatedAt: new Date().toISOString() },
@@ -1531,6 +1645,7 @@ export function renderApp(
   void checkXMemoStatus();
   void checkWeatherStatus();
   void checkRouteStatus();
+  void checkPlacesStatus();
   void refreshConnectorStatuses();
 
   function update() {
@@ -1645,7 +1760,13 @@ export function renderApp(
           : (nowPlan?.headline || 'Plan'));
 
     if (contextMode === 'live') {
-      if (liveRoute && liveDestination) {
+      if (selectedLivePlace) {
+        selectedCardState = {
+          selectedId: `place-${selectedLivePlace.osmId}`,
+          cardKind: 'lunch',
+          label: selectedLivePlace.name,
+        };
+      } else if (liveRoute && liveDestination) {
         selectedCardState = {
           selectedId: 'hero-live-route',
           cardKind: 'travel',
@@ -1656,6 +1777,12 @@ export function renderApp(
           selectedId: 'hero-live-dest',
           cardKind: 'travel',
           label: `Destination ${liveDestination.name}`,
+        };
+      } else if (livePlacesList && livePlacesList.length > 0) {
+        selectedCardState = {
+          selectedId: 'live-places',
+          cardKind: 'lunch',
+          label: 'Nearby Dining',
         };
       } else {
         selectedCardState = {
@@ -2060,7 +2187,10 @@ export function renderApp(
               `
             }
 
-            <!-- Nearby Places Section -->
+            <!-- Nearby Places Section (L3-REAL-PLACES) -->
+            ${
+              !livePlacesStatus.enabled
+                ? `
             <div class="live-card live-notice-card" id="notice-places-disabled" role="status" data-provenance="none">
               <div class="live-card-row">
                 <div class="live-card-icon" aria-hidden="true">
@@ -2077,6 +2207,110 @@ export function renderApp(
                 </div>
               </div>
             </div>
+            `
+                : !((liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted') && (liveLocationStatus.coords != null || (liveLocationStatus as any).latitude != null))
+                ? `
+            <div class="live-card live-notice-card" id="notice-places-no-location" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h2 class="live-card-title">Nearby Places</h2>
+                    <span class="live-source-chip">Location Required</span>
+                  </div>
+                  <p class="live-card-desc">Share location to find nearby places</p>
+                </div>
+              </div>
+            </div>
+            `
+                : livePlacesError
+                ? `
+            <div class="live-card live-notice-card" id="notice-places-error" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h2 class="live-card-title">Nearby Places</h2>
+                    <span class="live-source-chip">Provider Error</span>
+                  </div>
+                  <p class="live-card-desc">Nearby places unavailable · provider error</p>
+                </div>
+              </div>
+            </div>
+            `
+                : livePlacesList.length === 0 && !livePlacesLoading
+                ? `
+            <div class="live-card live-notice-card" id="notice-places-empty" role="status" data-provenance="none">
+              <div class="live-card-row">
+                <div class="live-card-icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                </div>
+                <div class="live-card-body">
+                  <div class="live-card-header">
+                    <h2 class="live-card-title">Nearby Places</h2>
+                    <span class="live-source-chip">Empty</span>
+                  </div>
+                  <p class="live-card-desc">No dining options found nearby</p>
+                </div>
+              </div>
+            </div>
+            `
+                : livePlacesList.length > 0
+                ? `
+            <div class="live-places-section" id="live-places-section">
+              <div class="live-places-header">
+                <h2 class="section-label">Nearby Dining</h2>
+                <span class="card-badge" data-provenance="live" data-source="overpass" data-fetched-at="${escapeHtml(livePlacesList[0]?.fetchedAt || new Date().toISOString())}">OpenStreetMap (ODbL)</span>
+              </div>
+              <div class="live-places-list" id="live-places-list">
+                ${livePlacesList
+                  .map(
+                    p => `
+                  <div class="live-card live-place-card ${selectedLivePlace?.osmId === p.osmId ? 'selected' : ''}" id="live-place-card-${p.osmId}" data-candidate-id="${escapeHtml(p.placeId)}" data-osm-id="${escapeHtml(String(p.osmId))}" data-provenance="live" data-source="overpass" data-fetched-at="${escapeHtml(p.fetchedAt)}" role="button" tabindex="0">
+                    <div class="live-card-row">
+                      <div class="live-card-icon" aria-hidden="true">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M18 2v20M21 2v6a3 3 0 0 1-3 3M15 2v6a3 3 0 0 0 3 3M3 2v7a4 4 0 0 0 4 4v9M7 2v20"></path>
+                        </svg>
+                      </div>
+                      <div class="live-card-body">
+                        <div class="live-card-header">
+                          <h3 class="live-card-title">${escapeHtml(p.name)}</h3>
+                          <span class="live-source-chip">OpenStreetMap via Overpass (ODbL)</span>
+                        </div>
+                        <div class="live-place-meta">
+                          ${p.cuisine ? `<span class="v2-cuisine-chip">${escapeHtml(p.cuisine)}</span>` : ''}
+                          <span class="v2-distance-chip">${escapeHtml(p.straightLineDistanceLabel || '')}</span>
+                          ${p.openingStatus === 'open' ? `<span class="v2-open-chip">Open now</span>` : ''}
+                        </div>
+                        ${(p as any).rankingExplanation ? `<p class="live-card-desc">${escapeHtml((p as any).rankingExplanation)}</p>` : ''}
+                      </div>
+                    </div>
+                  </div>
+                `
+                  )
+                  .join('')}
+              </div>
+            </div>
+            `
+                : ''
+            }
 
             <!-- Route Section (L2-ROUTE-MAP) -->
             ${
@@ -2153,7 +2387,7 @@ export function renderApp(
                 </div>
                 <div class="live-card-body">
                   <div class="live-card-header">
-                    <h2 class="live-card-title">Route</h2>
+                    <h2 class="live-card-title">${liveDestination ? `Route to ${escapeHtml(liveDestination.name)}` : 'Route'}</h2>
                     <span class="live-source-chip">No Route</span>
                   </div>
                   <p class="live-card-desc">No route available · ${escapeHtml(reasonDesc)}</p>
@@ -2545,7 +2779,7 @@ export function renderApp(
 
     if (activeDetail?.type === 'connectors') {
       root.innerHTML = `
-        <div class="app-layout" data-ui-version="${uiVersion}">
+        <div class="app-layout" data-ui-version="${uiVersion}" data-context-mode="${contextMode}">
           ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, true, isDesktopLayout) : ''}
           <div class="desktop-center-column">
             ${renderConnectorsView(latestConnectorStatuses)}
@@ -2741,14 +2975,20 @@ export function renderApp(
 
     const rightPanelOpts = {
       contextMode,
-      panelKind: isLive && (!liveDestination && !liveRoute) ? 'quiet' : panelState.activePanel,
-      cardKind: isLive && (!liveDestination && !liveRoute) ? 'quiet' : (selectedCardState?.cardKind || 'quiet'),
+      panelKind:
+        isLive && (!liveDestination && !liveRoute && !selectedLivePlace && selectedCardState?.cardKind !== 'lunch')
+          ? 'quiet'
+          : panelState.activePanel,
+      cardKind:
+        isLive && (!liveDestination && !liveRoute && !selectedLivePlace && selectedCardState?.cardKind !== 'lunch')
+          ? 'quiet'
+          : (selectedCardState?.cardKind || 'quiet'),
       planId: isLive ? undefined : (selectedCardState?.planId ?? nowPlan?.id),
       planTitle: isLive ? undefined : cleanNowTitle,
       planHeadline: isLive ? undefined : nowPlan?.headline,
       destinationName:
         contextMode === 'live'
-          ? liveDestination?.name
+          ? (selectedLivePlace?.name || liveDestination?.name)
           : ((spatialMapEvidence?.placeOrRoute as any)?.name || (nowPlan?.optionsOrSteps?.[0] as any)?.title || 'Piano Studio'),
       departureTime: !isLive && nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
       map: isLive ? undefined : currentV2Composition?.map,
@@ -2760,6 +3000,11 @@ export function renderApp(
       liveWeatherSignal,
       weatherStatusEnabled: weatherStatus.enabled,
       noRouteReason: getLiveNoRouteReason(),
+      livePlacesEnabled: livePlacesStatus.enabled,
+      livePlacesList,
+      livePlacesLoading,
+      livePlacesError,
+      selectedLivePlace,
       ariaAnnouncement: isLive
         ? (liveRoute && liveDestination
             ? `Selected Live route to ${liveDestination.name}.`
@@ -2768,7 +3013,7 @@ export function renderApp(
     };
 
     root.innerHTML = `
-      <div class="app-layout" data-ui-version="${uiVersion}">
+      <div class="app-layout" data-ui-version="${uiVersion}" data-context-mode="${contextMode}">
         ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, false, isDesktopLayout) : ''}
         <div class="desktop-center-column">
           <header class="header-bar" role="banner">
@@ -3267,6 +3512,7 @@ export function renderApp(
         liveLocationStatus = defaultLocationPort.getLocation();
         await refreshConnectorStatuses();
         void checkRouteStatus();
+        void checkPlacesStatus();
         update();
       });
     }
@@ -3285,9 +3531,34 @@ export function renderApp(
         }
         await refreshConnectorStatuses();
         await refreshLiveRoute();
+        await refreshLivePlaces();
         update();
       });
     }
+
+    // Live Place Selection (Mobile place cards + Desktop candidate tiles)
+    const placeElements = root.querySelectorAll('.live-place-card, .desktop-candidate-tile[data-osm-id]');
+    placeElements.forEach(el => {
+      const osmIdStr = el.getAttribute('data-osm-id');
+      if (!osmIdStr) return;
+      const osmId = parseInt(osmIdStr, 10);
+      const place = livePlacesList.find(p => p.osmId === osmId);
+      if (!place) return;
+
+      const handleSelect = (e: Event) => {
+        e.stopPropagation();
+        selectLivePlace(place);
+      };
+
+      el.addEventListener('click', handleSelect);
+      el.addEventListener('keydown', (e: Event) => {
+        const ke = e as KeyboardEvent;
+        if (ke.key === 'Enter' || ke.key === ' ') {
+          ke.preventDefault();
+          handleSelect(e);
+        }
+      });
+    });
 
     // 1. Scene Switcher
     const selectEl = root.querySelector('#scene-select') as HTMLSelectElement | null;
@@ -3484,14 +3755,20 @@ export function renderApp(
       if (panelEl) {
         const newHtml = renderDesktopRightPanel({
           contextMode,
-          panelKind: isLive && (!liveDestination && !liveRoute) ? 'quiet' : panelState.activePanel,
-          cardKind: isLive && (!liveDestination && !liveRoute) ? 'quiet' : selectedCardState.cardKind,
+          panelKind:
+            isLive && (!liveDestination && !liveRoute && !selectedLivePlace && selectedCardState?.cardKind !== 'lunch')
+              ? 'quiet'
+              : panelState.activePanel,
+          cardKind:
+            isLive && (!liveDestination && !liveRoute && !selectedLivePlace && selectedCardState?.cardKind !== 'lunch')
+              ? 'quiet'
+              : selectedCardState.cardKind,
           planId: isLive ? undefined : (selectedCardState.planId ?? nowPlan?.id),
           planTitle: isLive ? undefined : cleanNowTitle,
           planHeadline: isLive ? undefined : nowPlan?.headline,
           destinationName:
             contextMode === 'live'
-              ? liveDestination?.name
+              ? (selectedLivePlace?.name || liveDestination?.name)
               : ((spatialMapEvidence?.placeOrRoute as any)?.name || (nowPlan?.optionsOrSteps?.[0] as any)?.title || 'Piano Studio'),
           departureTime: !isLive && nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
           map: isLive ? undefined : currentV2Composition?.map,
@@ -3503,10 +3780,15 @@ export function renderApp(
           liveWeatherSignal,
           weatherStatusEnabled: weatherStatus.enabled,
           noRouteReason: getLiveNoRouteReason(),
+          livePlacesEnabled: livePlacesStatus.enabled,
+          livePlacesList,
+          livePlacesLoading,
+          livePlacesError,
+          selectedLivePlace,
           ariaAnnouncement: isLive
             ? (liveRoute && liveDestination
                 ? `Selected Live route to ${liveDestination.name}.`
-                : 'Live context. No item selected.')
+                : (selectedLivePlace ? `Selected Live place ${selectedLivePlace.name}.` : 'Live context. No item selected.'))
             : panelState.ariaAnnouncement,
         });
         const temp = document.createElement('div');
