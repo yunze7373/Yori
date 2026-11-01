@@ -19,7 +19,7 @@ This deliverable brings the desktop Home view, header, hero card, and contextual
   - Center column container enforces `overflow-x: hidden` and modal focus restore uses `preventScroll: true` to guarantee zero horizontal shift under the left nav.
 - **Hero Card "THOUGHT AHEAD FOR YOU"**: Equipped with top badge `THOUGHT AHEAD FOR YOU`, headline `#now-title` with transit mode icon, one-sentence rationale, rain checklist chip (`#chip-umbrella`), and a 4-signal tile grid (Weather, Calendar, Transit, Memory).
 - **Structured Sectioned Feed**: Replaced collapsible secondary sections with 3 clear sections:
-  1. *Now*: Event headline, subtitle (`Leave by 2:25 PM · Arrive 2:50 PM · Starts 3:00 PM`), and prominent countdown pill (`in 40m` / `in 55m`). Relative countdown is derived dynamically from the scene clock and plan `leaveAt`. Adjusting buffer by +15m drops both hero and Now row countdowns by 15m to `in 25m`.
+  1. *Now*: Event headline, subtitle (`Leave by 2:25 PM · Arrive 2:50 PM · Starts 3:00 PM`), and prominent countdown pill (`in 4h 25m` for Clear from 10:00 AM snapshot / `in 55m` for Rain from 1:45 PM snapshot). Relative countdown is derived dynamically from `leaveAt` and the scene snapshot clock (`snapshot.asOf`) with zero UI clock overrides. Adjusting buffer by +15m drops both hero and Now row countdowns by 15m (e.g. from `in 4h 25m` to `in 4h 10m`).
   2. *Ahead*: 2-column grid of upcoming plans with "See all ›" link (`#link-ahead-see-all`).
   3. *For You*: Personalized suggestions card with Confirm/Reject actions and "See all ›" link (`#link-foryou-see-all`).
 - **Right Panel Multi-Section Reference Layout & Truthfulness**:
@@ -35,7 +35,7 @@ This deliverable brings the desktop Home view, header, hero card, and contextual
 | Reference Dashboard Feature | Reference Mock Value | Yori Truthful Implementation | Design & Truthfulness Rationale |
 |---|---|---|---|
 | **Trip Stats: Arrive By** | `3:00 PM` (Appt time) | `2:50 PM` (Clear) / `2:55 PM` (Rain) / `2:35 PM` (Adjusted) | Truthful calculation: `leaveMs + travelMin * 60_000`. Conflating arrival time with appointment time erases buffer and violates honest navigation contracts. Now feed subtitle mirrors this exactly: `Leave by 2:25 PM · Arrive 2:50 PM · Starts 3:00 PM`. |
-| **Relative Countdown** | Static `In 1 hr 15 min` | Dynamic `in 40m` (Clear) / `in 55m` (Rain) / `in 25m` (Adjusted) | Derived from `leaveAt - sceneClock`. When timing buffer increases by +15m, countdown drops by exactly 15m in both hero card and Now row. |
+| **Relative Countdown** | Static `In 1 hr 15 min` | Dynamic `in 4h 25m` (Clear) / `in 55m` (Rain) / `in 2h 15m` (Multi-candidate) / `in 4h 10m` (Adjusted) | Derived truthfully from `leaveAt - snapshot.asOf` with zero UI clock overrides. When timing buffer increases by +15m, countdown drops by exactly 15m in both hero card and Now row. |
 | **Trip Stats: Distance & Traffic** | `6.8 km`, `Moderate (+6m)` | Rendered only when present in signal evidence | Fixture data does not invent arbitrary road distances or traffic delays without backing evidence signals. |
 | **Trip Stats: Status Pill** | Static `🟢 On time` | `🟢 On time` / `🔴 Late by Xm` | Evaluated against actual appointment buffer (`apptMs - arriveMs`). Omitted if no appointment is scheduled. |
 | **Destination Weather Timeline** | `2:30 PM – 4:00 PM` | `Issued at 1:35 PM` | Reflects actual signal observation timestamp (`issuedAt`), never an invented future time bracket. |

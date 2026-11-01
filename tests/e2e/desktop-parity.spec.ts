@@ -6,6 +6,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
 import { selectDemoScene } from './helpers/demo-panel.js';
+import { derivePlanCountdown } from '../../src/ui/view-models/home-vm.js';
 
 const EVIDENCE_DIR = getEvidenceDir('desktop-parity-1');
 
@@ -482,8 +483,9 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
     const feedDesc = page.locator('#feed-section-now .feed-now-desc');
     const rightPanel = page.locator('#desktop-right-panel');
 
-    await expect(heroCountdown).toHaveText('in 40m');
-    await expect(feedCountdown).toHaveText('in 40m');
+    const expectedInitialCountdown = derivePlanCountdown('2026-10-28T21:25:00.000Z', '2026-10-28T17:00:00.000Z')!;
+    await expect(heroCountdown).toHaveText(expectedInitialCountdown);
+    await expect(feedCountdown).toHaveText(expectedInitialCountdown);
     await expect(feedDesc).toContainText('Arrive 2:50 PM');
     await expect(feedDesc).toContainText('Starts 3:00 PM');
 
@@ -509,9 +511,10 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
     await forTodayBtn.click();
     await expect(adjustDialog).toBeHidden();
 
-    // 5. Verify countdowns dropped by 15m (from 40m to 25m)
-    await expect(heroCountdown).toHaveText('in 25m');
-    await expect(feedCountdown).toHaveText('in 25m');
+    // 5. Verify countdowns dropped by 15m (derived from new leaveAt: 2026-10-28T21:10:00.000Z)
+    const expectedAdjustedCountdown = derivePlanCountdown('2026-10-28T21:10:00.000Z', '2026-10-28T17:00:00.000Z')!;
+    await expect(heroCountdown).toHaveText(expectedAdjustedCountdown);
+    await expect(feedCountdown).toHaveText(expectedAdjustedCountdown);
 
     // 6. Verify feed now subtitle updated with new computed arrive time and preserved starts time
     await expect(feedDesc).toContainText('Leave by 2:10 PM');

@@ -2461,8 +2461,7 @@ export function renderApp(
           }
         }
 
-        const effectiveSceneClock =
-          currentScene === 'clear' ? '2026-10-28T20:45:00.000Z' : effectiveSnapshot?.asOf;
+        const effectiveSceneClock = effectiveSnapshot?.asOf;
 
         const v2Composition = buildHomeComposition({
           plan: nowPlan,
