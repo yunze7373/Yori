@@ -4734,6 +4734,7 @@ button.v2-view-detail-link:focus-visible {
   display: flex;
   flex-direction: column;
   flex: 1;
+  overflow-x: hidden !important;
 }
 
 /* 2. Tablet Shell (768px - 1023px): Two zones (Collapsed Icon Rail + Center) */
@@ -4744,7 +4745,9 @@ button.v2-view-detail-link:focus-visible {
     min-height: 100vh;
   }
 
-  .app-layout[data-ui-version="v2"] .bottom-tab-bar {
+  .app-layout[data-ui-version="v2"] ~ .bottom-tab-bar,
+  .app-layout[data-ui-version="v2"] .bottom-tab-bar,
+  .bottom-tab-bar {
     display: none !important;
   }
 
@@ -4855,7 +4858,9 @@ button.v2-view-detail-link:focus-visible {
     background-color: var(--color-ground, #F8F6F0);
   }
 
-  .app-layout[data-ui-version="v2"] .bottom-tab-bar {
+  .app-layout[data-ui-version="v2"] ~ .bottom-tab-bar,
+  .app-layout[data-ui-version="v2"] .bottom-tab-bar,
+  .bottom-tab-bar {
     display: none !important; /* Strictly hidden on desktop */
   }
 
@@ -5250,31 +5255,41 @@ button.v2-view-detail-link:focus-visible {
 /* Top Greeting Header Row & Connector Status Strip */
 .v2-header-container {
   width: 100%;
+  margin-bottom: var(--space-4, 16px);
 }
 
 .desktop-greeting-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: var(--space-3, 12px);
+  flex-wrap: wrap;
 }
 
 .greeting-text-group {
   flex: 1;
-  min-width: 0;
+  min-width: 240px;
 }
 
-.desktop-greeting-right {
+.desktop-header-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.desktop-connector-strip-wrapper {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
+  width: 100%;
+  margin-bottom: var(--space-2, 8px);
 }
 
 .desktop-connector-strip {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 4px;
   background: var(--color-surface, #FFFFFF);
   border: 1px solid var(--color-border, #E4DCD3);
@@ -5282,6 +5297,7 @@ button.v2-view-detail-link:focus-visible {
   padding: 3px 8px;
   font-size: 0.75rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  max-width: 100%;
 }
 
 .connector-status-chip {
@@ -5328,17 +5344,12 @@ button.v2-view-detail-link:focus-visible {
   color: var(--color-ink-muted, #5C6F68);
 }
 
-.desktop-header-controls {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .v2-mobile-brand-bar {
   display: none;
 }
 
 @media (max-width: 1023px) {
+  .desktop-connector-strip-wrapper,
   .desktop-connector-strip {
     display: none !important;
   }
@@ -5348,12 +5359,10 @@ button.v2-view-detail-link:focus-visible {
     margin-bottom: 6px;
   }
   .desktop-greeting-row {
-    flex-direction: column;
-    gap: 8px;
-  }
-  .desktop-greeting-right {
-    width: 100%;
+    flex-direction: row;
+    align-items: center;
     justify-content: space-between;
+    gap: 8px;
   }
 }
 
@@ -5447,10 +5456,39 @@ button.v2-view-detail-link:focus-visible {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--color-ink, #162824);
-  line-height: 1.3;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
+}
+
+.hero-prep-line {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-ink-muted, #5C6F68);
+  display: inline;
+}
+
+.hero-leave-headline {
+  font-size: 1.625rem;
+  font-weight: 700;
+  color: var(--color-ink, #162824);
+  display: block;
+  margin-top: 2px;
+  line-height: 1.2;
+}
+
+@media (max-width: 480px) {
+  .hero-leave-headline {
+    font-size: 1.375rem;
+  }
+  .hero-thought-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
 }
 
 /* Sectioned Feed Below Hero */
@@ -5554,7 +5592,7 @@ button.v2-view-detail-link:focus-visible {
 /* Right Panel Trip Details Stat Row & Lunch Cards */
 .trip-stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
   gap: 8px;
   margin-top: 10px;
   margin-bottom: 12px;

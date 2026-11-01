@@ -12,7 +12,7 @@
  * - Announced via aria-live="polite".
  */
 
-import { escapeHtml } from './presentation.js';
+import { escapeHtml, formatTime } from './presentation.js';
 import type { CardKind, PanelKind } from './desktop-ia.js';
 import type { MapVM, CandidateCardVM } from '../view-models/index.js';
 import type { RouteResult, RouteStatus, DestinationInfo, NoRouteReason } from '../../adapters/providers/routing-types.js';
@@ -33,8 +33,10 @@ export interface DesktopPanelRenderOptions {
   readonly destinationName?: string;
   readonly departureTime?: string;
   readonly arrivalTime?: string;
+  readonly statusPill?: string;
   readonly distanceText?: string;
   readonly trafficText?: string;
+  readonly demoWeatherSignal?: RealSignal<any> | null;
   readonly map?: MapVM;
   readonly candidateCards?: readonly CandidateCardVM[];
   readonly liveRoute?: RouteResult | null;
@@ -179,19 +181,24 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
         `;
       }
     } else {
-      // Demo mode travel panel: schematic map + stat row + destination weather + lunch recommendations
+      // Demo mode travel panel: schematic map + stat row + destination weather + lunch recommendations (when present)
       const destName = opts.destinationName || opts.map?.destinationName || 'Piano Studio';
-      const leaveTime = opts.departureTime || '2:25 PM';
-      const arriveTime = opts.arrivalTime || '2:49 PM';
-      const distance = opts.distanceText || '6.8 km';
-      const traffic = opts.trafficText || (opts.planHeadline?.includes('Rain') ? 'Moderate (+6 min)' : 'Typical (+0 min)');
+      const leaveTime = opts.departureTime;
+      const arriveTime = opts.arrivalTime;
+      const distance = opts.distanceText;
+      const traffic = opts.trafficText;
       const candidates = opts.candidateCards || [];
+
+      const weatherTemp = (opts.demoWeatherSignal?.value as any)?.temperatureC ?? (opts.demoWeatherSignal?.value as any)?.temperature ?? (opts.planHeadline?.includes('Rain') ? 18 : 20);
+      const weatherCond = (opts.demoWeatherSignal?.value as any)?.condition ?? (opts.planHeadline?.includes('Rain') ? 'Rain forecast' : 'Clear sky');
+      const weatherIssuedTime = opts.demoWeatherSignal?.issuedAt ? formatTime(opts.demoWeatherSignal.issuedAt, 'America/Los_Angeles') : undefined;
+      const weatherTimeLabel = weatherIssuedTime ? `Issued at ${weatherIssuedTime}` : (leaveTime ? `At ${leaveTime}` : 'Simulated');
 
       panelBodyHtml = `
         <div class="desktop-panel-section" data-panel-type="route">
           <div class="desktop-section-header-row">
             <h3 class="desktop-section-title">Trip Details</h3>
-            <span class="desktop-status-pill on-time" data-provenance="fixture">🟢 On time</span>
+            ${opts.statusPill ? `<span class="desktop-status-pill on-time" data-provenance="fixture">${escapeHtml(opts.statusPill)}</span>` : ''}
           </div>
 
           ${
@@ -225,24 +232,44 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
           `
           }
 
-          <!-- 4 Stat Cells Grid -->
+          <!-- Stat Cells Grid -->
           <div class="trip-stats-grid" data-provenance="fixture">
+            ${
+              leaveTime
+                ? `
             <div class="trip-stat-cell">
               <span class="trip-stat-label">LEAVE BY</span>
               <span class="trip-stat-val">${escapeHtml(leaveTime)}</span>
-            </div>
+            </div>`
+                : ''
+            }
+            ${
+              arriveTime
+                ? `
             <div class="trip-stat-cell">
               <span class="trip-stat-label">ARRIVE BY</span>
               <span class="trip-stat-val">${escapeHtml(arriveTime)}</span>
-            </div>
+            </div>`
+                : ''
+            }
+            ${
+              distance
+                ? `
             <div class="trip-stat-cell">
               <span class="trip-stat-label">DISTANCE</span>
               <span class="trip-stat-val">${escapeHtml(distance)}</span>
-            </div>
+            </div>`
+                : ''
+            }
+            ${
+              traffic
+                ? `
             <div class="trip-stat-cell">
               <span class="trip-stat-label">TRAFFIC</span>
               <span class="trip-stat-val ${traffic.includes('+6') ? 'traffic-warn' : ''}">${escapeHtml(traffic)}</span>
-            </div>
+            </div>`
+                : ''
+            }
           </div>
 
           <!-- Section 2: Destination Weather -->
@@ -254,16 +281,19 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
             <div class="desktop-weather-info">
               <div class="desktop-weather-row">
                 <div class="weather-temp-group">
-                  <span class="desktop-weather-temp">${opts.planHeadline?.includes('Rain') ? '18°C' : '20°C'}</span>
-                  <span class="desktop-weather-desc">${opts.planHeadline?.includes('Rain') ? 'Rain forecast' : 'Clear sky'}</span>
+                  <span class="desktop-weather-temp">${escapeHtml(String(weatherTemp))}°C</span>
+                  <span class="desktop-weather-desc">${escapeHtml(String(weatherCond))}</span>
                 </div>
-                <span class="desktop-weather-time">${escapeHtml(leaveTime ? `${leaveTime} – 4:00 PM` : 'At departure')}</span>
+                <span class="desktop-weather-time">${escapeHtml(weatherTimeLabel)}</span>
               </div>
-              <div class="desktop-weather-dest">Location: ${escapeHtml(destName)} (${escapeHtml(distance)} away)</div>
+              <div class="desktop-weather-dest">Location: ${escapeHtml(destName)}${distance ? ` (${escapeHtml(distance)} away)` : ''}</div>
             </div>
           </div>
         </div>
 
+        ${
+          candidates.length > 0
+            ? `
         <!-- Section 3: Nearby Lunch Recommendations -->
         <div class="desktop-panel-section" data-panel-type="places">
           <div class="desktop-panel-places-header">
@@ -272,11 +302,9 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
           </div>
           <p class="desktop-places-sub">Nearby Options & Walking Times · Curated spots near ${escapeHtml(destName)}</p>
           <div class="desktop-candidates-list">
-            ${
-              candidates.length > 0
-                ? candidates
-                    .map(
-                      c => `
+            ${candidates
+              .map(
+                c => `
               <div class="card desktop-candidate-tile ${c.isSelected ? 'selected' : ''}" data-candidate-id="${escapeHtml(c.id)}" data-provenance="fixture">
                 <div class="desktop-candidate-art" role="img" aria-label="Illustration · simulated - ${escapeHtml(c.photo?.altText || c.name)}">
                   ${c.photo?.svgMarkup || ''}
@@ -299,16 +327,13 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                 </div>
               </div>
             `
-                    )
-                    .join('')
-                : `
-              <div class="card desktop-quiet-card" data-provenance="fixture">
-                <p>No candidate dining places loaded.</p>
-              </div>
-            `
-            }
+              )
+              .join('')}
           </div>
         </div>
+        `
+            : ''
+        }
       `;
     }
   } else if (opts.cardKind === 'lunch') {

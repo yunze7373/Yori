@@ -178,7 +178,7 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
     await page.waitForSelector('.app-layout');
 
     // 1. Initial scene: Clear (Travel plan with reference desktop parity)
-    // Travel panel must render route schematic + destination weather + lunch recommendations
+    // Travel panel must render route schematic + destination weather (zero dining cards per mutual exclusion INV-103)
     const rightPanel = page.locator('#desktop-right-panel');
     await expect(rightPanel).toBeVisible();
     await expect(rightPanel.locator('.desktop-panel-section[data-panel-type="route"]')).toBeVisible();
@@ -186,8 +186,8 @@ test.describe('S4 Desktop IA: Purpose-Built Multi-Zone Layout & Per-Viewport Int
     await expect(rightPanel.locator('.desktop-weather-card')).toBeVisible();
     await expect(rightPanel.locator('.trip-stats-grid')).toBeVisible();
     await expect(rightPanel).toContainText('Destination Weather');
-    await expect(rightPanel).toContainText('Nearby Lunch Recommendations');
-    await expect(rightPanel.locator('.desktop-candidate-tile').first()).toBeVisible();
+    await expect(rightPanel).not.toContainText('Nearby Lunch Recommendations');
+    await expect(rightPanel.locator('.desktop-candidate-tile')).toHaveCount(0);
 
     // 2. Open Demo Controls and switch to Lunch scene
     await page.locator('#desktop-nav-settings').click();

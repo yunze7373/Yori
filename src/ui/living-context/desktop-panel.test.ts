@@ -12,6 +12,8 @@ describe('Desktop Contextual Detail Panel (S4-DESKTOP-IA)', () => {
       destinationName: 'Piano Studio',
       planHeadline: 'Rain forecast · Umbrella needed',
       departureTime: '3:00 PM',
+      arrivalTime: '3:25 PM',
+      statusPill: '🟢 On time',
       candidateCards: [
         {
           id: 'place-1',
@@ -42,6 +44,29 @@ describe('Desktop Contextual Detail Panel (S4-DESKTOP-IA)', () => {
     expect(html).toContain('Demo Place A · Ramen');
     expect(html).toContain('LEAVE BY');
     expect(html).toContain('ARRIVE BY');
+  });
+
+  it('omits lunch recommendations when candidateCards is empty for travel card in demo mode', () => {
+    const opts: DesktopPanelRenderOptions = {
+      contextMode: 'demo',
+      panelKind: 'route',
+      cardKind: 'travel',
+      destinationName: 'Piano Studio',
+      planHeadline: 'Typical traffic · 5m margin',
+      departureTime: '2:25 PM',
+      arrivalTime: '2:50 PM',
+      statusPill: '🟢 On time',
+      candidateCards: [],
+    };
+
+    const html = renderDesktopRightPanel(opts);
+    expect(html).toContain('desktop-right-panel');
+    expect(html).toContain('Trip Details');
+    expect(html).toContain('LEAVE BY');
+    expect(html).toContain('ARRIVE BY');
+    expect(html).toContain('Destination Weather');
+    expect(html).not.toContain('Nearby Lunch Recommendations');
+    expect(html).not.toContain('desktop-candidate-tile');
   });
 
   it('renders nearby dining places for lunch card in demo mode without route map', () => {

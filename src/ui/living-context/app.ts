@@ -37,6 +37,7 @@ import {
 import type {
   SpatialMapEvidence,
   PreparedPlan,
+  PlanOption,
   MemoryFact,
   SuppressionReason,
   ContextSnapshot,
@@ -143,8 +144,7 @@ import {
 } from './desktop-ia.js';
 import { renderDesktopLeftNav } from './desktop-nav.js';
 import { renderDesktopRightPanel } from './desktop-panel.js';
-import { getLocalIllustration } from '../view-models/photo-vm.js';
-import type { HomeCompositionVM, CandidateCardVM } from '../view-models/index.js';
+import type { HomeCompositionVM } from '../view-models/index.js';
 
 export type DemoSceneId =
   | 'clear'
@@ -2987,42 +2987,6 @@ export function renderApp(
     const isLive = contextMode === 'live';
     let panelState = createInitialPanelState(selectedCardState);
 
-    const defaultDemoCandidates: readonly CandidateCardVM[] = [
-      {
-        id: 'candidate-1',
-        name: 'Demo Place A · Ramen',
-        cuisine: 'Ramen',
-        distanceMinutes: 5,
-        distanceText: '5m away',
-        basis: 'Matches lunch window · 5 min walk',
-        photo: getLocalIllustration('japanese', 'Demo Place A · Ramen'),
-        isSelected: true,
-      },
-      {
-        id: 'candidate-2',
-        name: 'Demo Place B · Salad',
-        cuisine: 'Salad',
-        distanceMinutes: 7,
-        distanceText: '7m away',
-        basis: 'Healthy option · 7 min walk',
-        photo: getLocalIllustration('salad', 'Demo Place B · Salad'),
-        isSelected: false,
-        vegetarian: true,
-        noiseLevel: 'quiet',
-      },
-      {
-        id: 'candidate-3',
-        name: 'Demo Place C · Sushi',
-        cuisine: 'Sushi',
-        distanceMinutes: 10,
-        distanceText: '10m away',
-        basis: 'Quiet atmosphere · 10 min walk',
-        photo: getLocalIllustration('japanese', 'Demo Place C · Sushi'),
-        isSelected: false,
-        noiseLevel: 'quiet',
-      },
-    ];
-
     const locConn = latestConnectorStatuses?.location;
     const locState = locConn?.state === 'connected' ? 'available' : locConn?.state === 'permission_needed' ? 'prompt' : 'unavailable';
     const locLabel = locConn?.state === 'connected' ? 'Available' : locConn?.state === 'permission_needed' ? 'Prompt' : locConn?.state === 'denied' ? 'Denied' : 'Unavailable';
@@ -3037,6 +3001,36 @@ export function renderApp(
     const notifConn = latestConnectorStatuses?.notifications;
     const notifState = notifConn?.state === 'connected' ? 'available' : 'unavailable';
     const notifLabel = notifConn?.state === 'connected' ? 'On' : 'N/A';
+
+    const selectedOption = (
+      nowPlan?.optionsOrSteps?.find(o => typeof o === 'object' && o !== null && (o as any).isSelected) ??
+      nowPlan?.optionsOrSteps?.find(o => typeof o === 'object' && o !== null)
+    ) as PlanOption | undefined;
+    const travelMin = selectedOption?.travelMinutes ?? (selectedOption as any)?.estimatedMinutes ?? 25;
+    const leaveMs = !isLive && nowPlan?.leaveAt ? Date.parse(nowPlan.leaveAt) : NaN;
+    const demoArrivalTime = !isLive && !isNaN(leaveMs)
+      ? formatTime(new Date(leaveMs + travelMin * 60_000).toISOString(), snapshotTimezone)
+      : undefined;
+
+    let demoStatusPill: string | undefined;
+    if (!isLive && nowPlan?.apptAt && !isNaN(leaveMs)) {
+      const apptMs = Date.parse(nowPlan.apptAt);
+      const arriveMs = leaveMs + travelMin * 60_000;
+      const bufferMin = Math.round((apptMs - arriveMs) / 60_000);
+      demoStatusPill = bufferMin >= 0 ? '🟢 On time' : `🔴 Late by ${Math.abs(bufferMin)}m`;
+    }
+
+    const demoWeatherSignal = !isLive
+      ? (snapshot?.signals?.find(s => s.kind === 'weather') ?? (nowPlan?.why?.evidenceSignals?.find(s => s.kind === 'weather') as any) ?? null)
+      : null;
+    const demoTrafficSignal = !isLive
+      ? (snapshot?.signals?.find(s => s.kind === 'traffic') ?? (nowPlan?.why?.evidenceSignals?.find(s => s.kind === 'traffic') as any) ?? null)
+      : null;
+    const demoDistanceSignal = !isLive
+      ? (snapshot?.signals?.find(s => s.kind === 'travel_estimate' && (s.value as any)?.distanceText) ?? null)
+      : null;
+    const demoDistanceText = demoDistanceSignal ? (demoDistanceSignal.value as any).distanceText : undefined;
+    const demoTrafficText = demoTrafficSignal ? ((demoTrafficSignal.value as any)?.description || (demoTrafficSignal.value as any)?.text) : undefined;
 
     const rightPanelOpts = {
       contextMode,
@@ -3055,16 +3049,14 @@ export function renderApp(
         contextMode === 'live'
           ? (selectedLivePlace?.name || liveDestination?.name)
           : ((spatialMapEvidence?.placeOrRoute as any)?.name || (nowPlan?.optionsOrSteps?.[0] as any)?.title || 'Piano Studio'),
-      departureTime: !isLive && nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : '2:25 PM',
-      arrivalTime: !isLive && nowPlan?.apptAt ? formatTime(nowPlan.apptAt, snapshotTimezone) : '2:49 PM',
-      distanceText: !isLive ? '6.8 km' : undefined,
-      trafficText: !isLive ? (nowPlan?.headline?.includes('Rain') || currentScene === 'rain' ? 'Moderate (+6 min)' : 'Typical (+0 min)') : undefined,
+      departureTime: !isLive && nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
+      arrivalTime: demoArrivalTime,
+      statusPill: demoStatusPill,
+      distanceText: demoDistanceText,
+      trafficText: demoTrafficText,
       map: isLive ? undefined : currentV2Composition?.map,
-      candidateCards: isLive
-        ? undefined
-        : (currentV2Composition?.candidateCards && currentV2Composition.candidateCards.length > 0
-            ? currentV2Composition.candidateCards
-            : defaultDemoCandidates),
+      candidateCards: isLive ? undefined : currentV2Composition?.candidateCards,
+      demoWeatherSignal,
       liveRoute,
       liveRouteStatus,
       liveLocationStatus,
@@ -3101,85 +3093,85 @@ export function renderApp(
                     <p class="greeting-subheading desktop-greeting-sub">${escapeHtml(greeting.subheading)}</p>
                   </div>
 
-                  <div class="desktop-greeting-right">
-                    <div class="desktop-connector-strip" id="desktop-connector-strip" role="region" aria-label="Connectors Status">
-                      <span class="connector-status-chip location" id="chip-status-location" title="Location: ${escapeHtml(locLabel)}">
-                        <span class="connector-chip-icon" aria-hidden="true">📍</span>
-                        <span class="connector-chip-label">Location</span>
-                        <span class="connector-chip-val ${locState}">${escapeHtml(locLabel)}</span>
-                      </span>
-                      <span class="connector-status-chip calendar" id="chip-status-calendar" title="Calendar: Not available yet">
-                        <span class="connector-chip-icon" aria-hidden="true">📅</span>
-                        <span class="connector-chip-label">Calendar</span>
-                        <span class="connector-chip-val unavailable">${calLabel}</span>
-                      </span>
-                      <span class="connector-status-chip weather" id="chip-status-weather" title="Weather: ${escapeHtml(weatherLabel)}">
-                        <span class="connector-chip-icon" aria-hidden="true">🌤️</span>
-                        <span class="connector-chip-label">Weather</span>
-                        <span class="connector-chip-val">${escapeHtml(weatherLabel)}</span>
-                      </span>
-                      <span class="connector-status-chip xmemo" id="chip-status-xmemo" title="Memory: ${escapeHtml(xmemoLabel)}">
-                        <span class="connector-chip-icon" aria-hidden="true">🧠</span>
-                        <span class="connector-chip-label">XMemo</span>
-                        <span class="connector-chip-val">${escapeHtml(xmemoLabel)}</span>
-                      </span>
-                      <span class="connector-status-chip notifications" id="chip-status-alerts" title="Alerts: ${escapeHtml(notifLabel)}">
-                        <span class="connector-chip-icon" aria-hidden="true">🔔</span>
-                        <span class="connector-chip-label">Alerts</span>
-                        <span class="connector-chip-val ${notifState}">${escapeHtml(notifLabel)}</span>
-                      </span>
-                    </div>
-
-                    <div class="desktop-header-controls">
-                      <button
-                        type="button"
-                        class="context-pill ${contextMode === 'live' ? 'live' : 'demo'}"
-                        id="pill-context-status"
-                        aria-label="View sources and truth status"
-                        ${contextMode === 'live' ? `data-provenance="live" data-source="device_clock" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}
-                      >
-                        <div class="context-pill-content">
-                          <div class="context-pill-header">
-                            <span class="context-pill-dot" aria-hidden="true"></span>
-                            <span class="context-pill-title">${contextMode === 'live' ? STRINGS.header.livePill : STRINGS.header.demoPill}</span>
-                            <span class="context-pill-chevron" aria-hidden="true">›</span>
-                          </div>
-                          <div class="context-pill-subtitle" id="pill-subline">${escapeHtml(sourcesSubline)}</div>
+                  <div class="desktop-header-controls">
+                    <button
+                      type="button"
+                      class="context-pill ${contextMode === 'live' ? 'live' : 'demo'}"
+                      id="pill-context-status"
+                      aria-label="View sources and truth status"
+                      ${contextMode === 'live' ? `data-provenance="live" data-source="device_clock" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}
+                    >
+                      <div class="context-pill-content">
+                        <div class="context-pill-header">
+                          <span class="context-pill-dot" aria-hidden="true"></span>
+                          <span class="context-pill-title">${contextMode === 'live' ? STRINGS.header.livePill : STRINGS.header.demoPill}</span>
+                          <span class="context-pill-chevron" aria-hidden="true">›</span>
                         </div>
-                      </button>
+                        <div class="context-pill-subtitle" id="pill-subline">${escapeHtml(sourcesSubline)}</div>
+                      </div>
+                    </button>
 
-                      ${
-                        isDevMode
-                          ? `
-                      <button
-                        type="button"
-                        class="btn-dev-demo-controls"
-                        id="btn-dev-demo-controls"
-                        aria-label="Demo controls for presentation"
-                        title="Demo controls (Presentation)"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <circle cx="12" cy="12" r="3"></circle>
-                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                        </svg>
-                        <span>Demo controls</span>
-                      </button>
-                      `
-                          : ''
-                      }
+                    ${
+                      isDevMode
+                        ? `
+                    <button
+                      type="button"
+                      class="btn-dev-demo-controls"
+                      id="btn-dev-demo-controls"
+                      aria-label="Demo controls for presentation"
+                      title="Demo controls (Presentation)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                      </svg>
+                      <span>Demo controls</span>
+                    </button>
+                    `
+                        : ''
+                    }
 
-                      <button
-                        type="button"
-                        class="header-avatar-btn"
-                        id="btn-header-avatar"
-                        aria-label="Profile and settings"
-                      >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                          <circle cx="12" cy="7" r="4"></circle>
-                        </svg>
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      class="header-avatar-btn"
+                      id="btn-header-avatar"
+                      aria-label="Profile and settings"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="desktop-connector-strip-wrapper">
+                  <div class="desktop-connector-strip" id="desktop-connector-strip" role="region" aria-label="Connectors Status">
+                    <span class="connector-status-chip location" id="chip-status-location" title="Location: ${escapeHtml(locLabel)}">
+                      <span class="connector-chip-icon" aria-hidden="true">📍</span>
+                      <span class="connector-chip-label">Location</span>
+                      <span class="connector-chip-val ${locState}">${escapeHtml(locLabel)}</span>
+                    </span>
+                    <span class="connector-status-chip calendar" id="chip-status-calendar" title="Calendar: Not available yet">
+                      <span class="connector-chip-icon" aria-hidden="true">📅</span>
+                      <span class="connector-chip-label">Calendar</span>
+                      <span class="connector-chip-val unavailable">${calLabel}</span>
+                    </span>
+                    <span class="connector-status-chip weather" id="chip-status-weather" title="Weather: ${escapeHtml(weatherLabel)}">
+                      <span class="connector-chip-icon" aria-hidden="true">🌤️</span>
+                      <span class="connector-chip-label">Weather</span>
+                      <span class="connector-chip-val">${escapeHtml(weatherLabel)}</span>
+                    </span>
+                    <span class="connector-status-chip xmemo" id="chip-status-xmemo" title="Memory: ${escapeHtml(xmemoLabel)}">
+                      <span class="connector-chip-icon" aria-hidden="true">🧠</span>
+                      <span class="connector-chip-label">XMemo</span>
+                      <span class="connector-chip-val">${escapeHtml(xmemoLabel)}</span>
+                    </span>
+                    <span class="connector-status-chip notifications" id="chip-status-alerts" title="Alerts: ${escapeHtml(notifLabel)}">
+                      <span class="connector-chip-icon" aria-hidden="true">🔔</span>
+                      <span class="connector-chip-label">Alerts</span>
+                      <span class="connector-chip-val ${notifState}">${escapeHtml(notifLabel)}</span>
+                    </span>
                   </div>
                 </div>
 
@@ -3561,6 +3553,8 @@ export function renderApp(
           onClose: () => {
             demoPanelOpen = false;
             update();
+            const col = root.querySelector<HTMLElement>('.desktop-center-column');
+            if (col) col.scrollLeft = 0;
             restoreInvokingFocus(modalInvokingId || 'btn-dev-demo-controls');
           },
         });
@@ -3571,6 +3565,8 @@ export function renderApp(
         closePanelBtn.addEventListener('click', () => {
           demoPanelOpen = false;
           update();
+          const col = root.querySelector<HTMLElement>('.desktop-center-column');
+          if (col) col.scrollLeft = 0;
           restoreInvokingFocus(modalInvokingId || 'btn-dev-demo-controls');
         });
       }
@@ -3863,8 +3859,13 @@ export function renderApp(
               ? (selectedLivePlace?.name || liveDestination?.name)
               : ((spatialMapEvidence?.placeOrRoute as any)?.name || (nowPlan?.optionsOrSteps?.[0] as any)?.title || 'Piano Studio'),
           departureTime: !isLive && nowPlan?.leaveAt ? formatTime(nowPlan.leaveAt, snapshotTimezone) : undefined,
+          arrivalTime: demoArrivalTime,
+          statusPill: demoStatusPill,
+          distanceText: demoDistanceText,
+          trafficText: demoTrafficText,
           map: isLive ? undefined : currentV2Composition?.map,
           candidateCards: isLive ? undefined : currentV2Composition?.candidateCards,
+          demoWeatherSignal,
           liveRoute,
           liveRouteStatus,
           liveLocationStatus,

@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { getEvidenceDir } from './helpers/evidence-dir.js';
 import { selectDemoScene } from './helpers/demo-panel.js';
@@ -223,13 +224,11 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
     await expect(rightPanel.locator('.desktop-status-pill').first()).toContainText('On time');
     await expect(rightPanel.locator('.desktop-map-card')).toBeVisible();
 
-    // 4 Stat Cells Grid
+    // Stat Cells Grid (LEAVE BY and ARRIVE BY derived truthfully)
     const statsGrid = rightPanel.locator('.trip-stats-grid');
     await expect(statsGrid).toBeVisible();
     await expect(statsGrid).toContainText('LEAVE BY');
     await expect(statsGrid).toContainText('ARRIVE BY');
-    await expect(statsGrid).toContainText('DISTANCE');
-    await expect(statsGrid).toContainText('TRAFFIC');
 
     // Destination Weather Card
     const weatherCard = rightPanel.locator('.desktop-weather-card');
@@ -237,10 +236,14 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
     await expect(weatherCard).toContainText('Destination Weather');
     await expect(weatherCard.locator('.card-badge')).toContainText('SIMULATED');
 
-    // Nearby Lunch Recommendations Section
+    // Switch to away-lunch to verify Lunch Recommendations Section in right panel
+    await selectDemoScene(page, 'away-lunch');
+    await page.waitForTimeout(100);
+
+    // Nearby Lunch Recommendations Section (in away-lunch scene)
     const placesSection = rightPanel.locator('.desktop-panel-section[data-panel-type="places"]');
     await expect(placesSection).toBeVisible();
-    await expect(placesSection).toContainText('Nearby Lunch Recommendations');
+    await expect(placesSection).toContainText('Nearby Options & Walking Times');
     await expect(placesSection.locator('.desktop-candidate-tile').first()).toBeVisible();
 
     // Candidate details check: name, walk time, cuisine chip, sparkle rationale
@@ -251,6 +254,65 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
     await expect(firstCandidate.locator('.desktop-candidate-basis')).toBeVisible();
 
     await checkAxe(page, 'Right Panel at 1586x992');
+  });
+
+  test('Geometry & Bounding Box Non-Intersection: Strip does not overlap heading/subheading, and center content is not under nav', async ({
+    page,
+  }) => {
+    const viewports = [
+      { width: 1024, height: 768 },
+      { width: 1280, height: 800 },
+      { width: 1440, height: 900 },
+      { width: 1586, height: 992 },
+    ];
+
+    for (const vp of viewports) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.goto('/?ui=v2&dev=1');
+      await page.waitForSelector('.app-layout[data-ui-version="v2"]');
+
+      // Test before and after opening/closing demo controls to guarantee no horizontal scroll
+      await selectDemoScene(page, 'rain');
+      await page.waitForTimeout(100);
+
+      const centerColumn = page.locator('.desktop-center-column');
+      const scrollLeft = await centerColumn.evaluate(el => el.scrollLeft);
+      expect(scrollLeft, `scrollLeft must be 0 at width ${vp.width}`).toBe(0);
+
+      const navBox = await page.locator('.desktop-left-nav').boundingBox();
+      const mainBox = await page.locator('.desktop-center-column .main-container').first().boundingBox();
+      expect(navBox).not.toBeNull();
+      expect(mainBox).not.toBeNull();
+
+      // Center container must not sit under left nav
+      expect(
+        mainBox!.x,
+        `center container x (${mainBox!.x}) must be >= nav right (${navBox!.x + navBox!.width}) at ${vp.width}`
+      ).toBeGreaterThanOrEqual(navBox!.x + navBox!.width - 1);
+
+      // Check heading, subtitle, and connector strip vertical bounding boxes
+      const headingBox = await page.locator('#desktop-greeting-title').boundingBox();
+      const subBox = await page.locator('.desktop-greeting-sub').boundingBox();
+      const stripBox = await page.locator('#desktop-connector-strip').boundingBox();
+
+      expect(headingBox).not.toBeNull();
+      expect(subBox).not.toBeNull();
+      expect(stripBox).not.toBeNull();
+
+      // Heading must be above strip
+      expect(
+        headingBox!.y + headingBox!.height,
+        `Heading bottom (${headingBox!.y + headingBox!.height}) must be <= strip top (${stripBox!.y}) at ${vp.width}`
+      ).toBeLessThanOrEqual(stripBox!.y + 1);
+
+      // Subtitle must be above strip
+      expect(
+        subBox!.y + subBox!.height,
+        `Subtitle bottom (${subBox!.y + subBox!.height}) must be <= strip top (${stripBox!.y}) at ${vp.width}`
+      ).toBeLessThanOrEqual(stripBox!.y + 1);
+
+      await checkNoOverflow(page);
+    }
   });
 
   test('390px Mobile Viewport: Hides desktop connector strip & panels, displays mobile bottom bar, zero overflow', async ({
@@ -279,43 +341,135 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
     await saveEvidence(page, 'mobile-390x844-home.png');
   });
 
-  test('Matrix: Viewports (1586x992, 1440x900, 1280x800) x Scenes (clear, rain, away-lunch, multi-candidate)', async ({
+  test('Matrix: Viewports (1586x992, 1440x900, 1280x800, 390x844) x Views (clear, rain, away-lunch, multi-candidate, for-you)', async ({
     page,
   }) => {
+    test.setTimeout(120000);
     const viewports = [
       { name: 'ref-1586x992', width: 1586, height: 992 },
       { name: 'wide-1440x900', width: 1440, height: 900 },
       { name: 'std-1280x800', width: 1280, height: 800 },
+      { name: 'mob-390x844', width: 390, height: 844 },
     ];
 
-    const scenes = ['clear', 'rain', 'away-lunch', 'multi-candidate'];
+    const views = ['clear', 'rain', 'away-lunch', 'multi-candidate', 'for-you'];
+    const hashes = new Map<string, string>();
 
     for (const vp of viewports) {
       await page.setViewportSize({ width: vp.width, height: vp.height });
 
-      for (const scene of scenes) {
-        await page.goto('/?ui=v2&dev=1');
-        await page.waitForSelector('.app-layout[data-ui-version="v2"]');
-        await selectDemoScene(page, scene);
-        await page.waitForTimeout(100);
+      for (const view of views) {
+        if (view === 'for-you') {
+          await page.goto('/?ui=v2&tab=for-you&dev=1');
+          await page.waitForSelector('.app-layout[data-ui-version="v2"]');
+          await page.waitForSelector('.v2-for-you-view');
+        } else {
+          await page.goto('/?ui=v2&dev=1');
+          await page.waitForSelector('.app-layout[data-ui-version="v2"]');
+          await selectDemoScene(page, view);
 
-        // Core assertions
-        await expect(page.locator('.desktop-greeting-row')).toBeVisible();
-        await expect(page.locator('.desktop-left-nav')).toBeVisible();
-        await expect(page.locator('#desktop-right-panel')).toBeVisible();
-        await expect(page.locator('.now-card')).toBeVisible();
-
-        // Scene specific checks
-        if (scene === 'rain') {
-          const umbrellaChip = page.locator('.now-card #chip-umbrella');
-          await expect(umbrellaChip).toBeVisible();
-          await expect(umbrellaChip).toContainText('Umbrella');
+          if (view === 'clear') {
+            await expect(page.locator('#now-title')).toContainText('leave by 2:25 PM');
+          } else if (view === 'rain') {
+            await expect(page.locator('#now-title')).toContainText('leave by 2:30 PM');
+            await expect(page.locator('.now-card #chip-umbrella')).toBeVisible();
+          } else if (view === 'away-lunch') {
+            await expect(page.locator('.v2-candidates-hero, .now-card')).toBeVisible();
+          } else if (view === 'multi-candidate') {
+            await expect(page.locator('.v2-candidates-hero, .now-card')).toBeVisible();
+          }
         }
 
         await checkNoOverflow(page);
 
-        // Save evidence
-        await saveEvidence(page, `parity-${scene}-${vp.name}.png`);
+        const filename = `parity-${view}-${vp.name}.png`;
+        const filepath = path.join(EVIDENCE_DIR, filename);
+        await page.screenshot({ path: filepath, fullPage: false });
+        const content = fs.readFileSync(filepath);
+        const hash = crypto.createHash('sha256').update(content).digest('hex');
+        hashes.set(filename, hash);
+      }
+    }
+
+    // Assert that every screenshot in the matrix has a distinct SHA-256 hash
+    const hashValues = Array.from(hashes.values());
+    const uniqueHashes = new Set(hashValues);
+    expect(
+      uniqueHashes.size,
+      `All ${hashValues.length} screenshot hashes must be distinct! Duplicate detected: ${hashValues.length - uniqueHashes.size} duplicates.`
+    ).toBe(hashValues.length);
+  });
+
+  test('Side-by-side composite: Owner Reference vs Yori App Rain Scene (1586x992)', async ({
+    page,
+  }) => {
+    const refPath = path.join(os.homedir(), 'Downloads', 'Yori Proactive AI Dashboard.png');
+    const appRainPath = path.join(EVIDENCE_DIR, 'parity-rain-ref-1586x992.png');
+
+    // First ensure app rain screenshot exists
+    await page.setViewportSize({ width: 1586, height: 992 });
+    await page.goto('/?ui=v2&dev=1');
+    await page.waitForSelector('.app-layout[data-ui-version="v2"]');
+    await selectDemoScene(page, 'rain');
+    await page.waitForSelector('.now-card #chip-umbrella');
+    await page.screenshot({ path: appRainPath, fullPage: false });
+
+    if (fs.existsSync(refPath) && fs.existsSync(appRainPath)) {
+      const refBase64 = fs.readFileSync(refPath).toString('base64');
+      const appBase64 = fs.readFileSync(appRainPath).toString('base64');
+
+      // Use page to composite onto a 3172x1032 canvas with labels
+      const compositeBase64 = await page.evaluate(
+        async ({ refData, appData }) => {
+          const loadImg = (src: string) =>
+            new Promise<HTMLImageElement>((resolve, reject) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.onerror = reject;
+              img.src = src;
+            });
+
+          const [imgRef, imgApp] = await Promise.all([
+            loadImg(`data:image/png;base64,${refData}`),
+            loadImg(`data:image/png;base64,${appData}`),
+          ]);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = 3172;
+          canvas.height = 1032;
+          const ctx = canvas.getContext('2d')!;
+
+          // Dark banner header
+          ctx.fillStyle = '#162824';
+          ctx.fillRect(0, 0, 3172, 40);
+
+          ctx.fillStyle = '#FFFFFF';
+          ctx.font = 'bold 16px system-ui, sans-serif';
+          ctx.fillText('Reference Design (1586x992)', 24, 26);
+          ctx.fillText('Yori Implementation — Rain Scene (1586x992)', 1586 + 24, 26);
+
+          // Divider line
+          ctx.strokeStyle = '#3D5A50';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(1586, 0);
+          ctx.lineTo(1586, 1032);
+          ctx.stroke();
+
+          // Draw images below header
+          ctx.drawImage(imgRef, 0, 40, 1586, 992);
+          ctx.drawImage(imgApp, 1586, 40, 1586, 992);
+
+          return canvas.toDataURL('image/png').split(',')[1];
+        },
+        { refData: refBase64, appData: appBase64 }
+      );
+
+      if (compositeBase64) {
+        const compositePath = path.join(EVIDENCE_DIR, 'reference-vs-app-rain-1586x992.png');
+        fs.writeFileSync(compositePath, Buffer.from(compositeBase64, 'base64'));
+        expect(fs.existsSync(compositePath)).toBe(true);
+        expect(fs.statSync(compositePath).size).toBeGreaterThan(100000);
       }
     }
   });

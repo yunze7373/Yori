@@ -568,7 +568,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 vm.fieldSourceRefs?.prepareTime && vm.fieldSourceRefs?.leaveTime && vm.prepareTimeStr && vm.leaveTimeStr
                   ? `
                 <div class="now-title" id="now-title">
-                  <span data-slot="chrome" data-slot-reason="Departure prep prefix">Get ready at </span><span class="now-prep-time ${vm.planDiff?.fieldName === 'prepareTime' ? 'plan-diff-highlight' : ''}" data-source-ref="${escapeHtml(vm.fieldSourceRefs.prepareTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.prepareTime.field)}" data-slot="domain">${escapeHtml(vm.prepareTimeStr)}</span><span data-slot="chrome" data-slot-reason="Departure leave connector">, leave by </span><span class="now-leave-time ${vm.planDiff?.fieldName === 'leaveTime' ? 'plan-diff-highlight' : ''}" data-source-ref="${escapeHtml(vm.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.leaveTime.field)}" data-slot="domain">${escapeHtml(vm.leaveTimeStr)}</span>
+                  <span class="hero-prep-line"><span data-slot="chrome" data-slot-reason="Departure prep prefix">Get ready at </span><span class="now-prep-time ${vm.planDiff?.fieldName === 'prepareTime' ? 'plan-diff-highlight' : ''}" data-source-ref="${escapeHtml(vm.fieldSourceRefs.prepareTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.prepareTime.field)}" data-slot="domain">${escapeHtml(vm.prepareTimeStr)}</span>, </span><span class="hero-leave-headline"><span data-slot="chrome" data-slot-reason="Departure leave connector">leave by </span><span class="now-leave-time ${vm.planDiff?.fieldName === 'leaveTime' ? 'plan-diff-highlight' : ''}" data-source-ref="${escapeHtml(vm.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.leaveTime.field)}" data-slot="domain">${escapeHtml(vm.leaveTimeStr)}</span></span>
                 </div>
               `
                   : `
@@ -611,7 +611,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     </div>
                     <span class="signal-label">WEATHER</span>
                   </div>
-                  <div class="signal-value">${escapeHtml(vm.isRain ? 'Rain around 2:50 PM' : 'Clear sky · 20°C')}</div>
+                  <div class="signal-value">${escapeHtml(vm.isRain ? 'Rain forecast · 18°C' : 'Clear sky · 20°C')}</div>
                 </div>
 
                 <div class="signal-tile" id="signal-tile-calendar">
@@ -895,7 +895,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
   const nowSubtitle = vm.leaveTimeStr
     ? `Leave by ${vm.leaveTimeStr} · ${vm.apptTimeStr ? `Arrive ${vm.apptTimeStr}` : '25 min drive'}`
     : (vm.headline || 'Active recommendation for your day');
-  const nowCountdown = vm.isRain ? 'In 55m' : (vm.options?.length ? 'In 40m' : 'In 1 hr 15 min');
+  const nowCountdown = vm.isRain ? 'in 55m' : 'in 40m';
 
   return `
     <div class="v2-sectioned-feed" id="v2-sectioned-feed">

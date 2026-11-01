@@ -115,7 +115,7 @@ export function restoreInvokingFocus(
       (invokingSelector ? document.querySelector<HTMLElement>(invokingSelector) : null) ||
       fallbackEl;
     if (target && typeof target.focus === 'function') {
-      target.focus();
+      target.focus({ preventScroll: true });
     }
   });
 }
