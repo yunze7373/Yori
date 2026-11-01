@@ -90,9 +90,22 @@
 The underlying codebase has passed all required automated verification suites for Phase Closeout:
 - ✅ **AC-EXT-1 Core Diff Invariant**: `src/core/` diff vs baseline `f43c6c1d74c4bc1159300fed9d62aec9447b886e` is **100% EMPTY** (0 files, 0 lines changed).
 - ✅ **TypeScript Strict Mode**: `tsc --noEmit` exits 0 with zero errors.
-- ✅ **Unit & Mock Integration**: 795/795 tests passing across 32 files (`npm test`).
+- ✅ **Unit & Mock Integration**: 914/914 tests passing across 40 files (`npm test` with self-contained `pretest: vite build`).
 - ✅ **Golden Scenario Harness**: 18/18 scenarios passing byte-identically (`npm run test:golden`).
 - ✅ **Degradation Drills**: 56/56 fault injection invariance tests passing (`npm run test:drills`).
-- ✅ **Playwright E2E**: 286/286 end-to-end tests passing across 23 files (`npx playwright test`).
-- ✅ **Current-HEAD Visual Proof**: 6/6 tests passing twice consecutively across 18 mobile/desktop captures (`docs/evidence/visual-proof-head/`).
+- ✅ **Playwright E2E**: 441/444 tests passing across 33 files (`npx playwright test`, 3 skipped for viewport deduplication).
+- ✅ **Truthfulness & Provenance Audit**: 34/34 assertions passing across mobile and desktop (`tests/e2e/closeout-truth-audit.spec.ts`).
+- ✅ **Current-HEAD Visual Proof**: Verified responsive IA across mobile (390x844) and desktop (1280x800, 1440x900) (`docs/evidence/s4-desktop-ia/`).
 - ✅ **Static Secret Scan**: Zero tokens or keys in `src/`, `dist/`, or browser storage APIs.
+- ✅ **Model Billed Ledger**: Strictly locked at 22/50 lifetime calls (`.yori-runtime/model-live-ledger.json`).
+
+---
+
+## 🎬 Rev3 Recording Truth States (Visible at HEAD)
+
+Prior to video recording (Gate V1), verify that the recording environment reflects verified HEAD truth:
+- **Default Application Mode**: Defaults to Demo mode; Live mode requires explicit `?mode=live` or `VITE_YORI_DEFAULT_MODE=live` (owner gate d).
+- **Route Computation (G-ROUTE)**: Recorded fixture in demo; fail-closed "No Route · no destination set" when unconfigured; live routing engine selection is owner-gated (a).
+- **Nearby Places & Overpass**: Loopback proxy seam (`/api/places`); live Overpass instance selection & rate policy owner-gated (b); shows "Owner Gated" when offline.
+- **Calendar Availability**: Honestly displays "Not available yet" across all surfaces with zero fake toggles (out of hackathon scope).
+- **Desktop Responsive IA**: Three-zone layout on screens ≥1024px (240px sidebar nav, ≤680px main column, 380px contextual right panel).
