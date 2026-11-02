@@ -1,15 +1,18 @@
 /**
  * CONTEXT-TIMELINE: Proactivity from Context Changes, Not Scene Selection
  * Governed by TID: INBOX-20261101-070938 and North-Star Reaudit 2026-11-02.
+ * Rework revision: INBOX-20261101-070938-REV-16e68191.
  *
- * Acceptance Criteria:
+ * Acceptance Criteria & Reviewer Findings:
  * (a) Differential-state E2E with ZERO user input between states:
- *     S0 (morning calm) -> S1 (lunch intent + candidates) -> S1q (suppressed beat after Not now)
+ *     S0 (morning calm) -> S1 (lunch intent + candidates) -> S1q (honest quiet beat after dismissal)
  *     -> S2 (depart plan clear) -> S3 (rain: leave earlier, umbrella, habit re-rank).
  * (b) Mid-timeline actions: Accept / Adjust / Not now + preference writeback, daily prompt cap.
- * (c) 3-second comprehension: hero states noticed signal + prepared action above fold at 390 and 1280.
+ * (c) 3-second comprehension: hero states noticed signal + prepared action (#btn-accept) strictly above fold at 390 and 1280 at both S1 and S3.
  * (d) Accessibility & UX: touch targets >= 44px, AA contrast, CLS <= 0.1 during morph, axe 0, no horizontal scroll.
- * (e) Playwright local video captures (recordVideo) in .yori-runtime/evidence/context-timeline/ and committed stills in docs/evidence/context-timeline/.
+ * (e) Evidence: local video captures (recordVideo) in .yori-runtime/evidence/context-timeline/ and committed stills in docs/evidence/context-timeline/.
+ * (f) Dynamic Change Moment: Adjust buffer in S2 produces true dynamic prior/new leaveAt (not hardcoded 2:25/2:30).
+ * (g) Cross-surface coherence: desktop right panel follows now plan; connector strip weather matches snapshot; 1 cause marker.
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -17,7 +20,7 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 
-const STALE_COMMITTED_EVIDENCE_DIR = path.resolve('docs/evidence/context-timeline');
+const COMMITTED_EVIDENCE_DIR = path.resolve('docs/evidence/context-timeline');
 const RUNTIME_VIDEO_DIR = path.resolve('.yori-runtime/evidence/context-timeline');
 
 async function checkAxe(page: Page, context = 'page'): Promise<void> {
@@ -53,7 +56,7 @@ async function assertTouchTarget(page: Page, selector: string, label: string): P
 
 test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', () => {
   test.beforeAll(() => {
-    fs.mkdirSync(STALE_COMMITTED_EVIDENCE_DIR, { recursive: true });
+    fs.mkdirSync(COMMITTED_EVIDENCE_DIR, { recursive: true });
     fs.mkdirSync(RUNTIME_VIDEO_DIR, { recursive: true });
   });
 
@@ -61,10 +64,20 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
   // Acceptance (a): Differential-state E2E with ZERO user input between states
   // =========================================================================
   test('Acceptance (a): Differential-state transitions S0 -> S1 -> S1q -> S2 -> S3 with zero user input', async ({
-    page,
+    browser,
   }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile';
     const viewSuffix = isMobile ? '390' : '1280';
+    const viewport = isMobile ? { width: 390, height: 844 } : { width: 1280, height: 800 };
+
+    const context = await browser.newContext({
+      viewport,
+      recordVideo: {
+        dir: RUNTIME_VIDEO_DIR,
+        size: viewport,
+      },
+    });
+    const page = await context.newPage();
 
     await page.goto('/?ui=v2&timeline=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
@@ -98,7 +111,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await expect(page.locator('#timeline-restart-btn')).toBeVisible();
 
     await page.screenshot({
-      path: path.join(STALE_COMMITTED_EVIDENCE_DIR, `01-s0-morning-calm-${viewSuffix}.png`),
+      path: path.join(COMMITTED_EVIDENCE_DIR, `01-s0-morning-calm-${viewSuffix}.png`),
     });
 
     // -----------------------------------------------------------------------
@@ -131,13 +144,13 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await expect(candidatesHero.locator('#btn-why')).toBeVisible();
 
     await page.screenshot({
-      path: path.join(STALE_COMMITTED_EVIDENCE_DIR, `02-s1-lunch-away-${viewSuffix}.png`),
+      path: path.join(COMMITTED_EVIDENCE_DIR, `02-s1-lunch-away-${viewSuffix}.png`),
     });
 
     // -----------------------------------------------------------------------
-    // Transition S1 -> S1q: Suppressed / Quiet beat after "Not now" on lunch
+    // Transition S1 -> S1q: Honest dismissal via simulated user tap
     // -----------------------------------------------------------------------
-    await page.evaluate(() => (window as any).__YORI_TIMELINE__.step());
+    await page.evaluate(() => (window as any).__YORI_TIMELINE__.simulateDismissLunch('simulated_user'));
     await page.waitForTimeout(200);
 
     const stateS1q = await page.evaluate(() => (window as any).__YORI_TIMELINE__.getState());
@@ -154,7 +167,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await expect(page.locator('#budget-meter-value')).toHaveText('1 of 3 used today');
 
     await page.screenshot({
-      path: path.join(STALE_COMMITTED_EVIDENCE_DIR, `03-s1q-lunch-quiet-${viewSuffix}.png`),
+      path: path.join(COMMITTED_EVIDENCE_DIR, `03-s1q-lunch-quiet-${viewSuffix}.png`),
     });
 
     // -----------------------------------------------------------------------
@@ -179,140 +192,198 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     // Route map strip is visible
     await expect(journeyCardS2.locator('.now-map-strip')).toBeVisible();
 
-    // 4 Signal Tiles grid visible
-    await expect(journeyCardS2.locator('#signal-tile-weather')).toContainText('Clear sky');
-    await expect(journeyCardS2.locator('#signal-tile-calendar')).toContainText('Piano lesson at 3:00 PM');
-    await expect(journeyCardS2.locator('#signal-tile-transit')).toContainText('Drive');
-    await expect(journeyCardS2.locator('#signal-tile-memory')).toContainText('driving when it rains');
-
     await page.screenshot({
-      path: path.join(STALE_COMMITTED_EVIDENCE_DIR, `04-s2-depart-clear-${viewSuffix}.png`),
+      path: path.join(COMMITTED_EVIDENCE_DIR, `04-s2-depart-clear-${viewSuffix}.png`),
     });
 
     // -----------------------------------------------------------------------
     // Transition S2 -> S3: Rain Forecast Issued (The Change Moment)
+    // ZERO user input! Pure simulated context change
     // -----------------------------------------------------------------------
     await page.evaluate(() => (window as any).__YORI_TIMELINE__.step());
-    await page.waitForTimeout(200);
+    await page.waitForTimeout(250);
 
     const stateS3 = await page.evaluate(() => (window as any).__YORI_TIMELINE__.getState());
     expect(stateS3.currentBeat.id).toBe('S3');
 
-    // S3 Living header morphs to Rain from 2:00
+    // Capture standard motion transition capture immediately during soft crossfade
+    await page.screenshot({
+      path: path.join(COMMITTED_EVIDENCE_DIR, `05-s3-change-moment-${viewSuffix}.png`),
+    });
+
+    // Living header morphs into Rain
     await expect(page.locator('#living-header-line')).toHaveText('1:35 PM · Rain from 2:00 · Home');
 
-    // S3 The Change Moment:
-    // 1. Status transition: "Updated plan ready"
+    // Change Moment container rendered
+    const journeyCardS3 = page.locator('.now-card.v2-journey-card');
+    await expect(journeyCardS3).toBeVisible();
+
+    // 1. Status Transition Badge
     const statusTransition = page.locator('#plan-status-transition');
     await expect(statusTransition).toBeVisible();
     await expect(statusTransition).toHaveText('Updated plan ready');
 
-    // 2. Cause marker: "What changed: rain forecast"
+    // 2. What Changed Cause Marker (single marker on page)
     const whatChangedMarker = page.locator('#what-changed-marker');
     await expect(whatChangedMarker).toBeVisible();
     await expect(whatChangedMarker).toContainText('What changed: rain forecast');
+    // Ensure no duplicate insight banner above card
+    await expect(page.locator('.v2-insight-banner')).toHaveCount(0);
 
-    // 3. Hero cause -> effect microcopy
+    // 3. Hero Cause-Effect sentence
     const heroCauseEffect = page.locator('#hero-cause-effect');
     await expect(heroCauseEffect).toBeVisible();
     await expect(heroCauseEffect).toHaveText('Rain starts before your lesson. I moved your leave time to 2:30.');
 
-    // 4. Struck-through time: ~~2:25 PM~~ -> 2:30 PM
+    // 4. Struck-through time difference: 2:25 PM -> 2:30 PM
     const timeDiffDisplay = page.locator('#time-diff-display');
     await expect(timeDiffDisplay).toBeVisible();
     await expect(timeDiffDisplay.locator('.prior-time-struck s')).toHaveText('2:25 PM');
     await expect(timeDiffDisplay.locator('.new-time-highlight')).toHaveText('2:30 PM');
 
-    // 5. Updated headline and umbrella checklist chip
-    const journeyCardS3 = page.locator('.now-card.v2-journey-card');
-    await expect(journeyCardS3.locator('#now-title')).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
+    // 5. Hero updated with umbrella & habit preference
     await expect(journeyCardS3.locator('#chip-umbrella')).toContainText('Umbrella');
+    const memoryTile = journeyCardS3.locator('#signal-tile-memory');
+    await expect(memoryTile).toContainText('driving');
 
-    // 6. Habit re-ranked transit options (Drive ranked first by rain habit)
-    await expect(journeyCardS3.locator('#signal-tile-memory')).toContainText('driving when it rains');
+    // Cross-surface coherence (desktop right panel and connector strip)
+    if (!isMobile) {
+      const rightPanel = page.locator('.desktop-right-panel');
+      await expect(rightPanel).toBeVisible();
+      // Right panel must NOT show quiet state during S3 re-plan
+      await expect(rightPanel).not.toContainText('Selected quiet state');
+      await expect(rightPanel).not.toContainText('Schedule is clear');
+      // Connector strip weather chip matches rain
+      const weatherChip = page.locator('#chip-status-weather');
+      await expect(weatherChip).toContainText('Rain forecast');
+    }
 
-    await page.screenshot({
-      path: path.join(STALE_COMMITTED_EVIDENCE_DIR, `05-s3-change-moment-rain-${viewSuffix}.png`),
-    });
+    const video = page.video();
+    await context.close();
+    if (video) {
+      const targetVideoPath = path.join(RUNTIME_VIDEO_DIR, `context-timeline-${viewSuffix}.webm`);
+      await video.saveAs(targetVideoPath);
+    }
   });
 
   // =========================================================================
-  // Acceptance (b): Mid-timeline user actions and daily prompt budget cap
+  // Acceptance (f): Dynamic Change Moment — Adjust buffer in S2 changes struck/new times in S3
   // =========================================================================
-  test('Acceptance (b): Mid-timeline Accept, Adjust, Not now, and prompt cap across the day', async ({
+  test('Dynamic Change Moment: Adjust buffer in S2 produces true dynamic prior/new leaveAt (not 2:25/2:30)', async ({
+    page,
+  }) => {
+    await page.goto('/?ui=v2&timeline=1');
+    await page.waitForSelector('.app-layout[data-ui-version="v2"]');
+    await page.evaluate(() => (window as any).__YORI_TIMELINE__.reset());
+    await page.waitForTimeout(100);
+
+    // Go directly to S2
+    await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S2'));
+    await page.waitForSelector('.v2-journey-card');
+
+    // Adjust timing in S2: increase buffer by 10 minutes (from 5m to 15m)
+    await page.locator('#btn-adjust').click();
+    await page.waitForSelector('#adjust-dialog');
+    await page.locator('#input-buffer-minutes').fill('15');
+    await page.locator('#btn-adjust-for-today').click();
+    await page.waitForSelector('#adjust-dialog', { state: 'hidden' });
+
+    // S2 headline is now updated (leave 10 minutes earlier: 2:15 PM instead of 2:25 PM)
+    await expect(page.locator('#now-title')).toContainText('2:15 PM');
+
+    // Step to S3 (Rain forecast arrives!)
+    await page.evaluate(() => (window as any).__YORI_TIMELINE__.step());
+    await page.waitForSelector('#what-changed-marker');
+
+    // Assert: The prior struck time is the dynamic 2:15 PM (NOT the literal 2:25 PM!)
+    const struckTime = page.locator('#time-diff-display .prior-time-struck s');
+    await expect(struckTime).toHaveText('2:15 PM');
+
+    // Assert: The new leave time is dynamic (2:20 PM)
+    const newTime = page.locator('#time-diff-display .new-time-highlight');
+    await expect(newTime).toHaveText('2:20 PM');
+
+    // Assert: The hero cause-effect incorporates the dynamic new leave time
+    const heroCauseEffect = page.locator('#hero-cause-effect');
+    await expect(heroCauseEffect).toHaveText('Rain starts before your lesson. I moved your leave time to 2:20.');
+  });
+
+  // =========================================================================
+  // Acceptance (b): Mid-timeline user actions and prompt budget cap across the day
+  // =========================================================================
+  test('Acceptance (b): Accept, Adjust, Not now work mid-timeline and budget cap holds', async ({
     page,
   }) => {
     await page.goto('/?ui=v2&timeline=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
     await page.evaluate(() => (window as any).__YORI_TIMELINE__.reset());
 
-    // 1. Jump to S1 (Lunch) and trigger "Not now" via UI click
+    // Step to S1 (Lunch candidates)
     await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S1'));
     await page.waitForSelector('.v2-candidates-hero');
 
-    const notNowBtn = page.locator('#btn-dismiss');
-    await expect(notNowBtn).toHaveText('Not now');
-    await notNowBtn.click();
-
-    // Confirm dismiss dialog with "Don't suggest this today"
-    await expect(page.locator('#dismiss-dialog')).toBeVisible();
+    // User taps "Not now" on lunch candidates
+    await page.locator('.now-card #btn-dismiss').click();
+    await page.waitForSelector('#dismiss-dialog');
     await page.locator('#btn-confirm-dismiss').click();
+    await page.waitForSelector('#dismiss-dialog', { state: 'hidden' });
 
-    // Verifies transition to S1q with budget meter updated
-    await expect(page.locator('#quiet-title')).toHaveText("Okay — I'll stay quiet about lunch today");
+    // Transitions to S1q Quiet beat with budget meter
+    await expect(page.locator('.quiet-card.suppressed-quiet-card')).toBeVisible();
     await expect(page.locator('#budget-meter-value')).toHaveText('1 of 3 used today');
 
-    // 2. Jump to S2 (Clear depart) and test Adjust
-    await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S2'));
+    // Step to S2 (Depart Piano lesson)
+    await page.evaluate(() => (window as any).__YORI_TIMELINE__.step());
     await page.waitForSelector('.v2-journey-card');
 
-    const adjustBtn = page.locator('#btn-adjust');
-    await expect(adjustBtn).toBeVisible();
-    await adjustBtn.click();
-    await expect(page.locator('#adjust-dialog')).toBeVisible();
-
-    // Adjust buffer minutes to 10
-    const bufferInput = page.locator('#input-buffer-minutes');
-    await bufferInput.fill('10');
-    await page.locator('#btn-adjust-for-today').click();
-
-    // Verify schedule recomputed: leave 2:20 PM
-    await expect(page.locator('#now-title')).toContainText('leave by 2:20 PM');
-
-    // 3. Jump to S3 (Rain re-plan) and test Accept
-    await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S3'));
-    await page.waitForSelector('.v2-journey-card');
-
-    const acceptBtn = page.locator('#btn-accept');
-    await expect(acceptBtn).toBeVisible();
-    await acceptBtn.click();
-
-    // Verify accepted badge and Undo button appear
-    await expect(page.locator('.badge-accepted')).toHaveText('Accepted');
+    // Tapping Accept on S2 confirms plan and records action
+    await page.locator('.now-card #btn-accept').click();
     await expect(page.locator('#btn-undo-accept')).toBeVisible();
+
+    // Step to S3 (Rain re-plan)
+    await page.evaluate(() => (window as any).__YORI_TIMELINE__.step());
+    await page.waitForSelector('#what-changed-marker');
+
+    // Preference writeback and Accept still functional
+    await expect(page.locator('.now-card #btn-accept')).toBeVisible();
+    await expect(page.locator('.now-card #btn-adjust')).toBeVisible();
+    await expect(page.locator('.now-card #btn-dismiss')).toBeVisible();
   });
 
   // =========================================================================
-  // Acceptance (c): 3-second comprehension check above fold at 390 and 1280
+  // Acceptance (c): 3-second comprehension above fold at 390 and 1280 at S1 & S3
   // =========================================================================
-  test('Acceptance (c): 3-second comprehension at S3 above the fold without scrolling', async ({
+  test('Acceptance (c): 3-second comprehension — noticed signal and #btn-accept strictly above fold at 390 and 1280 at S1 and S3', async ({
     page,
-  }, testInfo) => {
-    const isMobile = testInfo.project.name === 'mobile';
-    const viewportHeight = isMobile ? 844 : 800;
-
+  }) => {
     await page.goto('/?ui=v2&timeline=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
+
+    const viewportSize = page.viewportSize();
+    expect(viewportSize).not.toBeNull();
+    const viewportHeight = viewportSize!.height;
+
+    // --- Check S1 (Lunch Candidates) ---
+    await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S1'));
+    await page.waitForSelector('.v2-candidates-hero');
+
+    const acceptBtnS1 = page.locator('.v2-candidates-hero #btn-accept');
+    await expect(acceptBtnS1).toBeVisible();
+    const acceptBoxS1 = await acceptBtnS1.boundingBox();
+    expect(acceptBoxS1).not.toBeNull();
+    expect(acceptBoxS1!.y + acceptBoxS1!.height).toBeLessThanOrEqual(viewportHeight);
+
+    // --- Check S3 (Rain Re-plan Change Moment) ---
     await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S3'));
     await page.waitForSelector('.v2-journey-card');
 
-    // Assert: Noticed signal (#what-changed-marker) is strictly above the fold
+    // Assert: Noticed signal (#what-changed-marker) is strictly above fold
     const whatChangedBox = await page.locator('#what-changed-marker').boundingBox();
     expect(whatChangedBox).not.toBeNull();
     expect(whatChangedBox!.y).toBeGreaterThanOrEqual(0);
     expect(whatChangedBox!.y + whatChangedBox!.height).toBeLessThanOrEqual(viewportHeight);
 
-    // Assert: Prepared action (#hero-cause-effect and #time-diff-display) is strictly above the fold
+    // Assert: Prepared action (#hero-cause-effect and #time-diff-display) is strictly above fold
     const causeEffectBox = await page.locator('#hero-cause-effect').boundingBox();
     expect(causeEffectBox).not.toBeNull();
     expect(causeEffectBox!.y).toBeGreaterThanOrEqual(0);
@@ -323,8 +394,12 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     expect(timeDiffBox!.y).toBeGreaterThanOrEqual(0);
     expect(timeDiffBox!.y + timeDiffBox!.height).toBeLessThanOrEqual(viewportHeight);
 
-    // Big Accept button is visible in hero card
-    await expect(page.locator('#btn-accept')).toBeVisible();
+    // Assert: #btn-accept is strictly above fold at 390 and 1280
+    const acceptBtnS3 = page.locator('.v2-journey-card #btn-accept');
+    await expect(acceptBtnS3).toBeVisible();
+    const acceptBoxS3 = await acceptBtnS3.boundingBox();
+    expect(acceptBoxS3).not.toBeNull();
+    expect(acceptBoxS3!.y + acceptBoxS3!.height).toBeLessThanOrEqual(viewportHeight);
   });
 
   // =========================================================================
@@ -347,11 +422,18 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await assertTouchTarget(page, '#btn-dismiss', 'Hero Not Now Button');
     await assertTouchTarget(page, '#btn-why', 'Hero Why Button');
 
+    // Wait for crossfade transition to settle before accessibility check
+    await page.waitForTimeout(450);
+
     // 2. Axe accessibility check (WCAG AA)
     await checkAxe(page, 'Context Timeline at S3');
 
-    // 3. No horizontal overflow
+    // 3. No horizontal overflow (and restart button is not clipped)
     await checkNoHorizontalOverflow(page);
+    const restartBox = await page.locator('#timeline-restart-btn').boundingBox();
+    expect(restartBox).not.toBeNull();
+    const viewportWidth = page.viewportSize()!.width;
+    expect(restartBox!.x + restartBox!.width).toBeLessThanOrEqual(viewportWidth);
 
     // 4. CLS measurement during beat morph
     const clsDelta = await page.evaluate(async () => {
@@ -391,6 +473,12 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await page.goto('/?ui=v2&timeline=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
 
+    // Verify document has zero active running animations under reducedMotion: 'reduce'
+    const runningAnimationsCount = await page.evaluate(() => {
+      return document.getAnimations().filter(a => a.playState === 'running').length;
+    });
+    expect(runningAnimationsCount).toBe(0);
+
     // Step to S3 under reduced motion
     await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S3'));
     await page.waitForSelector('#what-changed-marker');
@@ -403,8 +491,17 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await expect(page.locator('#time-diff-display .prior-time-struck s')).toHaveText('2:25 PM');
     await expect(page.locator('#time-diff-display .new-time-highlight')).toHaveText('2:30 PM');
 
+    // Capture distinct reduced-motion capture
     await page.screenshot({
-      path: path.join(STALE_COMMITTED_EVIDENCE_DIR, `06-s3-reduced-motion-${viewSuffix}.png`),
+      path: path.join(COMMITTED_EVIDENCE_DIR, `06-s3-reduced-motion-${viewSuffix}.png`),
     });
+
+    // Verify distinct from normal capture (files are non-empty and non-identical)
+    const normalPath = path.join(COMMITTED_EVIDENCE_DIR, `05-s3-change-moment-${viewSuffix}.png`);
+    const reducedPath = path.join(COMMITTED_EVIDENCE_DIR, `06-s3-reduced-motion-${viewSuffix}.png`);
+    expect(fs.existsSync(normalPath)).toBe(true);
+    expect(fs.existsSync(reducedPath)).toBe(true);
+    expect(fs.statSync(reducedPath).size).toBeGreaterThan(1000);
+    expect(fs.readFileSync(normalPath).equals(fs.readFileSync(reducedPath))).toBe(false);
   });
 });

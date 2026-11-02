@@ -389,19 +389,7 @@ export function computeSceneState(
       ...storedProposals,
     ];
 
-    let effectiveSuppressions = storedSuppressions;
-    if (timelineBeat.id === 'S1q' && !effectiveSuppressions.some(s => s.targetIntent === 'lunch')) {
-      effectiveSuppressions = [
-        ...effectiveSuppressions,
-        {
-          code: 'user_suppressed',
-          reason: "User dismissed: Don't suggest this today",
-          scope: 'today',
-          recordedAt: '2026-10-28T18:55:00.000Z',
-          targetIntent: 'lunch',
-        },
-      ];
-    }
+    const effectiveSuppressions = storedSuppressions;
 
     const result = runPipeline({
       snapshot: latestSnapshot,
@@ -1324,12 +1312,16 @@ export function renderApp(
   const timelineController = new ContinuousTimelineController({
     storage: sharedStorage,
     autoPlay: false,
-    onUpdate: () => {
+    onUpdate: (beat) => {
+      activeTimelineBeat = beat;
+      actionStore.resetToIdle();
       update();
     },
   });
 
   let activeTimelineBeat: TimelineBeat | null = null;
+  const previousComposedPlanByIntent = new Map<string, PreparedPlan>();
+
   if (typeof window !== 'undefined') {
     try {
       const p = new URLSearchParams(window.location.search);
@@ -1345,15 +1337,33 @@ export function renderApp(
     }
   }
 
-  if (typeof window !== 'undefined') {
+  const isTimelineGated =
+    isDevOrTest ||
+    isDevMode ||
+    (typeof window !== 'undefined' &&
+      typeof window.location?.search === 'string' &&
+      (window.location.search.includes('timeline=1') ||
+        window.location.search.includes('beat=') ||
+        window.location.search.includes('test=1') ||
+        window.location.search.includes('dev=1')));
+
+  if (typeof window !== 'undefined' && isTimelineGated) {
     (window as any).__YORI_TIMELINE__ = {
       step: () => {
+        actionStore.resetToIdle();
         activeTimelineBeat = timelineController.step();
         update();
         return activeTimelineBeat;
       },
       goTo: (beatId: TimelineBeatId) => {
+        actionStore.resetToIdle();
         activeTimelineBeat = timelineController.goTo(beatId);
+        update();
+        return activeTimelineBeat;
+      },
+      simulateDismissLunch: (source: 'simulated_user' | 'user' = 'simulated_user') => {
+        actionStore.resetToIdle();
+        activeTimelineBeat = timelineController.simulateDismissLunch(source);
         update();
         return activeTimelineBeat;
       },
@@ -1366,6 +1376,9 @@ export function renderApp(
         update();
       },
       reset: () => {
+        previousComposedPlanByIntent.clear();
+        actionStore.resetToIdle();
+        activeLoadedFacts = [];
         activeTimelineBeat = timelineController.restart();
         update();
         return activeTimelineBeat;
@@ -1948,8 +1961,8 @@ export function renderApp(
         };
       }
     } else {
-      if (!selectedCardState || selectedCardState.selectedId.startsWith('live-') || selectedCardState.selectedId.startsWith('hero-live')) {
-        const heroKind = determineCardKind(nowPlan);
+      const heroKind = determineCardKind(nowPlan);
+      if (activeTimelineBeat || !selectedCardState || selectedCardState.selectedId.startsWith('live-') || selectedCardState.selectedId.startsWith('hero-live')) {
         selectedCardState = {
           selectedId: nowPlan?.id || 'hero',
           cardKind: heroKind,
@@ -2627,6 +2640,75 @@ export function renderApp(
 
         const effectiveSceneClock = effectiveSnapshot?.asOf;
 
+        let computedChangeMoment: HomeCompositionVM['changeMoment'] = undefined;
+        if (nowPlan && (activeTimelineBeat || currentScene === 'rain')) {
+          let priorPlan = previousComposedPlanByIntent.get(nowPlan.intentId);
+          if (!priorPlan && (activeTimelineBeat?.id === 'S3' || currentScene === 'rain')) {
+            try {
+              const preState = computeSceneState(
+                'clear',
+                sharedStorage,
+                weatherStatus.enabled ? liveWeatherSignal : null,
+                activeLoadedFacts,
+                undefined,
+                activeTimelineBeat ? TIMELINE_BEATS.find(b => b.id === 'S2') ?? null : null
+              );
+              const candidatePrior = preState.pipelineResult.livingContext.now;
+              if (candidatePrior && candidatePrior.intentId === nowPlan.intentId) {
+                priorPlan = candidatePrior;
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          if (priorPlan) {
+            const tz = nowPlan.timezone || 'America/Los_Angeles';
+            const priorLeaveTimeStr = priorPlan.leaveAt ? formatTime(priorPlan.leaveAt, tz) : undefined;
+            const newLeaveTimeStr = nowPlan.leaveAt ? formatTime(nowPlan.leaveAt, tz) : undefined;
+            const priorPrepTimeStr = priorPlan.prepareAt ? formatTime(priorPlan.prepareAt, tz) : undefined;
+            const newPrepTimeStr = nowPlan.prepareAt ? formatTime(nowPlan.prepareAt, tz) : undefined;
+
+            const planDiff = computePlanDiff(
+              {
+                headline: priorPlan.headline,
+                leaveTimeStr: priorLeaveTimeStr,
+                prepareTimeStr: priorPrepTimeStr,
+              },
+              {
+                headline: nowPlan.headline,
+                leaveTimeStr: newLeaveTimeStr,
+                prepareTimeStr: newPrepTimeStr,
+              }
+            );
+
+            if (planDiff || (priorLeaveTimeStr && newLeaveTimeStr && priorLeaveTimeStr !== newLeaveTimeStr)) {
+              const weatherSig = effectiveSnapshot?.signals.find(s => s.kind === 'weather');
+              const isRain = (weatherSig?.value as any)?.condition === 'rain' || ((weatherSig?.value as any)?.precipProbability ?? 0) > 0;
+              const cause = isRain ? 'rain forecast' : 'schedule update';
+              const causeMarker = `What changed: ${cause}`;
+              const newLeaveClean = (newLeaveTimeStr || '').replace(/\s*[AaPp][Mm]$/, '');
+              const eventTitle = (nowPlan as any)?.subjectTitle || (nowPlan as any)?.title || 'your lesson';
+              const heroCauseEffect = isRain
+                ? `Rain starts before ${eventTitle.toLowerCase().includes('lesson') ? 'your lesson' : eventTitle}. I moved your leave time to ${newLeaveClean}.`
+                : `Travel estimate changed. I moved your leave time to ${newLeaveClean}.`;
+
+              computedChangeMoment = {
+                cause,
+                causeMarker,
+                heroCauseEffect,
+                priorLeaveTime: priorLeaveTimeStr,
+                newLeaveTime: newLeaveTimeStr,
+                statusTransition: 'Updated plan ready',
+              };
+            }
+          }
+
+          if (activeTimelineBeat?.id !== 'S3' && currentScene !== 'rain') {
+            previousComposedPlanByIntent.set(nowPlan.intentId, nowPlan);
+          }
+        }
+
         const v2Composition = buildHomeComposition({
           plan: nowPlan,
           spatialEvidence: spatialMapEvidence,
@@ -2648,18 +2730,15 @@ export function renderApp(
             placeDisplay: activeTimelineBeat?.placeDisplay ?? '',
             isSimulated: true,
           },
-          changeMoment: (activeTimelineBeat?.id === 'S3' || currentScene === 'rain') ? {
-            cause: 'rain forecast',
-            causeMarker: 'What changed: rain forecast',
-            heroCauseEffect: 'Rain starts before your lesson. I moved your leave time to 2:30.',
-            priorLeaveTime: '2:25 PM',
-            newLeaveTime: '2:30 PM',
-            statusTransition: 'Updated plan ready',
-          } : undefined,
-          suppressedQuiet: (activeTimelineBeat?.id === 'S1q') ? {
-            message: "Okay — I'll stay quiet about lunch today",
-            budgetMeter: `${storedEnvelope?.payload.promptBudget?.count ?? 1} of 3 used today`,
-          } : undefined,
+          changeMoment: computedChangeMoment,
+          suppressedQuiet:
+            activeTimelineBeat?.id === 'S1q' &&
+            storage.load()?.payload.suppressions?.some((s: any) => s.targetIntent === 'lunch')
+              ? {
+                  message: "Okay — I'll stay quiet about lunch today",
+                  budgetMeter: `${storedEnvelope?.payload.promptBudget?.count ?? 1} of 3 used today`,
+                }
+              : undefined,
           timelineControls: {
             isPlaying: timelineController.isPlaying(),
             simulatedTimeStr: activeTimelineBeat?.timeDisplay ?? '10:00 AM',
@@ -3182,9 +3261,11 @@ export function renderApp(
     const locState = locConn?.state === 'connected' ? 'available' : locConn?.state === 'permission_needed' ? 'prompt' : 'unavailable';
     const locLabel = locConn?.state === 'connected' ? 'Available' : locConn?.state === 'permission_needed' ? 'Prompt' : locConn?.state === 'denied' ? 'Denied' : 'Unavailable';
     const calLabel = 'N/A';
+    const weatherSig = effectiveSnapshot?.signals?.find(s => s.kind === 'weather');
+    const weatherCondition = (weatherSig?.value as any)?.condition;
     const weatherLabel = contextMode === 'live'
       ? (weatherStatus.enabled ? 'Open-Meteo' : 'Off')
-      : (currentScene === 'rain' ? 'Rain forecast' : '20°C');
+      : (weatherCondition === 'rain' || currentScene === 'rain' ? 'Rain forecast' : (weatherCondition === 'clear' ? 'Clear' : '20°C'));
     const xmemoConn = latestConnectorStatuses?.xmemo;
     const xmemoLabel = contextMode === 'live'
       ? (xmemoConn?.state === 'connected' ? 'Connected' : 'Disconnected')
@@ -3908,6 +3989,7 @@ export function renderApp(
         currentScene = val;
         activeTimelineBeat = null;
         selectedCardState = null;
+        previousComposedPlanByIntent.clear();
         actionStore.resetToIdle();
         actionStore.clearOverride();
         actionFeedbackMessage = null;
@@ -3929,6 +4011,7 @@ export function renderApp(
     const stepBtn = root.querySelector('#timeline-step-btn') as HTMLButtonElement | null;
     if (stepBtn) {
       stepBtn.addEventListener('click', () => {
+        actionStore.resetToIdle();
         activeTimelineBeat = timelineController.step();
         update();
       });
@@ -3936,6 +4019,9 @@ export function renderApp(
     const restartBtn = root.querySelector('#timeline-restart-btn') as HTMLButtonElement | null;
     if (restartBtn) {
       restartBtn.addEventListener('click', () => {
+        previousComposedPlanByIntent.clear();
+        actionStore.resetToIdle();
+        activeLoadedFacts = [];
         activeTimelineBeat = timelineController.restart();
         update();
       });
@@ -4669,6 +4755,29 @@ export function renderApp(
             updatedPlan,
             `Adjusted timing: prep ${prepMinutes}m, buffer ${bufferMinutes}m`
           );
+
+          previousComposedPlanByIntent.set(planToAdjust.intentId, updatedPlan);
+
+          const filteredLoaded = activeLoadedFacts.filter(
+            f => f.key !== 'prep_buffer_minutes' && f.key !== 'prep_duration_minutes'
+          );
+          activeLoadedFacts = [
+            ...filteredLoaded,
+            createMemoryFact(
+              'prep_buffer_minutes',
+              bufferMinutes,
+              'confirmed',
+              { source: 'user_feedback', recordedAt: snapshotAsOf, note: 'Adjusted for today' },
+              snapshotAsOf
+            ),
+            createMemoryFact(
+              'prep_duration_minutes',
+              prepMinutes,
+              'confirmed',
+              { source: 'user_feedback', recordedAt: snapshotAsOf, note: 'Adjusted for today' },
+              snapshotAsOf
+            ),
+          ];
         }
       };
 

@@ -38,12 +38,6 @@ export interface TimelineBeat {
   readonly placeDisplay: string;
   readonly livingHeaderLine: string;
   readonly isSuppressedBeat?: boolean;
-  readonly suppressedMessage?: string;
-  readonly whatChanged?: string;
-  readonly heroCauseEffect?: string;
-  readonly priorLeaveTime?: string;
-  readonly newLeaveTime?: string;
-  readonly statusTransition?: string;
 }
 
 export const TIMELINE_BEATS: readonly TimelineBeat[] = Object.freeze([
@@ -74,7 +68,6 @@ export const TIMELINE_BEATS: readonly TimelineBeat[] = Object.freeze([
     placeDisplay: 'Downtown',
     livingHeaderLine: '12:00 PM · Clear · Downtown',
     isSuppressedBeat: true,
-    suppressedMessage: "Okay — I'll stay quiet about lunch today",
   },
   {
     id: 'S2',
@@ -93,11 +86,6 @@ export const TIMELINE_BEATS: readonly TimelineBeat[] = Object.freeze([
     weatherDisplay: 'Rain from 2:00',
     placeDisplay: 'Home',
     livingHeaderLine: '1:35 PM · Rain from 2:00 · Home',
-    whatChanged: 'rain forecast',
-    heroCauseEffect: 'Rain starts before your lesson. I moved your leave time to 2:30.',
-    priorLeaveTime: '2:25 PM',
-    newLeaveTime: '2:30 PM',
-    statusTransition: 'Updated plan ready',
   },
 ]);
 
@@ -439,8 +427,64 @@ export class ContinuousTimelineController {
   }
 
   public step(): TimelineBeat {
-    const nextIndex = (this.currentBeatIndex + 1) % TIMELINE_BEATS.length;
+    let nextIndex = (this.currentBeatIndex + 1) % TIMELINE_BEATS.length;
+    const nextBeat = TIMELINE_BEATS[nextIndex]!;
+    if (nextBeat.id === 'S1q') {
+      // S1q is reached only if lunch was dismissed. If not dismissed, stepping skips S1q to S2
+      if (!this.isLunchSuppressedInStorage()) {
+        nextIndex = (nextIndex + 1) % TIMELINE_BEATS.length;
+      }
+    }
     return this.goToIndex(nextIndex);
+  }
+
+  public isLunchSuppressedInStorage(): boolean {
+    if (!this.storage) return false;
+    try {
+      const envelope = this.storage.load();
+      return (envelope?.payload.suppressions ?? []).some(
+        s => s.targetIntent === 'lunch' && s.code === 'user_suppressed'
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  public simulateDismissLunch(source: 'simulated_user' | 'user' = 'simulated_user'): TimelineBeat {
+    if (this.storage) {
+      try {
+        const envelope = this.storage.load();
+        const existing = envelope?.payload.suppressions ?? [];
+        const suppressions: SuppressionReason[] = existing.filter(
+          s => !(s.code === 'user_suppressed' && s.targetIntent === 'lunch')
+        );
+        suppressions.push({
+          code: 'user_suppressed',
+          reason:
+            source === 'simulated_user'
+              ? 'Demo: simulated tap on Not now'
+              : "User dismissed: Don't suggest this today",
+          scope: 'today',
+          recordedAt: '2026-10-28T18:55:00.000Z',
+          targetIntent: 'lunch',
+        });
+
+        const currentCount = envelope?.payload.promptBudget?.count ?? 0;
+        this.storage.save(
+          {
+            memoryFacts: envelope?.payload.memoryFacts ?? [],
+            proposals: envelope?.payload.proposals ?? [],
+            suppressions,
+            promptBudget: { date: '2026-10-28', count: Math.max(1, currentCount) },
+            acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
+          },
+          '2026-10-28T19:00:00.000Z'
+        );
+      } catch {
+        // storage error ignored
+      }
+    }
+    return this.goTo('S1q');
   }
 
   public goTo(beatId: TimelineBeatId): TimelineBeat {
@@ -517,11 +561,6 @@ export class ContinuousTimelineController {
     this.currentBeatIndex = idx;
     const currentBeat = TIMELINE_BEATS[idx]!;
 
-    // If entering S1q, record lunch suppression in storage
-    if (currentBeat.id === 'S1q' && this.storage) {
-      this.recordLunchSuppression();
-    }
-
     this.notifySubscribers();
 
     if (this.isAutoPlaying) {
@@ -549,38 +588,6 @@ export class ContinuousTimelineController {
       } catch {
         // ignore subscriber errors
       }
-    }
-  }
-
-  private recordLunchSuppression(): void {
-    if (!this.storage) return;
-    try {
-      const envelope = this.storage.load();
-      const existing = envelope?.payload.suppressions ?? [];
-      const suppressions: SuppressionReason[] = existing.filter(
-        s => !(s.code === 'user_suppressed' && s.targetIntent === 'lunch')
-      );
-      suppressions.push({
-        code: 'user_suppressed',
-        reason: "User dismissed: Don't suggest this today",
-        scope: 'today',
-        recordedAt: '2026-10-28T18:55:00.000Z',
-        targetIntent: 'lunch',
-      });
-
-      const currentCount = envelope?.payload.promptBudget?.count ?? 0;
-      this.storage.save(
-        {
-          memoryFacts: envelope?.payload.memoryFacts ?? [],
-          proposals: envelope?.payload.proposals ?? [],
-          suppressions,
-          promptBudget: { date: '2026-10-28', count: Math.max(1, currentCount) },
-          acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
-        },
-        '2026-10-28T19:00:00.000Z'
-      );
-    } catch {
-      // storage error ignored
     }
   }
 }

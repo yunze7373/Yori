@@ -233,7 +233,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await page.waitForTimeout(200);
 
     // Alert banner & Umbrella chip
-    await expect(page.locator('.v2-insight-title, .rain-banner').first()).toContainText(
+    await expect(page.locator('.v2-insight-title, .rain-banner, #what-changed-marker').first()).toContainText(
       'What changed: rain forecast'
     );
     await expect(page.locator('#chip-umbrella').first()).toContainText('Umbrella');

@@ -477,9 +477,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
     return `
       <div class="v2-home-container journey">
         ${renderStateNotices(vm)}
-        <!-- Weather / Insight Alert Banner -->
+        <!-- Weather / Insight Alert Banner (omitted when changeMoment is active to avoid duplicate cause markers) -->
         ${
-          vm.isRain && vm.rainBanner
+          !vm.changeMoment && vm.isRain && vm.rainBanner
             ? `
           <div class="v2-insight-banner" role="status" data-provenance="fixture">
             <div class="v2-insight-icon" aria-hidden="true">
@@ -526,7 +526,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
         <!-- Responsive Hero Structure (NOW Card with Inline Map) -->
         <div class="v2-journey-grid">
           <section class="card now-card v2-journey-card" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="fixture">
-            ${renderPlanDiffBanner(vm.planDiff)}
+            ${!vm.changeMoment ? renderPlanDiffBanner(vm.planDiff) : ''}
             <div class="v2-card-header">
               <!-- Hero Thought Badge & Relative Time -->
               <div class="hero-thought-header">
@@ -623,6 +623,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     : ''
                 }
               </div>
+
+              ${renderActionRow(vm)}
+
               <!-- 4 Signal Tiles Grid -->
               <div class="hero-signals-grid" id="hero-signals-grid" role="group" aria-label="Signal Inputs">
                 <div class="signal-tile" id="signal-tile-weather">
@@ -673,8 +676,6 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             <div class="now-basis">
               <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
             </div>
-
-            ${renderActionRow(vm)}
           </section>
         </div>
 
@@ -745,49 +746,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           `
               : ''
           }
-          <!-- 4 Signal Tiles Grid -->
-          <div class="hero-signals-grid" id="hero-signals-grid" role="group" aria-label="Signal Inputs">
-            <div class="signal-tile" id="signal-tile-weather">
-              <div class="signal-tile-top">
-                <div class="signal-icon-circle weather" aria-hidden="true">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line></svg>
-                </div>
-                <span class="signal-label">WEATHER</span>
-              </div>
-              <div class="signal-value">Clear sky · 20°C</div>
-            </div>
-
-            <div class="signal-tile" id="signal-tile-calendar">
-              <div class="signal-tile-top">
-                <div class="signal-icon-circle calendar" aria-hidden="true">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                </div>
-                <span class="signal-label">CALENDAR</span>
-              </div>
-              <div class="signal-value">${escapeHtml(vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'Drive route · ongoing' : 'Lunch break · 12:15 PM')}</div>
-            </div>
-
-            <div class="signal-tile" id="signal-tile-transit">
-              <div class="signal-tile-top">
-                <div class="signal-icon-circle transit" aria-hidden="true">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
-                </div>
-                <span class="signal-label">TRANSIT</span>
-              </div>
-              <div class="signal-value">${escapeHtml(vm.topCandidateDistance || '5m away · walk')}</div>
-            </div>
-
-            <div class="signal-tile" id="signal-tile-memory">
-              <div class="signal-tile-top">
-                <div class="signal-icon-circle memory" aria-hidden="true">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.93 7.07"></path></svg>
-                </div>
-                <span class="signal-label">MEMORY</span>
-              </div>
-              <div class="signal-value">${escapeHtml(vm.title === 'Low Fuel Warning' ? 'Low fuel threshold' : 'Prefers quiet dining')}</div>
-            </div>
-          </div>
         </div>
+
+        ${renderActionRow(vm)}
 
         <!-- Candidate Cards with Local Labelled SVG Illustrations -->
         ${
@@ -893,14 +854,55 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             : ''
         }
 
+        <!-- 4 Signal Tiles Grid -->
+        <div class="hero-signals-grid" id="hero-signals-grid" role="group" aria-label="Signal Inputs">
+          <div class="signal-tile" id="signal-tile-weather">
+            <div class="signal-tile-top">
+              <div class="signal-icon-circle weather" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line></svg>
+              </div>
+              <span class="signal-label">WEATHER</span>
+            </div>
+            <div class="signal-value">Clear sky · 20°C</div>
+          </div>
+
+          <div class="signal-tile" id="signal-tile-calendar">
+            <div class="signal-tile-top">
+              <div class="signal-icon-circle calendar" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              </div>
+              <span class="signal-label">CALENDAR</span>
+            </div>
+            <div class="signal-value">${escapeHtml(vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'Drive route · ongoing' : 'Lunch break · 12:15 PM')}</div>
+          </div>
+
+          <div class="signal-tile" id="signal-tile-transit">
+            <div class="signal-tile-top">
+              <div class="signal-icon-circle transit" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+              </div>
+              <span class="signal-label">TRANSIT</span>
+            </div>
+            <div class="signal-value">${escapeHtml(vm.topCandidateDistance || '5m away · walk')}</div>
+          </div>
+
+          <div class="signal-tile" id="signal-tile-memory">
+            <div class="signal-tile-top">
+              <div class="signal-icon-circle memory" aria-hidden="true">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.93 7.07"></path></svg>
+              </div>
+              <span class="signal-label">MEMORY</span>
+            </div>
+            <div class="signal-value">${escapeHtml(vm.title === 'Low Fuel Warning' ? 'Low fuel threshold' : 'Prefers quiet dining')}</div>
+          </div>
+        </div>
+
         <!-- Compact Map Strip inside Candidates Card (Finding 5) -->
         ${vm.map ? `<div class="v2-card-inline-map now-inline-map now-map-strip">${renderCompactMapStrip(vm.map)}</div>` : ''}
 
         <div class="now-basis">
           <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
         </div>
-
-        ${renderActionRow(vm)}
       </section>
 
       ${renderSectionedFeed(vm)}

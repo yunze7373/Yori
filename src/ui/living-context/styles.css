@@ -5942,6 +5942,42 @@ button.v2-view-detail-link:focus-visible {
   border: 1px solid var(--color-border, #E4DCD3);
   border-radius: 12px;
   padding: 4px 8px;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .desktop-greeting-row {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .greeting-text-group {
+    min-width: 0;
+    width: 100%;
+  }
+  .desktop-header-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .timeline-controls-bar {
+    width: 100%;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 3px 6px;
+  }
+  .timeline-pill {
+    padding: 4px 8px;
+    min-height: 44px;
+    max-width: calc(100% - 150px);
+  }
+  .timeline-pill .context-pill-subtitle {
+    display: none;
+  }
+  .timeline-action-buttons {
+    flex-shrink: 0;
+    gap: 4px;
+  }
 }
 
 .timeline-action-buttons {
@@ -5984,6 +6020,18 @@ button.v2-view-detail-link:focus-visible {
   background: rgba(45, 106, 79, 0.06);
   border: 1px solid rgba(45, 106, 79, 0.2);
   border-radius: 10px;
+  animation: changeMomentCrossfade 400ms ease-out;
+}
+
+@keyframes changeMomentCrossfade {
+  from {
+    opacity: 0.35;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .plan-status-transition {
@@ -6091,10 +6139,18 @@ button.v2-view-detail-link:focus-visible {
 
 /* prefers-reduced-motion fallback */
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
   .living-header-line,
   .living-header-line.living-header-morphing,
   .plan-status-transition,
-  .btn-timeline-ctrl {
+  .btn-timeline-ctrl,
+  .change-moment-container {
     transition: none !important;
     animation: none !important;
   }
