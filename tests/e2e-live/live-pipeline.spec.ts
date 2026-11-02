@@ -792,15 +792,15 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
   }) => {
     await page.clock.install({ time: new Date('2026-11-02T12:15:00.000Z') });
     seedLocalStorage(page);
+
     let placesReqCount = 0;
-    await page.route('**/api/places?*', async route => {
-      placesReqCount++;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ enabled: true, places: MOCK_PLACES_CANDIDATES }),
-      });
+    page.on('request', req => {
+      const u = req.url();
+      if (u.includes('/api/places') && !u.includes('/status')) {
+        placesReqCount++;
+      }
     });
+
     await setupBaseMockApiRoutes(page, { placesEnabled: true, weatherEnabled: false });
 
     await page.goto('/?mode=live');
@@ -810,6 +810,7 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     }
     await page.waitForSelector('#btn-accept', { timeout: 10000 });
     const initialCount = placesReqCount;
+    expect(initialCount).toBe(1);
 
     // Dispatch rapid focus and visibilitychange events simultaneously
     await page.evaluate(() => {
@@ -818,8 +819,8 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     });
     await page.waitForTimeout(500);
 
-    // Must coalesce to at most 1 additional fetch (single-flight coalescing)
-    expect(placesReqCount - initialCount).toBeLessThanOrEqual(1);
+    // Rapid focus and visibilitychange coalesce into exactly 1 additional places fetch
+    expect(placesReqCount - initialCount).toBe(1);
   });
 
   test('Reviewer Probe 6: Ack then real candidate change -> marker reappears (P-A)', async ({

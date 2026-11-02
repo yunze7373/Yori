@@ -252,7 +252,7 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await expect(topCard).toContainText('straight-line');
 
     // Verify map label derives from the top candidate (not literal SF 'Metro Gas & Go')
-    const mapCard = page.locator('.v2-map-card');
+    const mapCard = page.locator('.v2-map-card').first();
     await expect(mapCard).toBeVisible();
     const topCardName = await topCard.locator('.v2-candidate-name').innerText();
     await expect(mapCard).toContainText(topCardName.trim());

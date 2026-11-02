@@ -165,7 +165,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
 
     // Prominent route map canvas & journey timeline live in Trip Details (Finding 1)
     await page.locator('#btn-view-trip-details').click();
-    await expect(page.locator('.v2-map-canvas.prominent')).toBeVisible();
+    await expect(page.locator('.v2-map-canvas.prominent').first()).toBeVisible();
     await expect(page.locator('.v2-timeline')).toBeVisible();
     await page.locator('#trip-detail-back-btn').click();
 

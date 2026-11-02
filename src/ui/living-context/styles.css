@@ -2304,7 +2304,7 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 }
 
 .map-fallback-active .real-map-caption,
-.map-fallback-active .v2-map-weather-callout {
+.map-fallback-active div.v2-map-weather-callout {
   display: none !important;
 }
 
@@ -3724,6 +3724,7 @@ button.v2-view-detail-link:focus-visible {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
+  min-width: 44px;
   padding: 8px 16px;
   border-radius: 16px;
   font-family: var(--font-sans, "Inter", sans-serif);
@@ -5176,7 +5177,7 @@ button.v2-view-detail-link:focus-visible {
     max-height: 100vh;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 12px 20px 120px 20px;
+    padding: 12px 20px 24px 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -5187,7 +5188,7 @@ button.v2-view-detail-link:focus-visible {
     width: 100%;
     max-width: 680px;
     margin: 0 auto;
-    padding: 0;
+    padding: 0 0 160px 0;
     box-sizing: border-box;
   }
 
@@ -5997,6 +5998,8 @@ button.v2-view-detail-link:focus-visible {
   .timeline-pill {
     padding: 4px 8px;
     min-height: 44px;
+    min-width: 44px;
+    flex: 1 1 auto;
     max-width: calc(100% - 150px);
   }
   .timeline-pill .context-pill-subtitle {
@@ -6170,9 +6173,9 @@ button.v2-view-detail-link:focus-visible {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
+    animation-duration: 0s !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
   }
   .living-header-line,
   .living-header-line.living-header-morphing,

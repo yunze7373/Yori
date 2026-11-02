@@ -11,20 +11,22 @@ test.describe('PRE-S1-C: Production Gating of Dev/Test Hooks and URL Forcing', (
     await page.goto(`${SHIPPING_PREVIEW_URL}/?ui=v2&scene=lunch&geo_consent=denied&test=1`);
     await page.waitForSelector('.app-layout');
 
-    // 1. Scene forcing is INERT:
-    // Lunch options are NOT rendered; default clear morning commute scene remains active
-    const nowCard = page.locator('.now-card');
-    await expect(nowCard).toBeVisible();
-    await expect(nowCard).toContainText('Piano lesson at 3:00 PM');
-    await expect(nowCard).not.toContainText('Lunch options near you');
+    // 1. Scene forcing and mode overrides are INERT:
+    // Lunch options are NOT rendered; default Live mode remains active with honest quiet gated state
+    await expect(page.locator('.app-layout')).toHaveAttribute('data-context-mode', 'live');
+    const quietTitle = page.locator('#quiet-title');
+    await expect(quietTitle).toBeVisible();
+    await expect(quietTitle).toContainText('Location Needed');
     await expect(page.locator('.v2-candidate-list')).toHaveCount(0);
 
     // 2. Observable geo_consent forcing is INERT:
     // When geo_consent=denied is active, the app renders .v2-location-notice-banner.denied.
     // In shipping preview, geo_consent forcing is stripped at compile-time, so NO denied banner exists.
-    await expect(page.locator('.v2-location-notice-banner')).toHaveCount(0);
     await expect(page.locator('.v2-location-notice-banner.denied')).toHaveCount(0);
-    await expect(page.locator('.quiet-card')).toHaveCount(0);
+    await expect(page.locator('.v2-location-notice-banner.prompt')).toBeVisible();
+    await expect(page.locator('#btn-request-location')).toBeVisible();
+    await expect(page.locator('.quiet-card')).toBeVisible();
+    await expect(page.locator('[data-provenance="fixture"]')).toHaveCount(0);
 
     // 3. Dev/test window hooks are 100% absent:
     const hooksState = await page.evaluate(() => {
@@ -61,20 +63,16 @@ test.describe('PRE-S1-C: Production Gating of Dev/Test Hooks and URL Forcing', (
     expect(hooksState.interceptNav).toBe('undefined');
 
     // 4. Route test hooks are INERT in shipping production build:
-    await page.goto(`${SHIPPING_PREVIEW_URL}/?mode=live&test_destination=1&test=1`);
-    await page.waitForSelector('#notice-route-unavailable');
-    const routeCard = page.locator('#notice-route-unavailable');
-    await expect(routeCard).toHaveAttribute('data-no-route-reason', 'no_destination');
-    await expect(routeCard).toContainText('no destination set');
+    await page.goto(`${SHIPPING_PREVIEW_URL}/?test_destination=1&test=1`);
+    await page.waitForSelector('.app-layout');
     await expect(page.locator('#live-route-card')).toHaveCount(0);
     const bodyText = await page.locator('body').innerText();
     expect(bodyText).not.toContain('Mission Dolores');
 
-    await page.goto(`${SHIPPING_PREVIEW_URL}/?mode=live&test_no_route_reason=stale&test=1`);
-    await page.waitForSelector('#notice-route-unavailable');
-    const reasonCard = page.locator('#notice-route-unavailable');
-    await expect(reasonCard).toHaveAttribute('data-no-route-reason', 'no_destination');
-    await expect(reasonCard).not.toContainText('data is stale');
+    await page.goto(`${SHIPPING_PREVIEW_URL}/?test_no_route_reason=stale&test=1`);
+    await page.waitForSelector('.app-layout');
+    const bodyText2 = await page.locator('body').innerText();
+    expect(bodyText2).not.toContain('data is stale');
   });
 
   test('Positive case: on TEST build with ?test=1&scene=lunch&geo_consent=denied, forcing and hooks are active and observable', async ({

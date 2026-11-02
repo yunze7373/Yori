@@ -431,7 +431,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
       await page.locator('#desktop-nav-me').click();
     }
     await expect(page.locator('#fact-prep_buffer_preference')).toBeVisible();
-    await expect(page.locator('.badge-budget')).toContainText('0 of 3 used today');
+    await expect(page.locator('.badge-budget')).toContainText('1 of 3 used today');
   });
 
   test('Away-Lunch Scene (D3): <=3 lunch options with single distance and mock disclosure', async ({

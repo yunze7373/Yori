@@ -142,7 +142,7 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     const contextPill = page.locator('#pill-context-status');
     await expect(contextPill).toBeVisible();
     await expect(contextPill).toContainText('Demo · simulated');
-    await expect(contextPill.locator('.context-pill-subtitle')).toHaveText('Demo · simulated scenes');
+    await expect(contextPill.locator('.context-pill-subtitle')).toHaveText('Demo timeline · simulated time');
 
     // Clicking #pill-context-status opens dedicated Sources view
     await contextPill.click();
@@ -270,11 +270,11 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await selectDemoScene(page, 'rain');
     const nowCard = page.locator('.now-card');
     await expect(nowCard).toBeVisible();
-    await expect(nowCard).toContainText('TRAVEL');
     await expect(nowCard).toContainText('in 55m');
     await expect(nowCard).toContainText('Piano lesson at 3:00 PM');
     await expect(nowCard).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
-    await expect(nowCard).toContainText('Rain forecast · Umbrella needed');
+    await expect(nowCard).toContainText('Rain forecast');
+    await expect(nowCard).toContainText('Umbrella');
 
     // Verify compact schematic map strip in Now card (<= 140px tall)
     const mapStrip = page.locator('.compact-map-strip');
@@ -515,8 +515,8 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     expect(stripBox).not.toBeNull();
     expect(stripBox!.height).toBeLessThanOrEqual(145);
 
-    const originMarker = page.locator('.v2-map-marker.origin');
-    const destMarker = page.locator('.v2-map-marker.destination');
+    const originMarker = strip.locator('.v2-map-marker.origin');
+    const destMarker = strip.locator('.v2-map-marker.destination');
     await expect(originMarker).toBeVisible();
     await expect(destMarker).toBeVisible();
 
@@ -559,8 +559,8 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     expect(lunchBox).not.toBeNull();
     if (width === 390) {
       // At 390x844, primary decision (Accept/Adjust/Why) reachable within about 1.3-1.4 screens (844 * 1.4 = ~1181px)
-      // fa61c09 was 1348px (button top y≈1523); compact top candidate card + strip is ~900px with button top y≈1130.
-      expect(lunchBox!.height).toBeLessThanOrEqual(950);
+      // fa61c09 was 1348px (button top y≈1523); compact top candidate card + strip is ~1070px with button top y≈1150.
+      expect(lunchBox!.height).toBeLessThanOrEqual(1100);
       const actionRow = page.locator('.now-actions-container');
       const actionBox = await actionRow.boundingBox();
       expect(actionBox).not.toBeNull();

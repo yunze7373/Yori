@@ -103,7 +103,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
       const bodyText = await page.innerText('body');
       const nowCardText = (await page.locator('.now-card').count()) > 0 ? await page.locator('.now-card').innerText() : '';
       const optionsText = (await page.locator('.v2-options-grid').count()) > 0 ? await page.locator('.v2-options-grid').innerText() : '';
-      const mapText = (await page.locator('.v2-map-card').count()) > 0 ? await page.locator('.v2-map-card').innerText() : '';
+      const mapText = (await page.locator('.v2-map-card').count()) > 0 ? await page.locator('.v2-map-card').first().innerText() : '';
       const whyText = (await page.locator('#why-sheet-backdrop').count()) > 0 ? await page.locator('#why-sheet-backdrop').innerText() : '';
       const chatText = (await page.locator('#conversation-overlay').count()) > 0 ? await page.locator('#conversation-overlay').innerText() : '';
       const meText = (await page.locator('.me-view-container').count()) > 0 ? await page.locator('.me-view-container').innerText() : '';
@@ -163,8 +163,8 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
 
     // 3. Route Options (Drive vs Bus) in Trip Details (Finding 1)
     await page.locator('#btn-view-trip-details').click();
-    await expect(page.locator('.v2-map-weather-callout')).toContainText('Rain forecast · simulated');
-    await expect(page.locator('.v2-map-weather-callout')).toContainText('Issued 1:35 PM');
+    await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Rain forecast · simulated');
+    await expect(page.locator('.v2-map-weather-callout').first()).toContainText('Issued 1:35 PM');
 
     const optionCards = page.locator('.v2-options-grid .v2-option-card');
     await expect(optionCards).toHaveCount(2);
@@ -385,7 +385,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
       const bodyText = await page.innerText('body');
       const nowCardText = (await page.locator('.now-card').count()) > 0 ? await page.locator('.now-card').innerText() : '';
       const candidateListText = (await page.locator('.v2-candidate-list').count()) > 0 ? await page.locator('.v2-candidate-list').innerText() : '';
-      const mapText = (await page.locator('.v2-map-card').count()) > 0 ? await page.locator('.v2-map-card').innerText() : '';
+      const mapText = (await page.locator('.v2-map-card').count()) > 0 ? await page.locator('.v2-map-card').first().innerText() : '';
       const detailText = (await page.locator('.restaurant-detail-view').count()) > 0 ? await page.locator('.restaurant-detail-view').innerText() : '';
       const whyText = (await page.locator('#why-sheet-backdrop').count()) > 0 ? await page.locator('#why-sheet-backdrop').innerText() : '';
       const chatText = (await page.locator('#conversation-overlay').count()) > 0 ? await page.locator('#conversation-overlay').innerText() : '';

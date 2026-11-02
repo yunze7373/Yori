@@ -48,10 +48,12 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
       const detailsBtn = page.locator('#btn-view-trip-details');
       await expect(detailsBtn).toBeVisible();
       await detailsBtn.click();
-      await page.waitForSelector('.v2-map-weather-callout');
+      await page.waitForSelector('.v2-trip-detail');
 
-      const calloutRect = page.locator('.v2-map-weather-callout rect');
-      const calloutText = page.locator('.v2-map-weather-callout text').first();
+      await page.locator('.v2-trip-detail .v2-map-canvas').first().scrollIntoViewIfNeeded();
+
+      const calloutRect = page.locator('.v2-trip-detail .v2-map-weather-callout rect').first();
+      const calloutText = page.locator('.v2-trip-detail .v2-map-weather-callout text').first();
 
       const rBox = await calloutRect.boundingBox();
       const tBox = await calloutText.boundingBox();
@@ -79,28 +81,38 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
     await page.waitForSelector('.ask-bar-dock');
     await page.waitForSelector('.v2-map-card');
 
-    // Scroll to the absolute bottom of the document
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    // Scroll to the absolute bottom of the document/container
+    await page.evaluate(() => {
+      const col = document.querySelector('.desktop-center-column');
+      if (col) {
+        col.scrollTop = col.scrollHeight;
+      }
+      window.scrollTo(0, document.body.scrollHeight);
+    });
     await page.waitForTimeout(100);
 
     const askBar = page.locator('#ask-bar');
-    const mapCard = page.locator('.v2-map-card');
+    const mapCards = page.locator('.v2-map-card');
     const lastCardRow = page.locator('.now-card, .v2-journey-card').last();
 
     const askBox = await askBar.boundingBox();
-    const mapBox = await mapCard.boundingBox();
     const cardBox = await lastCardRow.boundingBox();
 
     expect(askBox).not.toBeNull();
-    expect(mapBox).not.toBeNull();
     expect(cardBox).not.toBeNull();
 
-    // Clearance check: bottom of map card and last card element must be above the floating ask bar
-    const mapIntersectsAsk =
-      mapBox!.x < askBox!.x + askBox!.width &&
-      mapBox!.x + mapBox!.width > askBox!.x &&
-      mapBox!.y < askBox!.y + askBox!.height &&
-      mapBox!.y + mapBox!.height > askBox!.y;
+    const count = await mapCards.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      const mapBox = await mapCards.nth(i).boundingBox();
+      if (!mapBox) continue;
+      const mapIntersectsAsk =
+        mapBox.x < askBox!.x + askBox!.width &&
+        mapBox.x + mapBox.width > askBox!.x &&
+        mapBox.y < askBox!.y + askBox!.height &&
+        mapBox.y + mapBox.height > askBox!.y;
+      expect(mapIntersectsAsk, `Ask bar overlaps map card ${i} at 1440x900 viewport bottom`).toBe(false);
+    }
 
     const cardIntersectsAsk =
       cardBox!.x < askBox!.x + askBox!.width &&
@@ -108,7 +120,6 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
       cardBox!.y < askBox!.y + askBox!.height &&
       cardBox!.y + cardBox!.height > askBox!.y;
 
-    expect(mapIntersectsAsk, 'Ask bar overlaps map card at 1440x900 viewport bottom').toBe(false);
     expect(cardIntersectsAsk, 'Ask bar overlaps card at 1440x900 viewport bottom').toBe(false);
 
     // Also verify timeline steps in TripDetail view where timeline now lives (Finding 1)

@@ -148,12 +148,12 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     await expect(nowCardRain.locator('#now-title')).toContainText('Get ready at 2:10 PM, leave by 2:30 PM');
     const clearTiming = 'Get ready at 2:05 PM, leave by 2:25 PM';
     const rainTiming = await nowCardRain.locator('#now-title').innerText();
-    expect(rainTiming).toContain('Get ready at 2:10 PM, leave by 2:30 PM');
+    expect(rainTiming.replace(/\s+/g, ' ')).toContain('Get ready at 2:10 PM, leave by 2:30 PM');
     expect(rainTiming).not.toEqual(clearTiming);
 
     // Verify prominent map canvas and timeline in Trip Details (Finding 1)
     await page.locator('#btn-view-trip-details').click();
-    await expect(page.locator('.v2-map-canvas.prominent')).toBeVisible();
+    await expect(page.locator('.v2-trip-detail .v2-map-canvas.prominent').first()).toBeVisible();
     await expect(page.locator('.v2-timeline')).toBeVisible();
     await page.locator('#trip-detail-back-btn').click();
 
@@ -321,7 +321,7 @@ test.describe('NORTH-STAR-AUDIT: Context-Change Runtime Evidence Suite (Default 
     await expect(nowCardRecomputed).toBeVisible();
     await expect(nowCardRecomputed.locator('#now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
     const postAdjustTiming = await nowCardRecomputed.locator('#now-title').innerText();
-    expect(postAdjustTiming).toContain('Get ready at 2:00 PM, leave by 2:25 PM');
+    expect(postAdjustTiming.replace(/\s+/g, ' ')).toContain('Get ready at 2:00 PM, leave by 2:25 PM');
     expect(postAdjustTiming).not.toEqual(preAdjustTiming);
 
     await checkNoHorizontalScroll(page);

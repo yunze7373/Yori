@@ -29,15 +29,12 @@ function escapeHtml(str: string): string {
 
 export function getMapTilesConfig(): 'osm' | 'off' {
   // Test hook: when in test mode, allow window.__YORI_MAP_TILES__ to override
-  if (
-    typeof window !== 'undefined' &&
-    ((typeof (window as any).__YORI_ENABLE_TEST_HOOKS__ !== 'undefined' && (window as any).__YORI_ENABLE_TEST_HOOKS__) ||
-      (typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined' && __YORI_ENABLE_TEST_HOOKS__) ||
-      (import.meta as any).env?.MODE === 'test')
-  ) {
-    const testOverride = (window as any).__YORI_MAP_TILES__;
-    if (testOverride === 'osm' || testOverride === 'off') {
-      return testOverride;
+  if (typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined' && __YORI_ENABLE_TEST_HOOKS__) {
+    if (typeof window !== 'undefined') {
+      const testOverride = (window as any).__YORI_MAP_TILES__;
+      if (testOverride === 'osm' || testOverride === 'off') {
+        return testOverride;
+      }
     }
   }
 

@@ -433,12 +433,12 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     // Weather callout lives in Trip Details (Finding 1)
     await page.locator('#btn-view-trip-details').click();
 
-    // Locate the weather callout rect and text
-    const rect = page.locator('.v2-map-canvas svg g:has(text) > rect, .v2-map-canvas svg g rect').first();
-    const text = page.locator('.v2-map-canvas svg g text').first();
+    const canvas = page.locator('.v2-trip-detail .v2-map-canvas').first();
+    await canvas.scrollIntoViewIfNeeded();
 
-    await expect(rect).toBeVisible();
-    await expect(text).toBeVisible();
+    // Locate the weather callout rect and text
+    const rect = canvas.locator('svg g:has(text) > rect, svg g rect').first();
+    const text = canvas.locator('svg g text').first();
 
     const rectBox = await rect.boundingBox();
     const textBox = await text.boundingBox();
@@ -538,7 +538,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     for (const testScene of ['rain', 'clear', 'away-lunch']) {
       await selectDemoScene(page, testScene);
       await page.waitForTimeout(200);
-      const svgTexts = page.locator('.v2-map-card svg text, .v2-map-canvas svg text');
+      const svgTexts = page.locator('.v2-map-card:visible svg text, .v2-map-canvas:visible svg text');
       const textCount = await svgTexts.count();
       expect(textCount).toBeGreaterThan(0);
       for (let i = 0; i < textCount; i++) {
@@ -570,7 +570,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
         const svgBox = await svgEl.boundingBox();
         expect(svgBox).not.toBeNull();
 
-        const svgTexts = page.locator('.v2-map-card svg text, .v2-map-canvas svg text');
+        const svgTexts = svgEl.locator('text');
         const count = await svgTexts.count();
         const textBoxes: { label: string; box: { x: number; y: number; width: number; height: number } }[] = [];
 
@@ -632,13 +632,13 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
         await selectDemoScene(page, scene);
         await page.waitForTimeout(200);
 
-        const calloutRects = page.locator('.v2-map-weather-callout rect, .v2-map-canvas svg g:has(text) > rect');
+        const calloutRects = page.locator('.v2-map-weather-callout:visible rect, .v2-map-canvas:visible svg g:has(text) > rect');
         const calloutCount = await calloutRects.count();
         if (calloutCount > 0) {
           const cRect = await calloutRects.first().boundingBox();
           expect(cRect).not.toBeNull();
 
-          const markerLabels = page.locator('.v2-map-marker text');
+          const markerLabels = page.locator('.v2-map-canvas:visible .v2-map-marker text');
           const labelCount = await markerLabels.count();
           for (let i = 0; i < labelCount; i++) {
             const lBox = await markerLabels.nth(i).boundingBox();

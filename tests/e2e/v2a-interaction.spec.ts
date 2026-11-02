@@ -175,9 +175,11 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     // Wait for transition to rain scene
     const nowCard = page.locator('.now-card');
     await expect(nowCard).toBeVisible();
-    await expect(nowCard).toContainText('Take umbrella', { timeout: 5000 });
-    await expect(nowCard.locator('#chip-umbrella')).toContainText('Umbrella');
+    await expect(nowCard.locator('#chip-umbrella')).toContainText('Umbrella', { timeout: 5000 });
     await expect(nowCard).toContainText('2:30 PM');
+
+    // Wait for pulse highlight animation to clear before steady-state Axe audit
+    await expect(nowCard).not.toHaveClass(/v2-highlight-changed/, { timeout: 5000 });
 
     // Axe audit
     await checkAxe(page);

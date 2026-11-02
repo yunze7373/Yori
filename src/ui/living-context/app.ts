@@ -227,27 +227,58 @@ export function getEffectiveUiVersion(): UiVersion {
 export type ContextMode = 'demo' | 'live';
 
 export function resolveContextMode(raw?: string | null): ContextMode {
-  if (typeof raw !== 'string') return 'demo';
+  if (typeof raw !== 'string') return 'live';
   const lower = raw.trim().toLowerCase();
-  return lower === 'live' ? 'live' : 'demo';
+  return lower === 'demo' ? 'demo' : 'live';
 }
 
 /**
- * Resolve the effective default mode (VITE_YORI_DEFAULT_MODE = demo | live, default 'demo').
- * Query string parameters ?mode=live|demo or ?default_mode=live|demo and window.__YORI_DEFAULT_MODE__ take precedence.
+ * Resolve the effective default mode (default 'live' in production builds).
+ * In production builds (__YORI_ENABLE_TEST_HOOKS__ is false), ?mode / ?default_mode / window.__YORI_DEFAULT_MODE__
+ * cannot leak and default mode is strictly Live. Demo is reachable ONLY behind ?dev=1.
  */
 export function getEffectiveDefaultMode(): ContextMode {
+  const testHooksEnabled =
+    typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined'
+      ? __YORI_ENABLE_TEST_HOOKS__
+      : Boolean((import.meta as any).env?.DEV);
+
+  const isProd = !testHooksEnabled;
+
   if (typeof window !== 'undefined') {
     const win = window as any;
-    if (typeof win.__YORI_DEFAULT_MODE__ === 'string') {
-      return resolveContextMode(win.__YORI_DEFAULT_MODE__);
+    // Window global hook is only available in dev/test builds
+    if (typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined' && __YORI_ENABLE_TEST_HOOKS__) {
+      if (typeof win.__YORI_DEFAULT_MODE__ === 'string') {
+        return resolveContextMode(win.__YORI_DEFAULT_MODE__);
+      }
     }
+
     if (window.location?.search) {
       try {
         const params = new URLSearchParams(window.location.search);
-        const modeParam = params.get('mode') || params.get('default_mode');
-        if (modeParam !== null) {
-          return resolveContextMode(modeParam);
+        const hasDev = params.get('dev') === '1';
+
+        if (isProd) {
+          // In production: overrides cannot leak; Demo is reachable ONLY behind ?dev=1
+          if (hasDev) {
+            const modeParam = params.get('mode') || params.get('default_mode');
+            if (modeParam !== null) {
+              return resolveContextMode(modeParam);
+            }
+            return 'demo';
+          }
+          // In production without ?dev=1, always 'live'
+          return 'live';
+        } else {
+          // In dev/test builds: mode parameters are accepted
+          const modeParam = params.get('mode') || params.get('default_mode');
+          if (modeParam !== null) {
+            return resolveContextMode(modeParam);
+          }
+          if (hasDev) {
+            return 'demo';
+          }
         }
       } catch {
         // ignore
@@ -255,12 +286,21 @@ export function getEffectiveDefaultMode(): ContextMode {
     }
   }
 
-  const envRaw =
-    (typeof process !== 'undefined' && process.env ? process.env.VITE_YORI_DEFAULT_MODE : undefined) ||
-    (typeof import.meta !== 'undefined' && (import.meta as any).env
-      ? ((import.meta as any).env.VITE_YORI_DEFAULT_MODE as string | undefined)
-      : undefined);
-  return resolveContextMode(envRaw);
+  // If in dev/test build, allow env override
+  if (!isProd) {
+    const envRaw =
+      (typeof process !== 'undefined' && process.env ? process.env.VITE_YORI_DEFAULT_MODE : undefined) ||
+      (typeof import.meta !== 'undefined' && (import.meta as any).env
+        ? ((import.meta as any).env.VITE_YORI_DEFAULT_MODE as string | undefined)
+        : undefined);
+    if (envRaw) {
+      return resolveContextMode(envRaw);
+    }
+    return 'demo';
+  }
+
+  // In production: default is strictly 'live'
+  return 'live';
 }
 
 /**
@@ -1623,6 +1663,11 @@ export function renderApp(
   let demoPanelOpen = false;
   let demoPanelCleanup: (() => void) | null = null;
 
+  const testHooksEnabled =
+    typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined'
+      ? __YORI_ENABLE_TEST_HOOKS__
+      : Boolean((import.meta as any).env?.DEV);
+
   const defaultMode = getEffectiveDefaultMode();
   let contextMode: 'demo' | 'live' = defaultMode;
 
@@ -1644,15 +1689,13 @@ export function renderApp(
       }
 
       const devParam = p.get('dev');
-      if (devParam === '1' || p.get('test') === '1') {
+      if (devParam === '1' || (testHooksEnabled && p.get('test') === '1')) {
         isDevMode = true;
         sessionStorage.setItem('yori_dev', '1');
       } else if (devParam === '0') {
         isDevMode = false;
         sessionStorage.removeItem('yori_dev');
-      } else if (defaultMode === 'live' || contextMode === 'live') {
-        isDevMode = false;
-      } else if (Boolean((import.meta as any).env?.DEV) || sessionStorage.getItem('yori_dev') === '1') {
+      } else if (testHooksEnabled && (Boolean((import.meta as any).env?.DEV) || sessionStorage.getItem('yori_dev') === '1')) {
         isDevMode = true;
       }
     } catch {
@@ -1660,17 +1703,12 @@ export function renderApp(
     }
   }
 
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && (isDevMode || testHooksEnabled)) {
     window.addEventListener('yori:open-demo-panel', () => {
       demoPanelOpen = true;
       update();
     });
   }
-
-  const testHooksEnabled =
-    typeof __YORI_ENABLE_TEST_HOOKS__ !== 'undefined'
-      ? __YORI_ENABLE_TEST_HOOKS__
-      : Boolean((import.meta as any).env?.DEV);
 
   const isDevOrTest =
     testHooksEnabled &&
@@ -1756,16 +1794,17 @@ export function renderApp(
   }
 
   const isTimelineGated =
-    isDevOrTest ||
-    isDevMode ||
-    (typeof window !== 'undefined' &&
-      typeof window.location?.search === 'string' &&
-      (window.location.search.includes('timeline=1') ||
-        window.location.search.includes('beat=') ||
-        window.location.search.includes('test=1') ||
-        window.location.search.includes('dev=1')));
+    testHooksEnabled &&
+    (isDevOrTest ||
+      isDevMode ||
+      (typeof window !== 'undefined' &&
+        typeof window.location?.search === 'string' &&
+        (window.location.search.includes('timeline=1') ||
+          window.location.search.includes('beat=') ||
+          window.location.search.includes('test=1') ||
+          window.location.search.includes('dev=1'))));
 
-  if (typeof window !== 'undefined' && isTimelineGated) {
+  if (testHooksEnabled && typeof window !== 'undefined' && isTimelineGated) {
     (window as any).__YORI_TIMELINE__ = {
       step: () => {
         actionStore.resetToIdle();
@@ -5312,8 +5351,10 @@ export function renderApp(
     const reqLocBtn = root.querySelector('#btn-request-location');
     if (reqLocBtn) {
       reqLocBtn.addEventListener('click', async () => {
-        defaultLocationPort.setSimulated(false);
-        defaultLocationPort.setLiveEnabled(true);
+        if (contextMode === 'live') {
+          defaultLocationPort.setSimulated(false);
+          defaultLocationPort.setLiveEnabled(true);
+        }
         if (
           'consentAndRequest' in defaultLocationPort &&
           typeof (defaultLocationPort as any).consentAndRequest === 'function'
@@ -5426,6 +5467,9 @@ export function renderApp(
       const headerEl = root.querySelector<HTMLElement>('.header-bar');
       const mainEl = root.querySelector<HTMLElement>('main.main-container');
       const navEl = root.querySelector<HTMLElement>('.bottom-tab-bar');
+      const centerCol = root.querySelector<HTMLElement>('.desktop-center-column');
+      const rightPanel = root.querySelector<HTMLElement>('.desktop-right-panel');
+      const leftNav = root.querySelector<HTMLElement>('.desktop-left-nav');
 
       const isModalOrConversationOpen =
         actionStore.getInteractionState() === 'CONVERSATION' || activeModal !== null || demoPanelOpen;
@@ -5437,6 +5481,12 @@ export function renderApp(
         mainEl?.setAttribute('aria-hidden', 'true');
         navEl?.setAttribute('inert', '');
         navEl?.setAttribute('aria-hidden', 'true');
+        centerCol?.setAttribute('inert', '');
+        centerCol?.setAttribute('aria-hidden', 'true');
+        rightPanel?.setAttribute('inert', '');
+        rightPanel?.setAttribute('aria-hidden', 'true');
+        leftNav?.setAttribute('inert', '');
+        leftNav?.setAttribute('aria-hidden', 'true');
       } else {
         headerEl?.removeAttribute('inert');
         headerEl?.removeAttribute('aria-hidden');
@@ -5444,6 +5494,12 @@ export function renderApp(
         mainEl?.removeAttribute('aria-hidden');
         navEl?.removeAttribute('inert');
         navEl?.removeAttribute('aria-hidden');
+        centerCol?.removeAttribute('inert');
+        centerCol?.removeAttribute('aria-hidden');
+        rightPanel?.removeAttribute('inert');
+        rightPanel?.removeAttribute('aria-hidden');
+        leftNav?.removeAttribute('inert');
+        leftNav?.removeAttribute('aria-hidden');
       }
 
       if (actionStore.getInteractionState() === 'CONVERSATION') {
@@ -5454,6 +5510,12 @@ export function renderApp(
           mainEl?.removeAttribute('aria-hidden');
           navEl?.removeAttribute('inert');
           navEl?.removeAttribute('aria-hidden');
+          centerCol?.removeAttribute('inert');
+          centerCol?.removeAttribute('aria-hidden');
+          rightPanel?.removeAttribute('inert');
+          rightPanel?.removeAttribute('aria-hidden');
+          leftNav?.removeAttribute('inert');
+          leftNav?.removeAttribute('aria-hidden');
           update();
           const askBarEl = root.querySelector<HTMLButtonElement>('#ask-bar');
           askBarEl?.focus();
