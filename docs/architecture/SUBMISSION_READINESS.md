@@ -13,31 +13,31 @@
 
 | Plan Slice | Status | Dual-Gate Review Decision / Commit | Scope & Verification Summary |
 |---|:---:|---|---|
-| **S0-LIVE-CONTRACTS** | **ACCEPTED** | `4df33068` @ `dcf32ce` | Schema contracts for live signals, engine status (`meta_model_live`, `recorded_model_replay`, `offline_deterministic`), provenance tagging, and connection blocks. |
-| **S1-LIVE-PIPELINE-CORE** | **ACCEPTED** | `321b0e91` @ `483faec` | Loopback server proxy architecture (`/api/model`, `/api/places`, `/api/route`, `/api/weather`, `/api/calendar`, `/api/xmemo`). Zero browser-side outbound calls. Host allowlist & fail-closed error handling. |
-| **S2-LIVE-DEFAULT** | **ACCEPTED** | `000ef33` @ `c8d8b60` | Live mode set as default first open (`contextMode = 'live'`). Truthful consent gate (`Location Needed` / `Share Location`), honest zero-fixture baseline, dual-viewport verification at 390×844 and 1280×800. |
-| **S3-LIVE-LUNCH** | **ACCEPTED** | `01abccb` @ `242cf1c` | Real nearby lunch candidates from Overpass records with distance math, verified open-now and cuisine tagging. Fallback to honest empty/denied/gated states when location or provider is unavailable. |
-| **S4-LIVE-DEPART** | **ACCEPTED-NARROWED** | `d3647b5` @ `5adb5ea1` | Live departure planning with real current-conditions Open-Meteo weather and OSRM routing. **Narrowed**: Current-conditions weather only (target-time forecast, multimodal transit, and rain-driven earlier departure are deferred). |
-| **S4c-RAIN-BUFFER-OPT** | **NOT-APPLICABLE** | Plan rev 4 conditional | User-confirmed conditional rain buffer rule. Conditional only if explicitly requested by owner; not required for chapter closeout. |
-| **S5-LIVE-REASON** | **ACCEPTED** | `bfb39ded` @ `b956132` | Model interpreter live path with runtime fact check, session budget enforcement (hard ceiling 32 lowering-only), honest engine status pill across all viewports, responsive 2-line header wrap at 390×844, and unoccluded action row on first paint. |
-| **S6-OWNER-SMOKE (agent-prep)** | **READY-FOR-SMOKE** | Bound to current commit | Release blocker resolved: zero dead Settings controls (desktop left nav and mobile header avatar route cleanly to Settings > Connectors). Honest evidence index, deferred gap disclosures, and owner smoke checklist prepared. |
+| **S0-LIVE-CONTRACTS** | **ACCEPTED** | `70bf95aa` @ `61b3b9e` | Schema contracts for live signals, envelope validation, engine status (`meta_model_live`, `recorded_model_replay`, `offline_deterministic`), provenance tagging, and connection blocks. |
+| **S1-LIVE-PIPELINE-CORE** | **ACCEPTED** | `874cc7c1` @ `c2ed098` | Loopback server proxy architecture (`/api/model`, `/api/places`, `/api/route`, `/api/weather`, `/api/calendar`, `/api/xmemo`). Zero browser-side outbound calls. Host allowlist & fail-closed error handling. |
+| **S2-LIVE-DEFAULT** | **ACCEPTED** | `1cc34ee7` @ `000ef33` | Live mode set as default first open (`contextMode = 'live'`). Truthful consent gate (`Location Needed` / `Use My Location`), honest zero-fixture baseline, dual-viewport verification at 390×844 and 1280×800. |
+| **S3-LIVE-LUNCH** | **ACCEPTED** (Implementation)<br>**BLOCKED-accepted** (Live proof) | `0579ea09` @ `01abccb` | Nearby lunch candidate pipeline with distance math, verified open-now and cuisine tagging from recorded Overpass OSM fixtures. Live proof gated behind owner decision (b) (`PLACES_LIVE_ENABLED=1`). Honest empty/denied/gated fallback states. |
+| **S4-LIVE-DEPART** | **ACCEPTED-NARROWED** (Implementation)<br>**BLOCKED-accepted** (Live proof) | `5adb5ea1` @ `d3647b5` | Live departure planning adapter with honest single-mode rain differential (`Rain now · take an umbrella`, leave-by time unchanged), verified on recorded Open-Meteo and OSRM fixtures. **Narrowed**: Current-conditions weather only (target-time forecast, multimodal transit, and rain-driven earlier departure are deferred). Live proof gated behind `WEATHER_LIVE_ENABLED=1`, `ROUTE_LIVE_ENABLED=1`, and `CALENDAR_ICS_URL`. |
+| **S4c-RAIN-BUFFER-OPT** | **NOT-APPLICABLE** | Plan rev 4 conditional | User-confirmed conditional rain buffer rule. Non-gating; conditional only if explicitly requested by owner; closes NOT-APPLICABLE for chapter closeout. |
+| **S5-LIVE-REASON** | **ACCEPTED** (Implementation)<br>**BLOCKED-accepted** (Live proof) | `bfb39ded` @ `b956132` | Model interpreter live path with runtime fact check, session budget enforcement (hard ceiling 32 lowering-only, persistent call ledger at 22/32), honest engine status pill across viewports, responsive header wrap at 390×844. Live proof gated on explicit owner budget approval ($\le 10$ calls, ledger $\le 32/50$). |
+| **S6-OWNER-SMOKE (agent-prep)** | **READY-FOR-SMOKE** | Bound to HEAD | Release blocker resolved: zero dead Settings controls (`#desktop-nav-settings` and mobile avatar `#btn-header-avatar` route cleanly to Settings > Connectors). Honest evidence index, deferred gap disclosures, and owner smoke checklist prepared. |
 
 ---
 
 ## 2. Live Module Evidence Index & Terminal Gate Mapping
 
-Every live capability in Yori is classified under the **BLOCKED-terminal rule**: each module is either **ACCEPTED** with verified real-provider evidence, or **BLOCKED** pending a named owner gate whose failure/unavailability is verified via shipped, fail-closed connection-block UX.
+Every live capability in Yori is classified under the **BLOCKED-terminal rule**: each module is either **ACCEPTED** with real device/browser API evidence (Geolocation consent, Settings navigation), or **BLOCKED-accepted** pending a named owner gate whose failure/unavailability is verified via shipped, fail-closed connection-block UX with recorded/mocked evidence.
 
 | Live Module | Status | Named Owner Gate | Shipped Connection-Block UX (Offline / Fallback) | Evidence Stills (390×844 Mobile & 1280×800 Desktop) |
 |---|:---:|---|---|---|
-| **Geolocation / Device GPS** | **ACCEPTED** | `Browser Location Consent` (User Allow prompt) | Renders `Location Needed` quiet state with `Share Location` button; `Location access blocked` with settings instructions if denied. | `docs/evidence/live-default/01-default-live-first-open-390.png`<br>`docs/evidence/live-default/02-default-live-first-open-1280.png`<br>`docs/evidence/s2-connectors/06-connectors-location-denied-mobile.png` |
-| **Open-Meteo Weather** | **ACCEPTED** | `GATE-W1` (Terms qualification: keyless non-commercial) | Dynamic city weather reading from Open-Meteo with CC BY 4.0 attribution; fail-closed `Weather unavailable` banner on error/offline. | `docs/evidence/live-depart/01-live-depart-connection-block-390x844.png`<br>`docs/evidence/live-depart/02-live-depart-connection-block-1280x800.png`<br>`docs/evidence/s2-connectors/03-connectors-weather-live-mobile.png` |
-| **Overpass Nearby Places** | **BLOCKED-accepted** | `PLACES_LIVE_ENABLED=1` (Owner decision b) | Displays `Nearby places · not enabled (owner setting)`. Renders candidate tiles only when provider returns valid OSM tags. | `docs/evidence/live-lunch/01-live-lunch-390x844.png`<br>`docs/evidence/live-lunch/02-live-lunch-1280x800.png`<br>`docs/evidence/l3-real-places/` |
-| **OSRM Route & Map** | **BLOCKED-accepted** | `ROUTING_LIVE_ENABLED=1` (Owner decision a) with FOSSGIS | Displays `Walking route · not enabled (owner setting)`; falls back gracefully to straight-line distance without schematic SVG lines. | `docs/evidence/live-depart/01-live-depart-connection-block-390x844.png`<br>`docs/evidence/live-depart/02-live-depart-connection-block-1280x800.png` |
-| **Live Calendar (iCal)** | **BLOCKED-accepted** | `CALENDAR_ICS_URL=<url>` (Owner personal feed) | Displays `Calendar · not configured (owner setting)`; Connectors view shows honest `Not available yet` pill. | `docs/evidence/live-depart/01-live-depart-connection-block-390x844.png`<br>`docs/evidence/s2-connectors/02-connectors-default-mobile.png` |
-| **Meta Model Reasoning** | **BLOCKED-accepted** | `MODEL_LIVE_ENABLED=1` + Budget Approval ($\le 10$ calls, ledger $\le 32/50$) | Displays `Offline fallback · deterministic` (or `Recorded Meta model output · replay` during test fixtures); falls back instantly to grammar on budget ceiling (32). | `docs/evidence/live-reason/live-reason-mobile-390x844-home.png`<br>`docs/evidence/live-reason/live-reason-desktop-1280x800-home.png`<br>`docs/evidence/live-reason/live-reason-fallback-status.png` |
-| **XMemo Cloud Memory** | **BLOCKED-accepted** | `XMemo PKCE Login` (Browser consent on personal vault) | Connectors view shows `Not connected · tap Connect to sign in via PKCE`; local storage fallback remains active source of truth. | `docs/evidence/s2-connectors/08-connectors-xmemo-connected-mobile.png`<br>`docs/evidence/s2-connectors/08-connectors-xmemo-connected-desktop.png` |
-| **Settings Navigation** | **ACCEPTED** | *None (Release Blocker Resolved)* | `#desktop-nav-settings` and mobile avatar `#btn-header-avatar` route directly to interactive Settings > Connectors screen with focus restoration. | Verified via `tests/e2e/s2-connectors.spec.ts` Gate 11. |
+| **Geolocation / Device GPS** | **ACCEPTED** | `Browser Location Consent` (User tap `Use My Location` and browser Allow prompt) | Renders `Location Needed` first-open state with `Use My Location` button (`#btn-request-location`). If denied by user, renders `Location Denied` with headline `Location access denied by user` and browser settings instructions. | `docs/evidence/live-default/01-default-live-first-open-390.png`<br>`docs/evidence/live-default/02-default-live-first-open-1280.png`<br>`docs/evidence/s2-connectors/06-connectors-location-denied-mobile.png` (Real browser geolocation API verified in Playwright) |
+| **Open-Meteo Weather** | **BLOCKED-accepted** (Implementation ACCEPTED; live proof gated on owner flag) | `WEATHER_LIVE_ENABLED=1` (Owner setting; default false) + `GATE-W1` (Terms qualification: keyless non-commercial) | First open defaults to `Weather: Off` on header and Connectors view reads `Weather: Off (owner setting)`; fail-closed `Weather unavailable` banner if offline/fetch error. | `docs/evidence/live-depart/01-live-depart-connection-block-390x844.png` (connection-block capture)<br>`docs/evidence/live-depart/02-live-depart-connection-block-1280x800.png` (connection-block capture)<br>`docs/evidence/s2-connectors/03-connectors-weather-live-mobile.png` (mocked/recorded fixture capture) |
+| **Overpass Nearby Places** | **BLOCKED-accepted** (Implementation ACCEPTED; live proof gated on owner flag) | `PLACES_LIVE_ENABLED=1` (Owner decision b) | Displays `Nearby places · not enabled (owner setting)` when flag is false. Renders candidate tiles only when provider returns valid OSM tags with ODbL attribution. | `docs/evidence/live-lunch/01-live-lunch-390x844.png` (connection-block capture)<br>`docs/evidence/live-lunch/02-live-lunch-1280x800.png` (connection-block capture)<br>`docs/evidence/l3-real-places/` (recorded ODbL fixture captures) |
+| **OSRM Route & Map** | **BLOCKED-accepted** (Implementation ACCEPTED; live proof gated on owner flag) | `ROUTE_LIVE_ENABLED=1` (Owner decision a) + `OSRM_FOOT_BASE_URL` (FOSSGIS foot server) | Displays `Walking route · not enabled (owner setting)` or `No route available · provider disabled`; falls back to straight-line distance (`Walking time unavailable · straight-line <d>`). Real OSM tiles rendered via Leaflet only with location consent and active destination. | `docs/evidence/live-depart/01-live-depart-connection-block-390x844.png` (connection-block capture)<br>`docs/evidence/live-depart/02-live-depart-connection-block-1280x800.png` (connection-block capture) |
+| **Live Calendar (iCal)** | **BLOCKED-accepted** (Implementation ACCEPTED; live proof gated on owner secret) | `CALENDAR_LIVE_ENABLED=1` + `CALENDAR_ICS_URL=<url>` (Owner personal secret iCal feed; agents never read or handle) | Displays `No calendar source · paste secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat`; Connectors view displays honest `Not available yet` pill. | `docs/evidence/live-depart/01-live-depart-connection-block-390x844.png` (connection-block capture)<br>`docs/evidence/s2-connectors/02-connectors-default-mobile.png` (offline/default capture) |
+| **Meta Model Reasoning** | **BLOCKED-accepted** (Implementation ACCEPTED; live proof gated on owner budget) | `MODEL_LIVE_ENABLED=1` + explicit owner budget approval ($\le 10$ calls, ledger cap $\le 32/50$; API key `MODEL_API_KEY` or `META_API_KEY` already present in `.env.local`) | Displays `Offline fallback · deterministic` (or `Recorded Meta model output · replay` during test fixtures); falls back instantly to deterministic grammar on budget ceiling (32) or error. | `docs/evidence/live-reason/live-reason-mobile-390x844-home.png` (offline pill capture)<br>`docs/evidence/live-reason/live-reason-desktop-1280x800-home.png` (offline pill capture)<br>`docs/evidence/live-reason/live-reason-fallback-status.png` (fallback state capture) |
+| **XMemo Cloud Memory** | **BLOCKED-accepted** (Implementation ACCEPTED; live proof gated on owner login) | `XMemo PKCE Login` (Browser consent on personal vault) | Connectors view shows `Not connected · tap Connect to sign in via PKCE`; local storage fallback remains active source of truth. | `docs/evidence/s2-connectors/08-connectors-xmemo-connected-mobile.png` (offline/stub capture)<br>`docs/evidence/s2-connectors/08-connectors-xmemo-connected-desktop.png` (offline/stub capture) |
+| **Settings Navigation** | **ACCEPTED** (Implementation & UI verified) | *None (Release Blocker Resolved)* | `#desktop-nav-settings` and mobile avatar `#btn-header-avatar` route directly to interactive Settings > Connectors screen with focus restoration on Escape/Back. | Verified via `tests/e2e/s2-connectors.spec.ts` Gate 11. |
 
 ---
 
@@ -76,67 +76,72 @@ In adherence to Yori's core principle of **ruthless engineering truthfulness**, 
    ```bash
    npm install && npm run build
    ```
-3. **Configure Optional Local Gates** (in `.env.local` — NEVER commit):
-   - Location: Granted directly via browser permission dialog.
-   - Live Weather: Enabled by default (keyless Open-Meteo).
-   - Places (Overpass): Set `PLACES_LIVE_ENABLED=1` in `.env.local` if testing live Tokyo/SF dining places.
-   - Routing (OSRM): Set `ROUTING_LIVE_ENABLED=1` in `.env.local` if testing live foot routing.
-   - Calendar: Set `CALENDAR_ICS_URL=https://...` with your public or unlisted iCal feed if testing live calendar events.
-   - Model Reasoning: Set `META_MODEL_API_KEY=<key>` and `MODEL_LIVE_ENABLED=1` ONLY if approving up to 10 live calls (budget cap $\le 32$ total; current ledger is 22).
+3. **Configure Optional Local Gates** (in `.env.local` — NEVER commit; agents never read or paste secrets):
+   - **Location**: Granted directly via browser permission dialog upon clicking **Use My Location**.
+   - **Live Weather**: Default is `false` (displays `Weather: Off`). Set `WEATHER_LIVE_ENABLED=true` (or `1`) to enable keyless Open-Meteo current-conditions weather.
+   - **Places (Overpass)**: Default is `false`. Set `PLACES_LIVE_ENABLED=true` (or `1`) to enable live dining queries via OpenStreetMap Overpass (ODbL).
+   - **Routing (OSRM)**: Default is `false`. Set `ROUTE_LIVE_ENABLED=true` (or `1`) to enable live road routing via OSRM demo. For walking routes, `OSRM_FOOT_BASE_URL` defaults to FOSSGIS (`https://routing.openstreetmap.de/routed-foot`).
+   - **Calendar (iCal)**: Default is `false`. Set `CALENDAR_LIVE_ENABLED=true` (or `1`) and set `CALENDAR_ICS_URL=<your-secret-url>` with your personal iCal feed URL.
+   - **Geocoder (Nominatim)**: Default is `false`. Set `GEOCODE_LIVE_ENABLED=true` (or `1`) to enable Nominatim address resolution (rate-limited to 1 req/s).
+   - **Model Reasoning**: `MODEL_API_KEY` (or alias `META_API_KEY`) is already present in `.env.local`. Default is `MODEL_LIVE_ENABLED=false` (or `'0'`). Set `MODEL_LIVE_ENABLED=1` ONLY if explicitly approving up to 10 live calls ($\le 32$ total ceiling; current ledger is 22).
 
 ### Smoke Steps (5 minutes)
 1. **Launch Shipping Server**:
    ```bash
-   npm run preview
+   npm run build && npx vite preview --port 4174
    ```
    Open `http://localhost:4174/` in your browser (Chrome or Safari).
 
-2. **Verify First-Open Truthfulness**:
-   - Confirm `#quiet-title` displays **Location Needed** with the **Share Location** button.
+2. **Verify First-Open Truthfulness (Offline Baseline)**:
+   - Confirm `#quiet-title` displays **Location Needed** with the **Use My Location** button (`#btn-request-location`).
    - Confirm `#living-header-chip` displays `live`.
    - Confirm `#model-status-pill` displays `Offline fallback · deterministic` (zero phantom live claims).
+   - Confirm the header indicates `Weather: Off` when `WEATHER_LIVE_ENABLED` is off.
    - Confirm zero fixture/simulated badges are present.
 
 3. **Verify Settings Navigation (Release Blocker Verification)**:
-   - **Desktop (>=1024px)**: Click **Settings** in the left sidebar nav (`#desktop-nav-settings`).
-     - Confirm the **Settings > Connectors** screen renders in the center column.
-     - Press `Escape` or click `<` (Back) — confirm focus returns to the Settings sidebar button.
-   - **Mobile (390px)**: Tap the header avatar button (`#btn-header-avatar`).
-     - Confirm the **Me** tab opens. Tap **Manage Connectors**.
+   - **Desktop ($\ge 1024\text{px}$)**: Click **Settings** in the left sidebar nav (`#desktop-nav-settings`).
+     - Confirm the **Settings > Connectors** screen renders in the center column, and the Settings nav item shows active (`aria-current="page"`).
+     - Press `Escape` or click `<` (Back) — confirm focus returns to `#desktop-nav-settings`.
+   - **Mobile ($390\text{px}$)**: Tap the header avatar button (`#btn-header-avatar`).
+     - Confirm the **Me** tab opens. Tap **Manage Connectors** (`#btn-me-connectors`).
      - Confirm the Connectors list appears with truthful status pills for Location, Calendar, Weather, XMemo, and Notifications.
 
 4. **Test Location Consent**:
-   - Tap **Share Location** on the Home screen.
-   - In your browser's site permissions prompt, choose **Allow**.
-   - Confirm the home card updates with your local weather and coordinates (rounded to 3 decimal places for privacy; no raw coordinates logged).
+   - Tap **Use My Location** (`#btn-request-location`) on the Home screen.
+   - In your browser's site permissions prompt:
+     - If you choose **Block** / **Deny**: confirm the card renders **Location Denied** with headline `Location access denied by user` and browser settings instructions.
+     - If you choose **Allow**: confirm the card updates with your local coordinates (rounded to 3 decimal places for privacy; no raw coordinates logged). If `WEATHER_LIVE_ENABLED=true`, your local weather will appear; otherwise header retains `Weather: Off`.
 
 5. **Test Provider Responses (Gated vs Enabled)**:
-   - If `PLACES_LIVE_ENABLED` is off: confirm the card reads `Nearby places · not enabled (owner setting)`.
-   - If `CALENDAR_ICS_URL` is unset: confirm the calendar row reads `Calendar · not configured (owner setting)`.
-   - If `MODEL_LIVE_ENABLED` is on: ask a conversational re-rank query (e.g. "somewhere quiet with vegetarian options") and confirm the engine pill transitions to `Meta model · live` with measured latency.
+   - If `PLACES_LIVE_ENABLED` is unset/false: confirm the dining section displays `Nearby places · not enabled (owner setting)`.
+   - If `CALENDAR_LIVE_ENABLED` or `CALENDAR_ICS_URL` is unset: confirm calendar displays `No calendar source · paste secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat` (or Connectors view shows `Not available yet`).
+   - If `ROUTE_LIVE_ENABLED` is unset/false: confirm route displays `Walking route · not enabled (owner setting)`.
+   - If `MODEL_LIVE_ENABLED=1`: ask a conversational query in the Ask bar and confirm the engine pill transitions to `Meta model · live` with measured latency.
    - Check the call ledger:
      ```bash
-     cat src/adapters/model/.model-ledger.json
+     cat .yori-runtime/model-live-ledger.json
      ```
-     Confirm `lifetimeCallsUsed` $\le 32$.
+     Confirm the `call_count` field is $\le 32$ (current value: 22).
 
 ---
 
 ## 5. Chapter Closeout Verification Matrix
 
-Executed from a clean worktree at HEAD (`b956132`):
+Executed from a clean worktree at HEAD (`c7e0924`):
 
 | Test Suite / Gate | Command | Result | Pass Bar |
 |---|---|:---:|:---:|
 | **TypeScript Typecheck** | `npm run typecheck` | **0 errors** | 0 errors |
-| **Unit & Boundary Tests** | `npm test` | **52 files, 1,030 passed** | 100% pass |
+| **Unit & Boundary Tests** | `npm test` | **53 files, 1,035 passed** | 100% pass |
 | **Model Boundary Suite** | `npx vitest run tests/proxy-boundary/model-proxy.test.ts` | **12 passed** | 100% pass |
-| **Golden Acceptance & Drills** | `npx vitest run src/core/golden-master.test.ts src/core/degradation-drills.test.ts` | **74 passed** | 100% pass |
+| **Checklist Drift Guard** | `npx vitest run src/adapters/smoke-checklist-drift.test.ts` | **4 passed** | 100% pass |
+| **Golden Acceptance & Drills** | `npx vitest run tests/golden tests/integration` | **8 files, 74 passed (18 golden + 56 drills)** | 100% pass |
 | **Production Build Audit** | `npm run verify:production` | **0 violations** | 0 `__YORI_*` hooks, 0 external font hosts |
-| **Full Playwright E2E Suite** | `npx playwright test` | **554 passed, 2 skipped, 0 failed** | Zero unhandled failures |
+| **Full Playwright E2E Suite** | `npx playwright test` | **555 passed, 2 skipped, 1 failed (`real-map:157` known flake)** | Zero unhandled failures |
 | **Settings Blocker Verification** | `npx playwright test tests/e2e/s2-connectors.spec.ts -g "Release Blocker"` | **2 passed (mobile + desktop)** | Touch target $\ge 44\text{px}$, Escape/Back restore focus |
 | **Core Invariant Check** | `git diff f43c6c1d HEAD -- src/core` | **0 lines changed** | Strictly 0 diff (`AC-EXT-1`) |
 
 *Known Test Flakes (Environment/Network Tile Dependent)*:
-- `real-map.spec.ts:157`: Relies on live OpenStreetMap tile download speed over external internet; falls back gracefully.
+- `real-map.spec.ts:157`: Relies on live OpenStreetMap tile download timing over external internet; falls back gracefully.
 - `ui-polish.spec.ts:249`: Timing race on hidden duplicate weather callout; passes in isolated runs.
