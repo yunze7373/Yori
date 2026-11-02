@@ -3547,7 +3547,7 @@ export function renderApp(
     if (activeDetail?.type === 'connectors') {
       root.innerHTML = `
         <div class="app-layout" data-ui-version="${uiVersion}" data-context-mode="${contextMode}">
-          ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, true, isDesktopLayout) : ''}
+          ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, true, isDesktopLayout, activeDetail?.originatingElementId) : ''}
           <div class="desktop-center-column">
             ${renderConnectorsView(latestConnectorStatuses)}
           </div>
@@ -3610,11 +3610,25 @@ export function renderApp(
       root.querySelector('#desktop-nav-home')?.addEventListener('click', () => onNavigateAway('today'));
       root.querySelector('#desktop-nav-plans')?.addEventListener('click', () => onNavigateAway('plans'));
       root.querySelector('#desktop-nav-for-you')?.addEventListener('click', () => onNavigateAway('for-you'));
+      root.querySelector('#desktop-nav-connectors')?.addEventListener('click', () => {
+        activeDetail = {
+          type: 'connectors',
+          originatingElementId: 'desktop-nav-connectors',
+        };
+        update();
+      });
       root.querySelector('#desktop-nav-me')?.addEventListener('click', () => onNavigateAway('me'));
       root.querySelector('#desktop-nav-settings')?.addEventListener('click', () => {
-        if (!isDevMode && !testHooksEnabled) return;
-        modalInvokingId = 'desktop-nav-settings';
-        demoPanelOpen = true;
+        if ((isDevMode || testHooksEnabled) && contextMode === 'demo') {
+          modalInvokingId = 'desktop-nav-settings';
+          demoPanelOpen = true;
+          update();
+          return;
+        }
+        activeDetail = {
+          type: 'connectors',
+          originatingElementId: 'desktop-nav-settings',
+        };
         update();
       });
       root.querySelector('#tab-home')?.addEventListener('click', () => onNavigateAway('today'));
@@ -4695,9 +4709,16 @@ export function renderApp(
     const desktopSettingsBtn = root.querySelector('#desktop-nav-settings');
     if (desktopSettingsBtn) {
       desktopSettingsBtn.addEventListener('click', () => {
-        if (!isDevMode && !testHooksEnabled) return;
-        modalInvokingId = 'desktop-nav-settings';
-        demoPanelOpen = true;
+        if ((isDevMode || testHooksEnabled) && contextMode === 'demo') {
+          modalInvokingId = 'desktop-nav-settings';
+          demoPanelOpen = true;
+          update();
+          return;
+        }
+        activeDetail = {
+          type: 'connectors',
+          originatingElementId: 'desktop-nav-settings',
+        };
         update();
       });
     }

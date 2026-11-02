@@ -582,4 +582,70 @@ test.describe('S2-CONNECTORS: Settings > Connectors Screen', () => {
 
     await page.locator('#btn-close-why').click();
   });
+
+  test('11. Release Blocker: No Dead Settings Controls on Desktop (1280) and Mobile (390)', async ({
+    page,
+  }) => {
+    // 11a. Desktop 1280x800: #desktop-nav-settings opens Connectors view in Live mode
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/?mode=live');
+    await page.waitForSelector('.app-layout');
+
+    const desktopSettingsBtn = page.locator('#desktop-nav-settings');
+    await expect(desktopSettingsBtn).toBeVisible();
+
+    // Verify touch target >= 44x44
+    const btnBox = await desktopSettingsBtn.boundingBox();
+    expect(btnBox).not.toBeNull();
+    expect(btnBox!.width).toBeGreaterThanOrEqual(44);
+    expect(btnBox!.height).toBeGreaterThanOrEqual(44);
+
+    // Tap #desktop-nav-settings -> opens Connectors view in center column
+    await desktopSettingsBtn.click();
+    const connectorsPage = page.locator('#connectors-page');
+    await expect(connectorsPage).toBeVisible();
+    await expect(desktopSettingsBtn).toHaveClass(/active/);
+    await expect(desktopSettingsBtn).toHaveAttribute('aria-current', 'page');
+
+    // Escape dismisses Connectors and restores focus to #desktop-nav-settings
+    await page.keyboard.press('Escape');
+    await expect(connectorsPage).toHaveCount(0);
+    await expect(desktopSettingsBtn).toBeFocused();
+
+    // Re-open via click, then back button restores focus
+    await desktopSettingsBtn.click();
+    await expect(connectorsPage).toBeVisible();
+    const backBtn = page.locator('#btn-connectors-back');
+    await expect(backBtn).toBeVisible();
+    await backBtn.click();
+    await expect(connectorsPage).toHaveCount(0);
+    await expect(desktopSettingsBtn).toBeFocused();
+
+    // 11b. Mobile 390x844: #btn-header-avatar -> Me -> #btn-me-connectors -> Connectors
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/?mode=live');
+    await page.waitForSelector('.app-layout');
+
+    const avatarBtn = page.locator('#btn-header-avatar');
+    await expect(avatarBtn).toBeVisible();
+    const avatarBox = await avatarBtn.boundingBox();
+    expect(avatarBox).not.toBeNull();
+    expect(avatarBox!.width).toBeGreaterThanOrEqual(44);
+    expect(avatarBox!.height).toBeGreaterThanOrEqual(44);
+
+    // Click avatar button -> goes to Me tab
+    await avatarBtn.click();
+    await expect(page.locator('.me-view-container')).toBeVisible();
+
+    // Click Manage Connectors -> opens Connectors view
+    const meConnectorsBtn = page.locator('#btn-me-connectors');
+    await expect(meConnectorsBtn).toBeVisible();
+    await meConnectorsBtn.click();
+    await expect(page.locator('#connectors-page')).toBeVisible();
+
+    // Back button restores focus to #btn-me-connectors
+    await page.locator('#btn-connectors-back').click();
+    await expect(page.locator('#connectors-page')).toHaveCount(0);
+    await expect(meConnectorsBtn).toBeFocused();
+  });
 });

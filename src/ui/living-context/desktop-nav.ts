@@ -57,7 +57,12 @@ export const SIDEBAR_NAV_ITEMS: readonly NavItemConfig[] = [
   },
 ];
 
-export function renderDesktopLeftNav(activeTab: string, isConnectorsActive = false, includeWordmarkClass = false): string {
+export function renderDesktopLeftNav(
+  activeTab: string,
+  isConnectorsActive = false,
+  includeWordmarkClass = false,
+  activeNavId?: string
+): string {
   return `
     <aside class="desktop-left-nav" aria-label="Sidebar Navigation">
       <div class="desktop-left-nav-inner">
@@ -66,10 +71,11 @@ export function renderDesktopLeftNav(activeTab: string, isConnectorsActive = fal
         </div>
         <nav class="sidebar-nav-list" role="navigation" aria-label="Main Navigation">
           ${SIDEBAR_NAV_ITEMS.map(item => {
-            const isActive =
-              item.tabId === 'connectors'
-                ? isConnectorsActive
-                : !isConnectorsActive && (item.tabId === activeTab || (item.tabId === 'home' && activeTab === 'today'));
+            const isActive = isConnectorsActive
+              ? activeNavId === 'desktop-nav-settings'
+                ? item.id === 'desktop-nav-settings'
+                : item.id === 'desktop-nav-connectors'
+              : !isConnectorsActive && (item.tabId === activeTab || (item.tabId === 'home' && activeTab === 'today'));
 
             return `
             <button

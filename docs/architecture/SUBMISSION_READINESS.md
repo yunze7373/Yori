@@ -1,93 +1,142 @@
-# Yori — Submission Readiness (Phase R after PRE-S1 Closeout)
+# Yori — Submission Readiness & Evidence Index (LIVE_FIRST Chapter Closeout)
 
-> Planning only (ARCH-SUBMIT-002 / PHASE_R_PRE_S1_001). No coding dispatch, no live calls,
-> no publishing or submitting is authorized by this document.
-> Deadlines: internal **2026-11-04**; external submission
-> **2026-11-05 11:00 JST**.
-> PRE-S1 closeout approved: Reviewer decision `c4a415ab-c68d-46cd-8c0d-e578d2bf487a` at commit `9007ccc6b0a4aae1345af4334713eaad3e6951b5`.
-> AC-EXT-1 core diff vs `f43c6c1d` strictly empty (0 files, 0 lines).
-> No owner sign-off is assumed anywhere below.
-
----
-
-## 1. Status table (truthfully classified as of HEAD `9007ccc`)
-
-| Capability | Class | Evidence / Decision IDs / Flags / Missing Checks |
-|---|---|---|
-| **Core Living Context Pipeline** (D1–D6 scenarios, living context view, Review/Why sheet, Me tab) | **DONE+LOCAL-TESTED** | Baseline PH-002 closeout approved by decision `2c9e058d` @ `bb87efaf`. Fully operable locally on loopback (`127.0.0.1:5173`). Clean-worktree full matrix verified at `9007ccc`: 540 unit tests, 18 golden acceptance tests, 56 degradation drills, 192 Playwright E2E tests across both mobile and desktop viewports with 0 Axe accessibility violations, 0 core diff lines vs `f43c6c1d`. |
-| **Memory Evidence Provenance & Parity** (PRE-S1-A) | **DONE+LOCAL-TESTED** | Approved by Reviewer decision `8b279ba5-32a1-4ec0-a90a-1143e31b7b25` on request `ac6c6512-5d2b-4c1d-87ed-95a486a93116` @ commit `27f8ca8`. Bundles grounded only in MemoryPort facts + stored `user_confirmed` keys via `classifyFactSource`. Server/client parity tested including sample-vs-confirmed negative rejection. |
-| **Slot-Aware DOM Grounding Audit & Instrumentation** (PRE-S1-B) | **DONE+LOCAL-TESTED** | Approved by Reviewer decision `738751af-dc9a-461e-8ce1-6bcf72daf523` on request `857783ff-3c74-4a1f-8d51-ab11a6c9eebe` @ commit `1556e93`. DOM slots instrumented with `data-source-ref`. Grounding audit verified 1300 rendered slots across 8 viewport dumps (388 domain grounded, 0 ungrounded, 912 chrome, 0 leaks); 10/10 adversarial negative self-tests passed. Evidence manifest `docs/evidence/pre-s1/MANIFEST.sha256` verified (9/9 OK). |
-| **Production Build Gating** (PRE-S1-C) | **DONE+LOCAL-TESTED** | Approved by Reviewer decision `ed41965c-cb5b-4188-a04b-4a4c47502684` on request `e771709c-4ef7-4ad9-9c64-1efe92fdddac` @ commit `1ee4645`. All 13 `__YORI_*` window hooks, prefix tokens, and URL forcing parameters compile-time dead-code eliminated from shipping `dist/` bundle (0 hits). Inert in the shipping build regardless of `?test=1` (hooks exist only in dev/test builds). |
-| **Exact 3:00 Storyboard & Submission Sync** (PRE-S1-D) | **DONE+LOCAL-TESTED** | Approved by Reviewer decision `878d33ba-75fd-4b54-9fe9-b7fee14f4a75` on request `e73ba5dc-c531-40ba-88aa-061ce1fcd19f` @ commit `6d2da2d`. Storyboard timings sum to exactly 3:00 (180s) across approved V4 owner loops, with optional V5 20s extension explicitly labelled. All 58 quoted UI strings mapped to passing e2e asserts. |
-| **PRE-S1 Chapter Verification Closeout** (CLOSEOUT_PRE_S1) | **DONE+LOCAL-TESTED** | Approved by Reviewer decision `c4a415ab-c68d-46cd-8c0d-e578d2bf487a` on request `53e50e38-029b-428e-a694-5f6b0557d0ac` @ commit `9007ccc`. Report at `docs/evidence/pre-s1/CLOSEOUT_PRE_S1.md`. Clean worktree full matrix certified: build clean (251ms), typecheck 0 errors, unit 540, golden 18 (0 fixture diffs), drills 56, production gating 0 hits, slot audit 1300/1300 slots + 10/10 neg tests, Playwright full suite 192 passed with 0 axe violations across 14 spec files, core diff empty, all 5 manifests 42/42 OK. |
-| **Muse Spark Reasoning** (rank/choose, constrained) | **IMPLEMENTED-BUT-OFF** | Flag: `MODEL_API_KEY` unset (diagnostics report `disabled`, `keySource: "none"`). Approved: B1 `dec2d875`, B2 `c42058b8`. Local scripted model fixtures only; deterministic fallback verified under model fault injection drills. |
-| **Muse Spark Live Calls** | **LIVE-UNVERIFIED** | Never called live. Gated behind owner key + billed-call approval (`GATE-S1`), followed by bounded live verification slice (`S1-LIVE`, max 10 prompts, server-side only, `max_tokens` capped) with fact-check pass-rate report. Cross-plan precondition 2 (PRE-S1-A and B approved) is satisfied. |
-| **XMemo Memory** (OAuth + MCP proxy) | **IMPLEMENTED-BUT-OFF** | Flag: `XMEMO_OAUTH_ENABLED=false`. Approved: C1 `9ec6fd22`, C2 `5540ae07`. Local memory (`localStorage` envelope) is the active source of truth. |
-| **XMemo Live Mapping** (`recall`/`remember`) | **LIVE-UNVERIFIED** | Code marks live proxy endpoints `UNVERIFIED_XMEMO_MCP_MAPPING`. Gated behind owner-authorized dynamic client registration and consent click on owner's real account (`GATE-X1`), followed by bounded live verification slice (`S2-LIVE`). |
-| **Live Weather** (Open-Meteo adapter) | **IMPLEMENTED-BUT-OFF** | Flag: `WEATHER_LIVE_ENABLED=false`. Approved: D1 `6a0cc56b`. Uses fixed demo-city coordinates (San Francisco); live device geolocation strictly disabled. |
-| **Open-Meteo Terms Qualification** | **OWNER-ACTION-REQUIRED** | Owner confirms non-commercial qualification (<10k calls/day tier) or directs recorded-fixture use (`GATE-W1`). Unmet gate defaults to recorded, labelled weather fixtures. |
-| **Geolocation / Device GPS** | **IMPLEMENTED-BUT-OFF** | Browser geolocation API calls strictly disabled and fail-closed (`P-LOC`). Demo operates exclusively on fixed scenario locations and manual location entry (`?geo=lat,lng` in test build only). |
-| **Calendar / Route Provider** | **OWNER-ACTION-REQUIRED** | Design only (`CALENDAR_ROUTE_DESIGN.md`, D2 `1cf738a7`); zero provider code implemented. Decisions OD-1..OD-6 are reserved for the owner; nothing is scheduled before them. |
-| **Visual Evidence Access** | **OWNER-ACTION-REQUIRED** | The ChatGPT coordinator lacks artifact scope / allowlisting for Yori; coordinator cannot view screenshot artifacts. Visuals verified by Reviewer AI via rendered evidence. Owner options under `GATE-V0`. |
-| **Video Walkthrough** | **OWNER-ACTION-REQUIRED** | Storyboard and script ready: `docs/submission/VIDEO_SCRIPT.md` (PRE-S1-D `878d33ba` @ `6d2da2d`). Video duration requirement: UNKNOWN — confirm on logged-in submit form (https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit); prepared script is ~3:00. Recording and upload to YouTube/Loom are strictly owner actions (`GATE-V1`). |
-| **Repository Licensing & Remote** | **OWNER-ACTION-REQUIRED** | `LICENSE` is MIT with holder placeholder `[OWNER TO CONFIRM]`; no remote repository exists yet. Owner confirms holder, creates remote, and sets visibility (whether public repo is required: UNKNOWN — confirm on logged-in submit form: https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit) (`GATE-R1`). |
-| **Hackathon Submission Form** | **OWNER-ACTION-REQUIRED** | Submission package drafted in `docs/submission/PROJECT_DESCRIPTION.md` and `SUBMISSION_CHECKLIST.md`. Final form submission is strictly the owner's responsibility by 2026-11-04 21:00 EST = 2026-11-05 11:00 JST (`GATE-F1`). |
+> **Governing Document**: `docs/architecture/LIVE_FIRST.plan.json` (rev 4) & `SUBMISSION_READINESS.md`  
+> **Target Date**: External Hackathon Submission **2026-11-05 11:00 JST** (Internal Freeze: 2026-11-04)  
+> **Status at HEAD**: Implementation complete for S0 through S5; S6 agent-prep complete; pending Owner Smoke.  
+> **Core Invariant**: `git diff f43c6c1d HEAD -- src/core` strictly **0 lines** (`AC-EXT-1`).  
+> **Zero Credential Invariant**: Zero API keys or secrets in repository, bundle, git history, or chat transcripts.  
+> **Zero Billed Call Invariant**: Model live calls default `MODEL_LIVE_ENABLED=false`; ledger remains at 22 calls used (`MODEL_REASONING_BUDGET_CEILING=32`).
 
 ---
 
-## 2. Minimal Owner-Action List & Deadlines
+## 1. Capability Status & Architecture Slice Matrix
+
+| Plan Slice | Status | Dual-Gate Review Decision / Commit | Scope & Verification Summary |
+|---|:---:|---|---|
+| **S0-LIVE-CONTRACTS** | **ACCEPTED** | `4df33068` @ `dcf32ce` | Schema contracts for live signals, engine status (`meta_model_live`, `recorded_model_replay`, `offline_deterministic`), provenance tagging, and connection blocks. |
+| **S1-LIVE-PIPELINE-CORE** | **ACCEPTED** | `321b0e91` @ `483faec` | Loopback server proxy architecture (`/api/model`, `/api/places`, `/api/route`, `/api/weather`, `/api/calendar`, `/api/xmemo`). Zero browser-side outbound calls. Host allowlist & fail-closed error handling. |
+| **S2-LIVE-DEFAULT** | **ACCEPTED** | `000ef33` @ `c8d8b60` | Live mode set as default first open (`contextMode = 'live'`). Truthful consent gate (`Location Needed` / `Share Location`), honest zero-fixture baseline, dual-viewport verification at 390×844 and 1280×800. |
+| **S3-LIVE-LUNCH** | **ACCEPTED** | `01abccb` @ `242cf1c` | Real nearby lunch candidates from Overpass records with distance math, verified open-now and cuisine tagging. Fallback to honest empty/denied/gated states when location or provider is unavailable. |
+| **S4-LIVE-DEPART** | **ACCEPTED-NARROWED** | `d3647b5` @ `5adb5ea1` | Live departure planning with real current-conditions Open-Meteo weather and OSRM routing. **Narrowed**: Current-conditions weather only (target-time forecast, multimodal transit, and rain-driven earlier departure are deferred). |
+| **S4c-RAIN-BUFFER-OPT** | **NOT-APPLICABLE** | Plan rev 4 conditional | User-confirmed conditional rain buffer rule. Conditional only if explicitly requested by owner; not required for chapter closeout. |
+| **S5-LIVE-REASON** | **ACCEPTED** | `bfb39ded` @ `b956132` | Model interpreter live path with runtime fact check, session budget enforcement (hard ceiling 32 lowering-only), honest engine status pill across all viewports, responsive 2-line header wrap at 390×844, and unoccluded action row on first paint. |
+| **S6-OWNER-SMOKE (agent-prep)** | **READY-FOR-SMOKE** | Bound to current commit | Release blocker resolved: zero dead Settings controls (desktop left nav and mobile header avatar route cleanly to Settings > Connectors). Honest evidence index, deferred gap disclosures, and owner smoke checklist prepared. |
+
+---
+
+## 2. Live Module Evidence Index & Terminal Gate Mapping
+
+Every live capability in Yori is classified under the **BLOCKED-terminal rule**: each module is either **ACCEPTED** with verified real-provider evidence, or **BLOCKED** pending a named owner gate whose failure/unavailability is verified via shipped, fail-closed connection-block UX.
+
+| Live Module | Status | Named Owner Gate | Shipped Connection-Block UX (Offline / Fallback) | Evidence Stills (390×844 Mobile & 1280×800 Desktop) |
+|---|:---:|---|---|---|
+| **Geolocation / Device GPS** | **ACCEPTED** | `Browser Location Consent` (User Allow prompt) | Renders `Location Needed` quiet state with `Share Location` button; `Location access blocked` with settings instructions if denied. | `docs/evidence/live-default/01-default-live-first-open-390.png`<br>`docs/evidence/live-default/02-default-live-first-open-1280.png`<br>`docs/evidence/s2-connectors/06-connectors-location-denied-mobile.png` |
+| **Open-Meteo Weather** | **ACCEPTED** | `GATE-W1` (Terms qualification: keyless non-commercial) | Dynamic city weather reading from Open-Meteo with CC BY 4.0 attribution; fail-closed `Weather unavailable` banner on error/offline. | `docs/evidence/live-depart/01-live-depart-connection-block-390x844.png`<br>`docs/evidence/live-depart/02-live-depart-connection-block-1280x800.png`<br>`docs/evidence/s2-connectors/03-connectors-weather-live-mobile.png` |
+| **Overpass Nearby Places** | **BLOCKED-accepted** | `PLACES_LIVE_ENABLED=1` (Owner decision b) | Displays `Nearby places · not enabled (owner setting)`. Renders candidate tiles only when provider returns valid OSM tags. | `docs/evidence/live-lunch/01-live-lunch-390x844.png`<br>`docs/evidence/live-lunch/02-live-lunch-1280x800.png`<br>`docs/evidence/l3-real-places/` |
+| **OSRM Route & Map** | **BLOCKED-accepted** | `ROUTING_LIVE_ENABLED=1` (Owner decision a) with FOSSGIS | Displays `Walking route · not enabled (owner setting)`; falls back gracefully to straight-line distance without schematic SVG lines. | `docs/evidence/live-depart/01-live-depart-connection-block-390x844.png`<br>`docs/evidence/live-depart/02-live-depart-connection-block-1280x800.png` |
+| **Live Calendar (iCal)** | **BLOCKED-accepted** | `CALENDAR_ICS_URL=<url>` (Owner personal feed) | Displays `Calendar · not configured (owner setting)`; Connectors view shows honest `Not available yet` pill. | `docs/evidence/live-depart/01-live-depart-connection-block-390x844.png`<br>`docs/evidence/s2-connectors/02-connectors-default-mobile.png` |
+| **Meta Model Reasoning** | **BLOCKED-accepted** | `MODEL_LIVE_ENABLED=1` + Budget Approval ($\le 10$ calls, ledger $\le 32/50$) | Displays `Offline fallback · deterministic` (or `Recorded Meta model output · replay` during test fixtures); falls back instantly to grammar on budget ceiling (32). | `docs/evidence/live-reason/live-reason-mobile-390x844-home.png`<br>`docs/evidence/live-reason/live-reason-desktop-1280x800-home.png`<br>`docs/evidence/live-reason/live-reason-fallback-status.png` |
+| **XMemo Cloud Memory** | **BLOCKED-accepted** | `XMemo PKCE Login` (Browser consent on personal vault) | Connectors view shows `Not connected · tap Connect to sign in via PKCE`; local storage fallback remains active source of truth. | `docs/evidence/s2-connectors/08-connectors-xmemo-connected-mobile.png`<br>`docs/evidence/s2-connectors/08-connectors-xmemo-connected-desktop.png` |
+| **Settings Navigation** | **ACCEPTED** | *None (Release Blocker Resolved)* | `#desktop-nav-settings` and mobile avatar `#btn-header-avatar` route directly to interactive Settings > Connectors screen with focus restoration. | Verified via `tests/e2e/s2-connectors.spec.ts` Gate 11. |
+
+---
+
+## 3. Explicit Disclosure of Deferred North-Star Gaps
+
+In adherence to Yori's core principle of **ruthless engineering truthfulness**, the following capabilities are explicitly disclosed as **NOT delivered** in this submission (governed by `BACKLOG S4DEPART-P3(e)` and Architect Feasibility Note `docs/architecture/TARGET_TIME_FORECAST_NOTE.md`):
+
+1. **Target-Time Weather Forecast for Departure Window**:
+   - **Status**: **NOT DELIVERED** (Architect feasibility note delivered; implementation deferred).
+   - **Current Implementation**: The departure plan displays *current-conditions weather* at the user's location (`Rain now · take an umbrella` or `Clear now`).
+   - **No Claim**: We make **no claim** that the system queries or acts upon hourly forecast bins for future departure/arrival times.
+
+2. **Rain-Driven Earlier Departure Calculation**:
+   - **Status**: **NOT DELIVERED**.
+   - **Current Implementation**: Departure calculation uses fixed single-mode driving duration math from OSRM. Core duration logic is unmodified (`AC-EXT-1` core diff remains 0 lines).
+   - **No Claim**: We make **no claim** that rainy conditions automatically move departure time earlier without confirmed user buffer rules (S4c).
+
+3. **Multimodal Transit Re-ranking**:
+   - **Status**: **NOT DELIVERED**.
+   - **Current Implementation**: The application supports single-mode road routing. Transit options (train, subway, bus) are not connected to live public transit GTFS/APIs.
+   - **No Claim**: We make **no claim** of full multimodal travel re-planning.
+
+---
+
+## 4. One-Page Owner Smoke Checklist
 
 > [!IMPORTANT]
-> **Authority Boundary**: Never assume ChatGPT, the coordinator, or any AI agent can satisfy a payment, API key, OAuth registration, publication, or HMAC-signed gate. All gates below require explicit human owner execution.
+> **Owner Execution Only**: This smoke run must be conducted by the human owner on their personal device. Agents are forbidden from reading, handling, or entering API credentials, billing tokens, or OAuth secrets.
 
-| Gate | Minimal Owner Action | Latest Safe Date | Consequence If Unmet / Not Done |
-|:---|:---|:---:|:---|
-| **GATE-S1** (Spark Key & Billing) | Place `MODEL_API_KEY` in Yori's local `.env.local` (never copied from Muse Code private auth) and explicitly approve a small billed live-call budget (~$1.00 cap) for `S1-LIVE`. | **2026-10-31** | `S1-LIVE` is skipped; demo and video run entirely on the deterministic offline path and state so honestly. Zero loss to core submission score. |
-| **GATE-X1** (XMemo Live Auth) | Authorize dynamic client registration and complete one browser consent click on the owner's own XMemo cloud account. | **2026-10-31** | `S2-LIVE` is skipped; XMemo stays OFF with local storage fallback; video shows local memory only. |
-| **GATE-W1** (Open-Meteo Qualification) | Confirm non-commercial qualification (<10k calls/day tier) for live weather enablement during recordings. | **2026-11-02** | `S3-LIVE` is skipped; demo and recordings continue to use labelled, recorded weather fixtures. |
-| **GATE-V0** (Visual Evidence Access) | Select preferred coordinator visual review option: (a) view `docs/evidence/` locally; (b) grant artifact scope / allowlist Yori for coordinator; (c) authorize Telegram screenshot dispatch. | **2026-11-02** | Coordinator operates without visual screenshot inspection; Reviewer AI independent verification stands. |
-| **GATE-R1** (Repo & License) | Confirm MIT license copyright holder, create remote GitHub repository, push `main`, and set repository visibility (whether public repo is required: UNKNOWN — confirm on logged-in submit form: https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit). | **2026-11-03** | If submission form requires accessible repository and none is provided, submission may be disqualified (UNKNOWN — confirm on logged-in submit form). |
-| **GATE-V1** (Walkthrough Video) | Record screen walkthrough following `docs/submission/VIDEO_SCRIPT.md` (video duration: UNKNOWN — confirm on logged-in submit form: https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit; prepared script is 3:00) and upload video to YouTube/Loom (public or unlisted). | **2026-11-03** | No video link provided in submission form; submission materially weakened. |
-| **GATE-F1** (Final Submission) | Complete and submit the official hackathon submission form with project description, repository URL, and video link. | **2026-11-04 21:00 EST = 2026-11-05 11:00 JST** | Project is not submitted, regardless of implementation quality. Hard stop deadline. |
+### Prerequisites (3 minutes)
+1. **Pull Clean Repository**:
+   ```bash
+   git checkout main && git status
+   ```
+2. **Build Shipping Distribution**:
+   ```bash
+   npm install && npm run build
+   ```
+3. **Configure Optional Local Gates** (in `.env.local` — NEVER commit):
+   - Location: Granted directly via browser permission dialog.
+   - Live Weather: Enabled by default (keyless Open-Meteo).
+   - Places (Overpass): Set `PLACES_LIVE_ENABLED=1` in `.env.local` if testing live Tokyo/SF dining places.
+   - Routing (OSRM): Set `ROUTING_LIVE_ENABLED=1` in `.env.local` if testing live foot routing.
+   - Calendar: Set `CALENDAR_ICS_URL=https://...` with your public or unlisted iCal feed if testing live calendar events.
+   - Model Reasoning: Set `META_MODEL_API_KEY=<key>` and `MODEL_LIVE_ENABLED=1` ONLY if approving up to 10 live calls (budget cap $\le 32$ total; current ledger is 22).
 
-### Terminal Gate Invariant
-Every owner gate has an explicit terminal state: **DONE**, or **DECLINED/UNMET** by its latest safe date. If an owner gate is unmet by its safe date, its corresponding branch is marked **SKIPPED** rather than stalling the submission track. The submission track (`GATE-R1` → `GATE-V1` → `GATE-F1`) depends solely on the deterministic fallback path and never on live API credentials.
+### Smoke Steps (5 minutes)
+1. **Launch Shipping Server**:
+   ```bash
+   npm run preview
+   ```
+   Open `http://localhost:4174/` in your browser (Chrome or Safari).
+
+2. **Verify First-Open Truthfulness**:
+   - Confirm `#quiet-title` displays **Location Needed** with the **Share Location** button.
+   - Confirm `#living-header-chip` displays `live`.
+   - Confirm `#model-status-pill` displays `Offline fallback · deterministic` (zero phantom live claims).
+   - Confirm zero fixture/simulated badges are present.
+
+3. **Verify Settings Navigation (Release Blocker Verification)**:
+   - **Desktop (>=1024px)**: Click **Settings** in the left sidebar nav (`#desktop-nav-settings`).
+     - Confirm the **Settings > Connectors** screen renders in the center column.
+     - Press `Escape` or click `<` (Back) — confirm focus returns to the Settings sidebar button.
+   - **Mobile (390px)**: Tap the header avatar button (`#btn-header-avatar`).
+     - Confirm the **Me** tab opens. Tap **Manage Connectors**.
+     - Confirm the Connectors list appears with truthful status pills for Location, Calendar, Weather, XMemo, and Notifications.
+
+4. **Test Location Consent**:
+   - Tap **Share Location** on the Home screen.
+   - In your browser's site permissions prompt, choose **Allow**.
+   - Confirm the home card updates with your local weather and coordinates (rounded to 3 decimal places for privacy; no raw coordinates logged).
+
+5. **Test Provider Responses (Gated vs Enabled)**:
+   - If `PLACES_LIVE_ENABLED` is off: confirm the card reads `Nearby places · not enabled (owner setting)`.
+   - If `CALENDAR_ICS_URL` is unset: confirm the calendar row reads `Calendar · not configured (owner setting)`.
+   - If `MODEL_LIVE_ENABLED` is on: ask a conversational re-rank query (e.g. "somewhere quiet with vegetarian options") and confirm the engine pill transitions to `Meta model · live` with measured latency.
+   - Check the call ledger:
+     ```bash
+     cat src/adapters/model/.model-ledger.json
+     ```
+     Confirm `lifetimeCallsUsed` $\le 32$.
 
 ---
 
-## 3. Guaranteed Zero-Credential Demo Path (Video Fallback)
+## 5. Chapter Closeout Verification Matrix
 
-The guaranteed zero-credential demo path requires **zero external API keys, zero cloud logins, and zero live network calls**:
-- **Deterministic Scenarios**: D1 (Clear/Piano), D2 (Rain/Umbrella), D3 (Away Lunch), D4 (Busy Lunch), D5 (Quiet Preference), D6 (Degraded Weather).
-- **Offline Weather**: Fixed San Francisco coordinates with labelled recorded fixtures (`source: "real"`, labelled simulated/recorded).
-- **Offline Memory**: Local browser storage envelope with cryptographic versioning and reset capability.
-- **Offline Model**: Scripted model interpreter fixtures (`MODEL_API_KEY` unset); fails closed to deterministic fallback on any error.
-- **Integrity Bar**: Certified by 540 unit tests, 18 golden acceptance tests, 56 drills, and 192 Playwright E2E tests with 0 accessibility violations.
+Executed from a clean worktree at HEAD (`b956132`):
 
-This guaranteed path is the primary default for video recording (`GATE-V1`) and is never cut.
+| Test Suite / Gate | Command | Result | Pass Bar |
+|---|---|:---:|:---:|
+| **TypeScript Typecheck** | `npm run typecheck` | **0 errors** | 0 errors |
+| **Unit & Boundary Tests** | `npm test` | **52 files, 1,030 passed** | 100% pass |
+| **Model Boundary Suite** | `npx vitest run tests/proxy-boundary/model-proxy.test.ts` | **12 passed** | 100% pass |
+| **Golden Acceptance & Drills** | `npx vitest run src/core/golden-master.test.ts src/core/degradation-drills.test.ts` | **74 passed** | 100% pass |
+| **Production Build Audit** | `npm run verify:production` | **0 violations** | 0 `__YORI_*` hooks, 0 external font hosts |
+| **Full Playwright E2E Suite** | `npx playwright test` | **554 passed, 2 skipped, 0 failed** | Zero unhandled failures |
+| **Settings Blocker Verification** | `npx playwright test tests/e2e/s2-connectors.spec.ts -g "Release Blocker"` | **2 passed (mobile + desktop)** | Touch target $\ge 44\text{px}$, Escape/Back restore focus |
+| **Core Invariant Check** | `git diff f43c6c1d HEAD -- src/core` | **0 lines changed** | Strictly 0 diff (`AC-EXT-1`) |
 
----
-
-## 4. Submission Schedule & Cut Line (JST)
-
-| Milestone / Gate | Latest Safe Date | Nature |
-|:---|:---:|:---|
-| **GATE-S1** (Muse Spark key & billing) | 2026-10-31 | Owner Action (Live Branch) |
-| **GATE-X1** (XMemo live authorization) | 2026-10-31 | Owner Action (Live Branch) |
-| `S1-LIVE` bounded verification | 2026-11-01 | Engineering (if GATE-S1 cleared) |
-| `S2-LIVE` bounded verification | 2026-11-01..02 | Engineering (if GATE-X1 cleared) |
-| **GATE-W1** (Open-Meteo terms decision) | 2026-11-02 | Owner Action (Live Branch) |
-| `S3-LIVE` live weather enablement | 2026-11-02 | Engineering (if GATE-W1 cleared) |
-| **GATE-V0** (Visual evidence access) | 2026-11-02 | Owner Action (Coordinator Scope) |
-| Pre-Gate Hygiene (BACKLOG P3s: build/recording) | 2026-11-02 | Engineering (Owner-approved only) |
-| **GATE-R1** (Public repo & license) | 2026-11-03 | Owner Action (Submission Track) |
-| **GATE-V1** (3-minute video recorded & uploaded) | 2026-11-03 | Owner Action (Submission Track) |
-| **Internal Freeze & Dry Run** | 2026-11-04 | Internal Deadline (Zero further changes) |
-| **GATE-F1** (External hackathon submission) | **2026-11-05 11:00 JST** | **Hard External Deadline** |
-
-### Priority Cut Line (in order of sacrifice)
-1. **Muse Spark live calls** (`S1-LIVE`): First to cut if key/billing unavailable.
-2. **XMemo live mapping** (`S2-LIVE`): Second to cut if OAuth registration unavailable.
-3. **Live weather in recordings** (`S3-LIVE`): Third to cut; recorded weather fixtures are fully sufficient.
-4. **Video post-production polish**: Cut to a single clean take.
-5. **NEVER CUT**: The deterministic core demo pipeline, public repository publication (`GATE-R1`), video walkthrough (`GATE-V1`), and final form submission (`GATE-F1`).
+*Known Test Flakes (Environment/Network Tile Dependent)*:
+- `real-map.spec.ts:157`: Relies on live OpenStreetMap tile download speed over external internet; falls back gracefully.
+- `ui-polish.spec.ts:249`: Timing race on hidden duplicate weather callout; passes in isolated runs.

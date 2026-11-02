@@ -28,6 +28,13 @@ describe('Desktop Left Navigation Sidebar (S4-DESKTOP-IA)', () => {
     expect(connectorsHtml).toMatch(/id="desktop-nav-connectors"[^>]*aria-current="page"/);
   });
 
+  it('marks settings active when connectors view is opened via settings', () => {
+    const settingsHtml = renderDesktopLeftNav('home', true, false, 'desktop-nav-settings');
+    expect(settingsHtml).toMatch(/class="[^"]*active[^"]*"[^>]*id="desktop-nav-settings"/);
+    expect(settingsHtml).toMatch(/id="desktop-nav-settings"[^>]*aria-current="page"/);
+    expect(settingsHtml).not.toMatch(/class="[^"]*active[^"]*"[^>]*id="desktop-nav-connectors"/);
+  });
+
   it('provides accessible labels and icons for all items', () => {
     for (const item of SIDEBAR_NAV_ITEMS) {
       expect(item.label).toBeTruthy();
