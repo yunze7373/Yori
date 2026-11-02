@@ -18,7 +18,7 @@
 |---|---|---|---|---|
 | 1 | `01-live-depart-connection-block-390x844.png` | 390×844 (Mobile) | Live (Unconfigured / Connection-Block) | Mobile Home quiet state ("Nothing needs your attention right now") and Settings > Connectors showing Calendar status as `Not available yet` with zero toggle affordances and zero fake events. No simulated fixtures or ungrounded piano lessons. |
 | 2 | `02-live-depart-connection-block-1280x800.png` | 1280×800 (Desktop) | Live (Unconfigured / Connection-Block) | Desktop quiet state rendering `#desktop-notice-calendar-unconfigured-quiet` in the right panel naming the owner action: `"Calendar · Owner Source Needed: paste the secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat"` with `data-provenance="none"`. |
-| 3 | `03-live-depart-rain-replan-390x844.png` | 390×844 (Mobile) | Live (Synthetic ICS + Nominatim + OSRM + Open-Meteo) | Live depart card for real calendar event "Product Review" at 3:00 PM. Event location resolved via Nominatim geocoder, driving route and 15 min travel time computed via OSRM, and target-time rain detected via Open-Meteo. Recomputes leave-by earlier (2:35 PM) and surfaces the umbrella preparation checklist item ("Take umbrella"). |
+| 3 | `03-live-depart-rain-replan-390x844.png` | 390×844 (Mobile) | Live (Synthetic ICS + Nominatim + OSRM + Open-Meteo) | Live depart card for real calendar event "Product Review" at 3:00 PM. Event location resolved via Nominatim geocoder, driving route (15 min) and multimodal bus option (35 min) computed via OSRM, and current conditions via Open-Meteo proxy. Recomputes leave-by earlier (2:15 PM via bus with `bus_first` preference vs 2:35 PM clear drive) and surfaces the umbrella preparation checklist item ("Take umbrella"). |
 
 ---
 
@@ -94,7 +94,30 @@ During review request `5985b0a1-2a8c-4691-a0a5-91b609bbce3d`, five specific find
 
 ---
 
-## 5. Automated Verification Matrix
+## 5. Rework 2 Findings & Hardening
+
+During review request `fd304aa9-7175-41ec-b6a2-3d21dd2cc970`, four specific findings were addressed:
+
+1. **First-Open Consent Gate Precedence (P1)**:
+   - Lifted location prompt, denied, and unavailable consent evaluation to the top level of the quiet view compiler (`home-vm.ts`), preceding intent-specific checks.
+   - Restored cold first-open behavior on default-Live `/`: shows `"Location Needed"` gated view and `"Use My Location"` action button without requiring pre-existing confirmed taste memory.
+
+2. **True Clear vs. Rain Differential Verification (P2)**:
+   - Updated differential E2E test in `live-depart.spec.ts` to run the same event under clear weather first (leave-by 2:35 PM, clear driving, no umbrella), then switch the weather mock to rain.
+   - Configured `rain_transport_preference: 'bus_first'` with multimodal route duration (15 min drive, 35 min bus).
+   - Asserted `leave-by(rain) < leave-by(clear)` (2:15 PM vs 2:35 PM), umbrella chip rendered exclusively under rain, and bus option ranked #1.
+
+3. **Floating ICS Timezone Proxy Resolution (P2)**:
+   - Floating timestamps (`YYYYMMDDTHHMMSS` without trailing `Z` and without `TZID` parameter) are resolved using `CALENDAR_DEFAULT_TZ` if configured in the environment, falling back to the server host's IANA timezone (`Intl.DateTimeFormat().resolvedOptions().timeZone`), and finally defaulting to `'UTC'`.
+   - Validated via `resolveIanaTimezone` in `server-proxy.ts` and passed into `IcsCalendarAdapter`.
+   - Added unit test asserting floating `15:00` with `defaultTimezone: 'Asia/Tokyo'` resolves strictly to `06:00Z`.
+
+4. **Dynamic No-Route Reason Labeling (P3)**:
+   - In `home-vm.ts`, calendar quiet state maps the live routing failure reason via `NO_ROUTE_REASON_LABELS` (e.g. `provider disabled`, `provider error`, `no destination set`, `location not shared`).
+
+---
+
+## 6. Automated Verification Matrix
 
 | Verification Tier | Command | Result |
 |---|---|---|

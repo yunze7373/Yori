@@ -36,6 +36,10 @@ import {
   type EvidenceBundle,
   type SourceRef,
 } from './grounding.js';
+import {
+  NO_ROUTE_REASON_LABELS,
+  type NoRouteReason,
+} from '../../adapters/providers/routing-types.js';
 import type {
   HomeCompositionVM,
   CandidateCardVM,
@@ -65,6 +69,7 @@ export interface BuildHomeCompositionOptions {
   isLive?: boolean;
   weatherEnabled?: boolean;
   calendarConnected?: boolean;
+  calendarNoRouteReason?: string;
   calendarSignalValue?: {
     title?: string;
     startTime?: string;
@@ -140,67 +145,93 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
 
   // 1. Quiet State (D4: 0 prompts is valid; honest quiet state)
   if (!plan) {
+    const locSig = snapshot?.signals?.find(s => s.kind === 'location_status' || s.kind === 'location');
+    const locVal = locSig?.value as any;
+
+    if (locVal?.status === 'prompt') {
+      const hasCal = snapshot?.signals?.some(s => s.kind === 'calendar');
+      const hasFuel = snapshot?.signals?.some(s => s.kind === 'fuel_percent' || s.kind === 'fuel_status');
+      const headline = hasCal
+        ? 'Location permission needed to compute departure and travel times'
+        : hasFuel
+          ? 'Location permission needed to find nearby gas stations'
+          : 'Location permission needed to find nearby lunch places';
+      const notice = hasCal
+        ? 'Location permission needed to compute departure routes'
+        : hasFuel
+          ? 'Location permission needed to find nearby gas stations'
+          : 'Location permission needed to find nearby lunch places';
+
+      return {
+        layoutKind: 'quiet',
+        title: 'Location Needed',
+        headline,
+        basis: 'Grant location access or enter coordinates manually · fails closed',
+        isRain: false,
+        options: [],
+        isAccepted: false,
+        canUndo: false,
+        actions: [],
+        aheadItems: compileAheadItems(aheadPlans),
+        proposals: compileProposals(proposals),
+        evidenceBundle: bundle,
+        locationState: 'prompt',
+        locationNotice: locVal?.notice || notice,
+      };
+    }
+
+    if (locVal?.status === 'denied') {
+      return {
+        layoutKind: 'quiet',
+        title: 'Location Denied',
+        headline: 'Location access denied by user',
+        basis: 'Location permission was denied · enter coordinates manually or enable permission',
+        isRain: false,
+        options: [],
+        isAccepted: false,
+        canUndo: false,
+        actions: [],
+        aheadItems: compileAheadItems(aheadPlans),
+        proposals: compileProposals(proposals),
+        evidenceBundle: bundle,
+        locationState: 'denied',
+        locationNotice: locVal?.notice || 'Location access denied by user',
+      };
+    }
+
+    if (locVal?.status === 'unavailable') {
+      const hasCal = snapshot?.signals?.some(s => s.kind === 'calendar');
+      const hasFuel = snapshot?.signals?.some(s => s.kind === 'fuel_percent' || s.kind === 'fuel_status');
+      const headline = hasCal
+        ? 'Cannot compute departure routes without location access'
+        : hasFuel
+          ? 'Cannot find nearby gas stations without location access'
+          : 'Cannot find nearby lunch places without location access';
+      const notice = hasCal
+        ? 'Cannot compute departure routes without location access'
+        : hasFuel
+          ? 'Cannot find nearby gas stations without location access'
+          : 'Cannot find nearby lunch places without location access';
+
+      return {
+        layoutKind: 'quiet',
+        title: 'Location Unavailable',
+        headline,
+        basis: 'Location permission or fixture coordinates required · fails closed',
+        isRain: false,
+        options: [],
+        isAccepted: false,
+        canUndo: false,
+        actions: [],
+        aheadItems: compileAheadItems(aheadPlans),
+        proposals: compileProposals(proposals),
+        evidenceBundle: bundle,
+        locationState: 'unavailable',
+        locationNotice: locVal?.notice || notice,
+      };
+    }
+
     if (snapshot?.signals?.some(s => s.kind === 'fuel_percent' || s.kind === 'fuel_status')) {
-      const locSig = snapshot.signals.find(s => s.kind === 'location_status');
-      const locVal = locSig?.value as any;
-
-      if (locVal?.status === 'prompt') {
-        return {
-          layoutKind: 'quiet',
-          title: 'Location Needed',
-          headline: 'Location permission needed to find nearby gas stations',
-          basis: 'Grant location access or enter coordinates manually · fails closed',
-          isRain: false,
-          options: [],
-          isAccepted: false,
-          canUndo: false,
-          actions: [],
-          aheadItems: compileAheadItems(aheadPlans),
-          proposals: compileProposals(proposals),
-          evidenceBundle: bundle,
-          locationState: 'prompt',
-          locationNotice: locVal?.notice || 'Location permission needed to find nearby gas stations',
-        };
-      }
-
-      if (locVal?.status === 'denied') {
-        return {
-          layoutKind: 'quiet',
-          title: 'Location Denied',
-          headline: 'Location access denied by user',
-          basis: 'Location permission was denied · enter coordinates manually or enable permission',
-          isRain: false,
-          options: [],
-          isAccepted: false,
-          canUndo: false,
-          actions: [],
-          aheadItems: compileAheadItems(aheadPlans),
-          proposals: compileProposals(proposals),
-          evidenceBundle: bundle,
-          locationState: 'denied',
-          locationNotice: locVal?.notice || 'Location access denied by user',
-        };
-      }
-
-      if (locVal?.status === 'unavailable') {
-        return {
-          layoutKind: 'quiet',
-          title: 'Location Unavailable',
-          headline: 'Cannot find nearby gas stations without location access',
-          basis: 'Location permission or fixture coordinates required · fails closed',
-          isRain: false,
-          options: [],
-          isAccepted: false,
-          canUndo: false,
-          actions: [],
-          aheadItems: compileAheadItems(aheadPlans),
-          proposals: compileProposals(proposals),
-          evidenceBundle: bundle,
-          locationState: 'unavailable',
-          locationNotice: locVal?.notice || 'Cannot find nearby gas stations without location access',
-        };
-      }
-
       const placesSig = snapshot.signals.find(s => s.kind === 'places_fuel');
       const placesVal = placesSig?.value as any;
       if (placesVal?.status === 'error') {
@@ -255,48 +286,7 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
       }
     }
 
-    if (snapshot?.signals?.some(s => s.kind === 'calendar')) {
-      const locSig = snapshot.signals.find(s => s.kind === 'location_status' || s.kind === 'location');
-      const locVal = locSig?.value as any;
-
-      if (locVal?.status === 'prompt') {
-        return {
-          layoutKind: 'quiet',
-          title: 'Location Needed',
-          headline: 'Location permission needed to compute departure and travel times',
-          basis: 'Grant location access or enter coordinates manually · fails closed',
-          isRain: false,
-          options: [],
-          isAccepted: false,
-          canUndo: false,
-          actions: [],
-          aheadItems: compileAheadItems(aheadPlans),
-          proposals: compileProposals(proposals),
-          evidenceBundle: bundle,
-          locationState: 'prompt',
-          locationNotice: locVal?.notice || 'Location permission needed to compute departure routes',
-        };
-      }
-
-      if (locVal?.status === 'denied') {
-        return {
-          layoutKind: 'quiet',
-          title: 'Location Denied',
-          headline: 'Location access denied by user',
-          basis: 'Location permission was denied · enter coordinates manually or enable permission',
-          isRain: false,
-          options: [],
-          isAccepted: false,
-          canUndo: false,
-          actions: [],
-          aheadItems: compileAheadItems(aheadPlans),
-          proposals: compileProposals(proposals),
-          evidenceBundle: bundle,
-          locationState: 'denied',
-          locationNotice: locVal?.notice || 'Location access denied by user',
-        };
-      }
-
+    if (options.isLive && options.calendarConnected && snapshot?.signals?.some(s => s.kind === 'calendar')) {
       const calSig = snapshot.signals.find(s => s.kind === 'calendar');
       const calVal = calSig?.value as any;
       if (calVal && typeof calVal === 'object') {
@@ -305,10 +295,12 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
         const tz = calVal.timezone || snapshot?.timezone || 'UTC';
         const apptTimeFormatted = apptIso ? formatTime(apptIso, tz) : undefined;
         const displayTitle = apptTimeFormatted ? `${apptTitle} at ${apptTimeFormatted}` : apptTitle;
+        const reasonKey = (options.calendarNoRouteReason as NoRouteReason) || undefined;
+        const reasonLabel = (reasonKey && NO_ROUTE_REASON_LABELS[reasonKey]) || 'provider disabled';
         return {
           layoutKind: 'quiet',
           title: displayTitle,
-          headline: 'Leave-by unavailable · no route (provider disabled)',
+          headline: `Leave-by unavailable · no route (${reasonLabel})`,
           basis: 'Calendar event detected, but routing provider is disabled or unavailable · leave-by time cannot be computed without a route',
           isRain: false,
           options: [],
@@ -330,67 +322,8 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
       userConfirmedKeys?.has('favorite_cuisine') ||
       Array.from(userConfirmedKeys ?? []).some(k => k.toLowerCase().includes('taste'));
 
-    if (hasConfirmedTaste && snapshot?.signals?.some(s => s.kind === 'places_lunch')) {
-      const locSig = snapshot.signals.find(s => s.kind === 'location_status' || s.kind === 'location');
-      const locVal = locSig?.value as any;
-
-      if (locVal?.status === 'prompt') {
-        return {
-          layoutKind: 'quiet',
-          title: 'Location Needed',
-          headline: 'Location permission needed to find nearby lunch places',
-          basis: 'Grant location access or enter coordinates manually · fails closed',
-          isRain: false,
-          options: [],
-          isAccepted: false,
-          canUndo: false,
-          actions: [],
-          aheadItems: compileAheadItems(aheadPlans),
-          proposals: compileProposals(proposals),
-          evidenceBundle: bundle,
-          locationState: 'prompt',
-          locationNotice: locVal?.notice || 'Location permission needed to find nearby lunch places',
-        };
-      }
-
-      if (locVal?.status === 'denied') {
-        return {
-          layoutKind: 'quiet',
-          title: 'Location Denied',
-          headline: 'Location access denied by user',
-          basis: 'Location permission was denied · enter coordinates manually or enable permission',
-          isRain: false,
-          options: [],
-          isAccepted: false,
-          canUndo: false,
-          actions: [],
-          aheadItems: compileAheadItems(aheadPlans),
-          proposals: compileProposals(proposals),
-          evidenceBundle: bundle,
-          locationState: 'denied',
-          locationNotice: locVal?.notice || 'Location access denied by user',
-        };
-      }
-
-      if (locVal?.status === 'unavailable') {
-        return {
-          layoutKind: 'quiet',
-          title: 'Location Unavailable',
-          headline: 'Cannot find nearby lunch places without location access',
-          basis: 'Location permission or fixture coordinates required · fails closed',
-          isRain: false,
-          options: [],
-          isAccepted: false,
-          canUndo: false,
-          actions: [],
-          aheadItems: compileAheadItems(aheadPlans),
-          proposals: compileProposals(proposals),
-          evidenceBundle: bundle,
-          locationState: 'unavailable',
-          locationNotice: locVal?.notice || 'Cannot find nearby lunch places without location access',
-        };
-      }
-
+    const shouldShowPlacesQuiet = !options.isLive || hasConfirmedTaste;
+    if (shouldShowPlacesQuiet && snapshot?.signals?.some(s => s.kind === 'places_lunch')) {
       const placesSig = snapshot.signals.find(s => s.kind === 'places_lunch');
       const placesVal = placesSig?.value as any;
       if (placesVal?.status === 'error') {

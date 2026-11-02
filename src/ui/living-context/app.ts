@@ -2351,12 +2351,19 @@ export function renderApp(
                             if (routeData.enabled && routeData.route) {
                               liveRoute = routeData.route;
                               const travelMinutes = Math.round(routeData.route.durationS / 60);
+                              const busMinutes =
+                                typeof routeData.busMinutes === 'number'
+                                  ? routeData.busMinutes
+                                  : typeof routeData.route?.busMinutes === 'number'
+                                    ? routeData.route.busMinutes
+                                    : undefined;
                               liveTravelSignal = createLiveSignal({
                                 kind: 'travel_estimate',
                                 value: {
                                   travelMinutes,
                                   mode: 'drive',
                                   driveMinutes: travelMinutes,
+                                  ...(busMinutes !== undefined ? { busMinutes } : {}),
                                 },
                                 provider: 'osrm',
                                 asOf: new Date().toISOString(),
@@ -3149,6 +3156,7 @@ export function renderApp(
           isLive: contextMode === 'live',
           weatherEnabled: weatherStatus.enabled,
           calendarConnected: liveCalendarStatus.configured && liveCalendarStatus.enabled,
+          calendarNoRouteReason: liveRouteErrorReason ?? undefined,
           calendarSignalValue: liveCalendarSignal?.value as any,
           plan: nowPlan,
           spatialEvidence: spatialMapEvidence,

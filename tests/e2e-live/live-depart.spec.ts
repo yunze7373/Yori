@@ -403,7 +403,32 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await setupClockAndMemory(page, { isoTime: '2026-11-02T14:15:00.000Z' });
+    await setupClockAndMemory(page, {
+      isoTime: '2026-11-02T14:15:00.000Z',
+      memoryFacts: [
+        {
+          key: 'prep_buffer_minutes',
+          value: 10,
+          status: 'confirmed',
+          provenance: { source: 'user_confirmed', recordedAt: '2026-11-02T12:00:00.000Z' },
+          updatedAt: '2026-11-02T12:00:00.000Z',
+        },
+        {
+          key: 'prep_duration_minutes',
+          value: 20,
+          status: 'confirmed',
+          provenance: { source: 'user_confirmed', recordedAt: '2026-11-02T12:00:00.000Z' },
+          updatedAt: '2026-11-02T12:00:00.000Z',
+        },
+        {
+          key: 'rain_transport_preference',
+          value: 'bus_first',
+          status: 'confirmed',
+          provenance: { source: 'user_confirmed', recordedAt: '2026-11-02T12:00:00.000Z' },
+          updatedAt: '2026-11-02T12:00:00.000Z',
+        },
+      ],
+    });
 
     await page.route('**/api/calendar/status', route =>
       route.fulfill({
@@ -449,6 +474,7 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           enabled: true,
+          busMinutes: 35,
           route: {
             geometry: [[37.7749, -122.4194], [37.776, -122.418]],
             distanceM: 3000,
@@ -469,7 +495,7 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
       })
     );
 
-    // Weather: Rain
+    let currentWeatherCondition: 'clear' | 'rain' = 'clear';
     await page.route('**/api/weather/current', route =>
       route.fulfill({
         status: 200,
@@ -479,7 +505,9 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
           signals: [
             {
               kind: 'weather',
-              value: { condition: 'rain', temperature: 16, precipProbability: 0.8 },
+              value: currentWeatherCondition === 'rain'
+                ? { condition: 'rain', temperature: 16, precipProbability: 0.8 }
+                : { condition: 'clear', temperature: 20, precipProbability: 0.0 },
               provider: 'open-meteo',
               asOf: '2026-11-02T14:15:00.000Z',
               issuedAt: '2026-11-02T14:15:00.000Z',
@@ -495,6 +523,8 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
       })
     );
 
+    // --- PHASE 1: Clear Weather ---
+    currentWeatherCondition = 'clear';
     await page.goto('/?mode=live');
     await page.waitForSelector('.app-layout[data-context-mode="live"]');
     await grantLocationIfPrompted(page);
@@ -503,12 +533,37 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
     await expect(nowCard).toBeVisible({ timeout: 10000 });
     await expect(nowCard).toContainText('Product Review');
 
-    // Rain surfaces umbrella preparation in checklist
-    const cardContent = await nowCard.textContent();
-    expect(cardContent?.toLowerCase()).toMatch(/umbrella|take umbrella/i);
+    // Under clear weather: No umbrella chip
+    await expect(page.locator('#chip-umbrella')).toHaveCount(0);
+    const clearContent = await nowCard.textContent();
+    expect(clearContent?.toLowerCase()).not.toContain('umbrella');
 
-    // Leave-by computed from 15 min drive + buffer
-    expect(cardContent).toMatch(/leave by 2:\d\d\s*pm/i);
+    // Clear leave-by: 15 min driving + 10 min buffer from 3:00 PM -> leave by 2:35 PM
+    expect(clearContent).toMatch(/leave by 2:35\s*pm/i);
+
+    // --- PHASE 2: Rain Weather (Re-plan Differential) ---
+    currentWeatherCondition = 'rain';
+    await page.reload();
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+    await grantLocationIfPrompted(page);
+
+    await expect(nowCard).toBeVisible({ timeout: 10000 });
+    await expect(nowCard).toContainText('Product Review');
+
+    // Under rain weather: Umbrella chip is visible
+    const umbrellaChip = page.locator('#chip-umbrella');
+    await expect(umbrellaChip).toBeVisible();
+    const rainContent = await nowCard.textContent();
+    expect(rainContent?.toLowerCase()).toContain('umbrella');
+
+    // Rain leave-by: with bus_first and 35 min bus + 10 min buffer -> leave by 2:15 PM
+    // Assert leave-by(rain) < leave-by(clear): 2:15 PM is earlier than 2:35 PM!
+    expect(rainContent).toMatch(/leave by 2:15\s*pm/i);
+
+    // Option order / recommended option changes to bus
+    const rainModeBadge = page.locator('.v2-active-mode-badge');
+    await expect(rainModeBadge).toBeVisible();
+    await expect(rainModeBadge).toContainText('Bus');
 
     // Calendar tile reflects event (never "Not connected")
     const calTile = page.locator('#signal-tile-calendar');

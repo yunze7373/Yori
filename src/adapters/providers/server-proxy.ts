@@ -38,6 +38,7 @@ import {
 } from './overpass-places-adapter.js';
 import {
   IcsCalendarAdapter,
+  resolveIanaTimezone,
 } from './ics-calendar-adapter.js';
 import {
   NominatimGeocoder,
@@ -917,6 +918,7 @@ export interface CalendarProxyConfig {
   readonly provider: 'ics';
   readonly attribution: string;
   readonly icsUrl?: string | null;
+  readonly defaultTimezone: string;
 }
 
 export function resolveCalendarConfig(
@@ -926,6 +928,11 @@ export function resolveCalendarConfig(
   const enabled = enabledVal === 'true' || enabledVal === '1';
   const icsUrl = env['CALENDAR_ICS_URL']?.trim() || null;
   const configured = Boolean(icsUrl && icsUrl.length > 0);
+  const rawTz = env['CALENDAR_DEFAULT_TZ']?.trim();
+  const hostTz = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
+  const resolvedTz = (rawTz ? resolveIanaTimezone(rawTz) : null) ??
+    (hostTz ? resolveIanaTimezone(hostTz) : null) ??
+    'UTC';
 
   return {
     enabled,
@@ -933,6 +940,7 @@ export function resolveCalendarConfig(
     provider: 'ics',
     attribution: 'iCalendar (RFC 5545)',
     icsUrl,
+    defaultTimezone: resolvedTz,
   };
 }
 
@@ -947,9 +955,14 @@ export function createCalendarProxyMiddleware(
     provider: 'ics',
     attribution: configOverride?.attribution ?? baseConfig.attribution,
     icsUrl: configOverride?.icsUrl !== undefined ? configOverride.icsUrl : baseConfig.icsUrl,
+    defaultTimezone: configOverride?.defaultTimezone ?? baseConfig.defaultTimezone,
   };
 
-  const calendarAdapter = adapterOverride ?? new IcsCalendarAdapter();
+  const calendarAdapter =
+    adapterOverride ??
+    new IcsCalendarAdapter({
+      defaultTimezone: config.defaultTimezone,
+    });
 
   return async function calendarProxyMiddleware(
     req: IncomingMessage,

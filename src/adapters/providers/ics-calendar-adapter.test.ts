@@ -67,6 +67,28 @@ describe('S4-LIVE-DEPART: ICS Calendar Adapter', () => {
     expect(winPst!.iso).toBe('2026-11-02T23:00:00.000Z');
   });
 
+  it('interprets floating DTSTART using defaultTimezone (e.g. Asia/Tokyo -> 06:00Z)', () => {
+    const directParsed = parseIcsDateTime('DTSTART:20261102T150000', 'Asia/Tokyo');
+    expect(directParsed).not.toBeNull();
+    expect(directParsed!.iso).toBe('2026-11-02T06:00:00.000Z');
+
+    const syntheticIcs = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:evt-floating-tokyo
+DTSTART:20261102T150000
+DTEND:20261102T160000
+SUMMARY:Floating Tokyo Meeting
+END:VEVENT
+END:VCALENDAR`;
+
+    const adapter = new IcsCalendarAdapter({ defaultTimezone: 'Asia/Tokyo' });
+    const events = adapter.parseIcsText(syntheticIcs);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.startTime).toBe('2026-11-02T06:00:00.000Z');
+    expect(events[0]!.endTime).toBe('2026-11-02T07:00:00.000Z');
+  });
+
   it('fails closed on unknown or invalid TZID (drops event)', () => {
     const invalidTz = parseIcsDateTime('DTSTART;TZID=Fictional_Galactic_Timezone:20261102T150000');
     expect(invalidTz).toBeNull();

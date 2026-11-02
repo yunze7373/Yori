@@ -272,7 +272,11 @@ export class IcsCalendarAdapter {
 
   constructor(config?: IcsCalendarAdapterConfig) {
     this.fetchFn = config?.fetchFn ?? globalThis.fetch;
-    this.defaultTimezone = config?.defaultTimezone ?? 'UTC';
+    const hostTz = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC';
+    const resolvedTz = config?.defaultTimezone
+      ? resolveIanaTimezone(config.defaultTimezone)
+      : (hostTz ? resolveIanaTimezone(hostTz) : null);
+    this.defaultTimezone = resolvedTz ?? 'UTC';
   }
 
   /**
