@@ -45,6 +45,7 @@ export interface ProxyTestSeamConfig {
   readonly forceDelayMs?: number;
   readonly staleAgeMs?: number;
   readonly errorMessage?: string;
+  readonly payload?: unknown;
 }
 
 const activeProxyTestSeams: Record<string, ProxyTestSeamConfig | null> = {
@@ -196,29 +197,32 @@ export function createWeatherProxyMiddleware(
         const staleOffset = weatherSeam.staleAgeMs || 7200000;
         const staleAsOf = new Date(Date.now() - staleOffset).toISOString();
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(
-          JSON.stringify({
-            enabled: true,
-            stale: true,
-            signals: [
-              {
-                kind: 'weather',
-                value: { condition: 'Clear', temperature: 20 },
-                provider: 'open-meteo',
-                asOf: staleAsOf,
-                issuedAt: staleAsOf,
-                validFor: 3600000,
-                confidence: 0.9,
-                provenance: 'live',
-                consentScope: 'device_only',
-                status: 'available',
-                source: 'real',
-                label: 'real',
-              },
-            ],
-            attribution: OPEN_METEO_ATTRIBUTION,
-          })
-        );
+        const payload =
+          weatherSeam.payload ||
+          (process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST)
+            ? {
+                enabled: true,
+                stale: true,
+                signals: [
+                  {
+                    kind: 'weather',
+                    value: { condition: 'Clear', temperature: 20 },
+                    provider: 'open-meteo',
+                    asOf: staleAsOf,
+                    issuedAt: staleAsOf,
+                    validFor: 3600000,
+                    confidence: 0.9,
+                    provenance: 'live',
+                    consentScope: 'device_only',
+                    status: 'available',
+                    source: 'real',
+                    label: 'real',
+                  },
+                ],
+                attribution: OPEN_METEO_ATTRIBUTION,
+              }
+            : { enabled: true, stale: true, signals: [] });
+        res.end(JSON.stringify(payload));
         return;
       }
     }
@@ -414,20 +418,23 @@ export function createRouteProxyMiddleware(
         const staleOffset = routeSeam.staleAgeMs || 7200000;
         const staleAsOf = new Date(Date.now() - staleOffset).toISOString();
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(
-          JSON.stringify({
-            enabled: true,
-            stale: true,
-            route: {
-              durationSeconds: 1200,
-              distanceMeters: 5000,
-              geometry: [],
-              asOf: staleAsOf,
-              validFor: 300000,
-            },
-            attribution: OSRM_ATTRIBUTION,
-          })
-        );
+        const payload =
+          routeSeam.payload ||
+          (process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST)
+            ? {
+                enabled: true,
+                stale: true,
+                route: {
+                  durationSeconds: 1200,
+                  distanceMeters: 5000,
+                  geometry: [],
+                  asOf: staleAsOf,
+                  validFor: 300000,
+                },
+                attribution: OSRM_ATTRIBUTION,
+              }
+            : { enabled: true, stale: true, route: null });
+        res.end(JSON.stringify(payload));
         return;
       }
     }
@@ -669,25 +676,28 @@ export function createPlacesProxyMiddleware(
         const staleOffset = placesSeam.staleAgeMs || 7200000;
         const staleAsOf = new Date(Date.now() - staleOffset).toISOString();
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(
-          JSON.stringify({
-            enabled: true,
-            stale: true,
-            places: [
-              {
-                osmId: 999999,
-                name: 'Stale Cafe',
-                lat: 37.77,
-                lng: -122.41,
-                distanceMeters: 250,
-                fetchedAt: staleAsOf,
-                validFor: 300000,
-                source: 'OpenStreetMap via Overpass (ODbL)',
-              },
-            ],
-            attribution: config.attribution,
-          })
-        );
+        const payload =
+          placesSeam.payload ||
+          (process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST)
+            ? {
+                enabled: true,
+                stale: true,
+                places: [
+                  {
+                    osmId: 999999,
+                    name: 'Test Place',
+                    lat: 37.77,
+                    lng: -122.41,
+                    distanceMeters: 250,
+                    fetchedAt: staleAsOf,
+                    validFor: 300000,
+                    source: 'OpenStreetMap via Overpass (ODbL)',
+                  },
+                ],
+                attribution: config.attribution,
+              }
+            : { enabled: true, stale: true, places: [] });
+        res.end(JSON.stringify(payload));
         return;
       }
     }

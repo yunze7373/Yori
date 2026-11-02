@@ -24,7 +24,7 @@ export class NotificationsConnectorPort implements ConnectorPort {
       return {
         id: this.id,
         state: 'unavailable',
-        detail: 'Notifications API not supported in this browser',
+        detail: 'Notifications API not supported in this browser · no background execution',
         source: 'Notification.permission',
         updatedAt,
       };

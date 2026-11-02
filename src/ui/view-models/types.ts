@@ -224,6 +224,7 @@ export interface HomeCompositionVM {
     readonly simulatedTimeStr: string;
     readonly timelineLabel: string;
   };
+  readonly isLive?: boolean;
 }
 
 // -------------------------------------------------------------

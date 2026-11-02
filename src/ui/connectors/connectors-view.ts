@@ -197,7 +197,7 @@ export function renderConnectorsView(
                     <span class="status-label">${escapeHtml(formatPillLabel(notif.state, notif.detail))}</span>
                   </span>
                 </div>
-                <p class="connector-desc">Lets Yori send you important proactive updates.</p>
+                <p class="connector-desc">Lets Yori send you important proactive updates · web browsers have no background execution.</p>
                 <div class="connector-detail" id="connector-detail-notifications">${escapeHtml(notif.detail)}</div>
                 ${
                   notif.state === 'permission_needed'

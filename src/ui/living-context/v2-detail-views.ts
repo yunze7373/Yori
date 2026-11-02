@@ -25,9 +25,10 @@ import type { PreparedPlan } from '../../core/contracts/index.js';
  */
 export function renderTripDetail(vm: TripDetailVM): string {
   const planId = vm.planId;
+  const isLive = Boolean((vm as any).isLive);
 
   return `
-    <div class="v2-detail-view v2-trip-detail" data-plan-id="${escapeHtml(planId)}" data-provenance="fixture">
+    <div class="v2-detail-view v2-trip-detail" data-plan-id="${escapeHtml(planId)}" data-provenance="${isLive ? 'live' : 'fixture'}">
       <div class="v2-detail-top-nav">
         <button type="button" class="v2-back-btn" id="trip-detail-back-btn" aria-label="Back to home">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -36,7 +37,7 @@ export function renderTripDetail(vm: TripDetailVM): string {
           </svg>
           <span>Back</span>
         </button>
-        <span class="v2-detail-badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+        <span class="v2-detail-badge">${isLive ? 'Live' : escapeHtml(STRINGS.header.simulatedBadge)}</span>
       </div>
 
       <header class="v2-detail-header">
@@ -222,8 +223,10 @@ export function renderTripDetail(vm: TripDetailVM): string {
  * Render Restaurant Detail View (Lunch Candidate Step-2)
  */
 export function renderRestaurantDetail(vm: RestaurantDetailVM): string {
+  const isLive = Boolean((vm as any).isLive);
+
   return `
-    <div class="v2-detail-view v2-restaurant-detail" data-candidate-id="${escapeHtml(vm.id)}" data-provenance="fixture">
+    <div class="v2-detail-view v2-restaurant-detail" data-candidate-id="${escapeHtml(vm.id)}" data-provenance="${isLive ? 'live' : 'fixture'}">
       <div class="v2-detail-top-nav">
         <button type="button" class="v2-back-btn" id="restaurant-detail-back-btn" aria-label="Back to home">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -232,7 +235,7 @@ export function renderRestaurantDetail(vm: RestaurantDetailVM): string {
           </svg>
           <span>Back</span>
         </button>
-        <span class="v2-detail-badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+        <span class="v2-detail-badge">${isLive ? 'Live' : escapeHtml(STRINGS.header.simulatedBadge)}</span>
       </div>
 
       <!-- Local Labelled SVG Illustration (Zero Remote URLs) -->
@@ -342,9 +345,9 @@ export function renderPlansView(aheadPlans: readonly PreparedPlan[]): string {
           ${aheadPlans
             .map(
               plan => `
-            <div class="card v2-plan-item-card" data-plan-id="${escapeHtml(plan.id)}" data-provenance="fixture">
+            <div class="card v2-plan-item-card" data-plan-id="${escapeHtml(plan.id)}" data-provenance="${(plan as any).provenance === 'live' ? 'live' : 'fixture'}">
               <div class="v2-plan-item-header">
-                <span class="card-badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+                ${(plan as any).provenance === 'live' ? '<span class="card-badge live-badge" data-provenance="live">Live</span>' : `<span class="card-badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>`}
                 <h2 class="v2-plan-headline">${escapeHtml(plan.headline)}</h2>
               </div>
               ${

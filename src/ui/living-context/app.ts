@@ -43,6 +43,14 @@ import {
   type TimelineBeat,
   type TimelineBeatId,
 } from '../../app/timeline/continuous-timeline.js';
+import {
+  buildLiveSnapshot,
+  deriveLiveLivingHeaderFromSnapshot,
+} from '../../adapters/providers/live-snapshot.js';
+import {
+  createLiveSignal,
+  type LiveSignal,
+} from '../../adapters/providers/live-signal.js';
 import type {
   SpatialMapEvidence,
   PreparedPlan,
@@ -141,11 +149,6 @@ import {
   rankPlacesByConfirmedPreferences,
   type RankedPlaceItem,
 } from '../../adapters/providers/overpass-places-adapter.js';
-import {
-  renderLiveRouteSvg,
-  formatDistance,
-  formatDuration,
-} from './route-geometry.js';
 import {
   determineCardKind,
   createInitialPanelState,
@@ -1048,6 +1051,385 @@ export function computeSceneState(
   }
 }
 
+export interface LiveChangeMomentState {
+  readonly id: string;
+  readonly detectedAt: string;
+  readonly intentId: string;
+  readonly cause: string;
+  readonly causeMarker: string;
+  readonly heroCauseEffect: string;
+  readonly priorLeaveTime?: string;
+  readonly newLeaveTime?: string;
+  readonly statusTransition: string;
+  acknowledged: boolean;
+}
+
+export interface LiveStateResult {
+  readonly pipelineResult: PipelineResult;
+  readonly spatialMapEvidence: SpatialMapEvidence | null;
+  readonly storageError: boolean;
+  readonly storage: YoriStorage;
+  readonly snapshotAsOf: string;
+  readonly snapshotTimezone: string;
+  readonly snapshot: Readonly<ContextSnapshot>;
+  readonly combinedMemory: readonly MemoryFact[];
+  readonly evidenceBundle?: EvidenceBundle;
+}
+
+export function computeLiveState(
+  storagePort?: YoriStorage,
+  liveWeatherSignal?: ContextSignal | null,
+  liveLocationStatus?: LocationStatus,
+  externalMemoryFacts?: readonly MemoryFact[],
+  livePlacesStatus?: { enabled: boolean; provider?: string },
+  livePlacesList?: readonly RankedPlaceItem[],
+  livePlacesError?: boolean,
+  liveRoute?: RouteResult | null,
+  liveDestination?: DestinationInfo | null,
+  options?: {
+    clockIso?: string;
+    timezone?: string;
+    customSignals?: readonly ContextSignal[];
+  }
+): LiveStateResult {
+  const effectiveStorage = storagePort ?? new YoriStorage(new WebStorageDriver());
+  const snapshotAsOf = options?.clockIso || new Date().toISOString();
+  let snapshotTimezone = options?.timezone;
+  if (!snapshotTimezone) {
+    try {
+      snapshotTimezone = (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC') || 'UTC';
+    } catch {
+      snapshotTimezone = 'UTC';
+    }
+  }
+
+  // Load storage envelope
+  let loadedEnvelope = null;
+  try {
+    loadedEnvelope = effectiveStorage.load();
+    if (!loadedEnvelope) {
+      effectiveStorage.save(
+        {
+          memoryFacts: [],
+          proposals: [],
+          suppressions: [],
+          promptBudget: { date: snapshotAsOf.slice(0, 10), count: 0 },
+          acceptedPlanIds: [],
+        },
+        snapshotAsOf
+      );
+      loadedEnvelope = effectiveStorage.load();
+    }
+  } catch {
+    // error handled
+  }
+
+  const storedSuppressions = loadedEnvelope?.payload.suppressions ?? [];
+  const rawStoredConfirmed = loadedEnvelope?.payload.memoryFacts ?? [];
+  const activeStoredConfirmed: MemoryFact[] = [...rawStoredConfirmed.filter((f: MemoryFact) => f.status === 'confirmed')];
+
+  // Process prep_buffer_preference if present
+  const uPrep = activeStoredConfirmed.find(f => f.key === 'prep_buffer_preference');
+  if (uPrep && typeof uPrep.value === 'object' && uPrep.value !== null) {
+    const val = uPrep.value as { prepMinutes?: number; bufferMinutes?: number };
+    if (
+      typeof val.bufferMinutes === 'number' &&
+      Number.isInteger(val.bufferMinutes) &&
+      val.bufferMinutes >= 0 &&
+      val.bufferMinutes <= 60 &&
+      !activeStoredConfirmed.some(f => f.key === 'prep_buffer_minutes')
+    ) {
+      activeStoredConfirmed.push(
+        createMemoryFact('prep_buffer_minutes', val.bufferMinutes, 'confirmed', uPrep.provenance, uPrep.updatedAt)
+      );
+    }
+    if (
+      typeof val.prepMinutes === 'number' &&
+      Number.isInteger(val.prepMinutes) &&
+      val.prepMinutes >= 0 &&
+      val.prepMinutes <= 120 &&
+      !activeStoredConfirmed.some(f => f.key === 'prep_duration_minutes')
+    ) {
+      activeStoredConfirmed.push(
+        createMemoryFact('prep_duration_minutes', val.prepMinutes, 'confirmed', uPrep.provenance, uPrep.updatedAt)
+      );
+    }
+  }
+
+  // Merge confirmed facts from externalMemoryFacts and activeStoredConfirmed (INV-107 confirmed-only)
+  const extConfirmed = (externalMemoryFacts ?? []).filter(f => f && f.status === 'confirmed');
+  const combinedMemory = [
+    ...extConfirmed,
+    ...activeStoredConfirmed.filter(sc => !extConfirmed.some(af => af.key === sc.key)),
+  ];
+
+  const storedUserConfirmedKeys = new Set(combinedMemory.map(f => f.key));
+
+  // Build Location Signal
+  let locationSignal: LiveSignal | null = null;
+  const locStatus = liveLocationStatus ?? defaultLocationPort.getLocation();
+  const isLocAvailable =
+    (locStatus.status === 'available' || (locStatus as any).status === 'granted') &&
+    (locStatus.coords != null || (locStatus as any).latitude != null);
+
+  if (isLocAvailable) {
+    const coords = locStatus.coords
+      ? { lat: locStatus.coords.lat, lng: locStatus.coords.lng }
+      : { lat: (locStatus as any).latitude, lng: (locStatus as any).longitude };
+    const area = (locStatus as any).coords?.city || 'Location shared';
+    locationSignal = createLiveSignal({
+      kind: 'location_status',
+      value: {
+        status: 'available',
+        coords,
+        accuracy: locStatus.accuracy,
+        isHome: false,
+        label: area,
+        currentArea: area,
+      },
+      provider: 'geolocation',
+      asOf: snapshotAsOf,
+      validFor: 60000,
+      confidence: 1.0,
+      provenance: 'live',
+      consentScope: 'device_only',
+      status: 'available',
+    });
+  } else if (locStatus.status === 'denied') {
+    locationSignal = createLiveSignal({
+      kind: 'location_status',
+      value: {
+        status: 'denied',
+        isHome: false,
+        notice: 'Location access denied by user',
+      },
+      provider: 'geolocation',
+      asOf: snapshotAsOf,
+      validFor: 60000,
+      confidence: 0,
+      provenance: 'live',
+      consentScope: 'device_only',
+      status: 'permission_needed',
+    });
+  } else if (locStatus.status === 'unavailable') {
+    locationSignal = createLiveSignal({
+      kind: 'location_status',
+      value: {
+        status: 'unavailable',
+        isHome: false,
+        notice: 'Location unavailable',
+      },
+      provider: 'geolocation',
+      asOf: snapshotAsOf,
+      validFor: 60000,
+      confidence: 0,
+      provenance: 'live',
+      consentScope: 'device_only',
+      status: 'unavailable',
+    });
+  } else if (locStatus.status === 'prompt') {
+    locationSignal = createLiveSignal({
+      kind: 'location_status',
+      value: {
+        status: 'prompt',
+        isHome: false,
+        notice: 'Location permission needed to find nearby lunch places',
+      },
+      provider: 'geolocation',
+      asOf: snapshotAsOf,
+      validFor: 60000,
+      confidence: 0,
+      provenance: 'live',
+      consentScope: 'device_only',
+      status: 'permission_needed',
+    });
+  }
+
+  // Build Places Signal
+  let placesSignal: LiveSignal | null = null;
+  const placesStatus = livePlacesStatus ?? { enabled: false };
+  const placesList = livePlacesList ?? [];
+  const isPlacesErr = Boolean(livePlacesError);
+
+  if (!placesStatus.enabled) {
+    placesSignal = createLiveSignal({
+      kind: 'places_lunch',
+      value: { status: 'disabled', places: [] },
+      provider: 'overpass',
+      asOf: snapshotAsOf,
+      validFor: 300000,
+      confidence: 0,
+      provenance: 'live',
+      consentScope: 'local_only',
+      status: 'unavailable',
+    });
+  } else if (isPlacesErr) {
+    placesSignal = createLiveSignal({
+      kind: 'places_lunch',
+      value: { status: 'error', places: [] },
+      provider: 'overpass',
+      asOf: snapshotAsOf,
+      validFor: 300000,
+      confidence: 0,
+      provenance: 'live',
+      consentScope: 'local_only',
+      status: 'error',
+    });
+  } else if (placesList.length === 0) {
+    placesSignal = createLiveSignal({
+      kind: 'places_lunch',
+      value: { status: 'empty', places: [] },
+      provider: 'overpass',
+      asOf: snapshotAsOf,
+      validFor: 300000,
+      confidence: 1.0,
+      provenance: 'live',
+      consentScope: 'local_only',
+      status: 'available',
+    });
+  } else {
+    placesSignal = createLiveSignal({
+      kind: 'places_lunch',
+      value: {
+        status: 'available',
+        places: placesList.map(p => ({
+          id: p.placeId,
+          name: p.name,
+          cuisine: p.cuisine,
+          noiseLevel: p.noiseLevel,
+          vegetarian: p.vegetarian,
+          coords: p.coords,
+          straightLineDistanceMeters: p.straightLineDistanceMeters,
+          straightLineDistanceLabel: p.straightLineDistanceLabel,
+          openNow: p.openingStatus === 'open',
+          osmId: p.osmId,
+        })),
+      },
+      provider: 'overpass',
+      asOf: placesList[0]?.fetchedAt || snapshotAsOf,
+      validFor: 300000,
+      confidence: 1.0,
+      provenance: 'live',
+      consentScope: 'local_only',
+      status: 'available',
+    });
+  }
+
+  // Build Route Signal
+  let routeSignal: LiveSignal | null = null;
+  if (liveRoute && !isRouteStale(liveRoute)) {
+    routeSignal = createLiveSignal({
+      kind: 'route',
+      value: liveRoute,
+      provider: 'osrm',
+      asOf: liveRoute.fetchedAt || snapshotAsOf,
+      validFor: 300000,
+      confidence: 1.0,
+      provenance: 'live',
+      consentScope: 'local_only',
+      status: 'available',
+    });
+  }
+
+  // Weather Signal
+  let weatherSig: LiveSignal | null = null;
+  if (liveWeatherSignal) {
+    if ((liveWeatherSignal as LiveSignal).validFor && (liveWeatherSignal as LiveSignal).asOf) {
+      weatherSig = liveWeatherSignal as LiveSignal;
+    } else {
+      weatherSig = createLiveSignal({
+        kind: 'weather',
+        value: liveWeatherSignal.value,
+        provider: 'open-meteo',
+        asOf: liveWeatherSignal.issuedAt || snapshotAsOf,
+        validFor: liveWeatherSignal.validFor || 300000,
+        confidence: 1.0,
+        provenance: 'live',
+        consentScope: 'local_only',
+        status: 'available',
+      });
+    }
+  }
+
+  // Build Snapshot
+  const snapshot = buildLiveSnapshot({
+    asOf: snapshotAsOf,
+    timezone: snapshotTimezone,
+    locationSignal,
+    weatherSignal: weatherSig,
+    placesSignal,
+    routeSignal,
+    memoryFacts: combinedMemory,
+    customSignals: options?.customSignals,
+  });
+
+  const plugins = staticPluginRegistry.getAll();
+  const pipelineResult = runPipeline({
+    snapshot,
+    memory: combinedMemory,
+    clock: snapshotAsOf,
+    plugins,
+    storage: effectiveStorage,
+    suppressions: storedSuppressions,
+  });
+
+  // Map & Evidence
+  let spatialMapEvidence: SpatialMapEvidence | null = null;
+  let evidenceBundle: EvidenceBundle | undefined;
+
+  const now = pipelineResult.livingContext.now;
+  if (now?.intentId === 'lunch') {
+    const topPlace = placesList[0];
+    if (topPlace && placesSignal) {
+      spatialMapEvidence = {
+        placeOrRoute: {
+          name: topPlace.name,
+          destination: topPlace.address || topPlace.cuisine || 'Dining',
+        },
+        spatialEvidence: placesSignal,
+      };
+    }
+    evidenceBundle = createLunchEvidenceBundle({
+      snapshot,
+      sceneClockIso: snapshotAsOf,
+      timezone: snapshotTimezone,
+      userConfirmedKeys: storedUserConfirmedKeys,
+      isConfirmedTaste: storedUserConfirmedKeys.has('taste_preference') || storedUserConfirmedKeys.has('taste_preference_lunch_cuisine') || storedUserConfirmedKeys.has('favorite_cuisine'),
+      memoryFacts: combinedMemory,
+    });
+  } else if (now?.intentId === 'depart') {
+    if (liveDestination && routeSignal) {
+      spatialMapEvidence = {
+        placeOrRoute: {
+          name: liveDestination.name,
+          destination: liveDestination.name,
+        },
+        spatialEvidence: routeSignal,
+      };
+    }
+    evidenceBundle = createRainEvidenceBundle({
+      snapshot,
+      sceneClockIso: snapshotAsOf,
+      timezone: snapshotTimezone,
+      userConfirmedKeys: storedUserConfirmedKeys,
+      isConfirmedHabit: storedUserConfirmedKeys.has('rain_transport_preference'),
+      memoryFacts: combinedMemory,
+    });
+  }
+
+  return {
+    pipelineResult,
+    spatialMapEvidence,
+    storageError: false,
+    storage: effectiveStorage,
+    snapshotAsOf,
+    snapshotTimezone,
+    snapshot,
+    combinedMemory,
+    evidenceBundle,
+  };
+}
+
 /**
  * Handles confirmation of a memory proposal honestly via MemoryPort (BACKLOG-20261031-XKEYDEL-P2).
  * Fails closed if writeBack returns unsuccessful or throws:
@@ -1322,6 +1704,8 @@ export function renderApp(
 
   let activeTimelineBeat: TimelineBeat | null = null;
   const previousComposedPlanByIntent = new Map<string, PreparedPlan>();
+  const previousLivePlanByIntent = new Map<string, PreparedPlan>();
+  let activeLiveChangeMoment: LiveChangeMomentState | null = null;
 
   if (typeof window !== 'undefined') {
     try {
@@ -1816,8 +2200,72 @@ export function renderApp(
   void checkPlacesStatus();
   void refreshConnectorStatuses();
 
+  let liveRefreshInFlight = false;
+
+  async function triggerLiveRefresh() {
+    if (liveRefreshInFlight) return;
+    if (contextMode !== 'live') return;
+    liveRefreshInFlight = true;
+    try {
+      liveLocationStatus = defaultLocationPort.getLocation();
+      await checkWeatherStatus();
+      await checkPlacesStatus();
+      await checkRouteStatus();
+      await refreshConnectorStatuses();
+      update();
+    } catch {
+      // ignore
+    } finally {
+      liveRefreshInFlight = false;
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', () => {
+      if (contextMode === 'live') {
+        void triggerLiveRefresh();
+      }
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && contextMode === 'live') {
+        void triggerLiveRefresh();
+      }
+    });
+    setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        return;
+      }
+      if (contextMode === 'live') {
+        void triggerLiveRefresh();
+      }
+    }, 60000);
+  }
+
   function update() {
     const isDesktopLayout = typeof window !== 'undefined' && window.innerWidth >= 1024;
+    const sceneState =
+      contextMode === 'live'
+        ? computeLiveState(
+            sharedStorage,
+            weatherStatus.enabled ? liveWeatherSignal : null,
+            liveLocationStatus,
+            activeLoadedFacts,
+            livePlacesStatus,
+            livePlacesList,
+            livePlacesError,
+            liveRoute,
+            liveDestination,
+            undefined
+          )
+        : computeSceneState(
+            currentScene,
+            sharedStorage,
+            weatherStatus.enabled ? liveWeatherSignal : null,
+            activeLoadedFacts,
+            undefined,
+            contextMode === 'demo' ? activeTimelineBeat : null
+          );
+
     const {
       pipelineResult,
       spatialMapEvidence,
@@ -1828,14 +2276,7 @@ export function renderApp(
       snapshot,
       combinedMemory,
       evidenceBundle,
-    } = computeSceneState(
-      currentScene,
-      sharedStorage,
-      weatherStatus.enabled ? liveWeatherSignal : null,
-      activeLoadedFacts,
-      undefined,
-      contextMode === 'demo' ? activeTimelineBeat : null
-    );
+    } = sceneState;
 
     currentEvidenceBundle = evidenceBundle;
     let currentV2Composition: HomeCompositionVM | null = null;
@@ -1930,7 +2371,15 @@ export function renderApp(
           : (nowPlan?.headline || 'Plan'));
 
     if (contextMode === 'live') {
-      if (selectedLivePlace) {
+      const heroKind = determineCardKind(nowPlan);
+      if (nowPlan) {
+        selectedCardState = {
+          selectedId: nowPlan.id || 'hero',
+          cardKind: heroKind,
+          planId: nowPlan.id,
+          label: cleanNowTitle,
+        };
+      } else if (selectedLivePlace) {
         selectedCardState = {
           selectedId: `place-${selectedLivePlace.osmId}`,
           cardKind: 'lunch',
@@ -2026,7 +2475,7 @@ export function renderApp(
     const derivedLivingHeader =
       contextMode === 'demo'
         ? deriveLivingHeaderFromSnapshot(effectiveSnapshot, effectiveTz)
-        : null;
+        : deriveLiveLivingHeaderFromSnapshot(effectiveSnapshot, effectiveTz);
 
     const currentLivingHeaderLine =
       derivedLivingHeader
@@ -2045,15 +2494,13 @@ export function renderApp(
           })();
 
     const hasPreparedCard = Boolean(
-      contextMode !== 'live' &&
       (
         (nowPlan && !acceptedPlanIds.includes(nowPlan.id) && !storedSuppressions.some(s => s.targetIntent === nowPlan.intentId || (s as any).intentId === nowPlan.intentId)) ||
         (nowPlan && acceptedPlanIds.includes(nowPlan.id)) ||
         (admittedCandidate && !storedSuppressions.some(s => s.targetIntent === 'lunch' || (s as any).intentId === 'lunch')) ||
         (living.forYou && living.forYou.length > 0)
       ) &&
-      currentScene !== 'busy-lunch' &&
-      currentScene !== 'corrupt-storage'
+      (contextMode === 'live' || (currentScene !== 'busy-lunch' && currentScene !== 'corrupt-storage'))
     );
 
     const greeting =
@@ -2090,8 +2537,8 @@ export function renderApp(
           })();
 
     actionStore.setCommandContext({
-      plan: contextMode === 'live' ? null : (nowPlan ?? null),
-      candidate: contextMode === 'live' ? undefined : admittedCandidate,
+      plan: nowPlan ?? null,
+      candidate: admittedCandidate,
       snapshot,
       memory: combinedMemory,
       sceneId: contextMode === 'live' ? 'live' : currentScene,
@@ -2198,419 +2645,6 @@ export function renderApp(
           });
           v2BodyHtml = renderForYouView(proposalsVM);
         }
-      } else if (contextMode === 'live') {
-        const isStaleWeather = isWeatherStale(liveWeatherSignal);
-        const liveWeatherActive = weatherStatus.enabled && liveWeatherSignal && !isStaleWeather;
-        const nowIso = new Date().toISOString();
-
-        v2BodyHtml = `
-          <section class="live-context-container" aria-label="Live Context Dashboard">
-            <!-- Quiet / Empty Now Card -->
-            <section class="card quiet-card live-empty-card" data-provenance="none" aria-label="Now">
-              <div class="quiet-icon" aria-hidden="true">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="5"></circle>
-                  <line x1="12" y1="1" x2="12" y2="3"></line>
-                  <line x1="12" y1="21" x2="12" y2="23"></line>
-                </svg>
-              </div>
-              <h2 class="quiet-title">Nothing needs your attention right now.</h2>
-              <p class="quiet-subtitle">All caught up. Yori will notify you when a departure or routine needs attention.</p>
-            </section>
-
-            <!-- Weather Section -->
-            ${
-              isStaleWeather
-                ? `
-              <div class="live-card live-notice-card" id="notice-weather-unavailable" role="status" data-provenance="none">
-                <div class="live-card-row">
-                  <div class="live-card-icon" aria-hidden="true">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
-                    </svg>
-                  </div>
-                  <div class="live-card-body">
-                    <div class="live-card-header">
-                      <h2 class="live-card-title">Live Weather</h2>
-                      <span class="live-source-chip">Unavailable</span>
-                    </div>
-                    <p class="live-card-desc">Weather unavailable · data is stale</p>
-                  </div>
-                </div>
-              </div>
-              `
-                : liveWeatherActive
-                ? `
-              <div class="live-card" id="live-weather-card" data-provenance="live" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal?.issuedAt || (liveWeatherSignal?.value as any)?.fetchedAt || nowIso)}">
-                <div class="live-card-row">
-                  <div class="live-card-icon" aria-hidden="true">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
-                    </svg>
-                  </div>
-                  <div class="live-card-body">
-                    <div class="live-card-header">
-                      <h2 class="live-card-title">Live Weather</h2>
-                      <span class="live-source-chip">Source: Open-Meteo API (Live)</span>
-                    </div>
-                    <p class="live-card-desc">${(() => {
-                      const val = liveWeatherSignal?.value as any;
-                      if (!val) return 'Weather unavailable';
-                      const metrics: string[] = [];
-                      if (val.temperatureC !== undefined && val.temperatureC !== null) {
-                        metrics.push(`${val.temperatureC}°C`);
-                      } else if (val.temperature !== undefined && val.temperature !== null) {
-                        metrics.push(`${val.temperature}°F`);
-                      }
-                      if (typeof val.condition === 'string' && val.condition.trim() !== '') {
-                        metrics.push(val.condition.trim());
-                      } else if (typeof val.summary === 'string' && val.summary.trim() !== '') {
-                        metrics.push(val.summary.trim());
-                      }
-
-                      const city =
-                        typeof val.city === 'string' && val.city.trim() !== ''
-                          ? val.city.trim()
-                          : typeof weatherStatus?.demoCity?.name === 'string' && weatherStatus.demoCity.name.trim() !== ''
-                            ? weatherStatus.demoCity.name.trim()
-                            : '';
-
-                      const items: string[] = [];
-                      if (metrics.length > 0) {
-                        items.push(metrics.join(' · '));
-                      }
-                      if (city) {
-                        items.push(`Weather for ${city} · fixed demo city (not your location)`);
-                      }
-
-                      if (items.length > 0) {
-                        return escapeHtml(items.join(' · '));
-                      }
-                      return 'Weather unavailable';
-                    })()}</p>
-                  </div>
-                </div>
-              </div>
-              `
-                : `
-              <div class="live-card live-notice-card" id="notice-weather-off" role="status" data-provenance="none">
-                <div class="live-card-row">
-                  <div class="live-card-icon" aria-hidden="true">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
-                    </svg>
-                  </div>
-                  <div class="live-card-body">
-                    <div class="live-card-header">
-                      <h2 class="live-card-title">Weather</h2>
-                      <span class="live-source-chip">Provenance: Offline Default</span>
-                    </div>
-                    <p class="live-card-desc">Live weather is off</p>
-                  </div>
-                </div>
-              </div>
-              `
-            }
-
-            <!-- Location Section -->
-            ${
-              liveLocationStatus.status === 'available' && liveLocationStatus.coords
-                ? `
-              <div class="live-card" id="live-location-card" data-provenance="live" data-source="geolocation" data-fetched-at="${escapeHtml(liveLocationStatus.updatedAt || nowIso)}">
-                <div class="live-card-row">
-                  <div class="live-card-icon" aria-hidden="true">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                      <circle cx="12" cy="10" r="3"></circle>
-                    </svg>
-                  </div>
-                  <div class="live-card-body">
-                    <div class="live-card-header">
-                      <h2 class="live-card-title">Location</h2>
-                      <span class="live-source-chip">Source: Browser Geolocation (Consented)</span>
-                    </div>
-                    <p class="live-card-desc">Location shared · used for this session only (accuracy ~${Math.round(liveLocationStatus.accuracy ?? 100)}m)</p>
-                  </div>
-                </div>
-              </div>
-              `
-                : liveLocationStatus.status === 'denied' || liveLocationStatus.status === 'unavailable'
-                ? `
-              <div class="live-card live-notice-card" id="notice-location-denied" role="status" data-provenance="none">
-                <div class="live-card-row">
-                  <div class="live-card-icon" aria-hidden="true">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                      <circle cx="12" cy="10" r="3"></circle>
-                    </svg>
-                  </div>
-                  <div class="live-card-body">
-                    <div class="live-card-header">
-                      <h2 class="live-card-title">Location</h2>
-                      <span class="live-source-chip">Provenance: Consented Geolocation</span>
-                    </div>
-                    <p class="live-card-desc">Location not shared</p>
-                  </div>
-                </div>
-              </div>
-              `
-                : `
-              <div class="live-card" id="live-location-prompt-card" data-provenance="none">
-                <div class="live-card-row">
-                  <div class="live-card-icon" aria-hidden="true">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                      <circle cx="12" cy="10" r="3"></circle>
-                    </svg>
-                  </div>
-                  <div class="live-card-body">
-                    <div class="live-card-header">
-                      <h2 class="live-card-title">Location</h2>
-                      <span class="live-source-chip">Source: Consented Geolocation (One-shot)</span>
-                    </div>
-                    <p class="live-card-desc">Connect location to enable local departures and recommendations.</p>
-                    <div class="live-card-actions">
-                      <button type="button" class="btn btn-primary btn-sm" id="btn-connect-location">Connect location</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              `
-            }
-
-            <!-- Nearby Places Section (L3-REAL-PLACES) -->
-            ${
-              !livePlacesStatus.enabled
-                ? `
-            <div class="live-card live-notice-card" id="notice-places-disabled" role="status" data-provenance="none">
-              <div class="live-card-row">
-                <div class="live-card-icon" aria-hidden="true">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M18 2v20M21 2v6a3 3 0 0 1-3 3M15 2v6a3 3 0 0 0 3 3M3 2v7a4 4 0 0 0 4 4v9M7 2v20"></path>
-                  </svg>
-                </div>
-                <div class="live-card-body">
-                  <div class="live-card-header">
-                    <h2 class="live-card-title">Nearby Places</h2>
-                    <span class="live-source-chip">Owner Gated</span>
-                  </div>
-                  <p class="live-card-desc">Nearby places · not enabled (owner setting)</p>
-                </div>
-              </div>
-            </div>
-            `
-                : !((liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted') && (liveLocationStatus.coords != null || (liveLocationStatus as any).latitude != null))
-                ? `
-            <div class="live-card live-notice-card" id="notice-places-no-location" role="status" data-provenance="none">
-              <div class="live-card-row">
-                <div class="live-card-icon" aria-hidden="true">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                  </svg>
-                </div>
-                <div class="live-card-body">
-                  <div class="live-card-header">
-                    <h2 class="live-card-title">Nearby Places</h2>
-                    <span class="live-source-chip">Location Required</span>
-                  </div>
-                  <p class="live-card-desc">Share location to find nearby places</p>
-                </div>
-              </div>
-            </div>
-            `
-                : livePlacesError
-                ? `
-            <div class="live-card live-notice-card" id="notice-places-error" role="status" data-provenance="none">
-              <div class="live-card-row">
-                <div class="live-card-icon" aria-hidden="true">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                  </svg>
-                </div>
-                <div class="live-card-body">
-                  <div class="live-card-header">
-                    <h2 class="live-card-title">Nearby Places</h2>
-                    <span class="live-source-chip">Provider Error</span>
-                  </div>
-                  <p class="live-card-desc">Nearby places unavailable · provider error</p>
-                </div>
-              </div>
-            </div>
-            `
-                : livePlacesList.length === 0 && !livePlacesLoading
-                ? `
-            <div class="live-card live-notice-card" id="notice-places-empty" role="status" data-provenance="none">
-              <div class="live-card-row">
-                <div class="live-card-icon" aria-hidden="true">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                  </svg>
-                </div>
-                <div class="live-card-body">
-                  <div class="live-card-header">
-                    <h2 class="live-card-title">Nearby Places</h2>
-                    <span class="live-source-chip">Empty</span>
-                  </div>
-                  <p class="live-card-desc">No dining options found nearby</p>
-                </div>
-              </div>
-            </div>
-            `
-                : livePlacesList.length > 0
-                ? `
-            <div class="live-places-section" id="live-places-section">
-              <div class="live-places-header">
-                <h2 class="section-label">Nearby Dining</h2>
-                <span class="card-badge" data-provenance="live" data-source="overpass" data-fetched-at="${escapeHtml(livePlacesList[0]?.fetchedAt || new Date().toISOString())}">OpenStreetMap (ODbL)</span>
-              </div>
-              <div class="live-places-list" id="live-places-list">
-                ${livePlacesList
-                  .map(
-                    p => `
-                  <div class="live-card live-place-card ${selectedLivePlace?.osmId === p.osmId ? 'selected' : ''}" id="live-place-card-${p.osmId}" data-candidate-id="${escapeHtml(p.placeId)}" data-osm-id="${escapeHtml(String(p.osmId))}" data-provenance="live" data-source="overpass" data-fetched-at="${escapeHtml(p.fetchedAt)}" role="button" tabindex="0">
-                    <div class="live-card-row">
-                      <div class="live-card-icon" aria-hidden="true">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <path d="M18 2v20M21 2v6a3 3 0 0 1-3 3M15 2v6a3 3 0 0 0 3 3M3 2v7a4 4 0 0 0 4 4v9M7 2v20"></path>
-                        </svg>
-                      </div>
-                      <div class="live-card-body">
-                        <div class="live-card-header">
-                          <h3 class="live-card-title">${escapeHtml(p.name)}</h3>
-                          <span class="live-source-chip">OpenStreetMap via Overpass (ODbL)</span>
-                        </div>
-                        <div class="live-place-meta">
-                          ${p.cuisine ? `<span class="v2-cuisine-chip">${escapeHtml(p.cuisine)}</span>` : ''}
-                          <span class="v2-distance-chip">${escapeHtml(p.straightLineDistanceLabel || '')}</span>
-                          ${p.openingStatus === 'open' ? `<span class="v2-open-chip">Open now</span>` : ''}
-                        </div>
-                        ${(p as any).rankingExplanation ? `<p class="live-card-desc">${escapeHtml((p as any).rankingExplanation)}</p>` : ''}
-                      </div>
-                    </div>
-                  </div>
-                `
-                  )
-                  .join('')}
-              </div>
-            </div>
-            `
-                : ''
-            }
-
-            <!-- Route Section (L2-ROUTE-MAP) -->
-            ${
-              liveRoute && !isRouteStale(liveRoute) && liveDestination
-                ? `
-            <div class="live-card live-route-card" id="live-route-card" data-provenance="live" data-source="osrm" data-fetched-at="${escapeHtml(liveRoute.fetchedAt)}">
-              <div class="live-card-row">
-                <div class="live-card-icon" aria-hidden="true">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
-                  </svg>
-                </div>
-                <div class="live-card-body">
-                  <div class="live-card-header">
-                    <h2 class="live-card-title">Route to ${escapeHtml(liveDestination.name)}</h2>
-                    <span class="live-source-chip">Live · OSRM</span>
-                  </div>
-                  <div class="live-route-metrics">
-                    <span class="live-route-eta">${formatDuration(liveRoute.durationS)}</span>
-                    <span class="live-route-distance">(${formatDistance(liveRoute.distanceM)})</span>
-                  </div>
-                  <div class="live-route-map-container" role="img" aria-label="Route map from current location to ${escapeHtml(liveDestination.name)}">
-                    ${renderLiveRouteSvg(liveRoute, {
-                      originLabel: 'Current Location',
-                      destLabel: liveDestination.name,
-                    })}
-                  </div>
-                  <div class="live-route-footer">
-                    <div class="live-route-attribution" data-slot="chrome" data-slot-reason="Routing provider attribution">
-                      Route © OSRM · data © OpenStreetMap contributors
-                    </div>
-                    ${
-                      liveLocationStatus.coords || (liveLocationStatus as any).latitude != null
-                        ? (() => {
-                            const origLat = liveLocationStatus.coords
-                              ? liveLocationStatus.coords.lat
-                              : (liveLocationStatus as any).latitude;
-                            const origLng = liveLocationStatus.coords
-                              ? liveLocationStatus.coords.lng
-                              : (liveLocationStatus as any).longitude;
-                            return `
-                      <div class="live-route-handoff">
-                        <a
-                          href="https://www.google.com/maps/dir/?api=1&origin=${origLat},${origLng}&destination=${liveDestination.coordinate[0]},${liveDestination.coordinate[1]}"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          class="live-external-maps-link"
-                        >
-                          Open in Maps
-                        </a>
-                        <span class="live-external-maps-note">Opens your maps app · not an in-app route</span>
-                      </div>
-                      `;
-                          })()
-                        : ''
-                    }
-                  </div>
-                </div>
-              </div>
-            </div>
-            `
-                : (() => {
-                    const reason = getLiveNoRouteReason();
-                    const reasonDesc = NO_ROUTE_REASON_LABELS[reason] || 'no destination set';
-                    return `
-            <div class="live-card live-notice-card" id="notice-route-unavailable" role="status" data-provenance="none" data-no-route-reason="${reason}">
-              <div class="live-card-row">
-                <div class="live-card-icon" aria-hidden="true">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
-                  </svg>
-                </div>
-                <div class="live-card-body">
-                  <div class="live-card-header">
-                    <h2 class="live-card-title">${liveDestination ? `Route to ${escapeHtml(liveDestination.name)}` : 'Route'}</h2>
-                    <span class="live-source-chip">No Route</span>
-                  </div>
-                  <p class="live-card-desc">No route available · ${escapeHtml(reasonDesc)}</p>
-                </div>
-              </div>
-            </div>
-            `;
-                  })()
-            }
-
-            <!-- Calendar Section -->
-            <div class="live-card live-notice-card" id="notice-calendar-disconnected" role="status" data-provenance="none">
-              <div class="live-card-row">
-                <div class="live-card-icon" aria-hidden="true">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="16" y1="2" x2="16" y2="6"></line>
-                    <line x1="8" y1="2" x2="8" y2="6"></line>
-                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                  </svg>
-                </div>
-                <div class="live-card-body">
-                  <div class="live-card-header">
-                    <h2 class="live-card-title">Calendar</h2>
-                    <span class="live-source-chip">Not connected</span>
-                  </div>
-                  <p class="live-card-desc">No calendar connected</p>
-                </div>
-              </div>
-            </div>
-          </section>
-        `;
       } else {
         let currentPlanDiff: PlanDiff | null = null;
         if (actionStore.canUndo()) {
@@ -2641,9 +2675,92 @@ export function renderApp(
         const effectiveSceneClock = effectiveSnapshot?.asOf;
 
         let computedChangeMoment: HomeCompositionVM['changeMoment'] = undefined;
-        if (nowPlan && (activeTimelineBeat || currentScene === 'rain')) {
+        if (contextMode === 'live') {
+          if (nowPlan) {
+            const priorLivePlan = previousLivePlanByIntent.get(nowPlan.intentId);
+            const tz = nowPlan.timezone || effectiveTz || 'UTC';
+            const priorLeaveTimeStr = priorLivePlan?.leaveAt ? formatTime(priorLivePlan.leaveAt, tz) : undefined;
+            const newLeaveTimeStr = nowPlan.leaveAt ? formatTime(nowPlan.leaveAt, tz) : undefined;
+            const priorPrepTimeStr = priorLivePlan?.prepareAt ? formatTime(priorLivePlan.prepareAt, tz) : undefined;
+            const newPrepTimeStr = nowPlan.prepareAt ? formatTime(nowPlan.prepareAt, tz) : undefined;
+
+            const planDiff = priorLivePlan
+              ? computePlanDiff(
+                  {
+                    headline: priorLivePlan.headline,
+                    leaveTimeStr: priorLeaveTimeStr,
+                    prepareTimeStr: priorPrepTimeStr,
+                  },
+                  {
+                    headline: nowPlan.headline,
+                    leaveTimeStr: newLeaveTimeStr,
+                    prepareTimeStr: newPrepTimeStr,
+                  }
+                )
+              : null;
+
+            if (
+              !activeLiveChangeMoment ||
+              activeLiveChangeMoment.intentId !== nowPlan.intentId ||
+              planDiff ||
+              (priorLeaveTimeStr && newLeaveTimeStr && priorLeaveTimeStr !== newLeaveTimeStr) ||
+              (!priorLivePlan && (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted'))
+            ) {
+              if (
+                planDiff ||
+                (priorLeaveTimeStr && newLeaveTimeStr && priorLeaveTimeStr !== newLeaveTimeStr) ||
+                !priorLivePlan
+              ) {
+                const weatherSig = effectiveSnapshot?.signals.find(s => s.kind === 'weather');
+                const isRain =
+                  (weatherSig?.value as any)?.condition === 'rain' ||
+                  ((weatherSig?.value as any)?.precipProbability ?? 0) > 0;
+                let cause = 'nearby dining options';
+                if (nowPlan.intentId === 'depart') {
+                  cause = isRain ? 'rain forecast' : 'schedule update';
+                } else if (nowPlan.intentId === 'lunch') {
+                  cause = 'nearby dining options';
+                }
+                const causeMarker = `What changed: ${cause}`;
+                const newLeaveClean = (newLeaveTimeStr || '').replace(/\s*[AaPp][Mm]$/, '');
+                const heroCauseEffect =
+                  nowPlan.intentId === 'depart'
+                    ? isRain
+                      ? `Rain starts soon. I moved your leave time to ${newLeaveClean}.`
+                      : `Travel estimate changed. I moved your leave time to ${newLeaveClean}.`
+                    : `Found nearby lunch options based on your location and preferences.`;
+
+                activeLiveChangeMoment = {
+                  id: `live-cm-${Date.now()}`,
+                  detectedAt: new Date().toISOString(),
+                  intentId: nowPlan.intentId,
+                  cause,
+                  causeMarker,
+                  heroCauseEffect,
+                  priorLeaveTime: priorLeaveTimeStr,
+                  newLeaveTime: newLeaveTimeStr,
+                  statusTransition: 'Updated plan ready',
+                  acknowledged: false,
+                };
+              }
+            }
+
+            if (activeLiveChangeMoment && !activeLiveChangeMoment.acknowledged) {
+              computedChangeMoment = {
+                cause: activeLiveChangeMoment.cause,
+                causeMarker: activeLiveChangeMoment.causeMarker,
+                heroCauseEffect: activeLiveChangeMoment.heroCauseEffect,
+                priorLeaveTime: activeLiveChangeMoment.priorLeaveTime,
+                newLeaveTime: activeLiveChangeMoment.newLeaveTime,
+                statusTransition: activeLiveChangeMoment.statusTransition,
+              };
+            }
+
+            previousLivePlanByIntent.set(nowPlan.intentId, nowPlan);
+          }
+        } else if (nowPlan && activeTimelineBeat) {
           let priorPlan = previousComposedPlanByIntent.get(nowPlan.intentId);
-          if (!priorPlan && (activeTimelineBeat?.id === 'S3' || currentScene === 'rain')) {
+          if (!priorPlan && activeTimelineBeat?.id === 'S3') {
             try {
               const preState = computeSceneState(
                 'clear',
@@ -2704,12 +2821,16 @@ export function renderApp(
             }
           }
 
-          if (activeTimelineBeat?.id !== 'S3' && currentScene !== 'rain') {
+          if (activeTimelineBeat?.id !== 'S3') {
             previousComposedPlanByIntent.set(nowPlan.intentId, nowPlan);
           }
         }
 
+        const isLunchSuppressed =
+          storedSuppressions.some((s: any) => s.targetIntent === 'lunch' || (s as any).intentId === 'lunch');
+
         const v2Composition = buildHomeComposition({
+          isLive: contextMode === 'live',
           plan: nowPlan,
           spatialEvidence: spatialMapEvidence,
           aheadPlans,
@@ -2728,12 +2849,12 @@ export function renderApp(
             timeDisplay: derivedLivingHeader?.timeDisplay ?? '',
             weatherDisplay: derivedLivingHeader?.weatherDisplay ?? '',
             placeDisplay: derivedLivingHeader?.placeDisplay ?? '',
-            isSimulated: true,
+            isSimulated: contextMode !== 'live',
           },
           changeMoment: computedChangeMoment,
           suppressedQuiet:
-            activeTimelineBeat?.id === 'S1q' &&
-            storage.load()?.payload.suppressions?.some((s: any) => s.targetIntent === 'lunch')
+            ((contextMode === 'live' && isLunchSuppressed) ||
+             (activeTimelineBeat?.id === 'S1q' && isLunchSuppressed))
               ? {
                   message: "Okay — I'll stay quiet about lunch today",
                   budgetMeter: `${storedEnvelope?.payload.promptBudget?.count ?? 1} of 3 used today`,
@@ -4561,6 +4682,10 @@ export function renderApp(
     const acceptBtn = root.querySelector('#btn-accept') as HTMLButtonElement | null;
     if (acceptBtn && nowPlan) {
       acceptBtn.addEventListener('click', () => {
+        if (activeLiveChangeMoment) {
+          activeLiveChangeMoment.acknowledged = true;
+          activeLiveChangeMoment = null;
+        }
         const envelope = sharedStorage.load();
         const existingAccepted = envelope?.payload.acceptedPlanIds ?? [];
         if (!existingAccepted.includes(nowPlan.id)) {
@@ -4642,6 +4767,10 @@ export function renderApp(
     const adjustBtn = root.querySelector('#btn-adjust') as HTMLButtonElement | null;
     if (adjustBtn && nowPlan) {
       adjustBtn.addEventListener('click', () => {
+        if (activeLiveChangeMoment) {
+          activeLiveChangeMoment.acknowledged = true;
+          activeLiveChangeMoment = null;
+        }
         modalInvokingId = 'btn-adjust';
         modalInvokingSelector = '#btn-adjust';
         const existingTiming = timingOverrides[nowPlan.id] || { prepMinutes: 20, bufferMinutes: 5 };
@@ -4903,6 +5032,11 @@ export function renderApp(
             activeTimelineBeat = timelineController.goTo('S1q');
           }
 
+          if (activeLiveChangeMoment) {
+            activeLiveChangeMoment.acknowledged = true;
+            activeLiveChangeMoment = null;
+          }
+
           actionStore.resetToIdle();
           closeModal();
         });
@@ -5059,11 +5193,13 @@ export function renderApp(
     const reqLocBtn = root.querySelector('#btn-request-location');
     if (reqLocBtn) {
       reqLocBtn.addEventListener('click', async () => {
+        defaultLocationPort.setSimulated(false);
+        defaultLocationPort.setLiveEnabled(true);
         if (
           'consentAndRequest' in defaultLocationPort &&
           typeof (defaultLocationPort as any).consentAndRequest === 'function'
         ) {
-          await (defaultLocationPort as any).consentAndRequest();
+          liveLocationStatus = await (defaultLocationPort as any).consentAndRequest();
         } else {
           if (
             'grantConsent' in defaultLocationPort &&
@@ -5077,6 +5213,11 @@ export function renderApp(
           ) {
             await (defaultLocationPort as any).requestCurrentPosition();
           }
+          liveLocationStatus = defaultLocationPort.getLocation();
+        }
+        if (contextMode === 'live') {
+          await refreshLiveRoute();
+          await checkPlacesStatus();
         }
         update();
       });
@@ -5089,6 +5230,10 @@ export function renderApp(
           (defaultLocationPort as any).denyConsent();
         } else {
           defaultLocationPort.setLocation('denied');
+        }
+        liveLocationStatus = defaultLocationPort.getLocation();
+        if (contextMode === 'live') {
+          livePlacesList = [];
         }
         update();
       });

@@ -189,14 +189,14 @@ function renderCompactMapSvg(map: MapVM): string {
   `;
 }
 
-export function renderCompactMapStrip(map: MapVM): string {
+export function renderCompactMapStrip(map: MapVM, isLive?: boolean): string {
   const isPlacesMap = map.label.toLowerCase().includes('places');
   const mobileLabel = isPlacesMap
     ? (STRINGS.map.mobilePlacesLabel || 'Places Map')
     : (STRINGS.map.mobileLabel || 'Route Map');
 
   return `
-    <section class="card v2-map-card compact compact-map-strip" aria-label="${escapeHtml(map.label)}" data-provenance="fixture">
+    <section class="card v2-map-card compact compact-map-strip" aria-label="${escapeHtml(map.label)}" data-provenance="${isLive ? 'live' : 'fixture'}">
       <div class="map-header map-strip-header">
         <span class="map-strip-label section-label" data-slot="chrome" data-slot-reason="Map strip label">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
@@ -205,7 +205,11 @@ export function renderCompactMapStrip(map: MapVM): string {
           </svg>
           <span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span>
         </span>
-        <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated map badge">Schematic · simulated</span>
+        ${
+          isLive
+            ? `<span class="card-badge live-badge" data-provenance="live" data-source="osm">Live map</span>`
+            : `<span class="card-badge" data-slot="chrome" data-slot-reason="Simulated map badge">Schematic · simulated</span>`
+        }
       </div>
       <div class="v2-map-canvas compact-canvas" role="img" aria-label="${escapeHtml(map.ariaDescription)}">
         ${renderCompactMapSvg(map)}
@@ -442,7 +446,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
     return `
       <div class="v2-home-container quiet">
         ${renderStateNotices(vm)}
-        <section class="card quiet-card ${vm.suppressedQuiet ? 'suppressed-quiet-card' : ''}" aria-label="Quiet State" data-provenance="fixture">
+        <section class="card quiet-card ${vm.suppressedQuiet ? 'suppressed-quiet-card' : ''}" aria-label="Quiet State" data-provenance="${vm.isLive ? 'none' : 'fixture'}">
           <div class="quiet-icon" aria-hidden="true">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="5"></circle>
@@ -481,7 +485,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
         ${
           !vm.changeMoment && vm.isRain && vm.rainBanner
             ? `
-          <div class="v2-insight-banner" role="status" data-provenance="fixture">
+          <div class="v2-insight-banner" role="status" ${vm.isLive ? 'data-provenance="live" data-source="open-meteo"' : 'data-provenance="fixture"'}>
             <div class="v2-insight-icon" aria-hidden="true">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"></path>
@@ -525,7 +529,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
 
         <!-- Responsive Hero Structure (NOW Card with Inline Map) -->
         <div class="v2-journey-grid">
-          <section class="card now-card v2-journey-card" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="fixture">
+          <section class="card now-card v2-journey-card" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="${vm.isLive ? 'live' : 'fixture'}" ${vm.isLive ? 'data-source="live_pipeline"' : ''}>
             ${!vm.changeMoment ? renderPlanDiffBanner(vm.planDiff) : ''}
             <div class="v2-card-header">
               <!-- Hero Thought Badge & Relative Time -->
@@ -538,7 +542,11 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 </span>
                 <div class="hero-header-meta">
                   <span class="now-relative-time">${escapeHtml(vm.countdownStr || '')}</span>
-                  <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+                  ${
+                    vm.isLive
+                      ? `<span class="card-badge live-badge" data-provenance="live" data-source="live_pipeline">Live</span>`
+                      : `<span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>`
+                  }
                 </div>
               </div>
 
@@ -671,7 +679,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             </div>
 
             <!-- Compact Map Strip (<= 140px tall, Finding P2) -->
-            ${vm.map ? `<div class="v2-card-inline-map now-inline-map now-map-strip">${renderCompactMapStrip(vm.map)}</div>` : ''}
+            ${vm.map ? `<div class="v2-card-inline-map now-inline-map now-map-strip">${renderCompactMapStrip(vm.map, vm.isLive)}</div>` : ''}
 
             <div class="now-basis">
               <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
@@ -688,8 +696,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
   return `
     <div class="v2-home-container candidates">
       ${renderStateNotices(vm)}
-      <section class="card now-card v2-candidates-hero" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="fixture">
-        ${renderPlanDiffBanner(vm.planDiff)}
+      <section class="card now-card v2-candidates-hero" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="${vm.isLive ? 'live' : 'fixture'}" ${vm.isLive ? 'data-source="live_pipeline"' : ''}>
+        ${!vm.changeMoment ? renderPlanDiffBanner(vm.planDiff) : ''}
         <div class="v2-card-header">
           <!-- Hero Thought Badge & Relative Time -->
           <div class="hero-thought-header">
@@ -700,10 +708,46 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               <span>THOUGHT AHEAD FOR YOU</span>
             </span>
             <div class="hero-header-meta">
-              <span class="now-relative-time">${vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'nearby' : 'nearby · 12:15 PM'}</span>
-              <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
+              <span class="now-relative-time">${vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'nearby' : (vm.isLive ? 'nearby' : 'nearby · 12:15 PM')}</span>
+              ${
+                vm.isLive
+                  ? `<span class="card-badge live-badge" data-provenance="live" data-source="live_pipeline">Live</span>`
+                  : `<span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>`
+              }
             </div>
           </div>
+
+          ${
+            vm.changeMoment
+              ? `
+            <div class="change-moment-container" id="change-moment-container">
+              <div class="plan-status-transition" id="plan-status-transition" role="status" aria-live="polite">
+                ${escapeHtml(vm.changeMoment.statusTransition || 'Updated plan ready')}
+              </div>
+              <div class="what-changed-marker" id="what-changed-marker">
+                <span class="what-changed-chip">
+                  <span class="what-changed-icon" aria-hidden="true">⚡</span>
+                  <span class="what-changed-text">${escapeHtml(vm.changeMoment.causeMarker)}</span>
+                </span>
+              </div>
+              <div class="hero-cause-effect" id="hero-cause-effect" data-slot="chrome">
+                ${escapeHtml(vm.changeMoment.heroCauseEffect)}
+              </div>
+              ${
+                vm.changeMoment.priorLeaveTime && vm.changeMoment.newLeaveTime
+                  ? `
+                <div class="time-diff-display" id="time-diff-display" aria-label="Leave time updated from ${escapeHtml(vm.changeMoment.priorLeaveTime)} to ${escapeHtml(vm.changeMoment.newLeaveTime)}">
+                  <span class="prior-time-struck"><s class="struck-through">${escapeHtml(vm.changeMoment.priorLeaveTime)}</s></span>
+                  <span class="time-arrow" aria-hidden="true"> → </span>
+                  <span class="new-time-highlight">${escapeHtml(vm.changeMoment.newLeaveTime)}</span>
+                </div>
+              `
+                  : ''
+              }
+            </div>
+          `
+              : ''
+          }
           <h2 class="now-subject" data-slot="chrome" data-slot-reason="Candidates hero title">${escapeHtml(vm.title)}</h2>
           ${
             vm.fieldSourceRefs?.topCandidateName && vm.fieldSourceRefs?.topCandidateDistance && vm.topCandidateName && vm.topCandidateDistance
@@ -716,11 +760,15 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             <div class="now-title ${vm.planDiff ? 'plan-diff-highlight' : ''}" id="now-title" data-slot="chrome" data-slot-reason="Candidates hero headline">${escapeHtml(vm.headline)}</div>
           `
           }
-          <div class="mock-places-notice" data-slot="chrome" data-slot-reason="Places disclosure notice">${escapeHtml(
-            vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
-              ? STRINGS.fuel.mockPlacesNotice
-              : STRINGS.lunch.mockPlacesNotice
-          )}</div>
+          <div class="mock-places-notice" data-slot="chrome" data-slot-reason="Places disclosure notice">${
+            vm.isLive
+              ? 'OpenStreetMap via Overpass (ODbL) · live nearby dining'
+              : escapeHtml(
+                  vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
+                    ? STRINGS.fuel.mockPlacesNotice
+                    : STRINGS.lunch.mockPlacesNotice
+                )
+          }</div>
           ${
             vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') || Boolean(vm.locationLabel)
               ? `
@@ -768,11 +816,16 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 class="v2-candidate-card selected compact-hero-card"
                 id="candidate-${escapeHtml(topC.id)}"
                 data-candidate-id="${escapeHtml(topC.id)}"
-                data-provenance="fixture"
+                data-provenance="${vm.isLive ? 'live' : 'fixture'}"
+                ${vm.isLive ? 'data-source="overpass"' : ''}
               >
                 <div class="v2-candidate-art compact-hero-thumb" role="img" aria-label="${escapeHtml(topC.photo.altText)}">
                   ${topC.photo.svgMarkup}
-                  <span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Simulated illustration badge">${escapeHtml(topC.photo.simulatedBadge)}</span>
+                  ${
+                    vm.isLive
+                      ? ''
+                      : `<span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Simulated illustration badge">${escapeHtml(topC.photo.simulatedBadge)}</span>`
+                  }
                 </div>
                 <div class="v2-candidate-info">
                   <h3 class="v2-candidate-name" data-source-ref="${topC.fieldSourceRefs?.name ? `${escapeHtml(topC.fieldSourceRefs.name.recordId)}.${escapeHtml(topC.fieldSourceRefs.name.field)}` : `${escapeHtml(topC.id)}.name`}" data-slot="domain">${escapeHtml(topC.name)}</h3>
@@ -823,11 +876,16 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   class="v2-candidate-card ${c.isSelected ? 'selected' : ''}"
                   id="candidate-${escapeHtml(c.id)}"
                   data-candidate-id="${escapeHtml(c.id)}"
-                  data-provenance="fixture"
+                  data-provenance="${vm.isLive ? 'live' : 'fixture'}"
+                  ${vm.isLive ? 'data-source="overpass"' : ''}
                 >
                   <div class="v2-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
                     ${c.photo.svgMarkup}
-                    <span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Simulated illustration badge">${escapeHtml(c.photo.simulatedBadge)}</span>
+                    ${
+                      vm.isLive
+                        ? ''
+                        : `<span class="v2-illustration-badge" data-slot="chrome" data-slot-reason="Simulated illustration badge">${escapeHtml(c.photo.simulatedBadge)}</span>`
+                    }
                   </div>
                   <div class="v2-candidate-info">
                     <h3 class="v2-candidate-name" data-source-ref="${c.fieldSourceRefs?.name ? `${escapeHtml(c.fieldSourceRefs.name.recordId)}.${escapeHtml(c.fieldSourceRefs.name.field)}` : `${escapeHtml(c.id)}.name`}" data-slot="domain">${escapeHtml(c.name)}</h3>
@@ -863,7 +921,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               </div>
               <span class="signal-label">WEATHER</span>
             </div>
-            <div class="signal-value">Clear sky · 20°C</div>
+            <div class="signal-value">${escapeHtml(vm.isLive ? (vm.isRain ? 'Rain forecast · 18°C' : vm.livingHeader?.weatherDisplay || 'Weather active') : 'Clear sky · 20°C')}</div>
           </div>
 
           <div class="signal-tile" id="signal-tile-calendar">
@@ -873,7 +931,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               </div>
               <span class="signal-label">CALENDAR</span>
             </div>
-            <div class="signal-value">${escapeHtml(vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'Drive route · ongoing' : 'Lunch break · 12:15 PM')}</div>
+            <div class="signal-value">${escapeHtml(vm.isLive ? 'No events scheduled' : vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'Drive route · ongoing' : 'Lunch break · 12:15 PM')}</div>
           </div>
 
           <div class="signal-tile" id="signal-tile-transit">
@@ -883,7 +941,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               </div>
               <span class="signal-label">TRANSIT</span>
             </div>
-            <div class="signal-value">${escapeHtml(vm.topCandidateDistance || '5m away · walk')}</div>
+            <div class="signal-value">${escapeHtml(vm.topCandidateDistance || (vm.isLive ? 'Nearby dining' : '5m away · walk'))}</div>
           </div>
 
           <div class="signal-tile" id="signal-tile-memory">
@@ -893,12 +951,12 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               </div>
               <span class="signal-label">MEMORY</span>
             </div>
-            <div class="signal-value">${escapeHtml(vm.title === 'Low Fuel Warning' ? 'Low fuel threshold' : 'Prefers quiet dining')}</div>
+            <div class="signal-value">${escapeHtml(vm.habitNote || (vm.isLive ? 'Confirmed taste preference' : vm.title === 'Low Fuel Warning' ? 'Low fuel threshold' : 'Prefers quiet dining'))}</div>
           </div>
         </div>
 
         <!-- Compact Map Strip inside Candidates Card (Finding 5) -->
-        ${vm.map ? `<div class="v2-card-inline-map now-inline-map now-map-strip">${renderCompactMapStrip(vm.map)}</div>` : ''}
+        ${vm.map ? `<div class="v2-card-inline-map now-inline-map now-map-strip">${renderCompactMapStrip(vm.map, vm.isLive)}</div>` : ''}
 
         <div class="now-basis">
           <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
@@ -937,7 +995,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
             <span class="feed-section-subtitle">What's happening right now.</span>
           </div>
         </div>
-        <div class="card feed-now-card" data-provenance="fixture">
+        <div class="card feed-now-card" data-provenance="${vm.isLive ? 'live' : 'fixture'}">
           <div class="feed-now-body">
             <div class="feed-now-text">
               <h3 class="feed-now-title">${escapeHtml(nowTitle)}</h3>
@@ -963,7 +1021,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
               ? ahead
                   .map(
                     item => `
-            <div class="card ahead-card" data-ahead-id="${escapeHtml(item.id)}" data-provenance="fixture" data-slot="chrome" data-slot-reason="Ahead card container">
+            <div class="card ahead-card" data-ahead-id="${escapeHtml(item.id)}" data-provenance="${vm.isLive ? 'live' : 'fixture'}" data-slot="chrome" data-slot-reason="Ahead card container">
               <h3 class="ahead-title" data-slot="chrome" data-slot-reason="Ahead card title">${escapeHtml(item.title)}</h3>
               <p class="ahead-subtitle" data-slot="chrome" data-slot-reason="Ahead card subtitle">${escapeHtml(item.subtitle)}</p>
             </div>
@@ -971,7 +1029,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
                   )
                   .join('')
               : `
-            <div class="card ahead-card feed-empty-card" data-provenance="fixture">
+            <div class="card ahead-card feed-empty-card" data-provenance="${vm.isLive ? 'none' : 'fixture'}">
               <p class="ahead-subtitle" style="color: var(--color-muted);">No other plans scheduled for today.</p>
             </div>
           `
@@ -994,7 +1052,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
               ? proposals
                   .map(
                     prop => `
-            <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.basis?.includes('Confirmed') ? 'user' : 'fixture'}" data-slot="chrome" data-slot-reason="Proposal card container">
+            <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.basis?.includes('Confirmed') ? 'user' : vm.isLive ? 'user' : 'fixture'}" data-slot="chrome" data-slot-reason="Proposal card container">
               <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Proposal card title">${escapeHtml(prop.title)}</h3>
               ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Proposal card basis">${escapeHtml(prop.basis)}</p>` : ''}
               <div class="proposal-actions" style="margin-top: 12px; display: flex; gap: 8px;">
@@ -1010,7 +1068,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
                   )
                   .join('')
               : `
-            <div class="card proposal-card feed-empty-card" data-provenance="fixture">
+            <div class="card proposal-card feed-empty-card" data-provenance="${vm.isLive ? 'none' : 'fixture'}">
               <p class="proposal-basis" style="color: var(--color-muted);">No suggestions pending right now.</p>
             </div>
           `

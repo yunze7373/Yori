@@ -60,6 +60,7 @@ export interface BuildHomeCompositionOptions {
   suppressedQuiet?: HomeCompositionVM['suppressedQuiet'];
   livingHeader?: HomeCompositionVM['livingHeader'];
   timelineControls?: HomeCompositionVM['timelineControls'];
+  isLive?: boolean;
 }
 
 export function derivePlanCountdown(
@@ -209,6 +210,23 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
         };
       }
 
+      if (placesVal?.status === 'disabled') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Nearby Places Not Enabled',
+          headline: 'Nearby places · not enabled (owner setting)',
+          basis: 'Nearby dining places provider disabled by owner setting · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+        };
+      }
+
       if (placesVal?.status === 'empty' || (Array.isArray(placesVal?.places) && placesVal.places.length === 0)) {
         return {
           layoutKind: 'quiet',
@@ -296,6 +314,23 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
           title: 'Lunch Place Lookup Failed',
           headline: 'Unable to load nearby lunch places from places provider',
           basis: 'Places provider error · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+        };
+      }
+
+      if (placesVal?.status === 'disabled') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Nearby Places Not Enabled',
+          headline: 'Nearby places · not enabled (owner setting)',
+          basis: 'Nearby dining places provider disabled by owner setting · fails closed',
           isRain: false,
           options: [],
           isAccepted: false,
@@ -834,5 +869,6 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     suppressedQuiet: options.suppressedQuiet ?? raw.suppressedQuiet,
     livingHeader: options.livingHeader ?? raw.livingHeader,
     timelineControls: options.timelineControls ?? raw.timelineControls,
+    isLive: Boolean(options.isLive),
   };
 }

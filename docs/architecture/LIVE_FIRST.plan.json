@@ -1,0 +1,285 @@
+{
+  "schema_version": "1.0.0",
+  "plan": {
+    "id": "yori_live_first",
+    "phase": "PH-002-ui",
+    "title": "LIVE-FIRST live pipeline: real signals run runPipeline; fixtures test-only; owner-gated providers (to 11/05 11:00 JST)",
+    "source": "ARCH-LIVE-FIRST-PROVIDERS (architect_request_id 5b67b2dc); design docs/architecture/LIVE_FIRST.plan.md; Reviewer LIVE_FIRST_PLAN_20261102.md + NORTH_STAR_REAUDIT_20261102.md; CONTEXT-TIMELINE INBOX-20261101-070938 continues as harness, not duplicated",
+    "created_at": "2026-11-02",
+    "status": "pending",
+    "description": "Slice 0 contracts+harness first, then CORE, DEFAULT, LUNCH, DEPART (ICS+geocoder), REASON, owner smoke. Zero paid calls without owner budget; no OAuth/secrets handled by agents; no deploy/push/submission. Blocked slices report BLOCKED with the named owner gate, never silent substitution. AC-EXT-1: git diff f43c6c1d -- src/core stays empty.",
+    "course_correction_summary": "previous_phase: Rev3 UI + live roadmap (offline-first, owner-gated) | core_delivery: live pipeline on real signals | deviation: fixture demo rejected as end product per owner override; Live becomes the production default behind S2 | INBOX_backlog: 0 P0, 0 P1 | next_phase_focus: S0 live-signal contracts"
+  },
+  "tasks": [
+    {
+      "id": "S0-LIVE-CONTRACTS",
+      "slice": "S0",
+      "title": "Slice 0 contracts + harness: LiveSignal envelope, buildLiveSnapshot, proxy-boundary mocks, static gates (zero behavior change)",
+      "priority": "P0",
+      "goal": "Define the LiveSignal envelope (provider/asOf/validFor/confidence/provenance live|simulated|user, frozen per INV-101) and buildLiveSnapshot() in adapters/UI only, composing device clock, consented fix, enabled providers, MemoryPort facts into the existing ContextSnapshot shape. Add the proxy-boundary mock harness (/api/* seam) provoking denied/stale/timeout/error paths, and static gates: no fixture render in Live outside ?dev=1, single navigator.geolocation owner, watchPosition absent, no secrets in bundle. Zero production behavior change.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 4,
+      "dependencies": [],
+      "goal_ids": ["G-204", "G-211", "G-212", "G-203"],
+      "acceptance_ids": ["AC-204-2", "AC-211-2", "AC-212-1", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/live-signal.ts",
+        "src/adapters/providers/live-snapshot.ts",
+        "src/adapters/providers/server-proxy.ts",
+        "src/adapters/static-check.test.ts",
+        "tests/proxy-boundary/"
+      ],
+      "checks": [
+        "Contract tests: envelope frozen, expired signals degrade to unavailable, missing providers yield empty lists with human-first notices; proxy harness provokes all four failure paths deterministically",
+        "Static gates green from clean checkout with zero credentials; full suite green; git diff f43c6c1d -- src/core empty (AC-EXT-1)",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S0-LIVE-CONTRACTS --plan-ref docs/architecture/LIVE_FIRST.plan.json"
+      ]
+    },
+    {
+      "id": "S1-LIVE-PIPELINE-CORE",
+      "slice": "S1",
+      "title": "LIVE-PIPELINE-CORE: Live builds a real ContextSnapshot and runs runPipeline to composer on open/focus/tick/signal",
+      "priority": "P0",
+      "goal": "Prove the Live path snapshot-to-composer through the S0 harness plus new modules only: build a real ContextSnapshot (device clock, consented one-shot location, local+XMemo memory, weather only if W1 enabled) and run runPipeline to a composer verdict, with re-run triggers (open, focus/visibility while visible, 60s tick while open+visible, signal arrival) under single-flight suppression. Zero edits to timeline-WIP files; the app.ts render hookup is authored post-timeline-merge under S2. Insufficient signals show honest quiet/gated states (empty/unavailable/permission-needed with provider+fetchedAt); nothing synthetic ever renders. Notifications connector states the no-background-execution limit honestly.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 10,
+      "dependencies": ["S0-LIVE-CONTRACTS"],
+      "goal_ids": ["G-204", "G-211", "G-203"],
+      "acceptance_ids": ["AC-204-2", "AC-211-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/live-signal.ts",
+        "src/adapters/providers/live-snapshot.ts",
+        "src/adapters/providers/geolocation-adapter.ts",
+        "src/ui/connectors/ports/",
+        "tests/proxy-boundary/",
+        "tests/e2e-live/"
+      ],
+      "checks": [
+        "Differential live-change e2e (Playwright geolocation mock + clock): zero-input context change drives perception to composer with What-changed banner; places-off shows truthful gated preparation; suppression respected; cross-session persistence holds",
+        "Dual gate A+B on Live states at 390x844 and 1280x800 (3s hero comprehension, quiet states, no debug on Home); goldens D1-D6 green; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S1-LIVE-PIPELINE-CORE --plan-ref docs/architecture/LIVE_FIRST.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_LIVEFIRST_A",
+      "title": "INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["S1-LIVE-PIPELINE-CORE"],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "S2-LIVE-DEFAULT",
+      "slice": "S2",
+      "title": "LIVE-DEFAULT: dev-gate mode overrides, env tests, flip production default to Live (gate d)",
+      "priority": "P0",
+      "goal": "Dev-gate the ?mode/?default_mode/__YORI_DEFAULT_MODE__ overrides so they cannot leak into production, add env tests, flip the production default to Live with honest empty states, and land the S1 app.ts live-wiring hookup. The app.ts hunks are authored post-timeline-merge only (timeline slice owns app.ts until its gate passes). Gate (d) is acknowledged by the owner override itself. Demo stays reachable only behind ?dev=1 with SIMULATED labels everywhere.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": ["INBOX_CHECK_LIVEFIRST_A"],
+      "goal_ids": ["G-204"],
+      "acceptance_ids": ["AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/living-context/app.ts",
+        "src/ui/living-context/sources-view.ts",
+        "tests/env/"
+      ],
+      "checks": [
+        "Env tests: prod build ignores mode overrides (Live default, honest empties); dev build honors ?dev=1 with SIMULATED labels; label audit finds zero unlabelled simulated renders",
+        "Full suite green; core diff 0; 390x844 and 1280x800 evidence of default-Live first open",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S2-LIVE-DEFAULT --plan-ref docs/architecture/LIVE_FIRST.plan.json"
+      ]
+    },
+    {
+      "id": "S3-LIVE-LUNCH",
+      "slice": "S3",
+      "title": "LIVE-LUNCH (narrative B): consented location to Overpass candidates with open-now plus OSRM walking ETA",
+      "priority": "P0",
+      "goal": "Lunch-window intent plus consented fix flows into Overpass candidates (real IDs, opening_hours-derived open-now else hours-unknown) ranked by bounded rules plus confirmed memory, with OSRM walking ETA and actions. No fix or providers-off yields honest states. No stock photos, no invented venues, no ratings (shown absent). Owner gates: (b) Overpass instance OK, (a) OSRM demo limits OK.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 8,
+      "dependencies": ["S2-LIVE-DEFAULT"],
+      "goal_ids": ["G-211", "G-212"],
+      "acceptance_ids": ["AC-211-2", "AC-212-1", "AC-212-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/overpass-places-adapter.ts",
+        "src/adapters/providers/osrm-route-adapter.ts",
+        "src/adapters/providers/server-proxy.ts",
+        "src/ui/view-models/restaurant-detail-vm.ts",
+        "src/ui/living-context/desktop-panel.ts"
+      ],
+      "checks": [
+        "Recorded-response tests: candidate IDs/coords/fetchedAt from provider records only; open-now derived solely from opening_hours; ETA from provider geometry; ODbL/OSM attribution visible",
+        "Live differential e2e with mocked fix+clock: lunch intent appears with real-shape candidates; denied-location and providers-off states honest; dual gate A+B at both viewports; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S3-LIVE-LUNCH --plan-ref docs/architecture/LIVE_FIRST.plan.json"
+      ]
+    },
+    {
+      "id": "S4-LIVE-DEPART",
+      "slice": "S4",
+      "title": "LIVE-DEPART (narrative A): ICS calendar port plus Nominatim geocode to OSRM ETA and target-time weather",
+      "priority": "P1",
+      "goal": "Add a read-only ICS calendar port (server-proxy fetch of the owner-pasted secret-iCal URL, parsed to events; no write scope; secret never client-visible) plus Nominatim geocoder (1 req/s, cached, attributed) resolving event locations to coordinates. Depart intent recomputes leave-by from OSRM ETA plus Open-Meteo at target time; weather changes re-rank options with umbrella preparation. BLOCKED-accepted outcome: without the owner calendar source, ship the explicit connection-block state and an ICS parser proven on synthetic samples, and report BLOCKED naming the owner action. No fake events ever.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 8,
+      "dependencies": ["S2-LIVE-DEFAULT"],
+      "goal_ids": ["G-212", "G-204"],
+      "acceptance_ids": ["AC-212-1", "AC-212-2", "AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/ics-calendar-adapter.ts",
+        "src/adapters/providers/nominatim-geocoder.ts",
+        "src/adapters/providers/server-proxy.ts",
+        "src/ui/connectors/ports/calendar-port.ts",
+        "src/ui/view-models/trip-detail-vm.ts"
+      ],
+      "checks": [
+        "ICS parser tests on synthetic feeds (recurrence, timezone, all-day, cancelled); geocoder tests on recorded Nominatim responses at capped rate; no event renders without a parsed source event; secret URL absent from bundle and logs",
+        "Depart differential e2e (recorded calendar+geo+route+weather): worsening rain moves leave-by earlier with umbrella and re-ranked options; no-source run shows connection-block; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S4-LIVE-DEPART --plan-ref docs/architecture/LIVE_FIRST.plan.json"
+      ]
+    },
+    {
+      "id": "S5-LIVE-REASON",
+      "slice": "S5",
+      "title": "LIVE-REASON: real Muse Spark ranking and rationale in the loop, ledger-capped, post-checked",
+      "priority": "P1",
+      "goal": "Enable the model interpreter live path over real candidates and plans with fact post-check, session cap, and visible engine status (meta_model_live vs fallbacks). Runs ONLY after explicit owner budget approval (max 10 further calls, ledger at most 32/50, key already in .env.local and never handled by agents). Exhaustion or failure falls back to deterministic grammar with the fallback labelled. Zero billed calls before approval is a hard gate, not a suggestion.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": ["S3-LIVE-LUNCH"],
+      "goal_ids": ["G-204", "G-203"],
+      "acceptance_ids": ["AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/conversation/model-interpreter.ts",
+        "src/adapters/model/",
+        "src/adapters/providers/server-proxy.ts"
+      ],
+      "checks": [
+        "Budget tests: zero network calls before approval flag; ledger cap enforced with labelled fallback after exhaustion; every live output passes fact post-check (uncited output discarded to grammar)",
+        "Reasoning changes ranking/explanation over real candidates in recorded e2e; decision log carries engine status and latency; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S5-LIVE-REASON --plan-ref docs/architecture/LIVE_FIRST.plan.json"
+      ]
+    },
+    {
+      "id": "S6-OWNER-SMOKE",
+      "slice": "S6",
+      "title": "S6 owner smoke: owner-run real-provider session on owner device before 2026-11-05 11:00 JST",
+      "priority": "P0",
+      "goal": "The owner (never an agent) runs the real-provider smoke on their own device: browser location consent, weather/providers enabled per granted gates, personal XMemo PKCE login, budgeted model calls only if approved. BLOCKED-terminal rule: gating is satisfied by dependencies in completed OR terminally-BLOCKED state, so S6 is never deadlocked by owner-gated S4/S5 — completed slices are smoked live while blocked slices contribute their tested connection-block UX for verification instead of waiting past the smoke date. Evidence captured and dual-gate reviewed. Agents prepare the build and checklist only; no OAuth, secrets, billing, deploys, or submissions.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "owner",
+      "pipeline": "new_feature",
+      "estimated_hours": 2,
+      "dependencies": ["S3-LIVE-LUNCH", "S4-LIVE-DEPART", "S5-LIVE-REASON"],
+      "goal_ids": ["G-204", "G-211", "G-212", "G-203"],
+      "acceptance_ids": ["AC-204-2", "AC-211-2", "AC-212-1", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "docs/architecture/LIVE_FIRST.plan.md",
+        "docs/architecture/SUBMISSION_READINESS.md"
+      ],
+      "checks": [
+        "Evidence index lists every live module as ACCEPTED on real-provider evidence or terminally BLOCKED with its named owner gate (BLOCKED states verified via their shipped connection-block UX); video/stills at 390x844 and 1280x800 reviewed under dual gate A+B+C",
+        "Ledger shows zero unapproved billed calls; no credentials in repo, bundle, logs, or chat transcripts",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S6-OWNER-SMOKE --plan-ref docs/architecture/LIVE_FIRST.plan.json"
+      ]
+    },
+    {
+      "id": "CLOSEOUT_LIVEFIRST",
+      "title": "Closeout: accepted-or-blocked ledger, dual-gate review pack, core-diff proof",
+      "priority": "P0",
+      "goal": "Close the plan with a per-module ACCEPTED (real evidence) or BLOCKED (named owner gate) ledger, the dual-gate review pack (functional + experience + evidence), and proof of git diff f43c6c1d -- src/core empty. Nothing fixture-green is reported as live-done.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": ["S6-OWNER-SMOKE"],
+      "goal_ids": ["G-204"],
+      "acceptance_ids": ["AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "docs/architecture/LIVE_FIRST.plan.md",
+        "docs/architecture/SUBMISSION_READINESS.md",
+        "tests/golden"
+      ],
+      "checks": [
+        "Full matrix green from a clean checkout with zero credentials (Live shows honest empty states; Demo only behind ?dev=1); git diff f43c6c1d -- src/core empty (AC-EXT-1)",
+        "Each live module listed ACCEPTED on real evidence or BLOCKED with its owner gate named; nothing fixture-green reported as live-done",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id CLOSEOUT_LIVEFIRST --plan-ref docs/architecture/LIVE_FIRST.plan.json"
+      ]
+    },
+    {
+      "id": "PHASE_R_LIVEFIRST_001",
+      "title": "Phase R planning + generate next phase plan",
+      "type": "meta",
+      "priority": "critical",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["CLOSEOUT_LIVEFIRST"],
+      "goal": "Live-first closed or explicitly blocked-reported -> Phase R -> assess against the 2026-11-05 11:00 JST deadline -> draft any next plan and submit for Reviewer plan review AND owner confirmation. All owner gates remain exactly as gated; nothing auto-executes.",
+      "phase_r_trigger": {
+        "auto_execute": true,
+        "tasks": [
+          "Re-read .progress/AI_INSTRUCTIONS.md (ensure rules are not lost after model switch)",
+          "R1: Read INBOX.md (scan mode command section first, then task section)",
+          "R1.5: Convergence gate (no real pending goes to standby)",
+          "R2: Read docs/architecture/goals.yaml and PHASE_PLAN.md, execute target alignment assessment; run phase_r_alignment_check.py to verify the alignment anchor (alignment anchor check)",
+          "R3: Phase review: git diff confirm delivery + archive completed tasks + Git Commit",
+          "R5: Intelligent planning: draft the next phase plan and submit it for Reviewer plan review AND owner confirmation (guarded autonomy); any commercial step requires the privacy-review gate and must not auto-start",
+          "Update PROGRESS_STATUS.json + TODOS.md",
+          "R6: Execute NOTHING from the next plan before the Reviewer + owner gate passes; enter standby and wait for the gate result"
+        ]
+      }
+    }
+  ],
+  "success_criteria": [
+    "Live runs runPipeline on real signals only; every live value carries source and timestamp, or the module shows empty/unavailable/permission-needed",
+    "Narratives B and A accepted only on real-provider evidence, or explicitly BLOCKED on calendar/budget owner gates",
+    "git diff f43c6c1d -- src/core empty across the plan; zero unapproved billed calls, zero agent-handled secrets, no deploy/push/submission"
+  ]
+}
