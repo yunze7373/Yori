@@ -3869,7 +3869,7 @@ export function renderApp(
                     <div class="living-header-ambient" id="living-header-ambient" role="region" aria-label="Living Context Line">
                       <span class="living-header-line" id="living-header-line">${escapeHtml(currentLivingHeaderLine)}</span>
                       <span class="living-header-chip card-badge" id="living-header-chip">${contextMode === 'live' ? 'live' : 'simulated'}</span>
-                      ${renderModelStatusPill({ status: actionStore.getEngineStatus(), label: actionStore.getEngineStatusLabel(), latencyMs: globalDecisionLogger.getLatest()?.latencyMs })}
+                      ${contextMode === 'live' ? renderModelStatusPill({ status: actionStore.getEngineStatus(), label: actionStore.getEngineStatusLabel(), latencyMs: globalDecisionLogger.getLatest()?.latencyMs }) : ''}
                     </div>
                     <h1 class="greeting-title" id="desktop-greeting-title">${escapeHtml(greeting.greeting)}</h1>
                     <p class="greeting-subheading desktop-greeting-sub">${escapeHtml(greeting.subheading)}</p>

@@ -472,6 +472,107 @@ describe('S5-LIVE-REASON: Model Proxy Boundary & Budget Hard Gates', () => {
       });
       expect(proxy.getConfig().maxCalls).toBe(10);
     });
+
+    it('enforces 32/50 budget ceiling across process restarts (Finding 6)', async () => {
+      const validSigId = 'places:2026-11-02T12:00:00Z';
+      const mockFetchResponse = {
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  orderedPlanIds: ['plan-1'],
+                  rationale: [
+                    {
+                      planId: 'plan-1',
+                      citedSignalIds: [validSigId],
+                      citedFactKeys: ['fact_one'],
+                      reasonCode: 'matches_confirmed_preference',
+                    },
+                  ],
+                }),
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { prompt_tokens: 50, completion_tokens: 30, total_tokens: 80 },
+        }),
+      };
+
+      const fetchSpy = vi.fn().mockImplementation(() => Promise.resolve(mockFetchResponse));
+      globalThis.fetch = fetchSpy as any;
+
+      // Seed ledger at 31 calls (1 remaining under the 32 ceiling)
+      const seededLedger = {
+        version: 1,
+        call_count: 31,
+        reservations: Array.from({ length: 31 }, (_, i) => ({
+          id: `seed-${i + 1}`,
+          timestamp: new Date().toISOString(),
+          endpoint: 'reason_rank',
+          callIndex: i + 1,
+        })),
+      };
+      fs.writeFileSync(testLedgerPath, JSON.stringify(seededLedger));
+
+      const input: ReasoningInput = {
+        candidates: [
+          {
+            id: 'plan-1',
+            intentId: 'lunch',
+            confidence: 1.0,
+            places: ['Ramen'],
+            times: ['12:00 PM'],
+            citedSignalIds: [validSigId],
+            citedFactKeys: ['fact_one'],
+          },
+        ],
+        availableSignalIds: [validSigId],
+        confirmedFactKeys: ['fact_one'],
+      };
+
+      // Instance 1 in process 1: makes 1 call -> succeeds and brings ledger to 32
+      const proxy1 = new ModelDevProxy({
+        apiKey: 'sk-test-key',
+        liveEnabled: true,
+        maxCalls: 10,
+        lifetimeMaxCalls: 50,
+        ledgerPath: testLedgerPath,
+      });
+
+      const res1 = await proxy1.handleReasoning(input);
+      expect(res1.usedFallback).toBe(false);
+      expect(res1.engineStatus).toBe('meta_model_live');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      const stateAfter1 = readLedgerState(testLedgerPath);
+      expect(stateAfter1.callCount).toBe(32);
+
+      // Simulate process restart: reset in-memory count, instantiate new proxy instance 2
+      resetProcessLiveCallCount();
+
+      const proxy2 = new ModelDevProxy({
+        apiKey: 'sk-test-key',
+        liveEnabled: true,
+        maxCalls: 10,
+        lifetimeMaxCalls: 50,
+        ledgerPath: testLedgerPath,
+      });
+
+      // Call in new process instance MUST be blocked by the 32 ceiling despite per-run cap resetting!
+      const res2 = await proxy2.handleReasoning(input);
+      expect(res2.usedFallback).toBe(true);
+      expect(res2.fallbackReason).toBe('disabled');
+      expect(res2.engineStatus).toBe('offline_deterministic');
+
+      // Zero additional fetch! Fetch count remains strictly 1.
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      // Ledger count remained strictly capped at 32/50
+      const finalState = readLedgerState(testLedgerPath);
+      expect(finalState.callCount).toBe(32);
+    });
   });
 
   // =========================================================================

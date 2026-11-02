@@ -1679,6 +1679,11 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
 }
 
+.model-status-pill .dot-replay {
+  background-color: #3b82f6;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.4);
+}
+
 .model-status-pill .dot-fallback {
   background-color: var(--color-tertiary, #9ca3af);
 }
@@ -5983,6 +5988,8 @@ button.v2-view-detail-link:focus-visible {
   gap: 8px;
   min-height: 24px;
   margin-bottom: 4px;
+  flex-wrap: nowrap;
+  max-width: 100%;
 }
 
 .living-header-line {

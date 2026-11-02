@@ -87,6 +87,7 @@ export interface ModelProxyConfig {
   readonly maxTokensOverride?: number;
   readonly reasoningEffort?: ReasoningEffort;
   readonly ledgerPath: string;
+  readonly reasoningBudgetCeiling?: number;
   readonly allowExtendedVerificationTimeout?: boolean;
 }
 
@@ -133,6 +134,24 @@ export function resolveLifetimeMaxCalls(
   if (raw === undefined || raw.trim() === '') return MODEL_LIFETIME_MAX_CALLS;
   const parsed = parseInt(raw, 10);
   if (isNaN(parsed) || parsed < 0) return MODEL_LIFETIME_MAX_CALLS;
+  return Math.min(parsed, MODEL_LIFETIME_MAX_CALLS);
+}
+
+/**
+ * Active slice budget ceiling for S5 reasoning and decision commands (TID: INBOX-20261102-91CC2B).
+ * Initial ledger had 22 calls used; at most 10 further calls allowed -> total at most 32/50.
+ * Enforced across process restarts: once callCount reaches MODEL_REASONING_BUDGET_CEILING (32),
+ * reasoning and decision commands fall back to deterministic grammar even if lifetime cap is 50.
+ */
+export const MODEL_REASONING_BUDGET_CEILING = 32;
+
+export function resolveReasoningBudgetCeiling(
+  env: Record<string, string | undefined> = process.env
+): number {
+  const raw = env['MODEL_REASONING_BUDGET_CEILING'] ?? env['MODEL_BUDGET_CEILING'];
+  if (raw === undefined || raw.trim() === '') return MODEL_REASONING_BUDGET_CEILING;
+  const parsed = parseInt(raw, 10);
+  if (isNaN(parsed) || parsed < 0) return MODEL_REASONING_BUDGET_CEILING;
   return Math.min(parsed, MODEL_LIFETIME_MAX_CALLS);
 }
 
@@ -534,6 +553,7 @@ export function resolveModelConfig(
     maxTokensOverride,
     reasoningEffort,
     ledgerPath,
+    reasoningBudgetCeiling: resolveReasoningBudgetCeiling(process.env),
   };
 }
 
@@ -796,6 +816,11 @@ export class ModelDevProxy {
 
       const ledgerPath = customConfig.ledgerPath ?? resolved.ledgerPath;
 
+      const reasoningBudgetCeiling =
+        customConfig.reasoningBudgetCeiling !== undefined
+          ? customConfig.reasoningBudgetCeiling
+          : resolved.reasoningBudgetCeiling;
+
       this.config = {
         apiKey,
         keySource,
@@ -808,6 +833,7 @@ export class ModelDevProxy {
         maxTokensOverride,
         reasoningEffort,
         ledgerPath,
+        reasoningBudgetCeiling,
         allowExtendedVerificationTimeout: customConfig.allowExtendedVerificationTimeout,
       };
     } else {
@@ -1556,9 +1582,13 @@ export class ModelDevProxy {
     }
 
     const preState = readLedgerState(this.config.ledgerPath);
-    if (preState.status === 'ok' && preState.callCount >= this.config.lifetimeMaxCalls) {
+    const effectiveCeiling = Math.min(
+      this.config.lifetimeMaxCalls,
+      this.config.reasoningBudgetCeiling ?? MODEL_REASONING_BUDGET_CEILING
+    );
+    if (preState.status === 'ok' && preState.callCount >= effectiveCeiling) {
       this.logger(
-        `[ModelProxy] Lifetime call cap reached (${preState.callCount}/${this.config.lifetimeMaxCalls}): falling back to deterministic`
+        `[ModelProxy] Reasoning budget ceiling reached (${preState.callCount}/${effectiveCeiling}): falling back to deterministic`
       );
       return {
         result: fallback,
@@ -1577,7 +1607,7 @@ export class ModelDevProxy {
       this.config.maxCalls,
       'reason_rank',
       this.logger,
-      this.config.lifetimeMaxCalls,
+      effectiveCeiling,
       this.runStartLedgerCount
     );
     if (!reservation.success) {
@@ -1772,9 +1802,13 @@ export class ModelDevProxy {
     }
 
     const preState = readLedgerState(this.config.ledgerPath);
-    if (preState.status === 'ok' && preState.callCount >= this.config.lifetimeMaxCalls) {
+    const effectiveCeiling = Math.min(
+      this.config.lifetimeMaxCalls,
+      this.config.reasoningBudgetCeiling ?? MODEL_REASONING_BUDGET_CEILING
+    );
+    if (preState.status === 'ok' && preState.callCount >= effectiveCeiling) {
       this.logger(
-        `[ModelProxy] Lifetime call cap reached (${preState.callCount}/${this.config.lifetimeMaxCalls}): falling back to deterministic`
+        `[ModelProxy] Reasoning budget ceiling reached (${preState.callCount}/${effectiveCeiling}): falling back to deterministic`
       );
       return {
         result: null,
@@ -1793,7 +1827,7 @@ export class ModelDevProxy {
       this.config.maxCalls,
       'decision_command',
       this.logger,
-      this.config.lifetimeMaxCalls,
+      effectiveCeiling,
       this.runStartLedgerCount
     );
     if (!reservation.success) {

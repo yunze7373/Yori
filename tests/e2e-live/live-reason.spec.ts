@@ -241,6 +241,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
   test('Gate A (Mobile 390x844): Reasoning reorders real candidates with honest engine status and decision log', async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
     await setupClockAndMemory(page);
 
     // Intercept model reasoning endpoint
@@ -280,7 +281,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
             rationale,
           },
           usedFallback: false,
-          engineStatus: 'meta_model_live',
+          engineStatus: 'recorded_model_replay',
         }),
       });
     });
@@ -300,7 +301,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
             explanation: 'Finding nearby Ramen places matching your confirmed taste.',
           },
           usedFallback: false,
-          engineStatus: 'meta_model_live',
+          engineStatus: 'recorded_model_replay',
         }),
       });
     });
@@ -317,9 +318,9 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     // 2. Verify Home UI surfaces honest engine status pill
     const modelStatusPill = page.locator('#model-status-pill');
     await expect(modelStatusPill).toBeVisible();
-    await expect(modelStatusPill).toHaveAttribute('data-engine-status', 'meta_model_live');
-    await expect(modelStatusPill).toHaveAttribute('data-provenance', 'live');
-    await expect(modelStatusPill).toContainText('Meta model · live');
+    await expect(modelStatusPill).toHaveAttribute('data-engine-status', 'recorded_model_replay');
+    await expect(modelStatusPill).toHaveAttribute('data-provenance', 'replay');
+    await expect(modelStatusPill).toContainText('Recorded Meta model output · replay');
 
     // Capture home view mobile screenshot
     await page.screenshot({
@@ -338,11 +339,11 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     // Verify conversation header displays honest engine status chip and pill
     const engineStatusChip = page.locator('#engine-status-chip');
     await expect(engineStatusChip).toBeVisible();
-    await expect(engineStatusChip).toContainText('Meta model · live');
+    await expect(engineStatusChip).toContainText('Recorded Meta model output · replay');
 
     const convModelPill = page.locator('#conversation-model-status-pill');
     await expect(convModelPill).toBeVisible();
-    await expect(convModelPill).toHaveAttribute('data-engine-status', 'meta_model_live');
+    await expect(convModelPill).toHaveAttribute('data-engine-status', 'recorded_model_replay');
 
     // Capture conversation shell mobile screenshot
     await page.screenshot({
@@ -360,7 +361,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     const logContent = await decisionLogViewer.textContent();
 
     // Decision log must carry engineStatus, latencyMs, and zero secrets
-    expect(logContent).toContain('meta_model_live');
+    expect(logContent).toContain('recorded_model_replay');
     expect(logContent).toContain('latencyMs');
     expect(logContent).toContain('reason_rank');
     expect(logContent).not.toContain('sk-');
@@ -410,7 +411,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
             })),
           },
           usedFallback: false,
-          engineStatus: 'meta_model_live',
+          engineStatus: 'recorded_model_replay',
         }),
       });
     });
@@ -427,7 +428,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     // Verify desktop header ambient line displays model status pill
     const modelStatusPill = page.locator('#model-status-pill');
     await expect(modelStatusPill).toBeVisible();
-    await expect(modelStatusPill).toContainText('Meta model · live');
+    await expect(modelStatusPill).toContainText('Recorded Meta model output · replay');
 
     // Capture desktop home screenshot
     await page.screenshot({
@@ -446,7 +447,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     const modelSourceItem = page.locator('#source-item-model');
     await expect(modelSourceItem).toBeVisible();
     await expect(modelSourceItem).toContainText('Reasoning Engine');
-    await expect(modelSourceItem).toContainText('Meta model · live');
+    await expect(modelSourceItem).toContainText('Recorded Meta model output · replay');
 
     // Close sources modal
     const closeWhyBtn = page.locator('#btn-close-why');
@@ -461,7 +462,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     await expect(overlay).toBeVisible();
 
     const engineChip = page.locator('#engine-status-chip');
-    await expect(engineChip).toContainText('Meta model · live');
+    await expect(engineChip).toContainText('Recorded Meta model output · replay');
 
     // Capture desktop conversation screenshot
     await page.screenshot({
@@ -486,6 +487,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
   test('Fallback Invariance: Model error discards to labelled deterministic fallback honestly', async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await setupClockAndMemory(page);
 
     // Mock model reasoning endpoint returning 500 error / fallback
@@ -523,5 +525,62 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
       path: path.join(EVIDENCE_DIR, 'live-reason-fallback-status.png'),
       fullPage: false,
     });
+  });
+
+  test('Engine Status Mapping: Model returning meta_model_live displays honest live status without capturing evidence', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await setupClockAndMemory(page);
+
+    await page.route('**/api/model/reason', async route => {
+      const req = route.request().postDataJSON();
+      const candidates = req?.candidates ?? [];
+      const availableSignalIds = req?.availableSignalIds ?? [];
+      const confirmedFactKeys = req?.confirmedFactKeys ?? [];
+      const orderedPlanIds = candidates.map((c: any) => c.id);
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          result: {
+            orderedPlanIds,
+            rationale: candidates.map((c: any) => ({
+              planId: c.id,
+              citedSignalIds:
+                c.citedSignalIds && c.citedSignalIds.length > 0
+                  ? [c.citedSignalIds[0]]
+                  : availableSignalIds.length > 0
+                    ? [availableSignalIds[0]]
+                    : [],
+              citedFactKeys:
+                c.citedFactKeys && c.citedFactKeys.length > 0
+                  ? [c.citedFactKeys[0]]
+                  : confirmedFactKeys.length > 0
+                    ? [confirmedFactKeys[0]]
+                    : [],
+              reasonCode: 'matches_confirmed_preference',
+            })),
+          },
+          usedFallback: false,
+          engineStatus: 'meta_model_live',
+        }),
+      });
+    });
+
+    await page.goto('/?mode=live&test=1&geo=1');
+    await page.waitForLoadState('networkidle');
+
+    const reqLocBtn = page.locator('#btn-request-location');
+    if (await reqLocBtn.isVisible()) {
+      await reqLocBtn.click();
+    }
+
+    const modelStatusPill = page.locator('#model-status-pill');
+    await expect(modelStatusPill).toBeVisible();
+    await expect(modelStatusPill).toHaveAttribute('data-engine-status', 'meta_model_live');
+    await expect(modelStatusPill).toHaveAttribute('data-provenance', 'live');
+    await expect(modelStatusPill).toContainText('Meta model · live');
   });
 });

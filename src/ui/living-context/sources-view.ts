@@ -141,12 +141,12 @@ export function renderSourcesSheet(
         </div>
         <div class="sources-item-desc">${escapeHtml(xmemoDetail)}</div>
       </li>
-      <li class="sources-item" id="source-item-model" data-provenance="${engineStatus === 'meta_model_live' ? 'live' : 'deterministic'}">
+      <li class="sources-item" id="source-item-model" data-provenance="${engineStatus === 'meta_model_live' ? 'live' : engineStatus === 'recorded_model_replay' ? 'replay' : 'deterministic'}">
         <div class="sources-item-header">
           <span class="sources-item-title">Reasoning Engine</span>
-          <span class="signal-badge ${engineStatus === 'meta_model_live' ? 'live-badge' : 'local-badge'}">${escapeHtml(engineStatusLabel || (engineStatus === 'meta_model_live' ? 'Meta model · live' : 'Offline fallback · deterministic'))}</span>
+          <span class="signal-badge ${engineStatus === 'meta_model_live' ? 'live-badge' : engineStatus === 'recorded_model_replay' ? 'simulated-badge' : 'local-badge'}">${escapeHtml(engineStatusLabel || (engineStatus === 'meta_model_live' ? 'Meta model · live' : engineStatus === 'recorded_model_replay' ? 'Recorded Meta model output · replay' : 'Offline fallback · deterministic'))}</span>
         </div>
-        <div class="sources-item-desc">${engineStatus === 'meta_model_live' ? 'Live Meta model API (constrained decision engine · owner budget gated)' : 'Deterministic fallback grammar · offline execution (zero external model calls)'}</div>
+        <div class="sources-item-desc">${engineStatus === 'meta_model_live' ? 'Live Meta model API (constrained decision engine · owner budget gated)' : engineStatus === 'recorded_model_replay' ? 'Recorded Meta model output · replay (zero billed calls · offline test fixtures)' : 'Deterministic fallback grammar · offline execution (zero external model calls)'}</div>
       </li>
     `
     : (!snapshot.signals || snapshot.signals.length === 0)

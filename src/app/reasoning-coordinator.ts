@@ -232,7 +232,7 @@ export async function coordinateReasoning(
   const latencyMs = Date.now() - startTime;
   const engineStatus: EngineStatus =
     responseData.engineStatus ||
-    (options?.endpoint?.includes('fixture') ? 'scripted_fixture' : 'meta_model_live');
+    (options?.endpoint?.includes('fixture') ? 'scripted_fixture' : 'offline_deterministic');
 
   const outputReasonCodes: string[] = [];
   if (Array.isArray(responseData.result.rationale)) {

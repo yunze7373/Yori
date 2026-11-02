@@ -52,7 +52,7 @@ export function renderModelStatusPill(options: ModelStatusPillOptions): string {
       role="status"
       aria-label="Model engine status: ${escapeHtml(label)}"
     >
-      <span class="status-dot ${isLive ? 'dot-live' : 'dot-fallback'}" aria-hidden="true"></span>
+      <span class="status-dot ${isLive ? 'dot-live' : isReplay ? 'dot-replay' : 'dot-fallback'}" aria-hidden="true"></span>
       <span class="status-text">${escapeHtml(label)}${latencyPart}</span>
     </div>
   `.trim();
