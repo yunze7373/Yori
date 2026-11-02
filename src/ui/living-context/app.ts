@@ -103,6 +103,7 @@ import {
 } from '../conversation/model-interpreter.js';
 import {
   buildHomeComposition,
+  isPlanAccepted,
   deriveTripDetailVM,
   deriveRestaurantDetailVM,
   createRainEvidenceBundle,
@@ -1374,7 +1375,10 @@ export function computeLiveState(
           straightLineDistanceMeters: p.straightLineDistanceMeters,
           straightLineDistanceLabel: p.straightLineDistanceLabel,
           openNow: p.openingStatus === 'open',
+          openingStatus: p.openingStatus,
           osmId: p.osmId,
+          fetchedAt: p.fetchedAt,
+          attribution: p.attribution,
         })),
       },
       provider: 'overpass',
@@ -2072,7 +2076,9 @@ export function renderApp(
       update();
       const [origLat, origLng] = locCoords;
       const [destLat, destLng] = liveDestination.coordinate;
-      const routeUrl = `/api/route?origin=${origLat},${origLng}&destination=${destLat},${destLng}&mode=driving`;
+      const isLunchRoute = selectedCardState?.cardKind === 'lunch' || Boolean(selectedLivePlace);
+      const mode = isLunchRoute ? 'walking' : 'driving';
+      const routeUrl = `/api/route?origin=${origLat},${origLng}&destination=${destLat},${destLng}&mode=${mode}`;
       const resp = await fetch(routeUrl, { cache: 'no-store' });
       if (resp.ok) {
         const data = await resp.json();
@@ -2578,8 +2584,8 @@ export function renderApp(
 
     const hasPreparedCard = Boolean(
       (
-        (nowPlan && !acceptedPlanIds.includes(nowPlan.id) && !storedSuppressions.some(s => s.targetIntent === nowPlan.intentId || (s as any).intentId === nowPlan.intentId)) ||
-        (nowPlan && acceptedPlanIds.includes(nowPlan.id)) ||
+        (nowPlan && !isPlanAccepted(nowPlan, acceptedPlanIds) && !storedSuppressions.some(s => s.targetIntent === nowPlan.intentId || (s as any).intentId === nowPlan.intentId)) ||
+        (nowPlan && isPlanAccepted(nowPlan, acceptedPlanIds)) ||
         (admittedCandidate && !storedSuppressions.some(s => s.targetIntent === 'lunch' || (s as any).intentId === 'lunch')) ||
         (living.forYou && living.forYou.length > 0)
       ) &&
@@ -2627,7 +2633,7 @@ export function renderApp(
       sceneId: contextMode === 'live' ? 'live' : currentScene,
       userConfirmedKeys,
     });
-    const isNowAccepted = nowPlan ? acceptedPlanIds.includes(nowPlan.id) : false;
+    const isNowAccepted = nowPlan ? isPlanAccepted(nowPlan, acceptedPlanIds) : false;
 
     // Build Main Content based on activeTab
     let mainContentHtml = '';
@@ -4868,8 +4874,14 @@ export function renderApp(
       undoAcceptBtn.addEventListener('click', () => {
         const envelope = sharedStorage.load();
         const existingAccepted = envelope?.payload.acceptedPlanIds ?? [];
-        if (existingAccepted.includes(nowPlan.id)) {
-          const updatedAccepted = existingAccepted.filter(id => id !== nowPlan.id);
+        if (isPlanAccepted(nowPlan, existingAccepted)) {
+          const updatedAccepted = existingAccepted.filter(id => {
+            if (id === nowPlan.id) return false;
+            if (nowPlan.intentId === 'lunch' && id.startsWith('plan-lunch-') && id.slice(11, 19) === nowPlan.id.slice(11, 19)) {
+              return false;
+            }
+            return true;
+          });
           sharedStorage.save(
             {
               memoryFacts: envelope?.payload.memoryFacts ?? [],

@@ -444,7 +444,7 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                     <div class="desktop-candidate-meta">
                       ${c.cuisine ? `<span class="v2-cuisine-chip">${escapeHtml(c.cuisine)}</span>` : ''}
                       <span class="v2-distance-chip">${escapeHtml(c.straightLineDistanceLabel || '')}</span>
-                      ${c.openingStatus === 'open' ? `<span class="v2-open-chip">Open now</span>` : ''}
+                      ${c.openingStatus === 'open' ? `<span class="v2-open-chip">Open now</span>` : c.openingStatus === 'closed' ? `<span class="v2-open-chip closed">Closed</span>` : `<span class="v2-open-chip unknown">Hours unknown</span>`}
                       <span class="v2-source-chip">OpenStreetMap via Overpass (ODbL)</span>
                     </div>
                     ${(c as any).rankingExplanation ? `<div class="desktop-candidate-basis">${escapeHtml((c as any).rankingExplanation)}</div>` : ''}

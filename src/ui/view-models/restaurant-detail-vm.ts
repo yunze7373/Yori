@@ -144,6 +144,19 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     attributeChips.push('Vegetarian');
   }
 
+  // Live opening hours status: open-now derived solely from opening_hours, otherwise Hours unknown
+  const rawOpeningStatus = (targetOpt as any)?.openingStatus;
+  const rawOpenNow = (targetOpt as any)?.openNow;
+  if (isLive) {
+    if (rawOpeningStatus === 'open' || rawOpenNow === true) {
+      attributeChips.push('Open now');
+    } else if (rawOpeningStatus === 'closed') {
+      attributeChips.push('Closed');
+    } else {
+      attributeChips.push('Hours unknown');
+    }
+  }
+
   // Taste preference basis with honest provenance
   const tasteFact = plan.why?.memoryFactsUsed?.find(
     f => f.key.includes('taste') || f.key.includes('cuisine')
@@ -258,6 +271,10 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
       )
     : undefined;
 
+  const attribution = isLive
+    ? ((targetOpt as any)?.attribution || 'OpenStreetMap via Overpass (ODbL)')
+    : undefined;
+
   return {
     id: candidateId,
     name: verifiedName,
@@ -272,11 +289,16 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     isLive,
     directions: Object.freeze(directions),
     simulatedNotice: isLive
-      ? 'OpenStreetMap via Overpass (ODbL) · live nearby dining'
+      ? `${attribution} · live nearby dining`
       : 'Demonstration place · simulated context',
     navigateUrl,
     evidenceBundle: bundle,
     sourceRef,
     fieldSourceRefs,
+    attribution,
+    osmId: (targetOpt as any)?.osmId,
+    coords: (targetOpt as any)?.coords,
+    fetchedAt: (targetOpt as any)?.fetchedAt,
+    openingStatus: rawOpeningStatus,
   };
 }

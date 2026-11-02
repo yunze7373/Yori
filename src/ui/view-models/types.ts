@@ -122,6 +122,12 @@ export interface CandidateCardVM {
   readonly vegetarian?: boolean;
   readonly sourceRef?: SourceRef;
   readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
+  readonly openingStatus?: 'open' | 'closed' | undefined;
+  readonly openNow?: boolean;
+  readonly osmId?: number;
+  readonly coords?: { readonly lat: number; readonly lng: number };
+  readonly fetchedAt?: string;
+  readonly attribution?: string;
 }
 
 export type HomeLayoutKind = 'journey' | 'candidates' | 'quiet' | 'generic';
@@ -312,4 +318,9 @@ export interface RestaurantDetailVM {
   readonly evidenceBundle?: EvidenceBundle;
   readonly sourceRef?: SourceRef;
   readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
+  readonly attribution?: string;
+  readonly osmId?: number;
+  readonly coords?: { readonly lat: number; readonly lng: number };
+  readonly fetchedAt?: string;
+  readonly openingStatus?: 'open' | 'closed' | undefined;
 }

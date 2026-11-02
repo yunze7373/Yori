@@ -966,6 +966,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   <div class="v2-candidate-tags">
                     <span class="v2-cuisine-chip" ${topC.fieldSourceRefs?.cuisine ? `data-source-ref="${escapeHtml(topC.fieldSourceRefs.cuisine.recordId)}.${escapeHtml(topC.fieldSourceRefs.cuisine.field)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Candidate category label"`}>${escapeHtml(topC.cuisine)}</span>
                     <span class="v2-distance-chip" data-source-ref="${topC.fieldSourceRefs?.distanceText ? `${escapeHtml(topC.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(topC.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(topC.id)}.distanceText`}" data-slot="domain">${escapeHtml(topC.distanceText)}</span>
+                    ${vm.isLive ? (topC.openingStatus === 'open' || topC.openNow === true ? `<span class="v2-open-chip">Open now</span>` : topC.openingStatus === 'closed' ? `<span class="v2-open-chip closed">Closed</span>` : `<span class="v2-open-chip unknown">Hours unknown</span>`) : ''}
                     ${topC.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
                     ${topC.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Dietary filter tag">Vegetarian</span>` : ''}
                   </div>
@@ -1026,6 +1027,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     <div class="v2-candidate-tags">
                       <span class="v2-cuisine-chip" ${c.fieldSourceRefs?.cuisine ? `data-source-ref="${escapeHtml(c.fieldSourceRefs.cuisine.recordId)}.${escapeHtml(c.fieldSourceRefs.cuisine.field)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Candidate category label"`}>${escapeHtml(c.cuisine)}</span>
                       <span class="v2-distance-chip" data-source-ref="${c.fieldSourceRefs?.distanceText ? `${escapeHtml(c.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(c.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(c.id)}.distanceText`}" data-slot="domain">${escapeHtml(c.distanceText)}</span>
+                      ${vm.isLive ? (c.openingStatus === 'open' || c.openNow === true ? `<span class="v2-open-chip">Open now</span>` : c.openingStatus === 'closed' ? `<span class="v2-open-chip closed">Closed</span>` : `<span class="v2-open-chip unknown">Hours unknown</span>`) : ''}
                       ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
                       ${c.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Dietary filter tag">Vegetarian</span>` : ''}
                     </div>

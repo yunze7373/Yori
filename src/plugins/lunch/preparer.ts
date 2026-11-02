@@ -33,6 +33,11 @@ export interface RankedPlaceOption {
   readonly coords?: { readonly lat: number; readonly lng: number };
   readonly straightLineDistanceMeters?: number;
   readonly straightLineDistanceLabel?: string;
+  readonly openingStatus?: 'open' | 'closed' | undefined;
+  readonly openNow?: boolean;
+  readonly osmId?: number;
+  readonly fetchedAt?: string;
+  readonly attribution?: string;
 }
 
 export class LunchPreparer implements Preparer {
@@ -118,6 +123,11 @@ export class LunchPreparer implements Preparer {
           coords: p.coords,
           straightLineDistanceMeters: distM,
           straightLineDistanceLabel: distLabel,
+          openingStatus: p.openingStatus,
+          openNow: p.openNow,
+          osmId: p.osmId,
+          fetchedAt: p.fetchedAt,
+          attribution: p.attribution,
         };
       });
     } else if (placesSignal?.value && Array.isArray(placesSignal.value)) {
@@ -235,6 +245,11 @@ export class LunchPreparer implements Preparer {
         requiresConfirmation: false,
         noiseLevel: p.noiseLevel,
         vegetarian: p.vegetarian,
+        openingStatus: pAny.openingStatus,
+        openNow: pAny.openNow,
+        osmId: pAny.osmId,
+        fetchedAt: pAny.fetchedAt,
+        attribution: pAny.attribution,
       });
     });
 

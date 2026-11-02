@@ -377,7 +377,7 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
     };
   }
 
-  const isAccepted = acceptedPlanIds.includes(plan.id);
+  const isAccepted = isPlanAccepted(plan, acceptedPlanIds);
   const actions: PlanAction[] = plan.actions ? [...plan.actions] : [];
 
   // 2. Journey / Depart Layout (Clear & Rain)
@@ -632,6 +632,12 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
             vegetarian: (opt as any).vegetarian,
             sourceRef,
             fieldSourceRefs,
+            openingStatus: (opt as any).openingStatus,
+            openNow: (opt as any).openNow,
+            osmId: (opt as any).osmId,
+            coords: (opt as any).coords,
+            fetchedAt: (opt as any).fetchedAt,
+            attribution: (opt as any).attribution,
           };
 
           if (bundle) {
@@ -870,6 +876,25 @@ function compileProposals(
       value: prop.value,
     }))
   );
+}
+
+/**
+ * Checks if a plan is accepted, ensuring lunch plans (keyed on asOf timestamp)
+ * remain stably accepted across ticks within the same calendar day.
+ */
+export function isPlanAccepted(plan: PreparedPlan, acceptedPlanIds: readonly string[]): boolean {
+  if (acceptedPlanIds.includes(plan.id)) {
+    return true;
+  }
+  if (plan.intentId === 'lunch' || plan.id.startsWith('plan-lunch-')) {
+    const planDatePart = plan.id.slice(11, 19);
+    if (planDatePart.length === 8) {
+      return acceptedPlanIds.some(
+        id => id.startsWith('plan-lunch-') && id.slice(11, 19) === planDatePart
+      );
+    }
+  }
+  return false;
 }
 
 export function buildHomeComposition(options: BuildHomeCompositionOptions): HomeCompositionVM {
