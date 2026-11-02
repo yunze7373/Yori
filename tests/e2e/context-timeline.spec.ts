@@ -23,6 +23,29 @@ import fs from 'fs';
 const COMMITTED_EVIDENCE_DIR = path.resolve('docs/evidence/context-timeline');
 const RUNTIME_VIDEO_DIR = path.resolve('.yori-runtime/evidence/context-timeline');
 
+async function assertElementNotOccluded(page: Page, selector: string, label: string): Promise<void> {
+  const result = await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return { found: false, unoccluded: false, topTag: 'none' };
+    const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const topEl = document.elementFromPoint(cx, cy);
+    const unoccluded = el === topEl || el.contains(topEl);
+    return {
+      found: true,
+      unoccluded,
+      topTag: topEl ? `${topEl.tagName.toLowerCase()}${topEl.id ? '#' + topEl.id : ''}${topEl.className ? '.' + String(topEl.className).replace(/\s+/g, '.') : ''}` : 'null',
+      cy,
+    };
+  }, selector);
+  expect(result.found, `${label} (${selector}) must exist in DOM`).toBe(true);
+  expect(
+    result.unoccluded,
+    `${label} (${selector}) center at y=${result.cy} must not be occluded; hit element was: ${result.topTag}`
+  ).toBe(true);
+}
+
 async function checkAxe(page: Page, context = 'page'): Promise<void> {
   const rules = ['color-contrast', 'button-name', 'heading-order', 'label', 'region'];
   const axeResults = await new AxeBuilder({ page })
@@ -352,8 +375,9 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
 
   // =========================================================================
   // Acceptance (c): 3-second comprehension above fold at 390 and 1280 at S1 & S3
+  // Unoccluded action buttons: elementFromPoint hit-test against floating #ask-bar
   // =========================================================================
-  test('Acceptance (c): 3-second comprehension — noticed signal and #btn-accept strictly above fold at 390 and 1280 at S1 and S3', async ({
+  test('Acceptance (c): 3-second comprehension — noticed signal above fold and actions (#btn-accept, #btn-adjust, #btn-dismiss) unoccluded by #ask-bar at 390 and 1280 at S1 and S3', async ({
     page,
   }) => {
     await page.goto('/?ui=v2&timeline=1');
@@ -367,11 +391,10 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S1'));
     await page.waitForSelector('.v2-candidates-hero');
 
-    const acceptBtnS1 = page.locator('.v2-candidates-hero #btn-accept');
-    await expect(acceptBtnS1).toBeVisible();
-    const acceptBoxS1 = await acceptBtnS1.boundingBox();
-    expect(acceptBoxS1).not.toBeNull();
-    expect(acceptBoxS1!.y + acceptBoxS1!.height).toBeLessThanOrEqual(viewportHeight);
+    // Assert: S1 action buttons are visible and not occluded by floating #ask-bar
+    await assertElementNotOccluded(page, '.v2-candidates-hero #btn-accept', 'S1 Accept Button');
+    await assertElementNotOccluded(page, '.v2-candidates-hero #btn-adjust', 'S1 Adjust Button');
+    await assertElementNotOccluded(page, '.v2-candidates-hero #btn-dismiss', 'S1 Not Now Button');
 
     // --- Check S3 (Rain Re-plan Change Moment) ---
     await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S3'));
@@ -394,12 +417,11 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     expect(timeDiffBox!.y).toBeGreaterThanOrEqual(0);
     expect(timeDiffBox!.y + timeDiffBox!.height).toBeLessThanOrEqual(viewportHeight);
 
-    // Assert: #btn-accept is strictly above fold at 390 and 1280
-    const acceptBtnS3 = page.locator('.v2-journey-card #btn-accept');
-    await expect(acceptBtnS3).toBeVisible();
-    const acceptBoxS3 = await acceptBtnS3.boundingBox();
-    expect(acceptBoxS3).not.toBeNull();
-    expect(acceptBoxS3!.y + acceptBoxS3!.height).toBeLessThanOrEqual(viewportHeight);
+    // Assert: S3 primary actions and dismissal (#btn-accept, #btn-adjust, #btn-dismiss)
+    // are strictly unoccluded by floating #ask-bar via elementFromPoint hit-testing
+    await assertElementNotOccluded(page, '.v2-journey-card #btn-accept', 'S3 Accept Button');
+    await assertElementNotOccluded(page, '.v2-journey-card #btn-adjust', 'S3 Adjust Button');
+    await assertElementNotOccluded(page, '.v2-journey-card #btn-dismiss', 'S3 Not Now Button');
   });
 
   // =========================================================================

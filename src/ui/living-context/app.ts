@@ -39,6 +39,7 @@ import {
   TIMELINE_BEATS,
   CONTINUOUS_MEMORY_FACTS,
   buildSnapshotAt,
+  deriveLivingHeaderFromSnapshot,
   type TimelineBeat,
   type TimelineBeatId,
 } from '../../app/timeline/continuous-timeline.js';
@@ -2022,15 +2023,14 @@ export function renderApp(
         : snapshotTimezone;
     const baseGreeting = getGreeting(effectiveNowIso, effectiveTz);
 
+    const derivedLivingHeader =
+      contextMode === 'demo'
+        ? deriveLivingHeaderFromSnapshot(effectiveSnapshot, effectiveTz)
+        : null;
+
     const currentLivingHeaderLine =
-      contextMode === 'demo' && activeTimelineBeat
-        ? activeTimelineBeat.livingHeaderLine
-        : contextMode === 'demo'
-        ? (currentScene === 'rain'
-            ? '1:35 PM · Rain from 2:00 · Home'
-            : currentScene === 'away-lunch'
-            ? '11:50 AM · Clear · Downtown'
-            : '1:20 PM · Clear · Home')
+      derivedLivingHeader
+        ? derivedLivingHeader.formattedLine
         : (() => {
             const timeStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
             const weatherStr =
@@ -2725,9 +2725,9 @@ export function renderApp(
           sceneClockIso: effectiveSceneClock,
           livingHeader: {
             formattedLine: currentLivingHeaderLine,
-            timeDisplay: activeTimelineBeat?.timeDisplay ?? '',
-            weatherDisplay: activeTimelineBeat?.weatherDisplay ?? '',
-            placeDisplay: activeTimelineBeat?.placeDisplay ?? '',
+            timeDisplay: derivedLivingHeader?.timeDisplay ?? '',
+            weatherDisplay: derivedLivingHeader?.weatherDisplay ?? '',
+            placeDisplay: derivedLivingHeader?.placeDisplay ?? '',
             isSimulated: true,
           },
           changeMoment: computedChangeMoment,
@@ -2741,7 +2741,7 @@ export function renderApp(
               : undefined,
           timelineControls: {
             isPlaying: timelineController.isPlaying(),
-            simulatedTimeStr: activeTimelineBeat?.timeDisplay ?? '10:00 AM',
+            simulatedTimeStr: derivedLivingHeader?.timeDisplay ?? '10:00 AM',
             timelineLabel: 'Demo timeline · simulated time',
           },
         });
@@ -2765,20 +2765,6 @@ export function renderApp(
             </div>
           </div>
         `
-            : ''
-        }
-
-        ${
-          notices.length > 0
-            ? notices
-                .map(
-                  n => `
-          <div class="notice-box" role="status">
-            <strong>${escapeHtml(STRINGS.notices.degradedNoticeHeader)}</strong> ${escapeHtml(formatNoticeMessage(n))}
-          </div>
-        `
-                )
-                .join('')
             : ''
         }
 

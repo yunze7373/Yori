@@ -2162,7 +2162,8 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 .v2-home-container {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 12px;
+  padding-bottom: 120px;
 }
 
 /* Insight Banner */
@@ -3650,13 +3651,14 @@ button.v2-view-detail-link:focus-visible {
   margin: 0 auto;
   padding-left: 20px;
   padding-right: 20px;
+  padding-top: 4px;
 }
 
 @media (min-width: 1280px) {
   .app-layout[data-ui-version="v2"] .main-container {
     max-width: 680px;
     margin: 0 auto;
-    padding-top: 36px;
+    padding-top: 12px;
     padding-bottom: 160px;
   }
 }
@@ -4061,7 +4063,7 @@ button.v2-view-detail-link:focus-visible {
   gap: 6px 8px;
   font-size: 0.875rem;
   color: var(--color-muted, #384A43);
-  margin-bottom: 10px;
+  margin-bottom: 4px;
   line-height: 1.35;
 }
 
@@ -4141,9 +4143,9 @@ button.v2-view-detail-link:focus-visible {
 .now-actions-container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   width: 100%;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .now-actions-primary {
@@ -4317,6 +4319,11 @@ button.v2-view-detail-link:focus-visible {
 }
 
 /* Restrained greeting typography */
+.app-layout[data-ui-version="v2"] .v2-header .header-bar {
+  gap: 4px;
+  margin-bottom: 2px;
+}
+
 .app-layout[data-ui-version="v2"] .greeting-title {
   font-family: var(--font-display, "Newsreader", Georgia, serif);
   font-size: 2.25rem;
@@ -4324,7 +4331,7 @@ button.v2-view-detail-link:focus-visible {
   line-height: 1.2;
   letter-spacing: -0.015em;
   color: var(--color-ink, #162824);
-  margin-bottom: 6px;
+  margin-bottom: 2px;
 }
 
 .app-layout[data-ui-version="v2"] .greeting-subheading {
@@ -4332,6 +4339,18 @@ button.v2-view-detail-link:focus-visible {
   font-size: 1.0625rem;
   color: var(--color-muted, #384A43);
   line-height: 1.45;
+  margin-bottom: 4px;
+}
+
+/* Now Card compact padding */
+.app-layout[data-ui-version="v2"] .card.now-card {
+  padding: 14px 16px;
+}
+
+@media (max-width: 640px) {
+  .app-layout[data-ui-version="v2"] .card.now-card {
+    padding: 10px 12px;
+  }
 }
 
 /* Ahead & For You Cards Visual Distinction */
@@ -4355,7 +4374,7 @@ button.v2-view-detail-link:focus-visible {
 .app-layout[data-ui-version="v2"] .v2-journey-grid {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
 }
 
 /* ==========================================================================
@@ -5157,7 +5176,7 @@ button.v2-view-detail-link:focus-visible {
     max-height: 100vh;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 24px 20px 80px 20px;
+    padding: 12px 20px 120px 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -5175,7 +5194,7 @@ button.v2-view-detail-link:focus-visible {
   .desktop-center-column .header-bar {
     width: 100%;
     max-width: 680px;
-    margin-bottom: 24px;
+    margin-bottom: 8px;
   }
 
   .desktop-center-column .v2-header-row .header-left .v2-brand-wordmark {
@@ -5457,7 +5476,7 @@ button.v2-view-detail-link:focus-visible {
 /* Top Greeting Header Row & Connector Status Strip */
 .v2-header-container {
   width: 100%;
-  margin-bottom: var(--space-4, 16px);
+  margin-bottom: 4px;
 }
 
 .desktop-greeting-row {
@@ -5465,7 +5484,7 @@ button.v2-view-detail-link:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: var(--space-3, 12px);
+  margin-bottom: 4px;
   flex-wrap: wrap;
 }
 
@@ -5558,7 +5577,7 @@ button.v2-view-detail-link:focus-visible {
   .v2-mobile-brand-bar {
     display: flex;
     align-items: center;
-    margin-bottom: 6px;
+    margin-bottom: 2px;
   }
   .desktop-greeting-row {
     flex-direction: row;
@@ -5573,18 +5592,22 @@ button.v2-view-detail-link:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-3, 12px);
+  margin-bottom: 4px;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .hero-thought-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
+  gap: 4px;
+  font-size: 0.6875rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--color-accent, #2D6A4F);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .hero-header-meta {
@@ -5688,8 +5711,12 @@ button.v2-view-detail-link:focus-visible {
     font-size: 1.375rem;
   }
   .hero-thought-header {
-    flex-wrap: wrap;
-    gap: 6px;
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+  .hero-thought-badge {
+    font-size: 0.625rem;
+    letter-spacing: 0.04em;
   }
 }
 
@@ -5949,8 +5976,8 @@ button.v2-view-detail-link:focus-visible {
 
 @media (max-width: 640px) {
   .desktop-greeting-row {
-    gap: 8px;
-    margin-bottom: 8px;
+    gap: 6px;
+    margin-bottom: 4px;
   }
   .greeting-text-group {
     min-width: 0;
@@ -5964,7 +5991,8 @@ button.v2-view-detail-link:focus-visible {
     width: 100%;
     justify-content: space-between;
     gap: 4px;
-    padding: 3px 6px;
+    padding: 2px 6px;
+    margin-bottom: 2px;
   }
   .timeline-pill {
     padding: 4px 8px;
@@ -6015,8 +6043,8 @@ button.v2-view-detail-link:focus-visible {
 
 /* Change Moment (Beat S3) */
 .change-moment-container {
-  margin-bottom: 12px;
-  padding: 10px 14px;
+  margin-bottom: 6px;
+  padding: 6px 10px;
   background: rgba(45, 106, 79, 0.06);
   border: 1px solid rgba(45, 106, 79, 0.2);
   border-radius: 10px;
@@ -6041,14 +6069,14 @@ button.v2-view-detail-link:focus-visible {
   font-weight: 700;
   color: #1b5e20;
   background: #E9F1E8;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: 9999px;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
   transition: opacity 200ms ease;
 }
 
 .what-changed-marker {
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .what-changed-chip {
@@ -6063,20 +6091,20 @@ button.v2-view-detail-link:focus-visible {
 }
 
 .hero-cause-effect {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--color-ink, #162824);
-  margin-bottom: 6px;
+  margin-bottom: 3px;
 }
 
 .time-diff-display {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 700;
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .prior-time-struck {

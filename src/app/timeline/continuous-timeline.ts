@@ -33,10 +33,6 @@ export interface TimelineBeat {
   readonly id: TimelineBeatId;
   readonly name: string;
   readonly clockIso: string;
-  readonly timeDisplay: string;
-  readonly weatherDisplay: string;
-  readonly placeDisplay: string;
-  readonly livingHeaderLine: string;
   readonly isSuppressedBeat?: boolean;
 }
 
@@ -45,47 +41,27 @@ export const TIMELINE_BEATS: readonly TimelineBeat[] = Object.freeze([
     id: 'S0',
     name: 'Morning Calm',
     clockIso: '2026-10-28T17:00:00.000Z',
-    timeDisplay: '10:00 AM',
-    weatherDisplay: 'Clear',
-    placeDisplay: 'Home',
-    livingHeaderLine: '10:00 AM · Clear · Home',
   },
   {
     id: 'S1',
     name: 'Lunch in Downtown',
     clockIso: '2026-10-28T18:50:00.000Z',
-    timeDisplay: '11:50 AM',
-    weatherDisplay: 'Clear',
-    placeDisplay: 'Downtown',
-    livingHeaderLine: '11:50 AM · Clear · Downtown',
   },
   {
     id: 'S1q',
     name: 'Lunch Dismissed (Quiet)',
     clockIso: '2026-10-28T19:00:00.000Z',
-    timeDisplay: '12:00 PM',
-    weatherDisplay: 'Clear',
-    placeDisplay: 'Downtown',
-    livingHeaderLine: '12:00 PM · Clear · Downtown',
     isSuppressedBeat: true,
   },
   {
     id: 'S2',
     name: 'Piano Lesson Depart (Clear)',
     clockIso: '2026-10-28T20:20:00.000Z',
-    timeDisplay: '1:20 PM',
-    weatherDisplay: 'Clear',
-    placeDisplay: 'Home',
-    livingHeaderLine: '1:20 PM · Clear · Home',
   },
   {
     id: 'S3',
     name: 'Rain Re-plan (The Change Moment)',
     clockIso: '2026-10-28T20:35:00.000Z',
-    timeDisplay: '1:35 PM',
-    weatherDisplay: 'Rain from 2:00',
-    placeDisplay: 'Home',
-    livingHeaderLine: '1:35 PM · Rain from 2:00 · Home',
   },
 ]);
 
@@ -282,6 +258,20 @@ export const CONTINUOUS_TIMELINE_EVENTS: readonly TimelineEvent[] = Object.freez
       consentScope: 'device_only',
     }),
   },
+  {
+    at: '2026-10-28T20:20:00.000Z',
+    signal: createSimulatedSignal({
+      kind: 'location_status',
+      value: {
+        isHome: true,
+        currentArea: 'Home',
+      },
+      issuedAt: '2026-10-28T20:20:00.000Z',
+      validFor: 7200000,
+      confidence: 0.95,
+      consentScope: 'device_only',
+    }),
+  },
 
   // 1:35 PM local (20:35:00Z) - S3: Rain Forecast Issued (The Change Moment)
   {
@@ -292,6 +282,8 @@ export const CONTINUOUS_TIMELINE_EVENTS: readonly TimelineEvent[] = Object.freez
         condition: 'rain',
         precipProbability: 0.9,
         rainfall: 'moderate',
+        forecastOnset: '2:00',
+        forecast: '2:00',
       },
       issuedAt: '2026-10-28T20:35:00.000Z',
       validFor: 7200000,
@@ -353,6 +345,69 @@ export function buildSnapshotAt(
     timezone,
     signals: Array.from(activeMap.values()),
   });
+}
+
+export interface DerivedLivingHeader {
+  readonly timeDisplay: string;
+  readonly weatherDisplay: string;
+  readonly placeDisplay: string;
+  readonly formattedLine: string;
+}
+
+export function formatTimelineTime(isoString: string | undefined, timeZone?: string): string {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (!Number.isFinite(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    ...(timeZone ? { timeZone } : {}),
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(d);
+}
+
+/**
+ * Derives the living header line dynamically from a ContextSnapshot.
+ * Form: `${timeDisplay} · ${weatherDisplay} · ${placeDisplay}`
+ */
+export function deriveLivingHeaderFromSnapshot(
+  snapshot: ContextSnapshot,
+  timeZone: string = snapshot.timezone || CONTINUOUS_TIMEZONE
+): DerivedLivingHeader {
+  // 1. Time from snapshot.asOf
+  const timeDisplay = formatTimelineTime(snapshot.asOf, timeZone);
+
+  // 2. Weather condition + onset if rain
+  const weatherSignal = snapshot.signals.find(s => s.kind === 'weather');
+  let weatherDisplay = 'Clear';
+  if (weatherSignal && weatherSignal.value) {
+    const val = weatherSignal.value as any;
+    const cond = typeof val.condition === 'string' ? val.condition.trim() : '';
+    const onset = val.forecastOnset || val.forecast;
+    if (cond.toLowerCase() === 'rain' && onset) {
+      weatherDisplay = `Rain from ${onset}`;
+    } else if (cond) {
+      weatherDisplay = cond.charAt(0).toUpperCase() + cond.slice(1).toLowerCase();
+    }
+  }
+
+  // 3. Place from location_status signal
+  const locSignal = snapshot.signals.find(s => s.kind === 'location_status');
+  let placeDisplay = 'Home';
+  if (locSignal && locSignal.value) {
+    const val = locSignal.value as any;
+    placeDisplay = val.currentArea || (val.isHome ? 'Home' : 'Nearby') || 'Home';
+  }
+
+  // 4. Formatted line
+  const formattedLine = `${timeDisplay} · ${weatherDisplay} · ${placeDisplay}`;
+
+  return {
+    timeDisplay,
+    weatherDisplay,
+    placeDisplay,
+    formattedLine,
+  };
 }
 
 export interface ContinuousTimelineControllerOptions {
