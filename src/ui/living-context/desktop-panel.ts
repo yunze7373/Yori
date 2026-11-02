@@ -495,6 +495,11 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                     } else {
                       const reason = opts.noRouteReason || 'provider_disabled';
                       const reasonDesc = NO_ROUTE_REASON_LABELS[reason] || 'provider disabled';
+                      const straightLineDist = opts.selectedLivePlace?.straightLineDistanceLabel || opts.distanceText || 'nearby';
+                      const descText =
+                        reason === 'mode_unsupported'
+                          ? `Walking time unavailable · straight-line ${straightLineDist}`
+                          : `No route available · ${reasonDesc}`;
                       return `
                         <div class="live-card live-notice-card notice-route-unavailable" id="desktop-notice-route-unavailable" role="status" data-provenance="none" data-no-route-reason="${reason}">
                           <div class="live-card-row">
@@ -509,7 +514,7 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                                 <h3 class="live-card-title">Route to ${escapeHtml(destName)}</h3>
                                 <span class="live-source-chip">No Route</span>
                               </div>
-                              <p class="live-card-desc">No route available · ${escapeHtml(reasonDesc)}</p>
+                              <p class="live-card-desc">${escapeHtml(descText)}</p>
                             </div>
                           </div>
                         </div>

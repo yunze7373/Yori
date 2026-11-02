@@ -295,6 +295,11 @@ test.describe('S3-LIVE-LUNCH: Full Live Verification Matrix', () => {
     const fixtureElements = await page.locator('[data-provenance="fixture"]').count();
     expect(fixtureElements).toBe(0);
 
+    // Scroll candidate card into view so Hayes Valley Ramen tile, tags, and Open now chip are visible
+    const candidateCard = page.locator('.v2-candidate-card').first();
+    await candidateCard.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(200);
+
     // Capture Dual Gate A mobile screenshot
     await page.screenshot({ path: path.join(EVIDENCE_DIR, '01-live-lunch-390x844.png') });
 

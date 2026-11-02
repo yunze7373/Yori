@@ -17,15 +17,25 @@ import { decodePolyline } from './polyline.js';
 
 export interface OSRMRouteAdapterConfig {
   readonly baseUrl?: string;
+  readonly footBaseUrl?: string | null;
   readonly fetchFn?: typeof fetch;
 }
 
 export class OSRMRouteAdapter implements RoutingProvider {
   private readonly baseUrl: string;
+  private readonly footBaseUrl: string | null;
   private readonly fetchFn: typeof fetch;
 
   constructor(config?: OSRMRouteAdapterConfig) {
-    this.baseUrl = config?.baseUrl ?? 'https://router.project-osrm.org';
+    this.baseUrl = config?.baseUrl ?? (typeof process !== 'undefined' ? process.env?.['OSRM_BASE_URL'] : undefined) ?? 'https://router.project-osrm.org';
+    if (config?.footBaseUrl === null || config?.footBaseUrl === '') {
+      this.footBaseUrl = null;
+    } else {
+      this.footBaseUrl =
+        config?.footBaseUrl ??
+        (typeof process !== 'undefined' ? process.env?.['OSRM_FOOT_BASE_URL'] : undefined) ??
+        'https://routing.openstreetmap.de/routed-foot';
+    }
     this.fetchFn = config?.fetchFn ?? globalThis.fetch;
   }
 
@@ -37,9 +47,28 @@ export class OSRMRouteAdapter implements RoutingProvider {
     const [originLat, originLng] = origin;
     const [destLat, destLng] = destination;
 
+    let targetBaseUrl: string;
+    let profileSegment: string;
+
+    if (mode === 'walking') {
+      if (!this.footBaseUrl) {
+        const err = new Error('OSRM routing error: mode_unsupported (no foot-capable routing endpoint configured)');
+        (err as any).code = 'mode_unsupported';
+        throw err;
+      }
+      targetBaseUrl = this.footBaseUrl.replace(/\/+$/, '');
+      profileSegment = 'foot';
+    } else if (mode === 'cycling') {
+      targetBaseUrl = this.baseUrl.replace(/\/+$/, '');
+      profileSegment = 'bicycle';
+    } else {
+      targetBaseUrl = this.baseUrl.replace(/\/+$/, '');
+      profileSegment = 'driving';
+    }
+
     // OSRM coordinates are specified as lon,lat;lon,lat
     const coordsParam = `${originLng},${originLat};${destLng},${destLat}`;
-    const url = `${this.baseUrl}/route/v1/${encodeURIComponent(mode)}/${coordsParam}?overview=full&geometries=geojson`;
+    const url = `${targetBaseUrl}/route/v1/${encodeURIComponent(profileSegment)}/${coordsParam}?overview=full&geometries=geojson`;
 
     const response = await this.fetchFn(url, {
       method: 'GET',

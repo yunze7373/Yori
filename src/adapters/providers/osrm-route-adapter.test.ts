@@ -50,7 +50,7 @@ describe('S3-LIVE-LUNCH: OSRM Route Adapter', () => {
     ],
   };
 
-  it('routes with mode=walking calling the walking profile endpoint', async () => {
+  it('routes with mode=walking using the foot base URL and never the car demo host', async () => {
     let requestedUrl = '';
     const mockFetch = vi.fn().mockImplementation(async (url: string) => {
       requestedUrl = url;
@@ -60,10 +60,16 @@ describe('S3-LIVE-LUNCH: OSRM Route Adapter', () => {
       };
     });
 
-    const adapter = new OSRMRouteAdapter({ fetchFn: mockFetch as unknown as typeof fetch });
+    const adapter = new OSRMRouteAdapter({
+      baseUrl: 'https://router.project-osrm.org',
+      footBaseUrl: 'https://routing.openstreetmap.de/routed-foot',
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
     const result = await adapter.route(origin, destination, 'walking');
 
-    expect(requestedUrl).toContain('/route/v1/walking/');
+    // Walking URL uses the foot base and NEVER the car demo host
+    expect(requestedUrl).toContain('https://routing.openstreetmap.de/routed-foot/route/v1/foot/');
+    expect(requestedUrl).not.toContain('router.project-osrm.org');
     expect(requestedUrl).toContain('-122.4194,37.7749;-122.418,37.7755');
     expect(result.mode).toBe('walking');
     expect(result.distanceM).toBe(310);
@@ -73,6 +79,36 @@ describe('S3-LIVE-LUNCH: OSRM Route Adapter', () => {
     expect(result.geometry).toHaveLength(3);
     expect(result.geometry[0]).toEqual([37.7749, -122.4194]);
     expect(result.geometry[2]).toEqual([37.7755, -122.418]);
+  });
+
+  it('routes with mode=driving using the default car demo host', async () => {
+    let requestedUrl = '';
+    const mockFetch = vi.fn().mockImplementation(async (url: string) => {
+      requestedUrl = url;
+      return {
+        ok: true,
+        json: async () => recordedWalkingResponse,
+      };
+    });
+
+    const adapter = new OSRMRouteAdapter({
+      baseUrl: 'https://router.project-osrm.org',
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+    await adapter.route(origin, destination, 'driving');
+
+    expect(requestedUrl).toContain('https://router.project-osrm.org/route/v1/driving/');
+  });
+
+  it('without a foot base configured, walking returns mode_unsupported', async () => {
+    const adapter = new OSRMRouteAdapter({
+      baseUrl: 'https://router.project-osrm.org',
+      footBaseUrl: null, // explicitly unconfigured
+    });
+
+    await expect(adapter.route(origin, destination, 'walking')).rejects.toThrow(
+      'mode_unsupported'
+    );
   });
 
   it('fails with clear error message when OSRM provider returns error code', async () => {

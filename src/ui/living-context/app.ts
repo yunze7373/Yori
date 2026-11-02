@@ -104,6 +104,7 @@ import {
 import {
   buildHomeComposition,
   isPlanAccepted,
+  removeAcceptedPlan,
   deriveTripDetailVM,
   deriveRestaurantDetailVM,
   createRainEvidenceBundle,
@@ -2010,6 +2011,7 @@ export function renderApp(
   let liveRoute: RouteResult | null = null;
   let liveRouteStatus: RouteStatus = { enabled: false };
   let liveRouteError = false;
+  let liveRouteErrorReason: NoRouteReason | null = null;
 
   async function checkRouteStatus() {
     try {
@@ -2085,17 +2087,26 @@ export function renderApp(
         if (data.enabled && data.route) {
           liveRoute = data.route;
           liveRouteError = false;
+          liveRouteErrorReason = null;
         } else {
           liveRoute = null;
           liveRouteError = false;
+          liveRouteErrorReason = data.code === 'mode_unsupported' || data.error?.includes('mode_unsupported') ? 'mode_unsupported' : null;
         }
       } else {
         liveRoute = null;
         liveRouteError = true;
+        try {
+          const errData = await resp.json();
+          liveRouteErrorReason = errData.code === 'mode_unsupported' || errData.error?.includes('mode_unsupported') ? 'mode_unsupported' : null;
+        } catch {
+          liveRouteErrorReason = null;
+        }
       }
     } catch {
       liveRoute = null;
       liveRouteError = true;
+      liveRouteErrorReason = null;
     } finally {
       update();
     }
@@ -2114,6 +2125,10 @@ export function renderApp(
       if (forced && forced in NO_ROUTE_REASON_LABELS) {
         return forced;
       }
+    }
+
+    if (liveRouteErrorReason) {
+      return liveRouteErrorReason;
     }
 
     if (liveRoute && isRouteStale(liveRoute)) {
@@ -4875,13 +4890,7 @@ export function renderApp(
         const envelope = sharedStorage.load();
         const existingAccepted = envelope?.payload.acceptedPlanIds ?? [];
         if (isPlanAccepted(nowPlan, existingAccepted)) {
-          const updatedAccepted = existingAccepted.filter(id => {
-            if (id === nowPlan.id) return false;
-            if (nowPlan.intentId === 'lunch' && id.startsWith('plan-lunch-') && id.slice(11, 19) === nowPlan.id.slice(11, 19)) {
-              return false;
-            }
-            return true;
-          });
+          const updatedAccepted = removeAcceptedPlan(nowPlan, existingAccepted);
           sharedStorage.save(
             {
               memoryFacts: envelope?.payload.memoryFacts ?? [],

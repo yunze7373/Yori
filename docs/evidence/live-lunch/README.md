@@ -12,7 +12,7 @@
 
 | # | Artifact | Viewport | Provenance | Description |
 |---|---|---|---|---|
-| 1 | `01-live-lunch-390x844.png` | 390×844 (Mobile) | Live (Overpass + Local Memory) | Live lunch recommendation card composed from real Overpass candidates (`Hayes Valley Ramen`, 450m). Top candidate ranks first matching confirmed taste memory (`Japanese or Ramen`). `Open now` status chip derived solely from `opening_hours` tag (`Mo-Su 11:00-22:00`). ODbL attribution visible (`OpenStreetMap via Overpass (ODbL)`). Zero fixture elements. |
+| 1 | `01-live-lunch-390x844.png` | 390×844 (Mobile) | Live (Overpass + Local Memory) | Live lunch recommendation card with top candidate `Hayes Valley Ramen` (450m) scrolled into view, showing confirmed taste citation, `Open now` status chip derived from `opening_hours` (`Mo-Su 11:00-22:00`), ODbL attribution (`OpenStreetMap via Overpass (ODbL)`), and action buttons. Zero fixture elements. |
 | 2 | `02-live-lunch-1280x800.png` | 1280×800 (Desktop) | Live (Overpass + OSRM) | Desktop candidate list with real Overpass tiles. Candidate tiles display `Open now` for venues with verified opening hours, and `Hours unknown` for venues without parseable tags (`Mission Taqueria`). Selecting a candidate triggers `/api/route` with `mode=walking`, rendering Live Route card with walking ETA (`6 min`), walking distance (`450 m`), and OSRM attribution. |
 
 ---
@@ -48,10 +48,11 @@ The Live Lunch intent triggers automatically through the perception pipeline whe
    - Evaluated for local day-of-week and time.
    - When `opening_hours` tag is missing, complex, or unparseable, the status returns `undefined` and the UI explicitly renders `Hours unknown`. Estimations, guesses, or assumed business hours are strictly prohibited.
 
-3. **Routing Mode & Walking ETA**:
+3. **Routing Mode, Foot Endpoint Policy, & Walking ETA**:
    - When a lunch candidate or dining destination is selected, `refreshLiveRoute` in `app.ts` dynamically sets `mode=walking`.
-   - Proxy endpoint `/api/route` invokes OSRM with `mode=walking`.
-   - Walking ETA and distance are computed directly from provider route geometry legs (`durationS` and `distanceM`).
+   - **Foot-Capable Endpoint Under Gate (a)**: Under owner gate (a), walking routing uses the dedicated foot-profile OSRM base URL `OSRM_FOOT_BASE_URL` (documented default: `https://routing.openstreetmap.de/routed-foot` operated by FOSSGIS e.V. under fair-use policy: attribution required, no heavy automated usage). The public OSRM demo host (`https://router.project-osrm.org`) is built exclusively with the car profile and is never queried for walking routes.
+   - **Fail-Closed on Unconfigured Foot Base**: When `OSRM_FOOT_BASE_URL` is unconfigured (`null`), walking routing fails closed with reason `mode_unsupported`, and the desktop route card truthfully displays `"Walking time unavailable · straight-line <distance>"` with zero minutes.
+   - When a foot route is available, walking ETA and distance are computed directly from provider route geometry legs (`durationS` and `distanceM`).
    - OSRM and OpenStreetMap attribution (`Route © OSRM · data © OpenStreetMap contributors`) is displayed in the route card footer.
 
 4. **Zero Ratings & Zero Remote Photos**:
@@ -59,8 +60,8 @@ The Live Lunch intent triggers automatically through the perception pipeline whe
    - Hero art uses local labelled SVG illustrations (`getLocalIllustration`) with zero external image requests.
 
 5. **Tick Acceptance Stability (`BACKLOG-20261102-S1CORE-P3(e)`)**:
-   - In `app.ts`, `isPlanAccepted` ensures that lunch plans (whose IDs contain the `asOf` timestamp `plan-lunch-YYYYMMDD...`) remain accepted across 60-second ticks within the same calendar day (`YYYYMMDD`).
-   - When crossing into the next local calendar day, the prior acceptance cleanly expires and unaccepts.
+   - In `app.ts`, `isPlanAccepted` ensures that lunch plans (whose IDs contain the UTC `asOf` timestamp `plan-lunch-YYYYMMDD...`) remain accepted across 60-second ticks within the same UTC calendar date (`YYYYMMDD`).
+   - When crossing into the next UTC calendar day, the prior acceptance cleanly expires and unaccepts.
 
 ---
 

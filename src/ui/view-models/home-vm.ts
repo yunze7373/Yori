@@ -897,6 +897,23 @@ export function isPlanAccepted(plan: PreparedPlan, acceptedPlanIds: readonly str
   return false;
 }
 
+/**
+ * Removes an accepted plan from the accepted plan IDs list, including any
+ * same-day lunch plan timestamp variants for that plan.
+ */
+export function removeAcceptedPlan(plan: PreparedPlan, acceptedPlanIds: readonly string[]): string[] {
+  return acceptedPlanIds.filter(id => {
+    if (id === plan.id) return false;
+    if (plan.intentId === 'lunch' && id.startsWith('plan-lunch-') && plan.id.startsWith('plan-lunch-')) {
+      const planDate = plan.id.slice(11, 19);
+      if (planDate.length === 8 && id.slice(11, 19) === planDate) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
 export function buildHomeComposition(options: BuildHomeCompositionOptions): HomeCompositionVM {
   const raw = compileHomeComposition(options);
 

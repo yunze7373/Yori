@@ -324,6 +324,7 @@ export interface RouteProxyConfig {
   readonly enabled: boolean;
   readonly tilesEnabled: boolean;
   readonly provider: string;
+  readonly footBaseUrl?: string | null;
 }
 
 export function resolveRouteConfig(
@@ -336,11 +337,15 @@ export function resolveRouteConfig(
   const tilesEnabled = tilesVal === 'true' || tilesVal === '1';
 
   const provider = env['ROUTE_PROVIDER'] || 'osrm';
+  const footBaseUrl = env['OSRM_FOOT_BASE_URL'] !== undefined
+    ? (env['OSRM_FOOT_BASE_URL'] === '' ? null : env['OSRM_FOOT_BASE_URL'])
+    : 'https://routing.openstreetmap.de/routed-foot';
 
   return {
     enabled,
     tilesEnabled,
     provider,
+    footBaseUrl,
   };
 }
 
@@ -353,9 +358,10 @@ export function createRouteProxyMiddleware(
     enabled: configOverride?.enabled ?? baseConfig.enabled,
     tilesEnabled: configOverride?.tilesEnabled ?? baseConfig.tilesEnabled,
     provider: configOverride?.provider ?? baseConfig.provider,
+    footBaseUrl: configOverride?.footBaseUrl !== undefined ? configOverride.footBaseUrl : baseConfig.footBaseUrl,
   };
 
-  const routeAdapter = adapterOverride ?? new OSRMRouteAdapter();
+  const routeAdapter = adapterOverride ?? new OSRMRouteAdapter({ footBaseUrl: config.footBaseUrl });
 
   return async function routeProxyMiddleware(
     req: IncomingMessage,
@@ -559,6 +565,22 @@ export function createRouteProxyMiddleware(
           })
         );
       } catch (err: any) {
+        if (err?.code === 'mode_unsupported' || err?.message?.includes('mode_unsupported')) {
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+          });
+          res.end(
+            JSON.stringify({
+              enabled: true,
+              route: null,
+              code: 'mode_unsupported',
+              error: 'Walking route unavailable (mode_unsupported)',
+              attribution: OSRM_ATTRIBUTION,
+            })
+          );
+          return;
+        }
         res.writeHead(500, {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-store',

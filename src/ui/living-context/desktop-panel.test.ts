@@ -163,6 +163,45 @@ describe('Desktop Contextual Detail Panel (S4-DESKTOP-IA)', () => {
     expect(html).toContain('No route available · no destination set');
   });
 
+  it('renders mode_unsupported notice with straight-line distance and zero minutes when foot base is unconfigured', () => {
+    const place = {
+      placeId: 'p1',
+      osmId: 101,
+      name: 'Hayes Valley Ramen',
+      cuisine: 'japanese',
+      category: 'restaurant',
+      coords: { lat: 37.776, lng: -122.417 },
+      source: 'live',
+      fetchedAt: '2026-11-02T12:15:00.000Z',
+      straightLineDistanceMeters: 450,
+      straightLineDistanceLabel: '450m',
+    };
+
+    const opts: DesktopPanelRenderOptions = {
+      contextMode: 'live',
+      panelKind: 'route',
+      cardKind: 'lunch',
+      noRouteReason: 'mode_unsupported',
+      livePlacesEnabled: true,
+      liveLocationStatus: {
+        status: 'available',
+        coords: { lat: 37.7749, lng: -122.4194 },
+      } as any,
+      livePlacesList: [place as any],
+      selectedLivePlace: place as any,
+      liveDestination: {
+        name: 'Hayes Valley Ramen',
+        coordinate: [37.776, -122.417],
+      },
+    };
+
+    const html = renderDesktopRightPanel(opts);
+    expect(html).toContain('notice-route-unavailable');
+    expect(html).toContain('data-no-route-reason="mode_unsupported"');
+    expect(html).toContain('Walking time unavailable · straight-line 450m');
+    expect(html).not.toMatch(/\b\d+\s*(?:min|mins|minutes)\b/i);
+  });
+
   it('renders honest L3 seam notice for live lunch with zero fixture provenance', () => {
     const opts: DesktopPanelRenderOptions = {
       contextMode: 'live',

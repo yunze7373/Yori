@@ -12,7 +12,8 @@ export type NoRouteReason =
   | 'location_not_shared'
   | 'provider_disabled'
   | 'provider_error'
-  | 'stale';
+  | 'stale'
+  | 'mode_unsupported';
 
 export const NO_ROUTE_REASON_LABELS: Readonly<Record<NoRouteReason, string>> = Object.freeze({
   no_destination: 'no destination set',
@@ -20,6 +21,7 @@ export const NO_ROUTE_REASON_LABELS: Readonly<Record<NoRouteReason, string>> = O
   provider_disabled: 'provider disabled',
   provider_error: 'provider error',
   stale: 'data is stale',
+  mode_unsupported: 'mode unsupported',
 });
 
 export const OSRM_ATTRIBUTION = 'Route © OSRM · data © OpenStreetMap contributors';
