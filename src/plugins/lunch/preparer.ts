@@ -40,6 +40,17 @@ export interface RankedPlaceOption {
   readonly attribution?: string;
   /** D2: why this option is shown — 'taste' (confirmed taste match), 'open_now' or 'nearest'. */
   readonly reasonKind?: 'taste' | 'open_now' | 'nearest';
+  /** D7: discovery source and Google-only fields (never invented for OSM). */
+  readonly provenance?: 'google' | 'osm';
+  readonly rating?: number;
+  readonly userRatingCount?: number;
+  readonly priceLevel?: number;
+  readonly photo?: {
+    readonly uri: string;
+    readonly widthPx?: number;
+    readonly heightPx?: number;
+    readonly authorAttributions: readonly { readonly displayName: string; readonly uri?: string }[];
+  };
 }
 
 /**
@@ -139,6 +150,11 @@ export class LunchPreparer implements Preparer {
           straightLineDistanceLabel: distLabel,
           openingStatus: p.openingStatus,
           openNow: p.openNow,
+          provenance: p.provenance,
+          rating: p.rating,
+          userRatingCount: p.userRatingCount,
+          priceLevel: p.priceLevel,
+          photo: p.photo,
           osmId: p.osmId,
           fetchedAt: p.fetchedAt,
           attribution: p.attribution,
@@ -274,6 +290,11 @@ export class LunchPreparer implements Preparer {
         fetchedAt: pAny.fetchedAt,
         attribution: pAny.attribution,
         reasonKind: usedTaste ? 'taste' : pAny.openingStatus === 'open' ? 'open_now' : 'nearest',
+        provenance: pAny.provenance,
+        rating: pAny.rating,
+        userRatingCount: pAny.userRatingCount,
+        priceLevel: pAny.priceLevel,
+        photo: pAny.photo,
       });
     });
 
@@ -302,7 +323,9 @@ export class LunchPreparer implements Preparer {
             sig.kind === 'user_request'
               ? 'Because you asked for food nearby just now'
               : sig.kind === 'places_lunch' && liveProviderPlaces
-              ? 'Nearby places from OpenStreetMap via Overpass (ODbL)'
+              ? ((sig.value as any)?.places?.[0]?.provenance === 'google'
+                  ? 'Nearby places from Google (Powered by Google)'
+                  : 'Nearby places from OpenStreetMap via Overpass (ODbL)')
               : `${sig.kind} signal evaluated at ${sig.issuedAt}`,
         })
       );
@@ -314,7 +337,9 @@ export class LunchPreparer implements Preparer {
           source: lunchPlacesSignal.source,
           issuedAt: lunchPlacesSignal.issuedAt,
           description: liveProviderPlaces
-            ? 'Nearby places from OpenStreetMap via Overpass (ODbL)'
+            ? ((lunchPlacesSignal.value as any)?.places?.[0]?.provenance === 'google'
+                ? 'Nearby places from Google (Powered by Google)'
+                : 'Nearby places from OpenStreetMap via Overpass (ODbL)')
             : 'Simulated restaurant places from provider',
         })
       );
@@ -376,7 +401,9 @@ export class LunchPreparer implements Preparer {
         memoryFactsUsed: Object.freeze(memoryFactsUsed),
         derivation: usedTaste
           ? `${filterNote}Recommended ${selected.length} options matching ${tasteDesc} (${tasteFactSummary}).`
-          : `${filterNote}No confirmed taste yet: showing ${selected.length} nearby places, open now first (OSM opening_hours), then nearest.`,
+          : `${filterNote}No confirmed taste yet: showing ${selected.length} nearby places, open now first (${
+              optionsOrSteps.some(o => o.provenance === 'google') ? 'Google opening hours' : 'OSM opening_hours'
+            }), then nearest.`,
       }),
     });
   }

@@ -6500,3 +6500,42 @@ button.v2-view-detail-link:focus-visible {
   color: var(--color-ink-muted, #5C6F68);
   background: var(--color-card-muted-bg, #f0ece2);
 }
+
+/* D7: Google candidate photo, rating/price chips and the required credits. */
+.v2-candidate-art.has-photo {
+  background: var(--color-card-muted-bg, #f0ece2);
+}
+
+.v2-candidate-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.v2-rating-chip,
+.v2-price-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+  background: #f4ecd7;
+}
+
+.v2-google-credits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 6px;
+  font-size: 0.6875rem;
+  color: var(--color-ink-muted, #5C6F68);
+}
+
+.v2-google-credits a {
+  color: inherit;
+  text-decoration: underline;
+}

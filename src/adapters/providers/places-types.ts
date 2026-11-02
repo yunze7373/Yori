@@ -26,6 +26,19 @@ export interface PlaceItem {
   readonly noiseLevel?: 'quiet' | 'moderate' | 'lively' | string;
   readonly vegetarian?: boolean;
   readonly attribution?: string;
+  /** D7: which discovery source produced this candidate. */
+  readonly provenance?: 'google' | 'osm';
+  /** D7 (Google only): rating 1-5, rating count, price level 0-4. Never invented for OSM. */
+  readonly rating?: number;
+  readonly userRatingCount?: number;
+  readonly priceLevel?: number;
+  /** D7 (Google only): keyless, short-lived photo URI resolved server-side, plus required credits. */
+  readonly photo?: {
+    readonly uri: string;
+    readonly widthPx?: number;
+    readonly heightPx?: number;
+    readonly authorAttributions: readonly { readonly displayName: string; readonly uri?: string }[];
+  };
 }
 
 export interface PlacesQuery {

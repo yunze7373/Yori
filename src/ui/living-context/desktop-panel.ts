@@ -433,20 +433,25 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
           <div class="desktop-panel-section" data-panel-type="places">
             <div class="desktop-panel-places-header">
               <h3 class="section-label">Nearby Dining</h3>
-              <span class="card-badge" data-provenance="live" data-source="overpass" data-fetched-at="${escapeHtml(fetchedAt)}">OpenStreetMap (ODbL)</span>
+              ${
+                (places[0] as any)?.provenance === 'google'
+                  ? `<span class="card-badge" data-provenance="live" data-source="google" data-fetched-at="${escapeHtml(fetchedAt)}">Powered by Google</span>`
+                  : `<span class="card-badge" data-provenance="live" data-source="overpass" data-fetched-at="${escapeHtml(fetchedAt)}">OpenStreetMap (ODbL)</span>`
+              }
             </div>
             <div class="desktop-candidates-list">
               ${places
                 .map(
                   c => `
-                <div class="card desktop-candidate-tile ${opts.selectedLivePlace?.osmId === c.osmId ? 'selected' : ''}" data-candidate-id="${escapeHtml(c.placeId)}" data-osm-id="${escapeHtml(String(c.osmId))}" data-provenance="live" data-source="overpass" data-fetched-at="${escapeHtml(c.fetchedAt)}" role="button" tabindex="0">
+                <div class="card desktop-candidate-tile ${opts.selectedLivePlace?.osmId === c.osmId ? 'selected' : ''}" data-candidate-id="${escapeHtml(c.placeId)}" data-osm-id="${escapeHtml(String(c.osmId))}" data-provenance="live" data-source="${(c as any).provenance === 'google' ? 'google' : 'overpass'}" data-fetched-at="${escapeHtml(c.fetchedAt)}" role="button" tabindex="0">
                   <div class="desktop-candidate-details">
                     <h4 class="desktop-candidate-title">${escapeHtml(c.name)}</h4>
                     <div class="desktop-candidate-meta">
                       ${c.cuisine ? `<span class="v2-cuisine-chip">${escapeHtml(c.cuisine)}</span>` : ''}
                       <span class="v2-distance-chip">${escapeHtml(c.straightLineDistanceLabel || '')}</span>
                       ${c.openingStatus === 'open' ? `<span class="v2-open-chip">Open now</span>` : c.openingStatus === 'closed' ? `<span class="v2-open-chip closed">Closed</span>` : `<span class="v2-open-chip unknown">Hours unknown</span>`}
-                      <span class="v2-source-chip">OpenStreetMap via Overpass (ODbL)</span>
+                      ${typeof (c as any).rating === 'number' && (c as any).provenance === 'google' ? `<span class="v2-rating-chip">★ ${escapeHtml(((c as any).rating as number).toFixed(1))}</span>` : ''}
+                      <span class="v2-source-chip">${(c as any).provenance === 'google' ? 'Powered by Google' : 'OpenStreetMap via Overpass (ODbL)'}</span>
                     </div>
                     ${(c as any).rankingExplanation ? `<div class="desktop-candidate-basis">${escapeHtml((c as any).rankingExplanation)}</div>` : ''}
                   </div>

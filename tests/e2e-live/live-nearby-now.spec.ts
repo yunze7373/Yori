@@ -250,7 +250,7 @@ test.describe('D2-LUNCH-DEFAULT-ON: nearby restaurants visibly work once locatio
     // Determinate success auto-collapses the overlay back to Home. Outside the meal window the
     // lunch card can only appear because the Ask registered the explicit nearby request.
     await expect(page.locator('#conversation-overlay')).toHaveCount(0, { timeout: 5000 });
-    await expect(page.locator('#btn-nearby-now')).toHaveText('Searching nearby…');
+    await expect(page.locator('#btn-nearby-now')).toHaveText('Searching OpenStreetMap…');
 
     await expect(page.locator('.v2-candidate-card').first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('.v2-candidate-card .v2-candidate-name').first()).toHaveText('Shinjuku Soba Tei');

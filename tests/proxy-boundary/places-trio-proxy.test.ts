@@ -172,8 +172,10 @@ describe('D2 status endpoints report exact outbound hosts for the consent copy',
   it('places, route (driving + routed-foot) and weather hosts', async () => {
     const places = reqRes('/api/places/status');
     await createPlacesProxyMiddleware({ enabled: true })(places.req, places.res, places.next);
+    // D7: the verified mirror is listed as the fallback host (no Google key in this test).
     expect(JSON.parse(places.response.body).outboundHosts).toEqual([
       { purpose: 'nearby places', host: 'overpass-api.de/api/interpreter' },
+      { purpose: 'nearby places, fallback', host: 'maps.mail.ru/osm/tools/overpass/api/interpreter' },
     ]);
 
     const route = reqRes('/api/route/status');

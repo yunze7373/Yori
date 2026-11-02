@@ -645,6 +645,49 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
  * fix at any hour; 'off' says honestly that the places provider is disabled by owner setting.
  */
 /**
+ * D7: candidate thumbnail. A Google photo is a keyless, server-resolved googleusercontent URI
+ * (hotlinked, never re-hosted); otherwise the local illustration. No referrer is sent.
+ * Returns the OPENING thumb element; the caller closes it (same shape as the illustration branch).
+ */
+function renderCandidateThumb(c: NonNullable<HomeCompositionVM['candidateCards']>[number], extraClass: string): string {
+  if (c.placePhoto?.uri) {
+    return `<div class="v2-candidate-art ${extraClass} has-photo" role="img" aria-label="Photo of ${escapeHtml(c.name)}">
+                  <img class="v2-candidate-photo" src="${escapeHtml(c.placePhoto.uri)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" width="72" height="72">`;
+  }
+  return '';
+}
+
+/** D7: rating and price exist only for Google candidates; nothing is shown (or invented) for OSM. */
+function renderGoogleFacts(c: NonNullable<HomeCompositionVM['candidateCards']>[number]): string {
+  if (c.provenance !== 'google') return '';
+  const parts: string[] = [];
+  if (typeof c.rating === 'number') {
+    const count = typeof c.userRatingCount === 'number' ? ` (${c.userRatingCount.toLocaleString('en-US')})` : '';
+    parts.push(`<span class="v2-rating-chip" aria-label="Rated ${c.rating.toFixed(1)} out of 5${count ? ' by ' + c.userRatingCount + ' people' : ''}">★ ${c.rating.toFixed(1)}${count}</span>`);
+  }
+  if (typeof c.priceLevel === 'number' && c.priceLevel > 0) {
+    parts.push(`<span class="v2-price-chip" aria-label="Price level ${c.priceLevel} of 4">${'$'.repeat(c.priceLevel)}</span>`);
+  }
+  return parts.join('');
+}
+
+/** D7: Google requires "Powered by Google" plus the photo author's attribution next to the content. */
+function renderGoogleCredits(c: NonNullable<HomeCompositionVM['candidateCards']>[number]): string {
+  if (c.provenance !== 'google') return '';
+  const authors = c.placePhoto?.uri ? c.placePhoto.authorAttributions : [];
+  const authorHtml = authors
+    .map(a =>
+      a.uri
+        ? `<a href="${escapeHtml(a.uri)}" target="_blank" rel="noopener noreferrer">${escapeHtml(a.displayName)}</a>`
+        : escapeHtml(a.displayName)
+    )
+    .join(', ');
+  return `<div class="v2-google-credits" data-attribution="google"><span class="powered-by-google">Powered by Google</span>${
+    authorHtml ? `<span class="photo-credit">Photo: ${authorHtml}</span>` : ''
+  }</div>`;
+}
+
+/**
  * D3: the ONE provenance chip a card carries (floor item b). Text says where the card's content
  * comes from: live sensing, the user's own confirmation, or (dev-only Demo) a simulation.
  */
@@ -670,13 +713,17 @@ function renderNearbyNow(vm: HomeCompositionVM, placement: 'quiet' | 'card'): st
   // On the lunch card the results speak for themselves; only failures/empties keep their note.
   const shownNote = placement === 'card' && note?.kind === 'info' ? undefined : note;
   const loading = state === 'loading';
-  const label = loading ? 'Searching nearby…' : placement === 'quiet' ? 'Nearby now' : 'Refresh nearby';
+  const label = loading
+    ? vm.nearbyNow.loadingLabel || 'Searching nearby…'
+    : placement === 'quiet'
+    ? 'Nearby now'
+    : 'Refresh nearby';
   return `
           <div class="nearby-now nearby-now-${placement}" id="nearby-now">
             <button type="button" class="btn ${placement === 'quiet' ? 'btn-primary' : 'btn-outline btn-sm'} nearby-now-btn" id="btn-nearby-now" ${loading ? 'disabled aria-busy="true"' : ''} aria-label="${placement === 'quiet' ? 'Find restaurants near you now' : 'Refresh restaurants near you'}">${escapeHtml(label)}</button>
             ${
               placement === 'quiet'
-                ? `<span class="nearby-now-caption">Restaurants around you · OpenStreetMap via Overpass</span>`
+                ? `<span class="nearby-now-caption">Restaurants around you · ${escapeHtml(vm.nearbyNow.sourceLabel || 'OpenStreetMap via Overpass')}</span>`
                 : ''
             }
             ${
@@ -943,10 +990,10 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 id="candidate-${escapeHtml(topC.id)}"
                 data-candidate-id="${escapeHtml(topC.id)}"
                 data-provenance="${vm.isLive ? 'live' : 'fixture'}"
-                ${vm.isLive ? 'data-source="overpass"' : ''}
+                ${vm.isLive ? `data-source="${topC.provenance === 'google' ? 'google' : 'overpass'}"` : ''}
               >
-                <div class="v2-candidate-art compact-hero-thumb" role="img" aria-label="${escapeHtml(topC.photo.altText)}">
-                  ${topC.photo.svgMarkup}
+                ${renderCandidateThumb(topC, 'compact-hero-thumb') || `<div class="v2-candidate-art compact-hero-thumb" role="img" aria-label="${escapeHtml(topC.photo.altText)}">
+                  ${topC.photo.svgMarkup}`}
                   ${
                     vm.isLive
                       ? ''
@@ -959,6 +1006,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     <span class="v2-cuisine-chip" ${topC.fieldSourceRefs?.cuisine ? `data-source-ref="${escapeHtml(topC.fieldSourceRefs.cuisine.recordId)}.${escapeHtml(topC.fieldSourceRefs.cuisine.field)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Candidate category label"`}>${escapeHtml(topC.cuisine)}</span>
                     <span class="v2-distance-chip" data-source-ref="${topC.fieldSourceRefs?.distanceText ? `${escapeHtml(topC.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(topC.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(topC.id)}.distanceText`}" data-slot="domain">${escapeHtml(topC.distanceText)}</span>
                     ${vm.isLive ? (topC.openingStatus === 'open' || topC.openNow === true ? `<span class="v2-open-chip">Open now</span>` : topC.openingStatus === 'closed' ? `<span class="v2-open-chip closed">Closed</span>` : `<span class="v2-open-chip unknown">Hours unknown</span>`) : ''}
+                    ${vm.isLive ? renderGoogleFacts(topC) : ''}
                     ${topC.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
                     ${topC.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Dietary filter tag">Vegetarian</span>` : ''}
                   </div>
@@ -989,6 +1037,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                       aria-label="View details for ${escapeHtml(topC.name)}"
                     >Details → · +${moreCount} more options</button>
                   </div>
+                  ${vm.isLive ? renderGoogleCredits(topC) : ''}
                 </div>
               </div>
             </div>
@@ -1004,7 +1053,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   id="candidate-${escapeHtml(c.id)}"
                   data-candidate-id="${escapeHtml(c.id)}"
                   data-provenance="${vm.isLive ? 'live' : 'fixture'}"
-                  ${vm.isLive ? 'data-source="overpass"' : ''}
+                  ${vm.isLive ? `data-source="${c.provenance === 'google' ? 'google' : 'overpass'}"` : ''}
                 >
                   <div class="v2-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
                     ${c.photo.svgMarkup}
@@ -1132,7 +1181,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           ${renderNearbyNow(vm, 'card')}
           <div class="mock-places-notice" data-slot="chrome" data-slot-reason="Places disclosure notice">${
             vm.isLive
-              ? 'OpenStreetMap via Overpass (ODbL) · live nearby dining'
+              ? escapeHtml(vm.placesAttributionLine || 'OpenStreetMap via Overpass (ODbL) · live nearby dining')
               : escapeHtml(
                   vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
                     ? STRINGS.fuel.mockPlacesNotice

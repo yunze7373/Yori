@@ -123,6 +123,17 @@ export interface CandidateCardVM {
   readonly sourceRef?: SourceRef;
   readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
   readonly openingStatus?: 'open' | 'closed' | undefined;
+  /** D7: discovery source and Google-only fields; placePhoto is a keyless, server-resolved URI. */
+  readonly provenance?: 'google' | 'osm';
+  readonly rating?: number;
+  readonly userRatingCount?: number;
+  readonly priceLevel?: number;
+  readonly placePhoto?: {
+    readonly uri: string;
+    readonly widthPx?: number;
+    readonly heightPx?: number;
+    readonly authorAttributions: readonly { readonly displayName: string; readonly uri?: string }[];
+  };
   readonly openNow?: boolean;
   readonly osmId?: number;
   readonly coords?: { readonly lat: number; readonly lng: number };
@@ -242,9 +253,15 @@ export interface HomeCompositionVM {
   /** D2: "Nearby now" on-demand search ('off' = places provider disabled by owner setting). */
   readonly nearbyNow?: {
     readonly state: 'ready' | 'loading' | 'off';
+    /** D7: progress copy while loading ('Searching OpenStreetMap…' on the slower OSM path). */
+    readonly loadingLabel?: string;
+    /** D7: where "Nearby now" searches (Google when configured, else OpenStreetMap). */
+    readonly sourceLabel?: string;
     /** D3: designed state shown with the button (cooldown info, empty answer, provider failure). */
     readonly note?: { readonly kind: 'info' | 'empty' | 'error'; readonly title: string; readonly desc: string };
   };
+  /** D7: honest discovery line for the lunch card (Google, OSM, or OSM after a Google failover). */
+  readonly placesAttributionLine?: string;
   /** D2: exact hosts (and purpose) of the enabled keyless providers, from their /status. */
   readonly consentHosts?: readonly { readonly purpose: string; readonly host: string }[];
   readonly calendarConnected?: boolean;

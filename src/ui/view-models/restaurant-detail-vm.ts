@@ -157,6 +157,17 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     }
   }
 
+  // D7: Google-only facts (never invented for OSM candidates)
+  if (isLive && (targetOpt as any)?.provenance === 'google') {
+    const rating = (targetOpt as any)?.rating;
+    const count = (targetOpt as any)?.userRatingCount;
+    if (typeof rating === 'number') {
+      attributeChips.push(`★ ${rating.toFixed(1)}${typeof count === 'number' ? ` (${count.toLocaleString('en-US')})` : ''}`);
+    }
+    const price = (targetOpt as any)?.priceLevel;
+    if (typeof price === 'number' && price > 0) attributeChips.push('$'.repeat(price));
+  }
+
   // Taste preference basis with honest provenance
   const tasteFact = plan.why?.memoryFactsUsed?.find(
     f => f.key.includes('taste') || f.key.includes('cuisine')

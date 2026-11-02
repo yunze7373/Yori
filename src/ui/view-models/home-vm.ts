@@ -74,6 +74,8 @@ export interface BuildHomeCompositionOptions {
   nearbyNow?: HomeCompositionVM['nearbyNow'];
   /** D2: exact hosts of the ENABLED keyless providers, for the location consent copy. */
   consentHosts?: HomeCompositionVM['consentHosts'];
+  /** D7: discovery line for the lunch card. */
+  placesAttributionLine?: string;
   calendarConnected?: boolean;
   calendarNoRouteReason?: string;
   calendarSignalValue?: {
@@ -622,10 +624,14 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
           const reasonKind = (opt as any).reasonKind as 'taste' | 'open_now' | 'nearest' | undefined;
           const basis =
             options.isLive && reasonKind === 'open_now'
-              ? 'Open now · from OpenStreetMap opening hours'
+              ? (opt as any).provenance === 'google'
+                ? 'Open now · from Google opening hours'
+                : 'Open now · from OpenStreetMap opening hours'
               : options.isLive && reasonKind === 'nearest'
               ? (opt as any).openingStatus === 'closed'
-                ? 'Nearest to you · closed now (OpenStreetMap hours)'
+                ? (opt as any).provenance === 'google'
+                  ? 'Nearest to you · closed now (Google hours)'
+                  : 'Nearest to you · closed now (OpenStreetMap hours)'
                 : 'Nearest to you · hours unknown'
               : `Based on taste: ${cuisine} (${provenance})`;
 
@@ -671,6 +677,11 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
             sourceRef,
             fieldSourceRefs,
             openingStatus: (opt as any).openingStatus,
+            provenance: (opt as any).provenance,
+            rating: (opt as any).rating,
+            userRatingCount: (opt as any).userRatingCount,
+            priceLevel: (opt as any).priceLevel,
+            placePhoto: (opt as any).photo,
             openNow: (opt as any).openNow,
             osmId: (opt as any).osmId,
             coords: (opt as any).coords,
@@ -1027,6 +1038,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     weatherProvenanceLine,
     nearbyNow: options.isLive ? options.nearbyNow : undefined,
     consentHosts: options.isLive ? options.consentHosts : undefined,
+    placesAttributionLine: options.isLive ? options.placesAttributionLine : undefined,
     calendarConnected: options.calendarConnected,
     calendarSignalValue: options.calendarSignalValue ?? (() => {
       const calSig = options.snapshot?.signals.find(s => s.kind === 'calendar');

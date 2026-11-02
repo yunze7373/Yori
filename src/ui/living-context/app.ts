@@ -1380,6 +1380,11 @@ export function computeLiveState(
           straightLineDistanceLabel: p.straightLineDistanceLabel,
           openNow: p.openingStatus === 'open',
           openingStatus: p.openingStatus,
+          provenance: p.provenance,
+          rating: p.rating,
+          userRatingCount: p.userRatingCount,
+          priceLevel: p.priceLevel,
+          photo: p.photo,
           osmId: p.osmId,
           fetchedAt: p.fetchedAt,
           attribution: p.attribution,
@@ -2219,6 +2224,8 @@ export function renderApp(
   let nearbyNowPending = false;
   let nearbyNowNote: { kind: 'info' | 'empty' | 'error'; title: string; desc: string } | null = null;
   let placesRefreshInFlight: Promise<void> | null = null;
+  // D7: which source answered the last search (Google primary, OSM fallback) and any failover.
+  let livePlacesDiscovery: { discovery: 'google' | 'osm'; failover: { reason: string } | null } | null = null;
   let lastPlacesFetch: { key: string; atMs: number } | null = null;
   const PLACES_CLIENT_MIN_INTERVAL_MS = 10000;
   const nowMonotonicMs = () =>
@@ -2239,9 +2246,9 @@ export function renderApp(
     await refreshLivePlaces();
   }
 
-  function refreshLivePlaces(): Promise<void> {
+  function refreshLivePlaces(opts: { fresh?: boolean } = {}): Promise<void> {
     if (placesRefreshInFlight) return placesRefreshInFlight;
-    placesRefreshInFlight = refreshLivePlacesOnce().finally(() => {
+    placesRefreshInFlight = refreshLivePlacesOnce(opts).finally(() => {
       placesRefreshInFlight = null;
     });
     return placesRefreshInFlight;
@@ -2265,14 +2272,15 @@ export function renderApp(
     nearbyNowNote = null;
     update();
     try {
-      await refreshLivePlaces();
+      // D7: an explicit request is the only thing that asks the proxy for a fresh (billed) search.
+      await refreshLivePlaces({ fresh: true });
     } finally {
       nearbyNowPending = false;
       update();
     }
   }
 
-  async function refreshLivePlacesOnce() {
+  async function refreshLivePlacesOnce(opts: { fresh?: boolean } = {}) {
     if (contextMode !== 'live') return;
     if (!livePlacesStatus.enabled) {
       livePlacesList = [];
@@ -2317,7 +2325,10 @@ export function renderApp(
 
     try {
       lastPlacesFetch = { key: fetchKey, atMs: nowMonotonicMs() };
-      const resp = await fetch(`/api/places?lat=${lat}&lng=${lng}&amenity=restaurant&radius=1500`, { cache: 'no-store' });
+      const resp = await fetch(
+        `/api/places?lat=${lat}&lng=${lng}&amenity=restaurant&radius=1500${opts.fresh ? '&fresh=1' : ''}`,
+        { cache: 'no-store' }
+      );
       if (resp.status === 429) {
         // Provider fair-use interval: keep what is shown, never flip to an error state.
         nearbyNowNote = { kind: 'info', title: 'Searched moments ago', desc: 'Try again in a few seconds.' };
@@ -2336,6 +2347,10 @@ export function renderApp(
           const confirmedFacts = activeLoadedFacts.filter(f => f.status === 'confirmed');
           livePlacesList = rankPlacesByConfirmedPreferences(data.places, confirmedFacts);
           livePlacesError = false;
+          livePlacesDiscovery = {
+            discovery: data.discovery === 'google' ? 'google' : 'osm',
+            failover: data.failover && typeof data.failover.reason === 'string' ? { reason: data.failover.reason } : null,
+          };
           // D1b: say so when the provider answered with nothing (instead of a silent quiet card).
           nearbyNowNote =
             livePlacesList.length === 0
@@ -3219,7 +3234,9 @@ export function renderApp(
                     (nowPlan.why?.memoryFactsUsed?.length ?? 0) > 0
                       ? 'Found nearby lunch options based on your location and preferences.'
                       : (nowPlan.optionsOrSteps as readonly { reasonKind?: string }[])?.some(o => o?.reasonKind === 'open_now')
-                      ? 'Found restaurants near you that are open now (OpenStreetMap hours).'
+                      ? (nowPlan.optionsOrSteps as readonly { provenance?: string }[])?.[0]?.provenance === 'google'
+                        ? 'Found restaurants near you that are open now (Google hours).'
+                        : 'Found restaurants near you that are open now (OpenStreetMap hours).'
                       : 'Found restaurants near your location.';
                 }
 
@@ -3332,6 +3349,14 @@ export function renderApp(
           isLive: contextMode === 'live',
           weatherEnabled: weatherStatus.enabled,
           weatherProvenance: liveWeatherProvenance,
+          placesAttributionLine:
+            livePlacesDiscovery?.discovery === 'google'
+              ? 'Powered by Google · nearby places'
+              : livePlacesDiscovery?.failover
+              ? livePlacesDiscovery.failover.reason === 'daily_cap'
+                ? "Google's daily limit is reached · showing OpenStreetMap via Overpass (ODbL)"
+                : 'Google did not answer · showing OpenStreetMap via Overpass (ODbL)'
+              : undefined,
           consentHosts:
             contextMode === 'live'
               ? [
@@ -3351,6 +3376,14 @@ export function renderApp(
                     ? 'loading'
                     : 'ready',
                   note: nearbyNowNote ?? undefined,
+                  sourceLabel:
+                    (livePlacesStatus as { discovery?: string }).discovery === 'google'
+                      ? 'Google'
+                      : 'OpenStreetMap via Overpass',
+                  loadingLabel:
+                    (livePlacesStatus as { discovery?: string }).discovery === 'google'
+                      ? 'Searching nearby…'
+                      : 'Searching OpenStreetMap…',
                 }
               : undefined,
           calendarConnected: liveCalendarStatus.configured && liveCalendarStatus.enabled,

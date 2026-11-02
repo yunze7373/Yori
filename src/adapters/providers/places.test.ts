@@ -470,7 +470,8 @@ describe('L3-REAL-PLACES: Unit Acceptance Matrix', () => {
       enabled: false,
       provider: 'overpass',
       attribution: OVERPASS_ATTRIBUTION,
-      // D2: exact outbound host for the consent copy (reported even while off).
+      // D2/D7: discovery source + exact outbound hosts for the consent copy (reported even while off).
+      discovery: 'osm',
       outboundHosts: [{ purpose: 'nearby places', host: 'overpass-api.de/api/interpreter' }],
     });
 

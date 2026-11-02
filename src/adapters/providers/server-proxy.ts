@@ -47,6 +47,13 @@ import {
   NominatimGeocoder,
   NOMINATIM_ATTRIBUTION,
 } from './nominatim-geocoder.js';
+import {
+  GooglePlacesAdapter,
+  GoogleQuotaExceededError,
+  GOOGLE_PLACES_ATTRIBUTION,
+} from './google-places-adapter.js';
+import { FileGooglePlacesLedger, DEFAULT_GOOGLE_PLACES_DAILY_CAP } from './google-places-ledger.js';
+import { loadEnvLocal } from '../model/server-proxy.js';
 
 export type ProxyFailureMode = 'denied' | 'stale' | 'timeout' | 'error' | 'none';
 export type ProxyEndpoint = 'weather' | 'route' | 'places' | 'calendar' | 'geocode';
@@ -715,39 +722,110 @@ export function createRouteProxyMiddleware(
 
 export interface PlacesProxyConfig {
   readonly enabled: boolean;
-  readonly provider: 'overpass';
+  readonly provider: 'overpass' | 'google';
   readonly attribution: string;
+  /**
+   * D7: server-side only (GOOGLE_PLACES_API_KEY override, else GOOGLE_MAPS_API_KEY). Never
+   * serialized, logged or sent to the client. Absent -> Overpass-only discovery.
+   */
+  readonly googleApiKey?: string;
+  /** D7: verified public Overpass mirror tried after the flagship (OVERPASS_MIRROR_URL; '' disables). */
+  readonly overpassMirrorUrl?: string | null;
+  readonly googleDailyCap?: number;
 }
+
+/** D7: verified 2026-11-03 (flagship 502/28 s; this mirror answered a 1.5 km query in ~21 s). */
+export const DEFAULT_OVERPASS_MIRROR_URL = 'https://maps.mail.ru/osm/tools/overpass/api/interpreter';
+export const OVERPASS_FALLBACK_FLAGSHIP_TIMEOUT_MS = 20000;
+export const OVERPASS_FALLBACK_MIRROR_TIMEOUT_MS = 25000;
 
 export function resolvePlacesConfig(
   env: NodeJS.ProcessEnv = process.env
 ): PlacesProxyConfig {
   const enabled = resolveTrioFlag(env['PLACES_LIVE_ENABLED'] || env['VITE_PLACES_LIVE_ENABLED']);
+  const googleApiKey = (env['GOOGLE_PLACES_API_KEY'] || env['GOOGLE_MAPS_API_KEY'] || '').trim() || undefined;
+  const mirror = env['OVERPASS_MIRROR_URL'];
+  const cap = Number(env['GOOGLE_PLACES_DAILY_CAP']);
   return {
     enabled,
-    provider: 'overpass',
-    attribution: OVERPASS_ATTRIBUTION,
+    provider: googleApiKey ? 'google' : 'overpass',
+    attribution: googleApiKey ? GOOGLE_PLACES_ATTRIBUTION : OVERPASS_ATTRIBUTION,
+    googleApiKey,
+    overpassMirrorUrl: mirror === undefined ? DEFAULT_OVERPASS_MIRROR_URL : mirror.trim() || null,
+    googleDailyCap: Number.isFinite(cap) && cap > 0 ? cap : DEFAULT_GOOGLE_PLACES_DAILY_CAP,
   };
 }
 
 let lastOutboundPlacesQueryMs = 0;
 
+/** D7: Google results are reused this long for automatic refreshes (explicit taps send fresh=1). */
+export const GOOGLE_RESULT_CACHE_TTL_MS = 5 * 60 * 1000;
+const googleResultCache = new Map<string, { at: number; body: string }>();
+
 export function resetPlacesRateLimit(): void {
   lastOutboundPlacesQueryMs = 0;
+  googleResultCache.clear();
 }
 
 export function createPlacesProxyMiddleware(
   configOverride?: Partial<PlacesProxyConfig>,
-  adapterOverride?: PlacesProvider
+  adapterOverride?: PlacesProvider,
+  deps?: {
+    /** D7: Google discovery (null disables even with a key); default built from googleApiKey. */
+    readonly google?: GooglePlacesAdapter | null;
+    /** D7: ordered Overpass chain; default flagship (20 s) then the verified mirror (25 s). */
+    readonly overpassChain?: readonly PlacesProvider[];
+  }
 ) {
+  loadEnvLocal();
   const baseConfig = resolvePlacesConfig();
+  const hasOverride = configOverride !== undefined && 'googleApiKey' in configOverride;
+  const googleApiKey = hasOverride ? configOverride!.googleApiKey : baseConfig.googleApiKey;
   const config: PlacesProxyConfig = {
     enabled: configOverride?.enabled ?? baseConfig.enabled,
-    provider: configOverride?.provider ?? baseConfig.provider,
-    attribution: configOverride?.attribution ?? baseConfig.attribution,
+    provider: googleApiKey ? 'google' : 'overpass',
+    attribution: configOverride?.attribution ?? (googleApiKey ? GOOGLE_PLACES_ATTRIBUTION : OVERPASS_ATTRIBUTION),
+    googleApiKey,
+    overpassMirrorUrl:
+      configOverride && 'overpassMirrorUrl' in configOverride ? configOverride.overpassMirrorUrl : baseConfig.overpassMirrorUrl,
+    googleDailyCap: configOverride?.googleDailyCap ?? baseConfig.googleDailyCap,
   };
 
-  const placesAdapter = adapterOverride ?? new OverpassPlacesAdapter({ liveEnabled: config.enabled });
+  // Legacy single-adapter callers (tests) keep exactly that adapter; otherwise the D7 chain.
+  const overpassChain: readonly PlacesProvider[] =
+    deps?.overpassChain ??
+    (adapterOverride
+      ? [adapterOverride]
+      : [
+          new OverpassPlacesAdapter({
+            liveEnabled: config.enabled,
+            timeoutMs: OVERPASS_FALLBACK_FLAGSHIP_TIMEOUT_MS,
+            queryTimeoutSeconds: 20,
+          }),
+          ...(config.overpassMirrorUrl
+            ? [
+                new OverpassPlacesAdapter({
+                  liveEnabled: config.enabled,
+                  endpoint: config.overpassMirrorUrl,
+                  timeoutMs: OVERPASS_FALLBACK_MIRROR_TIMEOUT_MS,
+                  queryTimeoutSeconds: 25,
+                }),
+              ]
+            : []),
+        ]);
+  const googleAdapter: GooglePlacesAdapter | null =
+    deps && 'google' in deps
+      ? deps.google ?? null
+      : config.googleApiKey && !adapterOverride
+      ? new GooglePlacesAdapter({
+          apiKey: config.googleApiKey,
+          ledger: new FileGooglePlacesLedger({ dailyCap: config.googleDailyCap }),
+        })
+      : null;
+  const usesGoogle = Boolean(googleAdapter);
+  const overpassHosts = overpassChain
+    .map(a => (typeof (a as OverpassPlacesAdapter).getEndpoint === 'function' ? (a as OverpassPlacesAdapter).getEndpoint() : DEFAULT_OVERPASS_ENDPOINT))
+    .map(u => describeOutboundHost(u));
 
   return async function placesProxyMiddleware(
     req: IncomingMessage,
@@ -879,8 +957,15 @@ export function createPlacesProxyMiddleware(
           enabled: config.enabled,
           provider: config.provider,
           attribution: config.attribution,
-          // D2: exact outbound host for the consent copy.
-          outboundHosts: [{ purpose: 'nearby places', host: describeOutboundHost(DEFAULT_OVERPASS_ENDPOINT) }],
+          // D2/D7: exact outbound hosts for the consent copy (Google first when it is primary).
+          discovery: usesGoogle ? 'google' : 'osm',
+          outboundHosts: [
+            ...(usesGoogle ? [{ purpose: 'nearby places and photos', host: 'places.googleapis.com' }] : []),
+            ...Array.from(new Set(overpassHosts)).map((host, i) => ({
+              purpose: usesGoogle || i > 0 ? 'nearby places, fallback' : 'nearby places',
+              host,
+            })),
+          ],
         })
       );
       return;
@@ -950,6 +1035,17 @@ export function createPlacesProxyMiddleware(
         return;
       }
 
+      // D7 cost guard: Google results are reused for 5 min per rounded fix + amenity, so automatic
+      // Live refreshes (focus / 60 s) never bill; an explicit "Nearby now" sends fresh=1.
+      const cacheKey = `${roundCoordinate3Decimals(lat)},${roundCoordinate3Decimals(lng)},${amenityParam}`;
+      const wantsFresh = parsedUrl.searchParams.get('fresh') === '1';
+      const cached = googleResultCache.get(cacheKey);
+      if (googleAdapter && cached && !wantsFresh && Date.now() - cached.at < GOOGLE_RESULT_CACHE_TTL_MS) {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(cached.body);
+        return;
+      }
+
       // Rate limit check: >=10s between outbound queries per server
       const now = Date.now();
       if (now - lastOutboundPlacesQueryMs < OVERPASS_MIN_OUTBOUND_INTERVAL_MS) {
@@ -975,35 +1071,58 @@ export function createPlacesProxyMiddleware(
 
       lastOutboundPlacesQueryMs = Date.now();
 
-      try {
-        const places = await placesAdapter.searchNearby({
-          location: { lat: roundedLat, lng: roundedLng },
-          category: amenityParam,
-          radiusMeters,
-        });
-
-        res.writeHead(200, {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store',
-        });
-        res.end(
-          JSON.stringify({
-            enabled: true,
-            places,
-            attribution: config.attribution,
-          })
-        );
-      } catch (err: any) {
-        res.writeHead(500, {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store',
-        });
-        res.end(
-          JSON.stringify({
-            error: err?.message || 'Places provider error',
-          })
-        );
+      // D7: Google first for food when configured; any Google failure (or the daily cap) falls
+      // back to the Overpass chain and the response says so. Fixed error messages only.
+      let failover: { from: 'google'; reason: 'daily_cap' | 'unavailable' } | null = null;
+      if (googleAdapter && (amenityParam === 'restaurant' || amenityParam === 'cafe')) {
+        try {
+          const places = await googleAdapter.searchNearby({ lat: roundedLat, lng: roundedLng });
+          const body = JSON.stringify({ enabled: true, discovery: 'google', places, attribution: GOOGLE_PLACES_ATTRIBUTION });
+          googleResultCache.set(cacheKey, { at: Date.now(), body });
+          if (googleResultCache.size > 50) googleResultCache.delete(googleResultCache.keys().next().value!);
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          res.end(body);
+          return;
+        } catch (err) {
+          failover = { from: 'google', reason: err instanceof GoogleQuotaExceededError ? 'daily_cap' : 'unavailable' };
+        }
       }
+
+      let lastErr: unknown = null;
+      for (let i = 0; i < overpassChain.length; i++) {
+        try {
+          const places = await overpassChain[i]!.searchNearby({
+            location: { lat: roundedLat, lng: roundedLng },
+            category: amenityParam,
+            radiusMeters,
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          res.end(
+            JSON.stringify({
+              enabled: true,
+              discovery: 'osm',
+              osmHost: overpassHosts[i],
+              failover,
+              places,
+              attribution: OVERPASS_ATTRIBUTION,
+            })
+          );
+          return;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(
+        JSON.stringify({
+          error:
+            lastErr instanceof Error && /^Overpass API responded with HTTP \d+$/.test(lastErr.message)
+              ? lastErr.message
+              : 'Places provider error',
+          discovery: 'osm',
+          failover,
+        })
+      );
       return;
     }
 

@@ -269,6 +269,7 @@ export function parseOverpassElements(
       openingStatus,
       brand: el.tags?.brand ? String(el.tags.brand) : undefined,
       attribution: OVERPASS_ATTRIBUTION,
+      provenance: 'osm',
     });
   }
 
@@ -365,6 +366,9 @@ export interface OverpassPlacesAdapterOptions {
    * outbound calls. Omitted -> legacy env check (isPlacesLiveEnabled).
    */
   readonly liveEnabled?: boolean;
+  /** D7 fallback path: client timeout and the query's own [timeout:N] (defaults 8 s / 8). */
+  readonly timeoutMs?: number;
+  readonly queryTimeoutSeconds?: number;
 }
 
 export class OverpassPlacesAdapter implements PlacesProvider {
@@ -374,11 +378,19 @@ export class OverpassPlacesAdapter implements PlacesProvider {
   private readonly endpoint: string;
   private readonly fetchFn?: typeof fetch;
   private readonly liveEnabled?: boolean;
+  private readonly timeoutMs: number;
+  private readonly queryTimeoutSeconds?: number;
 
   constructor(options: OverpassPlacesAdapterOptions = {}) {
     this.endpoint = options.endpoint ?? DEFAULT_OVERPASS_ENDPOINT;
     this.fetchFn = options.fetchFn;
     this.liveEnabled = options.liveEnabled;
+    this.timeoutMs = options.timeoutMs ?? OVERPASS_TIMEOUT_MS;
+    this.queryTimeoutSeconds = options.queryTimeoutSeconds;
+  }
+
+  public getEndpoint(): string {
+    return this.endpoint;
   }
 
   public async searchNearby(query: PlacesQuery): Promise<readonly PlaceItem[]> {
@@ -388,11 +400,13 @@ export class OverpassPlacesAdapter implements PlacesProvider {
       );
     }
 
-    const body = buildOverpassQuery(query);
+    const body = buildOverpassQuery(
+      this.queryTimeoutSeconds ? { ...query, timeoutSeconds: this.queryTimeoutSeconds } : query
+    );
     const effectiveFetch = this.fetchFn ?? fetch;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), OVERPASS_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
       const res = await effectiveFetch(this.endpoint, {
