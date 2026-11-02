@@ -29,6 +29,131 @@ export interface IcsCalendarAdapterConfig {
 }
 
 /**
+ * Common Windows Time Zone names mapped to canonical IANA Time Zone IDs.
+ */
+export const WINDOWS_TO_IANA_TZ: Record<string, string> = {
+  'Dateline Standard Time': 'Etc/GMT+12',
+  'UTC-11': 'Etc/GMT+11',
+  'Hawaiian Standard Time': 'Pacific/Honolulu',
+  'Alaskan Standard Time': 'America/Anchorage',
+  'Pacific Standard Time': 'America/Los_Angeles',
+  'Pacific Standard Time (Mexico)': 'America/Tijuana',
+  'Mountain Standard Time': 'America/Denver',
+  'Mountain Standard Time (Mexico)': 'America/Chihuahua',
+  'Central Standard Time': 'America/Chicago',
+  'Central Standard Time (Mexico)': 'America/Mexico_City',
+  'Canada Central Standard Time': 'America/Regina',
+  'Eastern Standard Time': 'America/New_York',
+  'US Eastern Standard Time': 'America/Indianapolis',
+  'Atlantic Standard Time': 'America/Halifax',
+  'Newfoundland Standard Time': 'America/St_Johns',
+  'Tokyo Standard Time': 'Asia/Tokyo',
+  'Korea Standard Time': 'Asia/Seoul',
+  'China Standard Time': 'Asia/Shanghai',
+  'Singapore Standard Time': 'Asia/Singapore',
+  'Taipei Standard Time': 'Asia/Taipei',
+  'W. Australia Standard Time': 'Australia/Perth',
+  'AUS Central Standard Time': 'Australia/Darwin',
+  'Cen. Australia Standard Time': 'Australia/Adelaide',
+  'AUS Eastern Standard Time': 'Australia/Sydney',
+  'E. Australia Standard Time': 'Australia/Brisbane',
+  'Tasmania Standard Time': 'Australia/Hobart',
+  'New Zealand Standard Time': 'Pacific/Auckland',
+  'Fiji Standard Time': 'Pacific/Fiji',
+  'GMT Standard Time': 'Europe/London',
+  'Greenwich Standard Time': 'Atlantic/Reykjavik',
+  'W. Europe Standard Time': 'Europe/Berlin',
+  'Central Europe Standard Time': 'Europe/Budapest',
+  'Romance Standard Time': 'Europe/Paris',
+  'Central European Standard Time': 'Europe/Warsaw',
+  'E. Europe Standard Time': 'Europe/Chisinau',
+  'FLE Standard Time': 'Europe/Kyiv',
+  'Israel Standard Time': 'Asia/Jerusalem',
+  'Arabic Standard Time': 'Asia/Baghdad',
+  'Arab Standard Time': 'Asia/Riyadh',
+  'Russian Standard Time': 'Europe/Moscow',
+  'Iran Standard Time': 'Asia/Tehran',
+  'Arabian Standard Time': 'Asia/Dubai',
+  'India Standard Time': 'Asia/Kolkata',
+  'Sri Lanka Standard Time': 'Asia/Colombo',
+  'Nepal Standard Time': 'Asia/Kathmandu',
+  'Bangladesh Standard Time': 'Asia/Dhaka',
+  'SE Asia Standard Time': 'Asia/Bangkok',
+  'UTC': 'UTC',
+};
+
+/**
+ * Resolves a timezone string (IANA or Windows name) to a valid IANA timezone.
+ * Returns null if the timezone is unresolvable or invalid.
+ */
+export function resolveIanaTimezone(tzid: string): string | null {
+  const clean = tzid.trim().replace(/^["']|["']$/g, '');
+  if (WINDOWS_TO_IANA_TZ[clean]) {
+    return WINDOWS_TO_IANA_TZ[clean];
+  }
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: clean });
+    return clean;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Converts wall time (year, month, day, hour, min, sec) in a given IANA timezone
+ * to a UTC ISO string in a host-independent manner without local timezone bias.
+ */
+export function wallTimeToUtcIso(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  min: number,
+  sec: number,
+  timeZone: string
+): string {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hourCycle: 'h23',
+  });
+
+  function getUtcFromParts(instant: Date): number {
+    const parts = dtf.formatToParts(instant);
+    const map: Record<string, string> = {};
+    for (const p of parts) {
+      map[p.type] = p.value;
+    }
+    return Date.UTC(
+      parseInt(map['year'] || '0', 10),
+      parseInt(map['month'] || '1', 10) - 1,
+      parseInt(map['day'] || '1', 10),
+      parseInt(map['hour'] || '0', 10),
+      parseInt(map['minute'] || '0', 10),
+      parseInt(map['second'] || '0', 10)
+    );
+  }
+
+  const targetUtcMs = Date.UTC(year, month - 1, day, hour, min, sec);
+  let guessMs = targetUtcMs;
+  let formattedInTzMs = getUtcFromParts(new Date(guessMs));
+  let diff = formattedInTzMs - targetUtcMs;
+  guessMs -= diff;
+
+  // Refine once for daylight saving time boundaries
+  formattedInTzMs = getUtcFromParts(new Date(guessMs));
+  diff = formattedInTzMs - targetUtcMs;
+  guessMs -= diff;
+
+  return new Date(guessMs).toISOString();
+}
+
+/**
  * Unfolds RFC 5545 content lines (lines starting with a single space or tab continue the previous line).
  */
 export function unfoldIcsLines(raw: string): string[] {
@@ -54,8 +179,15 @@ export function unfoldIcsLines(raw: string): string[] {
  * - UTC format: 20261102T150000Z
  * - Date-only format: 20261102
  * - Local format with TZID parameter: TZID=America/Los_Angeles:20261102T150000
+ * - Windows TZID: TZID=Tokyo Standard Time:20261102T150000
+ * - Floating time: 20261102T150000 (interpreted using defaultTz, defaults to device timezone or UTC)
+ *
+ * Fails closed (returns null) on invalid syntax or unresolvable timezones.
  */
-export function parseIcsDateTime(rawProp: string, defaultTz = 'UTC'): { iso: string; allDay: boolean } {
+export function parseIcsDateTime(
+  rawProp: string,
+  defaultTz = 'UTC'
+): { iso: string; allDay: boolean } | null {
   let paramPart = '';
   let valuePart = rawProp;
 
@@ -79,19 +211,24 @@ export function parseIcsDateTime(rawProp: string, defaultTz = 'UTC'): { iso: str
   // Parse YYYYMMDDTHHMMSS[Z]
   const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/.exec(valuePart);
   if (!match) {
-    // Fallback: try standard Date parsing
     const d = new Date(valuePart);
     if (!Number.isNaN(d.getTime())) {
       return { iso: d.toISOString(), allDay: false };
     }
-    return { iso: new Date().toISOString(), allDay: false };
+    return null;
   }
 
-  const [, year, month, day, hour, min, sec, isUtc] = match;
+  const [, yearStr = '', monthStr = '', dayStr = '', hourStr = '', minStr = '', secStr = '', isUtc] = match;
+  const year = parseInt(yearStr || '0', 10);
+  const month = parseInt(monthStr || '1', 10);
+  const day = parseInt(dayStr || '1', 10);
+  const hour = parseInt(hourStr || '0', 10);
+  const min = parseInt(minStr || '0', 10);
+  const sec = parseInt(secStr || '0', 10);
 
   if (isUtc) {
     return {
-      iso: `${year}-${month}-${day}T${hour}:${min}:${sec}.000Z`,
+      iso: `${yearStr}-${monthStr}-${dayStr}T${hourStr}:${minStr}:${secStr}.000Z`,
       allDay: false,
     };
   }
@@ -103,19 +240,16 @@ export function parseIcsDateTime(rawProp: string, defaultTz = 'UTC'): { iso: str
     tzid = tzidMatch[1].replace(/["']/g, '');
   }
 
-  // Convert local wall time in timezone to UTC ISO
+  const resolvedTz = resolveIanaTimezone(tzid);
+  if (!resolvedTz) {
+    return null; // Fail closed on unknown/invalid TZID
+  }
+
   try {
-    const dummyUtc = new Date(`${year}-${month}-${day}T${hour}:${min}:${sec}Z`);
-    // Format in target timezone to find offset
-    const invDate = new Date(dummyUtc.toLocaleString('en-US', { timeZone: tzid }));
-    const diff = dummyUtc.getTime() - invDate.getTime();
-    const targetDate = new Date(dummyUtc.getTime() + diff);
-    return { iso: targetDate.toISOString(), allDay: false };
+    const iso = wallTimeToUtcIso(year, month, day, hour, min, sec, resolvedTz);
+    return { iso, allDay: false };
   } catch {
-    return {
-      iso: `${year}-${month}-${day}T${hour}:${min}:${sec}.000Z`,
-      allDay: false,
-    };
+    return null;
   }
 }
 
@@ -241,7 +375,11 @@ export class IcsCalendarAdapter {
       return [];
     }
 
-    const { iso: startIso, allDay } = parseIcsDateTime(dtstartLine, this.defaultTimezone);
+    const startParsed = parseIcsDateTime(dtstartLine, this.defaultTimezone);
+    if (!startParsed) {
+      return [];
+    }
+    const { iso: startIso, allDay } = startParsed;
 
     // 7. DTEND or DURATION
     let endIso: string | undefined;
@@ -249,7 +387,8 @@ export class IcsCalendarAdapter {
     const durationLine = props['DURATION']?.[0];
 
     if (dtendLine) {
-      endIso = parseIcsDateTime(dtendLine, this.defaultTimezone).iso;
+      const endParsed = parseIcsDateTime(dtendLine, this.defaultTimezone);
+      endIso = endParsed ? endParsed.iso : undefined;
     } else if (durationLine) {
       const durStr = durationLine.slice(durationLine.indexOf(':') + 1);
       const durMs = parseIcsDurationMs(durStr);
@@ -301,7 +440,8 @@ export class IcsCalendarAdapter {
 
     const freq = rruleParts['FREQ'];
     const count = parseInt(rruleParts['COUNT'] || '100', 10);
-    const until = rruleParts['UNTIL'] ? Date.parse(parseIcsDateTime(rruleParts['UNTIL']).iso) : Infinity;
+    const untilParsed = rruleParts['UNTIL'] ? parseIcsDateTime(rruleParts['UNTIL']) : null;
+    const until = untilParsed ? Date.parse(untilParsed.iso) : Infinity;
 
     let stepMs = 0;
     if (freq === 'DAILY') {

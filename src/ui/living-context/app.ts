@@ -2298,6 +2298,11 @@ export function renderApp(
               const title = upcoming.title || 'Appointment';
               const location = upcoming.location;
 
+              const deviceTimezone =
+                typeof Intl !== 'undefined'
+                  ? Intl.DateTimeFormat().resolvedOptions().timeZone
+                  : 'UTC';
+
               liveCalendarSignal = createLiveSignal({
                 kind: 'calendar',
                 value: {
@@ -2305,7 +2310,7 @@ export function renderApp(
                   startTime: apptIso,
                   apptTime: apptIso,
                   location,
-                  timezone: 'UTC',
+                  timezone: deviceTimezone,
                 },
                 provider: 'ics',
                 asOf: new Date().toISOString(),
@@ -2352,7 +2357,6 @@ export function renderApp(
                                   travelMinutes,
                                   mode: 'drive',
                                   driveMinutes: travelMinutes,
-                                  busMinutes: travelMinutes + 15,
                                 },
                                 provider: 'osrm',
                                 asOf: new Date().toISOString(),
@@ -2362,37 +2366,53 @@ export function renderApp(
                                 consentScope: 'device_only',
                                 status: 'available',
                               });
+                            } else {
+                              liveRoute = null;
+                              liveTravelSignal = null;
+                              liveRouteError = true;
+                              liveRouteErrorReason = routeData.enabled === false ? 'provider_disabled' : 'provider_error';
                             }
+                          } else {
+                            liveRoute = null;
+                            liveTravelSignal = null;
+                            liveRouteError = true;
+                            liveRouteErrorReason = 'provider_error';
                           }
                         } catch {
-                          // ignore route error
+                          liveRoute = null;
+                          liveTravelSignal = null;
+                          liveRouteError = true;
+                          liveRouteErrorReason = 'provider_error';
                         }
+                      } else {
+                        liveRoute = null;
+                        liveTravelSignal = null;
+                        liveRouteError = false;
+                        liveRouteErrorReason = 'location_not_shared';
                       }
+                    } else {
+                      liveRoute = null;
+                      liveTravelSignal = null;
+                      liveRouteError = false;
+                      liveRouteErrorReason = geoData.error === 'owner_gated' ? 'provider_disabled' : 'no_destination';
                     }
+                  } else {
+                    liveRoute = null;
+                    liveTravelSignal = null;
+                    liveRouteError = true;
+                    liveRouteErrorReason = 'provider_error';
                   }
                 } catch {
-                  // ignore geocode error
+                  liveRoute = null;
+                  liveTravelSignal = null;
+                  liveRouteError = true;
+                  liveRouteErrorReason = 'provider_error';
                 }
-              }
-
-              // Fallback travel signal if no route available yet but appointment exists
-              if (!liveTravelSignal) {
-                liveTravelSignal = createLiveSignal({
-                  kind: 'travel_estimate',
-                  value: {
-                    travelMinutes: 20,
-                    mode: 'drive',
-                    driveMinutes: 20,
-                    busMinutes: 35,
-                  },
-                  provider: 'osrm',
-                  asOf: new Date().toISOString(),
-                  validFor: 300000,
-                  confidence: 0.8,
-                  provenance: 'live',
-                  consentScope: 'device_only',
-                  status: 'available',
-                });
+              } else {
+                liveRoute = null;
+                liveTravelSignal = null;
+                liveRouteError = false;
+                liveRouteErrorReason = 'no_destination';
               }
             }
           }
@@ -3128,6 +3148,8 @@ export function renderApp(
         const v2Composition = buildHomeComposition({
           isLive: contextMode === 'live',
           weatherEnabled: weatherStatus.enabled,
+          calendarConnected: liveCalendarStatus.configured && liveCalendarStatus.enabled,
+          calendarSignalValue: liveCalendarSignal?.value as any,
           plan: nowPlan,
           spatialEvidence: spatialMapEvidence,
           aheadPlans,
@@ -4387,6 +4409,7 @@ export function renderApp(
         await refreshConnectorStatuses();
         await refreshLiveRoute();
         await refreshLivePlaces();
+        await refreshLiveCalendar();
         update();
       });
     }
@@ -5570,6 +5593,7 @@ export function renderApp(
         if (contextMode === 'live') {
           await refreshLiveRoute();
           await checkPlacesStatus();
+          await refreshLiveCalendar();
         }
         await refreshConnectorStatuses();
         update();

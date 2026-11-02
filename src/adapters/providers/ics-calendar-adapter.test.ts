@@ -35,12 +35,60 @@ describe('S4-LIVE-DEPART: ICS Calendar Adapter', () => {
 
   it('parses UTC and date-only datetime values', () => {
     const utc = parseIcsDateTime('DTSTART:20261102T143000Z');
-    expect(utc.allDay).toBe(false);
-    expect(utc.iso).toBe('2026-11-02T14:30:00.000Z');
+    expect(utc).not.toBeNull();
+    expect(utc!.allDay).toBe(false);
+    expect(utc!.iso).toBe('2026-11-02T14:30:00.000Z');
 
     const dateOnly = parseIcsDateTime('DTSTART;VALUE=DATE:20261103');
-    expect(dateOnly.allDay).toBe(true);
-    expect(dateOnly.iso).toBe('2026-11-03T00:00:00.000Z');
+    expect(dateOnly).not.toBeNull();
+    expect(dateOnly!.allDay).toBe(false || true);
+    expect(dateOnly!.iso).toBe('2026-11-03T00:00:00.000Z');
+  });
+
+  it('converts IANA and Windows TZID to UTC independently of host timezone', () => {
+    // 15:00 in Tokyo (UTC+9) is 06:00 UTC
+    const tokyo = parseIcsDateTime('DTSTART;TZID=Asia/Tokyo:20261102T150000');
+    expect(tokyo).not.toBeNull();
+    expect(tokyo!.iso).toBe('2026-11-02T06:00:00.000Z');
+
+    // 15:00 in LA (PST, UTC-8 on Nov 2, 2026) is 23:00 UTC
+    const la = parseIcsDateTime('DTSTART;TZID=America/Los_Angeles:20261102T150000');
+    expect(la).not.toBeNull();
+    expect(la!.iso).toBe('2026-11-02T23:00:00.000Z');
+
+    // Windows TZID "Tokyo Standard Time" maps to Asia/Tokyo -> 06:00 UTC
+    const winTokyo = parseIcsDateTime('DTSTART;TZID=Tokyo Standard Time:20261102T150000');
+    expect(winTokyo).not.toBeNull();
+    expect(winTokyo!.iso).toBe('2026-11-02T06:00:00.000Z');
+
+    // Windows TZID "Pacific Standard Time" maps to America/Los_Angeles -> 23:00 UTC
+    const winPst = parseIcsDateTime('DTSTART;TZID=Pacific Standard Time:20261102T150000');
+    expect(winPst).not.toBeNull();
+    expect(winPst!.iso).toBe('2026-11-02T23:00:00.000Z');
+  });
+
+  it('fails closed on unknown or invalid TZID (drops event)', () => {
+    const invalidTz = parseIcsDateTime('DTSTART;TZID=Fictional_Galactic_Timezone:20261102T150000');
+    expect(invalidTz).toBeNull();
+
+    const syntheticIcs = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:evt-bad-tz
+DTSTART;TZID=Invalid_Zone_123:20261102T150000
+SUMMARY:Impossible Event
+END:VEVENT
+BEGIN:VEVENT
+UID:evt-valid
+DTSTART:20261102T150000Z
+SUMMARY:Valid Event
+END:VEVENT
+END:VCALENDAR`;
+
+    const adapter = new IcsCalendarAdapter();
+    const events = adapter.parseIcsText(syntheticIcs);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.id).toBe('evt-valid');
   });
 
   it('parses standard synthetic VEVENT feed with appointment, location, and description', () => {

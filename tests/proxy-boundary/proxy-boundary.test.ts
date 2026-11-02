@@ -404,7 +404,32 @@ describe('Proxy-Boundary Mock Harness (/api/* seams)', () => {
   // 5. Geocode Proxy Seam (/api/geocode)
   // =========================================================================
   describe('Geocode Proxy Seam (/api/geocode)', () => {
-    it('rejects empty query parameter with 400', async () => {
+    it('returns honest status endpoint /api/geocode/status', async () => {
+      const middleware = createGeocodeProxyMiddleware({ enabled: false });
+      const { req, res, next, response } = createMockReqRes('/api/geocode/status');
+      await middleware(req, res, next);
+
+      expect(response.statusCode).toBe(200);
+      const data = JSON.parse(response.body);
+      expect(data.enabled).toBe(false);
+      expect(data.provider).toBe('nominatim');
+      expect(data.attribution).toContain('OpenStreetMap');
+    });
+
+    it('fails closed when geocode is disabled (owner gate enforced)', async () => {
+      const middleware = createGeocodeProxyMiddleware({ enabled: false });
+      const { req, res, next, response } = createMockReqRes('/api/geocode?q=100+Van+Ness');
+      await middleware(req, res, next);
+
+      expect(response.statusCode).toBe(200);
+      const data = JSON.parse(response.body);
+      expect(data.enabled).toBe(false);
+      expect(data.success).toBe(false);
+      expect(data.error).toBe('owner_gated');
+      expect(data.result).toBeNull();
+    });
+
+    it('rejects empty query parameter with 400 when enabled', async () => {
       const middleware = createGeocodeProxyMiddleware({ enabled: true });
       const { req, res, next, response } = createMockReqRes('/api/geocode?q=');
       await middleware(req, res, next);

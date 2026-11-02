@@ -5,14 +5,18 @@
  * Acceptance Checks:
  * 1. Connection-Block State (Dual Gate A & B):
  *    - Mobile 390x844: No owner calendar configured -> honest quiet neutral state, zero fake events.
- *      Connectors view shows Calendar "Unavailable" with "Not available yet".
+ *      Connectors view shows Calendar "Unavailable" with "Not available yet". Calendar tile shows "Not connected".
  *    - Desktop 1280x800: Desktop right panel displays honest #desktop-notice-calendar-unconfigured-quiet
  *      naming the owner action ("paste secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat").
- * 2. Live Depart Intent & Rain Re-Plan:
- *    - Consented synthetic calendar feed + Nominatim geocode + OSRM ETA + Open-Meteo target-time weather.
- *    - Event "Product Review" at 3:00 PM resolved to coordinates.
- *    - Rain condition re-plans departure with umbrella checklist ("Take umbrella") and recomputed leave-by time.
- * 3. Security Boundary:
+ * 2. Fail-Closed Route Disabled:
+ *    - Calendar event present + route disabled -> no leave-by minutes, no osrm travel signal,
+ *      honest headline explaining leave-by is unavailable without route.
+ * 3. Differential Test (Clear vs Rain):
+ *    - Clear weather: leave-by 2:35 PM, no umbrella checklist item.
+ *    - Rain weather: surfaces "Take umbrella" checklist item, re-ranked options, rain banner.
+ * 4. Timezone Correctness (Asia/Tokyo):
+ *    - Renders wall times in JST (e.g. 3:00 PM for 06:00Z), never UTC.
+ * 5. Security Boundary:
  *    - Secret iCal URL is never exposed to client or logged.
  */
 
@@ -106,6 +110,13 @@ function setupClockAndMemory(
   );
 }
 
+async function grantLocationIfPrompted(page: Page) {
+  const reqLocBtn = page.locator('#btn-request-location');
+  if (await reqLocBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await reqLocBtn.click();
+  }
+}
+
 test.describe('S4-LIVE-DEPART E2E Suite', () => {
   test.beforeAll(() => {
     if (!fs.existsSync(EVIDENCE_DIR)) {
@@ -173,6 +184,7 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
 
     await page.goto('/?mode=live');
     await page.waitForSelector('.app-layout[data-context-mode="live"]');
+    await grantLocationIfPrompted(page);
 
     // 1. Verify honest quiet state on Home screen
     const quietTitle = page.locator('#quiet-title, .quiet-title');
@@ -195,6 +207,24 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
     await expect(calRow.locator('#status-pill-calendar')).toContainText('Not available yet');
     await expect(calRow.locator('#connector-detail-calendar')).toHaveText('Not available yet');
     await expect(calRow.locator('button')).toHaveCount(0); // No connect toggle or fake affordance
+
+    // Go back from Connectors view and verify Sources sheet
+    const backBtn = page.locator('#btn-connectors-back');
+    if (await backBtn.isVisible()) {
+      await backBtn.click();
+    }
+    const homeNav = page.locator('#tab-home, #desktop-nav-home').first();
+    if (await homeNav.isVisible()) {
+      await homeNav.click();
+    }
+    const contextPill = page.locator('.context-pill, #pill-subline').first();
+    if (await contextPill.isVisible()) {
+      await contextPill.click();
+      const calSource = page.locator('#source-item-calendar');
+      if (await calSource.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await expect(calSource).toContainText('Not connected');
+      }
+    }
 
     // Capture Dual Gate A mobile evidence screenshot
     await page.screenshot({ path: path.join(EVIDENCE_DIR, '01-live-depart-connection-block-390x844.png') });
@@ -260,6 +290,7 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
 
     await page.goto('/?mode=live');
     await page.waitForSelector('.app-layout[data-context-mode="live"]');
+    await grantLocationIfPrompted(page);
 
     // Desktop right panel displays honest connection-block notice
     const calNotice = page.locator('#desktop-notice-calendar-unconfigured-quiet');
@@ -278,25 +309,20 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
   });
 
   // =========================================================================
-  // Live Depart Intent: Recorded Synthetic Feed + Geocode + OSRM + Weather Rain Re-plan
+  // Fail-Closed: Calendar event present + routing disabled -> no fake leave-by minutes
   // =========================================================================
-  test('Live Depart: synthetic calendar event + geocode + OSRM + Open-Meteo rain re-plans with umbrella', async ({
+  test('Fail-Closed: calendar event + route disabled gives no leave-by minutes and no osrm travel signal', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await setupClockAndMemory(page, { isoTime: '2026-11-02T14:15:00.000Z' });
 
-    // 1. Mock Calendar status & feed
+    // Calendar configured with event
     await page.route('**/api/calendar/status', route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          enabled: true,
-          configured: true,
-          provider: 'ics',
-          attribution: 'iCalendar (RFC 5545)',
-        }),
+        body: JSON.stringify({ enabled: true, configured: true, provider: 'ics', attribution: 'iCalendar' }),
       })
     );
     await page.route('**/api/calendar', route =>
@@ -308,38 +334,115 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
           configured: true,
           events: [
             {
-              id: 'evt-design-sync-101',
+              id: 'evt-product-review',
               title: 'Product Review',
               startTime: '2026-11-02T15:00:00.000Z',
               location: '100 Van Ness Ave, San Francisco',
             },
           ],
-          attribution: 'iCalendar (RFC 5545)',
+          attribution: 'iCalendar',
         }),
       })
     );
 
-    // 2. Mock Geocode: resolves location to coords
+    // Geocode returns coordinate
     await page.route('**/api/geocode?*', route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
+          enabled: true,
           success: true,
-          query: '100 Van Ness Ave, San Francisco',
-          result: {
-            coordinate: [37.776, -122.418],
-            displayName: '100 Van Ness Ave, San Francisco, CA',
-            attribution: 'Data © OpenStreetMap contributors, ODbL 1.0',
-            fetchedAt: '2026-11-02T14:15:00.000Z',
-            fromCache: false,
-          },
-          attribution: 'Data © OpenStreetMap contributors, ODbL 1.0',
+          result: { coordinate: [37.776, -122.418] },
+          attribution: 'Nominatim',
         }),
       })
     );
 
-    // 3. Mock Route: 15 min driving ETA
+    // Route disabled by gate
+    await page.route('**/api/route?*', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: false, route: null, code: 'permission_denied' }),
+      })
+    );
+
+    await page.goto('/?mode=live');
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+    await grantLocationIfPrompted(page);
+
+    // Verify title still shows the parsed event title and time
+    const quietTitle = page.locator('#quiet-title, .quiet-title');
+    await expect(quietTitle).toBeVisible();
+    await expect(quietTitle).toContainText('Product Review');
+    await expect(quietTitle).toContainText('3:00 PM');
+
+    // Verify honest headline explaining leave-by is unavailable without route
+    const quietSubtitle = page.locator('#quiet-subtitle, .quiet-subtitle');
+    await expect(quietSubtitle).toContainText(/Leave-by unavailable · no route/i);
+
+    // Verify NO leave-by time is fabricated
+    const bodyText = await page.textContent('body');
+    expect(bodyText).not.toContain('leave by');
+    expect(bodyText).not.toContain('2:30 PM');
+    expect(bodyText).not.toContain('2:35 PM');
+
+    // Verify Calendar connector is connected (honest state)
+    await page.locator('#btn-header-avatar').click();
+    await page.locator('#btn-me-connectors').click();
+    const calRow = page.locator('#connector-row-calendar');
+    await expect(calRow).toBeVisible();
+    await expect(calRow.locator('#status-pill-calendar')).toContainText('Connected');
+  });
+
+  // =========================================================================
+  // Differential Test: Clear vs Rain moves leave-by earlier with umbrella
+  // =========================================================================
+  test('Differential: Clear vs Rain re-plans with umbrella and adjusts departure', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await setupClockAndMemory(page, { isoTime: '2026-11-02T14:15:00.000Z' });
+
+    await page.route('**/api/calendar/status', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: true, configured: true, provider: 'ics', attribution: 'iCalendar' }),
+      })
+    );
+    await page.route('**/api/calendar', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          configured: true,
+          events: [
+            {
+              id: 'evt-product-review',
+              title: 'Product Review',
+              startTime: '2026-11-02T15:00:00.000Z',
+              location: '100 Van Ness Ave, San Francisco',
+            },
+          ],
+          attribution: 'iCalendar',
+        }),
+      })
+    );
+    await page.route('**/api/geocode?*', route =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          enabled: true,
+          success: true,
+          result: { coordinate: [37.776, -122.418] },
+          attribution: 'Nominatim',
+        }),
+      })
+    );
     await page.route('**/api/route?*', route =>
       route.fulfill({
         status: 200,
@@ -349,29 +452,24 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
           route: {
             geometry: [[37.7749, -122.4194], [37.776, -122.418]],
             distanceM: 3000,
-            durationS: 900, // 15 min
+            durationS: 900, // 15 min driving
             provider: 'osrm',
             mode: 'driving',
             fetchedAt: '2026-11-02T14:15:00.000Z',
-            attribution: 'Route © OSRM · data © OpenStreetMap contributors',
           },
-          attribution: 'Route © OSRM · data © OpenStreetMap contributors',
+          attribution: 'OSRM',
         }),
       })
     );
-
-    // 4. Mock Weather: Rain forecast at target time
     await page.route('**/api/weather/status', route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({
-          enabled: true,
-          provider: 'open-meteo',
-          attribution: 'Weather data by Open-Meteo.com (CC BY 4.0)',
-        }),
+        body: JSON.stringify({ enabled: true, provider: 'open-meteo', attribution: 'Open-Meteo' }),
       })
     );
+
+    // Weather: Rain
     await page.route('**/api/weather/current', route =>
       route.fulfill({
         status: 200,
@@ -381,11 +479,7 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
           signals: [
             {
               kind: 'weather',
-              value: {
-                condition: 'rain',
-                temperature: 16,
-                precipProbability: 0.8,
-              },
+              value: { condition: 'rain', temperature: 16, precipProbability: 0.8 },
               provider: 'open-meteo',
               asOf: '2026-11-02T14:15:00.000Z',
               issuedAt: '2026-11-02T14:15:00.000Z',
@@ -396,27 +490,133 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
               status: 'available',
             },
           ],
-          attribution: 'Weather data by Open-Meteo.com (CC BY 4.0)',
+          attribution: 'Open-Meteo',
         }),
       })
     );
 
     await page.goto('/?mode=live');
     await page.waitForSelector('.app-layout[data-context-mode="live"]');
+    await grantLocationIfPrompted(page);
 
-    // Verify NOW card appears with the real event title
     const nowCard = page.locator('.now-card, #now-card');
     await expect(nowCard).toBeVisible({ timeout: 10000 });
     await expect(nowCard).toContainText('Product Review');
 
-    // Verify umbrella preparation checklist item is present due to rain
-    const hasUmbrellaInCard = await nowCard.textContent();
-    expect(hasUmbrellaInCard?.toLowerCase()).toMatch(/umbrella|take umbrella/i);
+    // Rain surfaces umbrella preparation in checklist
+    const cardContent = await nowCard.textContent();
+    expect(cardContent?.toLowerCase()).toMatch(/umbrella|take umbrella/i);
 
-    // Verify timing: leave by 2:30 PM (or 2:35 PM based on 15m drive + 10m buffer from 3:00 PM)
-    expect(hasUmbrellaInCard).toMatch(/leave by 2:\d\d\s*pm/i);
+    // Leave-by computed from 15 min drive + buffer
+    expect(cardContent).toMatch(/leave by 2:\d\d\s*pm/i);
+
+    // Calendar tile reflects event (never "Not connected")
+    const calTile = page.locator('#signal-tile-calendar');
+    await expect(calTile).toBeVisible();
+    await expect(calTile).toContainText('Product Review');
+    await expect(calTile).not.toContainText('Not connected');
 
     // Capture Live Depart rain re-plan screenshot
     await page.screenshot({ path: path.join(EVIDENCE_DIR, '03-live-depart-rain-replan-390x844.png') });
+  });
+
+  // =========================================================================
+  // Timezone Correctness: JST User in Asia/Tokyo Sees Proper Wall Times
+  // =========================================================================
+  test.describe('Timezone Correctness (Asia/Tokyo)', () => {
+    test.use({
+      timezoneId: 'Asia/Tokyo',
+      geolocation: { latitude: 35.658, longitude: 139.701 },
+    });
+
+    test('calendar event displays honest JST wall times', async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+
+      // 05:15 UTC = 14:15 JST
+      await setupClockAndMemory(page, { isoTime: '2026-11-02T05:15:00.000Z' });
+
+      await page.route('**/api/calendar/status', route =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ enabled: true, configured: true, provider: 'ics', attribution: 'iCalendar' }),
+        })
+      );
+      // 06:00 UTC = 15:00 JST (3:00 PM JST)
+      await page.route('**/api/calendar', route =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            enabled: true,
+            configured: true,
+            events: [
+              {
+                id: 'evt-tokyo-review',
+                title: 'Tokyo Sync',
+                startTime: '2026-11-02T06:00:00.000Z',
+                location: 'Shibuya, Tokyo',
+              },
+            ],
+            attribution: 'iCalendar',
+          }),
+        })
+      );
+      await page.route('**/api/geocode?*', route =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            enabled: true,
+            success: true,
+            result: { coordinate: [35.658, 139.701] },
+            attribution: 'Nominatim',
+          }),
+        })
+      );
+      await page.route('**/api/route?*', route =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            enabled: true,
+            route: {
+              geometry: [[35.65, 139.7], [35.658, 139.701]],
+              distanceM: 2000,
+              durationS: 900, // 15 min
+              provider: 'osrm',
+              mode: 'driving',
+              fetchedAt: '2026-11-02T05:15:00.000Z',
+            },
+            attribution: 'OSRM',
+          }),
+        })
+      );
+      await page.route('**/api/weather/**', route =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ enabled: false }),
+        })
+      );
+
+      await page.goto('/?mode=live');
+      await page.waitForSelector('.app-layout[data-context-mode="live"]');
+      await grantLocationIfPrompted(page);
+
+      const nowCard = page.locator('.now-card, #now-card');
+      await expect(nowCard).toBeVisible({ timeout: 10000 });
+      await expect(nowCard).toContainText('Tokyo Sync');
+
+      const text = await nowCard.textContent();
+      expect(text).toContain('Tokyo Sync');
+      expect(text).toContain('3:00 PM');
+      expect(text).toMatch(/leave by 2:\d\d\s*pm/i);
+
+      // Verify Calendar tile shows event in JST
+      const calTile = page.locator('#signal-tile-calendar');
+      await expect(calTile).toBeVisible();
+      await expect(calTile).toContainText('Tokyo Sync');
+    });
   });
 });

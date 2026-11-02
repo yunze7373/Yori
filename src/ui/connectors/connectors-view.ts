@@ -106,9 +106,9 @@ export function renderConnectorsView(
               <div class="connector-info">
                 <div class="connector-title-row">
                   <h2 class="connector-title">Calendar</h2>
-                  <span class="status-pill status-unavailable" id="status-pill-calendar">
+                  <span class="status-pill status-${cal.state}" id="status-pill-calendar">
                     <span class="status-dot" aria-hidden="true"></span>
-                    <span class="status-label">Not available yet</span>
+                    <span class="status-label">${escapeHtml(formatPillLabel(cal.state, cal.detail))}</span>
                   </span>
                 </div>
                 <p class="connector-desc">Reads your events to prepare for what's next.</p>
@@ -243,7 +243,7 @@ function formatPillLabel(state: string, detail: string): string {
     case 'owner_gated':
       return 'Owner setting';
     case 'unavailable':
-      return 'Unavailable';
+      return detail.includes('Not available yet') ? 'Not available yet' : 'Unavailable';
     default:
       return 'Not connected';
   }

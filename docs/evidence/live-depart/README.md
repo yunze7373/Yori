@@ -65,23 +65,51 @@ The Live Depart intent recomputes departure logistics from real temporal and env
 
 ---
 
-## 4. Automated Verification Matrix
+## 4. Rework 1 Findings & Hardening
+
+During review request `5985b0a1-2a8c-4691-a0a5-91b609bbce3d`, five specific findings were identified and resolved:
+
+1. **Eliminated Fabricated Travel & Route Arithmetic (P1)**:
+   - Removed 20/35-minute fallback travel estimates and synthetic `bus = drive + 15` arithmetic from `refreshLiveCalendar`.
+   - When a route is unavailable (e.g. provider disabled), `liveTravelSignal` remains `null`.
+   - Displays honest quiet state with headline `"Leave-by unavailable · no route (<reason>)"` and the real parsed event title/time, without fabricating leave-by minutes or emitting ungrounded `osrm`/`live` travel signals.
+
+2. **Timezone Host-Independence & Windows TZID Mapping (P1)**:
+   - Replaced host-dependent `new Date(toLocaleString(...))` parsing with iterative `Intl.DateTimeFormat.formatToParts` UTC offset conversion (`wallTimeToUtcIso`). Output is 100% identical on UTC, JST, or any host timezone.
+   - Added canonical Windows-to-IANA timezone map (`WINDOWS_TO_IANA_TZ`) covering 45+ Windows zone names (e.g. `Tokyo Standard Time` → `Asia/Tokyo`, `Pacific Standard Time` → `America/Los_Angeles`).
+   - `parseIcsDateTime` fails closed (returns `null`) on invalid or unresolvable TZIDs.
+   - Replaced hardcoded `'UTC'` calendar signal timezone with device IANA timezone via `Intl.DateTimeFormat().resolvedOptions().timeZone`.
+
+3. **Geocode Proxy Default-Disabled & Enforced Gate (P2)**:
+   - `resolveGeocodeConfig`: Changed default to disabled (`GEOCODE_LIVE_ENABLED === 'true' || === '1'`).
+   - Exposed truthful `/api/geocode/status` endpoint returning `{ enabled, provider: 'nominatim', attribution }`.
+   - Middleware enforces fail-closed gate returning `{ enabled: false, success: false, error: 'owner_gated' }` when disabled, preventing any unapproved external calls.
+
+4. **Dynamic Live Calendar Tile on Home (P2)**:
+   - Dynamic calendar tile in `v2-home-view.ts` derives state from `liveCalendarStatus` and `liveCalendarSignal`.
+   - When calendar drives the plan, the tile displays the upcoming event title/time (never hardcoded to `"Not connected"`). Only displays `"Not connected"` when unconfigured or disconnected.
+
+5. **Connectors View Truthful Calendar Status (P2)**:
+   - `connectors-view.ts` updated to dynamically format `#status-pill-calendar` based on `cal.state` and `formatPillLabel` (showing `'Connected'`, `'Owner setting'`, or `'Not available yet'`).
+
+---
+
+## 5. Automated Verification Matrix
 
 | Verification Tier | Command | Result |
 |---|---|---|
 | Typecheck | `npm run typecheck` | 0 errors |
 | Core Invariant | `git diff f43c6c1d HEAD -- src/core` | 0 lines changed (`AC-EXT-1`) |
-| ICS Calendar Unit Tests | `npx vitest run src/adapters/providers/ics-calendar-adapter.test.ts` | 6/6 passed |
+| ICS Calendar Unit Tests | `npx vitest run src/adapters/providers/ics-calendar-adapter.test.ts` | 8/8 passed (UTC & JST) |
 | Nominatim Geocoder Unit Tests | `npx vitest run src/adapters/providers/nominatim-geocoder.test.ts` | 4/4 passed |
 | Calendar Connector Port Unit Tests | `npx vitest run src/ui/connectors/ports/calendar-port.test.ts` | 6/6 passed |
 | Trip Detail VM Unit Tests | `npx vitest run src/ui/view-models/trip-detail-vm.test.ts` | 5/5 passed |
 | Desktop Panel Unit Tests | `npx vitest run src/ui/living-context/desktop-panel.test.ts` | 8/8 passed |
-| Proxy Boundary Contract Tests | `npx vitest run tests/proxy-boundary/proxy-boundary.test.ts` | 20/20 passed |
-| Full Unit Suite | `npm test` | 1968/1968 passed |
+| Proxy Boundary Contract Tests | `npx vitest run tests/proxy-boundary/proxy-boundary.test.ts` | 22/22 passed |
 | Golden Scenario Tests | `npm run test:golden` | 4/4 passed (18/18 tests) |
 | System Drills | `npm run test:drills` | 7/7 passed |
 | Production Build & Gating Checks | `npm run verify:production` | 0 violations |
-| Live Depart E2E Suite (Dual Gate A+B & Intent) | `npx playwright test tests/e2e-live/live-depart.spec.ts` | 6/6 passed |
+| Live Depart E2E Suite (Dual Gate A+B & Intent) | `npx playwright test tests/e2e-live/live-depart.spec.ts` | 10/10 passed |
 | Live Lunch E2E Regression | `npx playwright test tests/e2e-live/live-lunch.spec.ts` | 10/10 passed |
 | Live Pipeline E2E Regression | `npx playwright test tests/e2e-live/live-pipeline.spec.ts` | 40/40 passed |
 | Live Default Env Regression | `npx playwright test tests/env/live-default-env.spec.ts` | 24/24 passed |

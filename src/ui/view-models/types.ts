@@ -237,6 +237,13 @@ export interface HomeCompositionVM {
     temperatureC?: number;
     precipProbability?: number;
   };
+  readonly calendarConnected?: boolean;
+  readonly calendarSignalValue?: {
+    title?: string;
+    startTime?: string;
+    location?: string;
+    timezone?: string;
+  };
   readonly confirmedMemoryFact?: string;
   readonly confirmedMemoryNote?: string;
 }

@@ -513,7 +513,17 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
   // 2. Calendar Value
   let calendarValue: string;
   if (vm.isLive) {
-    calendarValue = 'Not connected';
+    if (vm.calendarConnected || vm.calendarSignalValue || vm.apptTimeStr) {
+      if (vm.apptTimeStr) {
+        calendarValue = `${vm.subjectTitle || 'Appointment'} at ${vm.apptTimeStr}`;
+      } else if (vm.calendarSignalValue?.title) {
+        calendarValue = vm.calendarSignalValue.title;
+      } else {
+        calendarValue = 'Connected · no upcoming events';
+      }
+    } else {
+      calendarValue = 'Not connected';
+    }
   } else if (vm.layoutKind === 'journey') {
     calendarValue = vm.apptTimeStr
       ? `${vm.subjectTitle || 'Piano lesson'} at ${vm.apptTimeStr}`

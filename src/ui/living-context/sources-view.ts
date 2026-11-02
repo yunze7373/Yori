@@ -93,6 +93,9 @@ export function renderSourcesSheet(
     ? connectorStatuses.xmemo.state === 'connected'
     : false;
 
+  const isCalendarConnected = connectorStatuses?.calendar
+    ? connectorStatuses.calendar.state === 'connected'
+    : false;
   const calendarDetail = connectorStatuses?.calendar?.detail
     ? connectorStatuses.calendar.detail
     : 'Not connected · no calendar provider configured; zero calendar data is accessed.';
@@ -122,10 +125,10 @@ export function renderSourcesSheet(
         </div>
         <div class="sources-item-desc">${escapeHtml(locationDetail)}</div>
       </li>
-      <li class="sources-item" id="source-item-calendar" data-provenance="none">
+      <li class="sources-item" id="source-item-calendar" ${isCalendarConnected ? `data-provenance="live" data-source="calendar_ics" data-fetched-at="${nowIso}"` : 'data-provenance="none"'}>
         <div class="sources-item-header">
           <span class="sources-item-title">Calendar</span>
-          <span class="signal-badge off-badge">Not connected</span>
+          ${isCalendarConnected ? `<span class="signal-badge live-badge">Connected</span>` : `<span class="signal-badge off-badge">Not connected</span>`}
         </div>
         <div class="sources-item-desc">${escapeHtml(calendarDetail)}</div>
       </li>

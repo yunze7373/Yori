@@ -1156,7 +1156,7 @@ export function resolveGeocodeConfig(
   env: NodeJS.ProcessEnv = process.env
 ): GeocodeProxyConfig {
   const enabledVal = env['GEOCODE_LIVE_ENABLED'];
-  const enabled = enabledVal !== 'false' && enabledVal !== '0';
+  const enabled = enabledVal === 'true' || enabledVal === '1';
   return {
     enabled,
     attribution: NOMINATIM_ATTRIBUTION,
@@ -1248,7 +1248,42 @@ export function createGeocodeProxyMiddleware(
     const parsedUrl = new URL(urlStr, baseUrl);
     const pathname = parsedUrl.pathname;
 
+    // Route 1: GET /api/geocode/status
+    if (pathname === '/api/geocode/status' && req.method === 'GET') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      });
+      res.end(
+        JSON.stringify({
+          enabled: config.enabled,
+          provider: 'nominatim',
+          attribution: config.attribution,
+        })
+      );
+      return;
+    }
+
+    // Route 2: GET /api/geocode?q=...
     if (pathname === '/api/geocode' && req.method === 'GET') {
+      if (!config.enabled) {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            enabled: false,
+            success: false,
+            error: 'owner_gated',
+            message: 'Geocoding live provider disabled by gate (owner approval required)',
+            result: null,
+            attribution: config.attribution,
+          })
+        );
+        return;
+      }
+
       const q = parsedUrl.searchParams.get('q');
       if (!q || !q.trim()) {
         res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -1261,6 +1296,7 @@ export function createGeocodeProxyMiddleware(
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         res.end(
           JSON.stringify({
+            enabled: true,
             success: Boolean(result),
             query: q.trim(),
             result: result ?? null,

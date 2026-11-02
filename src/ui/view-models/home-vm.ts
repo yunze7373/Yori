@@ -64,6 +64,13 @@ export interface BuildHomeCompositionOptions {
   timelineControls?: HomeCompositionVM['timelineControls'];
   isLive?: boolean;
   weatherEnabled?: boolean;
+  calendarConnected?: boolean;
+  calendarSignalValue?: {
+    title?: string;
+    startTime?: string;
+    location?: string;
+    timezone?: string;
+  };
 }
 
 export function derivePlanCountdown(
@@ -248,7 +255,82 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
       }
     }
 
-    if (snapshot?.signals?.some(s => s.kind === 'places_lunch')) {
+    if (snapshot?.signals?.some(s => s.kind === 'calendar')) {
+      const locSig = snapshot.signals.find(s => s.kind === 'location_status' || s.kind === 'location');
+      const locVal = locSig?.value as any;
+
+      if (locVal?.status === 'prompt') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Location Needed',
+          headline: 'Location permission needed to compute departure and travel times',
+          basis: 'Grant location access or enter coordinates manually · fails closed',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+          locationState: 'prompt',
+          locationNotice: locVal?.notice || 'Location permission needed to compute departure routes',
+        };
+      }
+
+      if (locVal?.status === 'denied') {
+        return {
+          layoutKind: 'quiet',
+          title: 'Location Denied',
+          headline: 'Location access denied by user',
+          basis: 'Location permission was denied · enter coordinates manually or enable permission',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+          locationState: 'denied',
+          locationNotice: locVal?.notice || 'Location access denied by user',
+        };
+      }
+
+      const calSig = snapshot.signals.find(s => s.kind === 'calendar');
+      const calVal = calSig?.value as any;
+      if (calVal && typeof calVal === 'object') {
+        const apptTitle = calVal.title || 'Appointment';
+        const apptIso = calVal.startTime || calVal.apptTime;
+        const tz = calVal.timezone || snapshot?.timezone || 'UTC';
+        const apptTimeFormatted = apptIso ? formatTime(apptIso, tz) : undefined;
+        const displayTitle = apptTimeFormatted ? `${apptTitle} at ${apptTimeFormatted}` : apptTitle;
+        return {
+          layoutKind: 'quiet',
+          title: displayTitle,
+          headline: 'Leave-by unavailable · no route (provider disabled)',
+          basis: 'Calendar event detected, but routing provider is disabled or unavailable · leave-by time cannot be computed without a route',
+          isRain: false,
+          options: [],
+          isAccepted: false,
+          canUndo: false,
+          actions: [],
+          aheadItems: compileAheadItems(aheadPlans),
+          proposals: compileProposals(proposals),
+          evidenceBundle: bundle,
+          subjectTitle: apptTitle,
+          apptTimeStr: apptTimeFormatted,
+        };
+      }
+    }
+
+    const hasConfirmedTaste =
+      userConfirmedKeys?.has('taste_preference') ||
+      userConfirmedKeys?.has('taste_preference_lunch_cuisine') ||
+      userConfirmedKeys?.has('favorite_cuisine') ||
+      Array.from(userConfirmedKeys ?? []).some(k => k.toLowerCase().includes('taste'));
+
+    if (hasConfirmedTaste && snapshot?.signals?.some(s => s.kind === 'places_lunch')) {
       const locSig = snapshot.signals.find(s => s.kind === 'location_status' || s.kind === 'location');
       const locVal = locSig?.value as any;
 
@@ -975,6 +1057,20 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     isLive: Boolean(options.isLive),
     weatherEnabled: options.weatherEnabled,
     weatherSignalValue,
+    calendarConnected: options.calendarConnected,
+    calendarSignalValue: options.calendarSignalValue ?? (() => {
+      const calSig = options.snapshot?.signals.find(s => s.kind === 'calendar');
+      const val = calSig?.value as any;
+      if (val && typeof val === 'object') {
+        return {
+          title: typeof val.title === 'string' ? val.title : undefined,
+          startTime: typeof (val.startTime ?? val.apptTime) === 'string' ? (val.startTime ?? val.apptTime) : undefined,
+          location: typeof val.location === 'string' ? val.location : undefined,
+          timezone: typeof val.timezone === 'string' ? val.timezone : undefined,
+        };
+      }
+      return undefined;
+    })(),
     confirmedMemoryFact,
     confirmedMemoryNote,
   };
