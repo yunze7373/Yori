@@ -4,6 +4,56 @@ import * as path from 'path';
 const SHIPPING_PREVIEW_URL = 'http://localhost:4174';
 const TEST_BUILD_URL = 'http://localhost:4173';
 
+/**
+ * D2 (DEMO_RESCUE): the shipping build defaults the keyless trio ON after the owner §9
+ * confirmation. The e2e preview servers pin the flags OFF to stay offline, so these tests answer
+ * the three /status endpoints with the exact default-on payloads the real proxy serves (same
+ * shape, same hosts) and abort every provider DATA request, counting it.
+ */
+const DEFAULT_ON_STATUS: Record<string, unknown> = {
+  '/api/places/status': {
+    enabled: true,
+    provider: 'overpass',
+    attribution: 'OpenStreetMap via Overpass (ODbL)',
+    outboundHosts: [{ purpose: 'nearby places', host: 'overpass-api.de/api/interpreter' }],
+  },
+  '/api/route/status': {
+    enabled: true,
+    provider: 'osrm',
+    tilesEnabled: false,
+    outboundHosts: [
+      { purpose: 'driving routes', host: 'router.project-osrm.org' },
+      { purpose: 'walking routes', host: 'routing.openstreetmap.de/routed-foot' },
+    ],
+  },
+  '/api/weather/status': {
+    enabled: true,
+    provider: 'open-meteo',
+    attribution: { text: 'Weather data by Open-Meteo.com', url: 'https://open-meteo.com/', license: 'CC BY 4.0' },
+    outboundHosts: [{ purpose: 'weather', host: 'api.open-meteo.com' }],
+  },
+};
+
+async function routeDefaultOnTrio(page: Page): Promise<string[]> {
+  const dataRequests: string[] = [];
+  await page.route(
+    u => u.pathname.startsWith('/api/'),
+    async route => {
+      const u = new URL(route.request().url());
+      const status = DEFAULT_ON_STATUS[u.pathname];
+      if (status) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(status) });
+      }
+      if (/^\/api\/(places|route|weather\/current)/.test(u.pathname)) {
+        dataRequests.push(u.pathname + u.search);
+        return route.abort();
+      }
+      return route.continue();
+    }
+  );
+  return dataRequests;
+}
+
 const FORBIDDEN_FIXTURE_TEXTS = [
   'Piano lesson',
   'Fiore Caffe',
@@ -309,4 +359,33 @@ test.describe('S2-LIVE-DEFAULT: Production Live Default and Dev Mode Gating', ()
     await expect(page.locator('.app-layout')).toHaveAttribute('data-context-mode', 'live');
     await expect(page.locator('#living-header-chip')).toHaveText('live');
   });
+
+  test('D2 shipping default-on trio: zero provider data requests before consent and after Deny; Connectors says weather follows your location', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const dataRequests = await routeDefaultOnTrio(page);
+    await page.goto(SHIPPING_PREVIEW_URL);
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+    await expect(page.locator('#btn-request-location')).toBeVisible();
+    await expect(page.locator('#living-header-line')).toContainText('Weather unavailable');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForTimeout(500);
+    expect(dataRequests, 'no provider data request before location consent').toEqual([]);
+
+    await page.locator('#btn-header-avatar').click();
+    await page.locator('#btn-me-connectors').click();
+    await expect(page.locator('#connector-detail-weather')).toHaveText(
+      'Open-Meteo · follows your shared location (rounded ~100 m)'
+    );
+    await page.goto(SHIPPING_PREVIEW_URL);
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+
+    await page.locator('#btn-deny-location').click();
+    await expect(page.locator('.v2-location-notice-banner.denied')).toBeVisible();
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForTimeout(500);
+    expect(dataRequests, 'no provider data request after Deny').toEqual([]);
+  });
 });
+

@@ -1,7 +1,57 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const SHIPPING_PREVIEW_URL = 'http://localhost:4174';
 const TEST_BUILD_URL = 'http://localhost:4173';
+
+/**
+ * D2 (DEMO_RESCUE): the shipping build defaults the keyless trio ON after the owner §9
+ * confirmation. The e2e preview servers pin the flags OFF to stay offline, so these tests answer
+ * the three /status endpoints with the exact default-on payloads the real proxy serves (same
+ * shape, same hosts) and abort every provider DATA request, counting it.
+ */
+const DEFAULT_ON_STATUS: Record<string, unknown> = {
+  '/api/places/status': {
+    enabled: true,
+    provider: 'overpass',
+    attribution: 'OpenStreetMap via Overpass (ODbL)',
+    outboundHosts: [{ purpose: 'nearby places', host: 'overpass-api.de/api/interpreter' }],
+  },
+  '/api/route/status': {
+    enabled: true,
+    provider: 'osrm',
+    tilesEnabled: false,
+    outboundHosts: [
+      { purpose: 'driving routes', host: 'router.project-osrm.org' },
+      { purpose: 'walking routes', host: 'routing.openstreetmap.de/routed-foot' },
+    ],
+  },
+  '/api/weather/status': {
+    enabled: true,
+    provider: 'open-meteo',
+    attribution: { text: 'Weather data by Open-Meteo.com', url: 'https://open-meteo.com/', license: 'CC BY 4.0' },
+    outboundHosts: [{ purpose: 'weather', host: 'api.open-meteo.com' }],
+  },
+};
+
+async function routeDefaultOnTrio(page: Page): Promise<string[]> {
+  const dataRequests: string[] = [];
+  await page.route(
+    u => u.pathname.startsWith('/api/'),
+    async route => {
+      const u = new URL(route.request().url());
+      const status = DEFAULT_ON_STATUS[u.pathname];
+      if (status) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(status) });
+      }
+      if (/^\/api\/(places|route|weather\/current)/.test(u.pathname)) {
+        dataRequests.push(u.pathname + u.search);
+        return route.abort();
+      }
+      return route.continue();
+    }
+  );
+  return dataRequests;
+}
 
 test.describe('PRE-S1-C: Production Gating of Dev/Test Hooks and URL Forcing', () => {
   test('Negative case: on SHIPPING production preview, ?test=1&scene=lunch&geo_consent=denied is completely INERT and zero hooks exist', async ({
@@ -131,4 +181,19 @@ test.describe('PRE-S1-C: Production Gating of Dev/Test Hooks and URL Forcing', (
     });
     expect(bundleId).toContain('bundle-lunch');
   });
+
+  test('D2 shipping build: consent copy lists exactly the hosts the default-on /status endpoints report, and nothing is fetched before consent', async ({
+    page,
+  }) => {
+    const dataRequests = await routeDefaultOnTrio(page);
+    await page.goto(SHIPPING_PREVIEW_URL);
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+    await expect(page.locator('#location-consent-hosts')).toHaveText(
+      'Used only while Yori is open, rounded to about 100 m, and sent only to: overpass-api.de/api/interpreter (nearby places), router.project-osrm.org (driving routes), routing.openstreetmap.de/routed-foot (walking routes), api.open-meteo.com (weather). Never stored or tracked.'
+    );
+    // ?dev=1 is inert on shipping, so no demo controls or simulated provider appear.
+    await expect(page.locator('#btn-mode-demo')).toHaveCount(0);
+    expect(dataRequests).toEqual([]);
+  });
 });
+
