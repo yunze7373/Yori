@@ -427,9 +427,13 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
     const weatherIssuedTime = weatherSignal?.issuedAt ? formatTime(weatherSignal.issuedAt, tz) : undefined;
 
     if (isRain) {
-      rainInsightDesc = weatherIssuedTime
-        ? `Rain in the forecast for your travel window · simulated (issued ${weatherIssuedTime}). I've prepared an updated departure schedule.`
-        : `Rain in the forecast for your travel window · simulated. I've prepared an updated departure schedule.`;
+      if (options.isLive) {
+        rainInsightDesc = "Rain now · umbrella recommended. I've prepared an updated departure schedule.";
+      } else {
+        rainInsightDesc = weatherIssuedTime
+          ? `Rain in the forecast for your travel window · simulated (issued ${weatherIssuedTime}). I've prepared an updated departure schedule.`
+          : `Rain in the forecast for your travel window · simulated. I've prepared an updated departure schedule.`;
+      }
     }
 
     let habitNote: string | undefined;
@@ -453,7 +457,11 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
 
     let displayTitle = title;
     let displayHeadline = headline;
-    let rainBanner: string | undefined = isRain ? STRINGS.rain.whatChanged : undefined;
+    let rainBanner: string | undefined = isRain
+      ? options.isLive
+        ? 'What changed: Rain now'
+        : STRINGS.rain.whatChanged
+      : undefined;
 
     if (bundle) {
       if (plan.apptAt) {

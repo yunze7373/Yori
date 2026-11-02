@@ -2351,19 +2351,14 @@ export function renderApp(
                             if (routeData.enabled && routeData.route) {
                               liveRoute = routeData.route;
                               const travelMinutes = Math.round(routeData.route.durationS / 60);
-                              const busMinutes =
-                                typeof routeData.busMinutes === 'number'
-                                  ? routeData.busMinutes
-                                  : typeof routeData.route?.busMinutes === 'number'
-                                    ? routeData.route.busMinutes
-                                    : undefined;
+                              // Note: Real /api/route proxy provides single driving mode (OSRM); transit
+                              // modes require a transit provider in a future slice. busMinutes is not emitted.
                               liveTravelSignal = createLiveSignal({
                                 kind: 'travel_estimate',
                                 value: {
                                   travelMinutes,
                                   mode: 'drive',
                                   driveMinutes: travelMinutes,
-                                  ...(busMinutes !== undefined ? { busMinutes } : {}),
                                 },
                                 provider: 'osrm',
                                 asOf: new Date().toISOString(),
@@ -3023,7 +3018,14 @@ export function renderApp(
               .join(',');
             const hasCandidateChange = Boolean(priorLivePlan && priorCandIds !== newCandIds);
             const hasTimeShift = Boolean(priorLeaveTimeStr && newLeaveTimeStr && priorLeaveTimeStr !== newLeaveTimeStr);
-            const hasMeaningfulDiff = Boolean(planDiff || hasTimeShift || hasCandidateChange);
+            const priorIsRain = Boolean(priorLivePlan?.checklist?.includes('umbrella'));
+            const newIsRain = Boolean(
+              nowPlan.checklist?.includes('umbrella') ||
+              (effectiveSnapshot?.signals.find(s => s.kind === 'weather')?.value as any)?.condition === 'rain' ||
+              ((effectiveSnapshot?.signals.find(s => s.kind === 'weather')?.value as any)?.precipProbability ?? 0) > 0
+            );
+            const hasWeatherChange = Boolean(priorLivePlan && priorIsRain !== newIsRain);
+            const hasMeaningfulDiff = Boolean(planDiff || hasTimeShift || hasCandidateChange || hasWeatherChange);
 
             if (isPersistedAck || (isAlreadyAccepted && !hasMeaningfulDiff)) {
               activeLiveChangeMoment = null;
@@ -3031,27 +3033,55 @@ export function renderApp(
               !activeLiveChangeMoment ||
               activeLiveChangeMoment.intentId !== nowPlan.intentId ||
               hasMeaningfulDiff ||
-              (!priorLivePlan && (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted'))
+              (!priorLivePlan && (
+                (nowPlan.intentId === 'lunch' && (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted')) ||
+                (nowPlan.intentId === 'depart' && newIsRain)
+              ))
             ) {
-              if (hasMeaningfulDiff || !priorLivePlan) {
+              const shouldTriggerChangeMoment =
+                hasMeaningfulDiff ||
+                (!priorLivePlan && (
+                  (nowPlan.intentId === 'lunch' && (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted')) ||
+                  (nowPlan.intentId === 'depart' && newIsRain)
+                ));
+
+              if (shouldTriggerChangeMoment) {
                 const weatherSig = effectiveSnapshot?.signals.find(s => s.kind === 'weather');
                 const isRain =
+                  newIsRain ||
                   (weatherSig?.value as any)?.condition === 'rain' ||
                   ((weatherSig?.value as any)?.precipProbability ?? 0) > 0;
                 let cause = 'nearby dining options';
+                let causeMarker = 'What changed: nearby dining options';
+                let heroCauseEffect = '';
+
+                const newLeaveClean = (newLeaveTimeStr || '').replace(/\s*[AaPp][Mm]$/, '').trim();
+                const priorLeaveClean = (priorLeaveTimeStr || '').replace(/\s*[AaPp][Mm]$/, '').trim();
+                const didLeaveTimeMove = Boolean(priorLeaveClean && newLeaveClean && priorLeaveClean !== newLeaveClean);
+
                 if (nowPlan.intentId === 'depart') {
-                  cause = isRain ? 'rain forecast' : 'schedule update';
+                  if (isRain) {
+                    cause = 'Rain now';
+                    causeMarker = 'What changed: Rain now';
+                    if (didLeaveTimeMove) {
+                      heroCauseEffect = `Rain now · take an umbrella; I moved your leave time to ${newLeaveClean}.`;
+                    } else {
+                      heroCauseEffect = `Rain now · take an umbrella; leave time unchanged (${newLeaveClean}).`;
+                    }
+                  } else {
+                    cause = 'schedule update';
+                    causeMarker = 'What changed: schedule update';
+                    if (didLeaveTimeMove) {
+                      heroCauseEffect = `Travel estimate changed. I moved your leave time to ${newLeaveClean}.`;
+                    } else {
+                      heroCauseEffect = `Travel estimate updated · leave at ${newLeaveClean}.`;
+                    }
+                  }
                 } else if (nowPlan.intentId === 'lunch') {
                   cause = 'nearby dining options';
+                  causeMarker = 'What changed: nearby dining options';
+                  heroCauseEffect = 'Found nearby lunch options based on your location and preferences.';
                 }
-                const causeMarker = `What changed: ${cause}`;
-                const newLeaveClean = (newLeaveTimeStr || '').replace(/\s*[AaPp][Mm]$/, '');
-                const heroCauseEffect =
-                  nowPlan.intentId === 'depart'
-                    ? isRain
-                      ? `Rain starts soon. I moved your leave time to ${newLeaveClean}.`
-                      : `Travel estimate changed. I moved your leave time to ${newLeaveClean}.`
-                    : `Found nearby lunch options based on your location and preferences.`;
 
                 activeLiveChangeMoment = {
                   id: `live-cm-${Date.now()}`,
@@ -3060,8 +3090,8 @@ export function renderApp(
                   cause,
                   causeMarker,
                   heroCauseEffect,
-                  priorLeaveTime: priorLeaveTimeStr,
-                  newLeaveTime: newLeaveTimeStr,
+                  priorLeaveTime: didLeaveTimeMove ? priorLeaveTimeStr : undefined,
+                  newLeaveTime: didLeaveTimeMove ? newLeaveTimeStr : undefined,
                   statusTransition: 'Updated plan ready',
                   acknowledged: false,
                 };
@@ -3127,18 +3157,24 @@ export function renderApp(
               const isRain = (weatherSig?.value as any)?.condition === 'rain' || ((weatherSig?.value as any)?.precipProbability ?? 0) > 0;
               const cause = isRain ? 'rain forecast' : 'schedule update';
               const causeMarker = `What changed: ${cause}`;
-              const newLeaveClean = (newLeaveTimeStr || '').replace(/\s*[AaPp][Mm]$/, '');
+              const newLeaveClean = (newLeaveTimeStr || '').replace(/\s*[AaPp][Mm]$/, '').trim();
+              const priorLeaveClean = (priorLeaveTimeStr || '').replace(/\s*[AaPp][Mm]$/, '').trim();
+              const didDemoLeaveMove = Boolean(priorLeaveClean && newLeaveClean && priorLeaveClean !== newLeaveClean);
               const eventTitle = (nowPlan as any)?.subjectTitle || (nowPlan as any)?.title || 'your lesson';
               const heroCauseEffect = isRain
-                ? `Rain starts before ${eventTitle.toLowerCase().includes('lesson') ? 'your lesson' : eventTitle}. I moved your leave time to ${newLeaveClean}.`
-                : `Travel estimate changed. I moved your leave time to ${newLeaveClean}.`;
+                ? didDemoLeaveMove
+                  ? `Rain starts before ${eventTitle.toLowerCase().includes('lesson') ? 'your lesson' : eventTitle}. I moved your leave time to ${newLeaveClean}.`
+                  : `Rain starts before ${eventTitle.toLowerCase().includes('lesson') ? 'your lesson' : eventTitle}. Take an umbrella; leave time unchanged (${newLeaveClean}).`
+                : didDemoLeaveMove
+                  ? `Travel estimate changed. I moved your leave time to ${newLeaveClean}.`
+                  : `Travel estimate updated · leave at ${newLeaveClean}.`;
 
               computedChangeMoment = {
                 cause,
                 causeMarker,
                 heroCauseEffect,
-                priorLeaveTime: priorLeaveTimeStr,
-                newLeaveTime: newLeaveTimeStr,
+                priorLeaveTime: didDemoLeaveMove ? priorLeaveTimeStr : undefined,
+                newLeaveTime: didDemoLeaveMove ? newLeaveTimeStr : undefined,
                 statusTransition: 'Updated plan ready',
               };
             }

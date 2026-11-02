@@ -18,7 +18,7 @@
 |---|---|---|---|---|
 | 1 | `01-live-depart-connection-block-390x844.png` | 390×844 (Mobile) | Live (Unconfigured / Connection-Block) | Mobile Home quiet state ("Nothing needs your attention right now") and Settings > Connectors showing Calendar status as `Not available yet` with zero toggle affordances and zero fake events. No simulated fixtures or ungrounded piano lessons. |
 | 2 | `02-live-depart-connection-block-1280x800.png` | 1280×800 (Desktop) | Live (Unconfigured / Connection-Block) | Desktop quiet state rendering `#desktop-notice-calendar-unconfigured-quiet` in the right panel naming the owner action: `"Calendar · Owner Source Needed: paste the secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat"` with `data-provenance="none"`. |
-| 3 | `03-live-depart-rain-replan-390x844.png` | 390×844 (Mobile) | Live (Synthetic ICS + Nominatim + OSRM + Open-Meteo) | Live depart card for real calendar event "Product Review" at 3:00 PM. Event location resolved via Nominatim geocoder, driving route (15 min) and multimodal bus option (35 min) computed via OSRM, and current conditions via Open-Meteo proxy. Recomputes leave-by earlier (2:15 PM via bus with `bus_first` preference vs 2:35 PM clear drive) and surfaces the umbrella preparation checklist item ("Take umbrella"). |
+| 3 | `03-live-depart-rain-replan-390x844.png` | 390×844 (Mobile) | Live (Synthetic ICS + Nominatim + OSRM + Open-Meteo) | Live depart card for real calendar event "Product Review" at 3:00 PM. Event location resolved via Nominatim geocoder, driving route (15 min) computed via real OSRM proxy shape, and current conditions via Open-Meteo proxy. Surfaces the umbrella preparation checklist item ("Take umbrella") and honest rationale ("Rain now"), while leave-by remains truthfully unchanged (2:35 PM) under single driving mode without fabricated transit data. |
 
 ---
 
@@ -117,7 +117,30 @@ During review request `fd304aa9-7175-41ec-b6a2-3d21dd2cc970`, four specific find
 
 ---
 
-## 6. Automated Verification Matrix
+## 6. Rework 3 Findings & Hardening
+
+During review request `40bfdb2b-476c-4bd5-86e7-c20c5af03668`, three specific findings were addressed:
+
+1. **Eliminated Mock-Only Transit Data & Enforced 100% Real Proxy Contract (P2)**:
+   - Removed `busMinutes: 35` from the Differential test mock in `live-depart.spec.ts` and neutralized `busMinutes` extraction in `app.ts`.
+   - The test mock strictly matches the real `/api/route` proxy output shape (`{ enabled, route: { geometry, distanceM, durationS, provider, mode, fetchedAt }, attribution }`).
+   - Honestly reflects production capability: under single driving mode, rain recommends an umbrella ("Take umbrella") while leave-by remains 2:35 PM (unchanged from clear).
+   - **Plan-amendment note**: Multimodal transit option re-ranking (AC check 2) requires a dedicated transit router/GTFS proxy to be connected in a future slice (reviewer routing to Architect).
+
+2. **Truthful What-Changed Copy & Current Conditions Weather Chips (P2)**:
+   - Live depart What-changed banner only claims "I moved your leave time to X" when the new leave-by actually differs from the previously shown one.
+   - When leave-by is unchanged under rain, states truthfully: `"Rain now · take an umbrella; leave time unchanged (2:35)."`.
+   - On clear first load with no prior plan, no misleading "Travel estimate changed. I moved your leave time to 2:35." is emitted.
+   - Weather rationale chip derives from `/api/weather/current` and displays `"Rain now"` (not `"Rain forecast"` or `"starts soon"`).
+   - Time-diff display (`#time-diff-display` with struck-through time) is suppressed when prior leave time equals new leave time.
+
+3. **Re-captured 03 Evidence & Corrected Documentation (P2)**:
+   - Re-captured `03-live-depart-rain-replan-390x844.png` from the honest production-shaped single driving mode path.
+   - Corrected README row 3 and Section 6.
+
+---
+
+## 7. Automated Verification Matrix
 
 | Verification Tier | Command | Result |
 |---|---|---|

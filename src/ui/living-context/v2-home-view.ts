@@ -743,7 +743,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     ${escapeHtml(vm.changeMoment.heroCauseEffect)}
                   </div>
                   ${
-                    vm.changeMoment.priorLeaveTime && vm.changeMoment.newLeaveTime
+                    vm.changeMoment.priorLeaveTime &&
+                    vm.changeMoment.newLeaveTime &&
+                    vm.changeMoment.priorLeaveTime !== vm.changeMoment.newLeaveTime
                       ? `
                     <div class="time-diff-display" id="time-diff-display" aria-label="Leave time updated from ${escapeHtml(vm.changeMoment.priorLeaveTime)} to ${escapeHtml(vm.changeMoment.newLeaveTime)}">
                       <span class="prior-time-struck"><s class="struck-through">${escapeHtml(vm.changeMoment.priorLeaveTime)}</s></span>
@@ -790,7 +792,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     </svg>
                     Umbrella
                   </span>
-                  <span class="now-rationale-forecast">Rain forecast</span>
+                  <span class="now-rationale-forecast">${vm.isLive ? 'Rain now' : 'Rain forecast'}</span>
                 `
                     : `
                   <span>Typical traffic · 5m margin</span>
@@ -870,7 +872,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 ${escapeHtml(vm.changeMoment.heroCauseEffect)}
               </div>
               ${
-                vm.changeMoment.priorLeaveTime && vm.changeMoment.newLeaveTime
+                vm.changeMoment.priorLeaveTime &&
+                vm.changeMoment.newLeaveTime &&
+                vm.changeMoment.priorLeaveTime !== vm.changeMoment.newLeaveTime
                   ? `
                 <div class="time-diff-display" id="time-diff-display" aria-label="Leave time updated from ${escapeHtml(vm.changeMoment.priorLeaveTime)} to ${escapeHtml(vm.changeMoment.newLeaveTime)}">
                   <span class="prior-time-struck"><s class="struck-through">${escapeHtml(vm.changeMoment.priorLeaveTime)}</s></span>

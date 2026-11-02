@@ -474,7 +474,6 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           enabled: true,
-          busMinutes: 35,
           route: {
             geometry: [[37.7749, -122.4194], [37.776, -122.418]],
             distanceM: 3000,
@@ -541,6 +540,10 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
     // Clear leave-by: 15 min driving + 10 min buffer from 3:00 PM -> leave by 2:35 PM
     expect(clearContent).toMatch(/leave by 2:35\s*pm/i);
 
+    // Clear first open does not claim a false time move or change moment
+    expect(clearContent).not.toContain('I moved your leave time');
+    expect(await page.locator('#what-changed-marker').count()).toBe(0);
+
     // --- PHASE 2: Rain Weather (Re-plan Differential) ---
     currentWeatherCondition = 'rain';
     await page.reload();
@@ -556,14 +559,29 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
     const rainContent = await nowCard.textContent();
     expect(rainContent?.toLowerCase()).toContain('umbrella');
 
-    // Rain leave-by: with bus_first and 35 min bus + 10 min buffer -> leave by 2:15 PM
-    // Assert leave-by(rain) < leave-by(clear): 2:15 PM is earlier than 2:35 PM!
-    expect(rainContent).toMatch(/leave by 2:15\s*pm/i);
+    // Weather rationale chip states current condition "Rain now" (not "Rain forecast")
+    const rainForecastChip = page.locator('.now-rationale-forecast');
+    await expect(rainForecastChip).toBeVisible();
+    await expect(rainForecastChip).toHaveText('Rain now');
 
-    // Option order / recommended option changes to bus
-    const rainModeBadge = page.locator('.v2-active-mode-badge');
-    await expect(rainModeBadge).toBeVisible();
-    await expect(rainModeBadge).toContainText('Bus');
+    // Rain leave-by: with single driving mode (OSRM proxy), leave-by is 2:35 PM (honest: unchanged from clear)
+    expect(rainContent).toMatch(/leave by 2:35\s*pm/i);
+
+    // Single driving mode has no transit mode badge (honest: no transit provider connected to re-rank modes)
+    await expect(page.locator('.v2-active-mode-badge')).toHaveCount(0);
+
+    // What-changed banner and hero cause-effect state honest production behavior
+    const whatChangedMarker = page.locator('#what-changed-marker');
+    await expect(whatChangedMarker).toBeVisible();
+    await expect(whatChangedMarker).toContainText('What changed: Rain now');
+
+    const heroCauseEffect = page.locator('#hero-cause-effect');
+    await expect(heroCauseEffect).toBeVisible();
+    await expect(heroCauseEffect).toHaveText('Rain now · take an umbrella; leave time unchanged (2:35).');
+
+    // Truthful copy: does NOT falsely claim leave time was moved when unchanged
+    expect(rainContent).not.toContain('I moved your leave time');
+    expect(await page.locator('#time-diff-display').count()).toBe(0);
 
     // Calendar tile reflects event (never "Not connected")
     const calTile = page.locator('#signal-tile-calendar');
