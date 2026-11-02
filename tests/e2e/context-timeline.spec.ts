@@ -20,8 +20,23 @@ import AxeBuilder from '@axe-core/playwright';
 import path from 'path';
 import fs from 'fs';
 
+const CAPTURE_EVIDENCE = process.env.CAPTURE_EVIDENCE === '1' || process.env.CAPTURE_EVIDENCE === 'true';
 const COMMITTED_EVIDENCE_DIR = path.resolve('docs/evidence/context-timeline');
 const RUNTIME_VIDEO_DIR = path.resolve('.yori-runtime/evidence/context-timeline');
+
+async function captureTimelineScreenshot(page: Page, filename: string): Promise<string> {
+  fs.mkdirSync(RUNTIME_VIDEO_DIR, { recursive: true });
+  const runtimePath = path.join(RUNTIME_VIDEO_DIR, filename);
+  await page.screenshot({ path: runtimePath });
+
+  if (CAPTURE_EVIDENCE) {
+    fs.mkdirSync(COMMITTED_EVIDENCE_DIR, { recursive: true });
+    const committedPath = path.join(COMMITTED_EVIDENCE_DIR, filename);
+    fs.copyFileSync(runtimePath, committedPath);
+    return committedPath;
+  }
+  return runtimePath;
+}
 
 async function assertElementNotOccluded(page: Page, selector: string, label: string): Promise<void> {
   const result = await page.evaluate((sel) => {
@@ -133,9 +148,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await expect(page.locator('#timeline-step-btn')).toBeVisible();
     await expect(page.locator('#timeline-restart-btn')).toBeVisible();
 
-    await page.screenshot({
-      path: path.join(COMMITTED_EVIDENCE_DIR, `01-s0-morning-calm-${viewSuffix}.png`),
-    });
+    await captureTimelineScreenshot(page, `01-s0-morning-calm-${viewSuffix}.png`);
 
     // -----------------------------------------------------------------------
     // Transition S0 -> S1: ZERO user input! Step deterministic engine
@@ -166,9 +179,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await expect(candidatesHero.locator('#btn-dismiss')).toHaveText('Not now');
     await expect(candidatesHero.locator('#btn-why')).toBeVisible();
 
-    await page.screenshot({
-      path: path.join(COMMITTED_EVIDENCE_DIR, `02-s1-lunch-away-${viewSuffix}.png`),
-    });
+    await captureTimelineScreenshot(page, `02-s1-lunch-away-${viewSuffix}.png`);
 
     // -----------------------------------------------------------------------
     // Transition S1 -> S1q: Honest dismissal via simulated user tap
@@ -189,9 +200,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await expect(page.locator('#budget-meter')).toBeVisible();
     await expect(page.locator('#budget-meter-value')).toHaveText('1 of 3 used today');
 
-    await page.screenshot({
-      path: path.join(COMMITTED_EVIDENCE_DIR, `03-s1q-lunch-quiet-${viewSuffix}.png`),
-    });
+    await captureTimelineScreenshot(page, `03-s1q-lunch-quiet-${viewSuffix}.png`);
 
     // -----------------------------------------------------------------------
     // Transition S1q -> S2: Piano Lesson Depart Plan (Clear Sky)
@@ -215,9 +224,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     // Route map strip is visible
     await expect(journeyCardS2.locator('.now-map-strip')).toBeVisible();
 
-    await page.screenshot({
-      path: path.join(COMMITTED_EVIDENCE_DIR, `04-s2-depart-clear-${viewSuffix}.png`),
-    });
+    await captureTimelineScreenshot(page, `04-s2-depart-clear-${viewSuffix}.png`);
 
     // -----------------------------------------------------------------------
     // Transition S2 -> S3: Rain Forecast Issued (The Change Moment)
@@ -230,9 +237,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     expect(stateS3.currentBeat.id).toBe('S3');
 
     // Capture standard motion transition capture immediately during soft crossfade
-    await page.screenshot({
-      path: path.join(COMMITTED_EVIDENCE_DIR, `05-s3-change-moment-${viewSuffix}.png`),
-    });
+    await captureTimelineScreenshot(page, `05-s3-change-moment-${viewSuffix}.png`);
 
     // Living header morphs into Rain
     await expect(page.locator('#living-header-line')).toHaveText('1:35 PM · Rain from 2:00 · Home');
@@ -514,15 +519,22 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await expect(page.locator('#time-diff-display .new-time-highlight')).toHaveText('2:30 PM');
 
     // Capture distinct reduced-motion capture
-    await page.screenshot({
-      path: path.join(COMMITTED_EVIDENCE_DIR, `06-s3-reduced-motion-${viewSuffix}.png`),
-    });
+    const reducedFilename = `06-s3-reduced-motion-${viewSuffix}.png`;
+    const normalFilename = `05-s3-change-moment-${viewSuffix}.png`;
+    await captureTimelineScreenshot(page, reducedFilename);
 
     // Verify distinct from normal capture (files are non-empty and non-identical)
-    const normalPath = path.join(COMMITTED_EVIDENCE_DIR, `05-s3-change-moment-${viewSuffix}.png`);
-    const reducedPath = path.join(COMMITTED_EVIDENCE_DIR, `06-s3-reduced-motion-${viewSuffix}.png`);
-    expect(fs.existsSync(normalPath)).toBe(true);
-    expect(fs.existsSync(reducedPath)).toBe(true);
+    const normalPath = CAPTURE_EVIDENCE
+      ? path.join(COMMITTED_EVIDENCE_DIR, normalFilename)
+      : (fs.existsSync(path.join(RUNTIME_VIDEO_DIR, normalFilename))
+          ? path.join(RUNTIME_VIDEO_DIR, normalFilename)
+          : path.join(COMMITTED_EVIDENCE_DIR, normalFilename));
+    const reducedPath = CAPTURE_EVIDENCE
+      ? path.join(COMMITTED_EVIDENCE_DIR, reducedFilename)
+      : path.join(RUNTIME_VIDEO_DIR, reducedFilename);
+
+    expect(fs.existsSync(normalPath), `Normal path ${normalPath} must exist`).toBe(true);
+    expect(fs.existsSync(reducedPath), `Reduced path ${reducedPath} must exist`).toBe(true);
     expect(fs.statSync(reducedPath).size).toBeGreaterThan(1000);
     expect(fs.readFileSync(normalPath).equals(fs.readFileSync(reducedPath))).toBe(false);
   });

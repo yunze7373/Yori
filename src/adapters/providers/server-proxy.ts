@@ -37,6 +37,41 @@ import {
   ALLOWED_AMENITIES,
 } from './overpass-places-adapter.js';
 
+export type ProxyFailureMode = 'denied' | 'stale' | 'timeout' | 'error' | 'none';
+
+export interface ProxyTestSeamConfig {
+  readonly forceMode?: ProxyFailureMode;
+  readonly forceStatusCode?: number;
+  readonly forceDelayMs?: number;
+  readonly staleAgeMs?: number;
+  readonly errorMessage?: string;
+}
+
+const activeProxyTestSeams: Record<string, ProxyTestSeamConfig | null> = {
+  weather: null,
+  route: null,
+  places: null,
+};
+
+export function setProxyTestSeam(
+  endpoint: 'weather' | 'route' | 'places',
+  config: ProxyTestSeamConfig | null
+): void {
+  activeProxyTestSeams[endpoint] = config;
+}
+
+export function resetProxyTestSeams(): void {
+  activeProxyTestSeams.weather = null;
+  activeProxyTestSeams.route = null;
+  activeProxyTestSeams.places = null;
+}
+
+export function getProxyTestSeam(
+  endpoint: 'weather' | 'route' | 'places'
+): ProxyTestSeamConfig | null {
+  return activeProxyTestSeams[endpoint] ?? null;
+}
+
 export interface WeatherProxyConfig {
   readonly enabled: boolean;
   readonly demoCity: DemoCityCoordinate;
@@ -111,6 +146,81 @@ export function createWeatherProxyMiddleware(
 
     if (!rawPathname.startsWith('/api/weather')) {
       return next();
+    }
+
+    // --- TEST SEAM INJECTION (provokes denied / stale / timeout / error) ---
+    const weatherSeam = getProxyTestSeam('weather');
+    if (weatherSeam && weatherSeam.forceMode && weatherSeam.forceMode !== 'none') {
+      if (weatherSeam.forceMode === 'denied') {
+        const code = weatherSeam.forceStatusCode || 403;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error:
+              weatherSeam.errorMessage ||
+              'Access denied: provider disabled or unconsented (provoked by test seam)',
+            code: 'permission_denied',
+            provider: 'open-meteo',
+          })
+        );
+        return;
+      }
+      if (weatherSeam.forceMode === 'timeout') {
+        if (weatherSeam.forceDelayMs && weatherSeam.forceDelayMs > 0) {
+          await new Promise(resolve => setTimeout(resolve, weatherSeam.forceDelayMs));
+        }
+        const code = weatherSeam.forceStatusCode || 504;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error: weatherSeam.errorMessage || 'Gateway timeout (provoked by test seam)',
+            code: 'timeout',
+            provider: 'open-meteo',
+          })
+        );
+        return;
+      }
+      if (weatherSeam.forceMode === 'error') {
+        const code = weatherSeam.forceStatusCode || 500;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error: weatherSeam.errorMessage || 'Internal provider error (provoked by test seam)',
+            code: 'provider_error',
+            provider: 'open-meteo',
+          })
+        );
+        return;
+      }
+      if (weatherSeam.forceMode === 'stale') {
+        const staleOffset = weatherSeam.staleAgeMs || 7200000;
+        const staleAsOf = new Date(Date.now() - staleOffset).toISOString();
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            enabled: true,
+            stale: true,
+            signals: [
+              {
+                kind: 'weather',
+                value: { condition: 'Clear', temperature: 20 },
+                provider: 'open-meteo',
+                asOf: staleAsOf,
+                issuedAt: staleAsOf,
+                validFor: 3600000,
+                confidence: 0.9,
+                provenance: 'live',
+                consentScope: 'device_only',
+                status: 'available',
+                source: 'real',
+                label: 'real',
+              },
+            ],
+            attribution: OPEN_METEO_ATTRIBUTION,
+          })
+        );
+        return;
+      }
     }
 
     const hostHeader = req.headers['host'];
@@ -254,6 +364,72 @@ export function createRouteProxyMiddleware(
     // Path-first guard: only intercept /api/route paths
     if (!rawPathname.startsWith('/api/route')) {
       return next();
+    }
+
+    // --- TEST SEAM INJECTION (provokes denied / stale / timeout / error) ---
+    const routeSeam = getProxyTestSeam('route');
+    if (routeSeam && routeSeam.forceMode && routeSeam.forceMode !== 'none') {
+      if (routeSeam.forceMode === 'denied') {
+        const code = routeSeam.forceStatusCode || 403;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error:
+              routeSeam.errorMessage ||
+              'Access denied: routing disabled (provoked by test seam)',
+            code: 'permission_denied',
+            provider: config.provider,
+          })
+        );
+        return;
+      }
+      if (routeSeam.forceMode === 'timeout') {
+        if (routeSeam.forceDelayMs && routeSeam.forceDelayMs > 0) {
+          await new Promise(resolve => setTimeout(resolve, routeSeam.forceDelayMs));
+        }
+        const code = routeSeam.forceStatusCode || 504;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error: routeSeam.errorMessage || 'Routing gateway timeout (provoked by test seam)',
+            code: 'timeout',
+            provider: config.provider,
+          })
+        );
+        return;
+      }
+      if (routeSeam.forceMode === 'error') {
+        const code = routeSeam.forceStatusCode || 500;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error: routeSeam.errorMessage || 'Routing provider error (provoked by test seam)',
+            code: 'provider_error',
+            provider: config.provider,
+          })
+        );
+        return;
+      }
+      if (routeSeam.forceMode === 'stale') {
+        const staleOffset = routeSeam.staleAgeMs || 7200000;
+        const staleAsOf = new Date(Date.now() - staleOffset).toISOString();
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            enabled: true,
+            stale: true,
+            route: {
+              durationSeconds: 1200,
+              distanceMeters: 5000,
+              geometry: [],
+              asOf: staleAsOf,
+              validFor: 300000,
+            },
+            attribution: OSRM_ATTRIBUTION,
+          })
+        );
+        return;
+      }
     }
 
     const hostHeader = req.headers['host'];
@@ -443,6 +619,77 @@ export function createPlacesProxyMiddleware(
     // Path-first guard: only intercept /api/places paths
     if (!rawPathname.startsWith('/api/places')) {
       return next();
+    }
+
+    // --- TEST SEAM INJECTION (provokes denied / stale / timeout / error) ---
+    const placesSeam = getProxyTestSeam('places');
+    if (placesSeam && placesSeam.forceMode && placesSeam.forceMode !== 'none') {
+      if (placesSeam.forceMode === 'denied') {
+        const code = placesSeam.forceStatusCode || 403;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error:
+              placesSeam.errorMessage ||
+              'Access denied: places disabled (provoked by test seam)',
+            code: 'permission_denied',
+            provider: config.provider,
+          })
+        );
+        return;
+      }
+      if (placesSeam.forceMode === 'timeout') {
+        if (placesSeam.forceDelayMs && placesSeam.forceDelayMs > 0) {
+          await new Promise(resolve => setTimeout(resolve, placesSeam.forceDelayMs));
+        }
+        const code = placesSeam.forceStatusCode || 504;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error: placesSeam.errorMessage || 'Places gateway timeout (provoked by test seam)',
+            code: 'timeout',
+            provider: config.provider,
+          })
+        );
+        return;
+      }
+      if (placesSeam.forceMode === 'error') {
+        const code = placesSeam.forceStatusCode || 500;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error: placesSeam.errorMessage || 'Places provider error (provoked by test seam)',
+            code: 'provider_error',
+            provider: config.provider,
+          })
+        );
+        return;
+      }
+      if (placesSeam.forceMode === 'stale') {
+        const staleOffset = placesSeam.staleAgeMs || 7200000;
+        const staleAsOf = new Date(Date.now() - staleOffset).toISOString();
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            enabled: true,
+            stale: true,
+            places: [
+              {
+                osmId: 999999,
+                name: 'Stale Cafe',
+                lat: 37.77,
+                lng: -122.41,
+                distanceMeters: 250,
+                fetchedAt: staleAsOf,
+                validFor: 300000,
+                source: 'OpenStreetMap via Overpass (ODbL)',
+              },
+            ],
+            attribution: config.attribution,
+          })
+        );
+        return;
+      }
     }
 
     const hostHeader = req.headers['host'];

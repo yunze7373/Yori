@@ -347,4 +347,39 @@ describe('Static Security Check (AC-106-3, HB-2, HB-3)', () => {
     expect(isFixtureCoord(sfLatShifted, sfLon)).toBe(false);
     expect(isFixtureCoord(sfLon, sfLatShifted)).toBe(false);
   });
+
+  it('ensures zero fixture render or imports in live adapter layer outside ?dev=1 (LIVE_FIRST S0 Static Gate)', () => {
+    // 1. live-signal.ts and live-snapshot.ts must NEVER import from fixtures
+    const liveAdapterFiles = [
+      path.resolve('src/adapters/providers/live-signal.ts'),
+      path.resolve('src/adapters/providers/live-snapshot.ts'),
+    ];
+
+    for (const filePath of liveAdapterFiles) {
+      expect(fs.existsSync(filePath), `${filePath} must exist`).toBe(true);
+      const content = fs.readFileSync(filePath, 'utf-8');
+
+      // Zero fixture imports
+      expect(content).not.toMatch(/from\s+['"].*\/fixtures\/.*['"]/);
+      expect(content).not.toMatch(/from\s+['"].*mock-venues.*['"]/);
+
+      // Zero hardcoded demo scenes
+      expect(content).not.toContain('morning_calm');
+      expect(content).not.toContain('lunch_away');
+      expect(content).not.toContain('depart_piano');
+      expect(content).not.toContain('rain_replan');
+    }
+
+    // 2. Client bundle in dist (if built) must not contain ungated live fixture renders
+    const distPath = path.resolve('dist');
+    if (fs.existsSync(distPath)) {
+      const distFiles = collectFiles(distPath);
+      for (const filePath of distFiles) {
+        if (filePath.endsWith('.js')) {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          expect(content).not.toContain('buildLiveSnapshotWithDemoFixture');
+        }
+      }
+    }
+  });
 });

@@ -132,6 +132,22 @@ describe('Continuous Timeline Dynamic Living Header (Finding 2)', () => {
       expect(header.placeDisplay).toBe('Home');
       expect(header.formattedLine).toBe('10:00 AM · Clear · Home');
     });
+
+    it('ensures Clear and Home fallbacks are strictly unreachable from Live (Carried finding 1)', () => {
+      const snap: ContextSnapshot = freezeSnapshot({
+        id: 'live-snap-empty',
+        asOf: '2026-10-28T17:00:00.000Z',
+        timezone: CONTINUOUS_TIMEZONE,
+        signals: [],
+      });
+      const header = deriveLivingHeaderFromSnapshot(snap, CONTINUOUS_TIMEZONE, { isLive: true });
+      expect(header.timeDisplay).toBe('10:00 AM');
+      expect(header.weatherDisplay).toBe('Weather unavailable');
+      expect(header.placeDisplay).toBe('Location not shared');
+      expect(header.formattedLine).toBe('10:00 AM · Weather unavailable · Location not shared');
+      expect(header.formattedLine).not.toContain('Clear');
+      expect(header.formattedLine).not.toContain('Home');
+    });
   });
 
   describe('formatTimelineTime', () => {

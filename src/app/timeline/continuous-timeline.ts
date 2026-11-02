@@ -24,6 +24,7 @@ import {
   freezeSnapshot,
 } from '../../core/contracts/index.js';
 import { YoriStorage } from '../../core/storage/index.js';
+import { deriveLiveLivingHeaderFromSnapshot } from '../../adapters/providers/live-snapshot.js';
 
 export const CONTINUOUS_TIMEZONE = 'America/Los_Angeles';
 
@@ -366,14 +367,25 @@ export function formatTimelineTime(isoString: string | undefined, timeZone?: str
   }).format(d);
 }
 
+export interface DeriveLivingHeaderOptions {
+  readonly isLive?: boolean;
+}
+
 /**
  * Derives the living header line dynamically from a ContextSnapshot.
  * Form: `${timeDisplay} · ${weatherDisplay} · ${placeDisplay}`
+ * When isLive is true (or in Live mode), never defaults to 'Clear' or 'Home';
+ * instead reports 'Weather unavailable' and 'Location not shared' (INV-103).
  */
 export function deriveLivingHeaderFromSnapshot(
   snapshot: ContextSnapshot,
-  timeZone: string = snapshot.timezone || CONTINUOUS_TIMEZONE
+  timeZone: string = snapshot.timezone || CONTINUOUS_TIMEZONE,
+  options?: DeriveLivingHeaderOptions
 ): DerivedLivingHeader {
+  if (options?.isLive) {
+    return deriveLiveLivingHeaderFromSnapshot(snapshot, timeZone);
+  }
+
   // 1. Time from snapshot.asOf
   const timeDisplay = formatTimelineTime(snapshot.asOf, timeZone);
 

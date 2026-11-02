@@ -24,3 +24,5 @@ export * from './polyline.js';
 export * from './osrm-route-adapter.js';
 export * from './ors-route-adapter.js';
 export * from './server-proxy.js';
+export * from './live-signal.js';
+export * from './live-snapshot.js';
