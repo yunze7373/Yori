@@ -68,6 +68,8 @@ export interface BuildHomeCompositionOptions {
   timelineControls?: HomeCompositionVM['timelineControls'];
   isLive?: boolean;
   weatherEnabled?: boolean;
+  /** D1: provenance of the Live weather response (device fix vs demo city, source, fetch time). */
+  weatherProvenance?: { source: string; fetchedAt?: string; atDeviceFix: boolean } | null;
   calendarConnected?: boolean;
   calendarNoRouteReason?: string;
   calendarSignalValue?: {
@@ -970,6 +972,17 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
         }
       : undefined;
 
+  // D1: in Live, weather is only shown with its provenance — measured at the consented fix,
+  // named source, observation time. Demo-city data is never presented as "near you".
+  let weatherProvenanceLine: string | undefined;
+  if (options.isLive && weatherSignalValue && options.weatherProvenance?.atDeviceFix) {
+    const observedIso = weatherSig?.issuedAt || options.weatherProvenance.fetchedAt;
+    const observedTime = formatTime(observedIso, options.snapshot?.timezone);
+    weatherProvenanceLine = observedTime
+      ? `${options.weatherProvenance.source} · near you · as of ${observedTime}`
+      : `${options.weatherProvenance.source} · near you`;
+  }
+
   const memSig = options.snapshot?.signals.find(s => s.kind === 'memory_facts');
   const memList = Array.isArray(memSig?.value) ? (memSig.value as MemoryFact[]) : [];
   const confirmedMemFromSig = memList.find(f => f && f.status === 'confirmed');
@@ -998,6 +1011,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     isLive: Boolean(options.isLive),
     weatherEnabled: options.weatherEnabled,
     weatherSignalValue,
+    weatherProvenanceLine,
     calendarConnected: options.calendarConnected,
     calendarSignalValue: options.calendarSignalValue ?? (() => {
       const calSig = options.snapshot?.signals.find(s => s.kind === 'calendar');

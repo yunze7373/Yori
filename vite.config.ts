@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import {
   createModelProxyMiddleware,
@@ -124,6 +125,17 @@ function geocodeProxyPlugin(): Plugin {
 
 const bindHost = resolveBindHost();
 
+/**
+ * DEMO_RESCUE D1 (npm run demo:https): preview serves HTTPS only when scripts/demo-https.mjs
+ * passes an mkcert certificate + key (kept in gitignored .yori-runtime/). Never self-signed here.
+ */
+function resolvePreviewHttps(): { cert: Buffer; key: Buffer } | undefined {
+  const certPath = process.env.DEMO_HTTPS_CERT;
+  const keyPath = process.env.DEMO_HTTPS_KEY;
+  if (!certPath || !keyPath) return undefined;
+  return { cert: readFileSync(certPath), key: readFileSync(keyPath) };
+}
+
 export default defineConfig(({ mode }) => {
   const isTestMode =
     mode === 'test' ||
@@ -152,6 +164,7 @@ export default defineConfig(({ mode }) => {
     preview: {
       port: 4173,
       host: bindHost,
+      https: resolvePreviewHttps(),
     },
     test: {
       setupFiles: ['./tests/setup-netguard.ts'],

@@ -5744,6 +5744,44 @@ button.v2-view-detail-link:focus-visible {
   word-break: break-word;
 }
 
+/* D1: weather near the consented fix on the quiet Live home. */
+.live-weather-now {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin: 12px auto 4px;
+  padding: 10px 16px;
+  max-width: 320px;
+  border-radius: 12px;
+  background: var(--color-surface-muted, rgba(22, 40, 36, 0.04));
+}
+
+.live-weather-now-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-muted, #5C6F68);
+}
+
+.live-weather-now-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+}
+
+/* D1: weather provenance under the Live weather tile (source · near you · as of time). */
+.signal-meta {
+  margin-top: 2px;
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  color: var(--color-ink-muted, #5C6F68);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hero-prep-line {
   font-size: 0.9375rem;
   font-weight: 500;

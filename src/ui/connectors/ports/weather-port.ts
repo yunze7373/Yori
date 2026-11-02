@@ -5,7 +5,8 @@
  * Implements truthful runtime read:
  * - GET /api/weather/status
  * - enabled false -> owner_gated ('Live weather is off (owner setting)')
- * - enabled true -> connected ('Open-Meteo · <demoCity.name> · fixed demo city (not your location)')
+ * - enabled true, Live -> connected ('Open-Meteo · follows your shared location (rounded ~100 m)'), D1
+ * - enabled true, dev demo -> connected ('Open-Meteo · <demoCity.name> · fixed demo city (not your location)')
  * - Fetch error / non-200 -> unavailable
  * - No user toggle; enabling remains owner-gated (GATE-W1).
  */
@@ -15,7 +16,7 @@ import type { ConnectorPort, ConnectorStatus } from '../types.js';
 export class WeatherConnectorPort implements ConnectorPort {
   public readonly id = 'weather' as const;
 
-  public async status(): Promise<ConnectorStatus> {
+  public async status(options: { live?: boolean } = {}): Promise<ConnectorStatus> {
     const updatedAt = new Date().toISOString();
 
     try {
@@ -40,7 +41,10 @@ export class WeatherConnectorPort implements ConnectorPort {
             : undefined;
 
       if (data?.enabled === true) {
-        const detail = cityName
+        // D1: Live weather is queried at the consented fix only; the demo city is dev-only.
+        const detail = options.live
+          ? 'Open-Meteo · follows your shared location (rounded ~100 m)'
+          : cityName
           ? `Open-Meteo · ${cityName} · fixed demo city (not your location)`
           : 'Open-Meteo · fixed demo city (location not reported)';
         return {

@@ -208,7 +208,7 @@ function setupBaseMockApiRoutes(
         }),
       })
     ),
-    page.route('**/api/weather/current', (route) => {
+    page.route('**/api/weather/current*', (route) => {
       if (!weatherEnabled) {
         return route.fulfill({
           status: 200,

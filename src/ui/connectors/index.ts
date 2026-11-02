@@ -18,11 +18,13 @@ import { weatherConnectorPort } from './ports/weather-port.js';
 import { xmemoConnectorPort } from './ports/xmemo-port.js';
 import { notificationsConnectorPort } from './ports/notifications-port.js';
 
-export async function getAllConnectorsStatus(): Promise<Record<ConnectorId, ConnectorStatus>> {
+export async function getAllConnectorsStatus(
+  options: { live?: boolean } = {}
+): Promise<Record<ConnectorId, ConnectorStatus>> {
   const [location, calendar, weather, xmemo, notifications] = await Promise.all([
     locationConnectorPort.status(),
     calendarConnectorPort.status(),
-    weatherConnectorPort.status(),
+    weatherConnectorPort.status({ live: options.live }),
     xmemoConnectorPort.status(),
     notificationsConnectorPort.status(),
   ]);

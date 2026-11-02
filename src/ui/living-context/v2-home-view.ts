@@ -575,6 +575,11 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
           <span class="signal-label">WEATHER</span>
         </div>
         <div class="signal-value">${escapeHtml(weatherValue)}</div>
+        ${
+          vm.isLive && vm.weatherProvenanceLine && weatherValue !== 'Unavailable' && !weatherValue.startsWith('Off')
+            ? `<div class="signal-meta" id="signal-tile-weather-provenance" data-provenance="live" data-source="open-meteo">${escapeHtml(vm.weatherProvenanceLine)}</div>`
+            : ''
+        }
       </div>
 
       <div class="signal-tile" id="signal-tile-calendar">
@@ -616,6 +621,27 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
   `;
 }
 
+/**
+ * D1: "weather near you" on the quiet Live home. Rendered only when the weather was measured at
+ * the consented device fix (weatherProvenanceLine is set) and carries a real value; otherwise
+ * nothing is rendered (no placeholder temperature, no demo city).
+ */
+function renderLiveWeatherNow(vm: HomeCompositionVM): string {
+  if (!vm.isLive || !vm.weatherProvenanceLine || !vm.weatherSignalValue) return '';
+  if (vm.weatherError || vm.livingHeader?.weatherDisplay === 'Weather unavailable') return '';
+  const { condition, temperatureC } = vm.weatherSignalValue;
+  const cond = condition ? condition.charAt(0).toUpperCase() + condition.slice(1) : '';
+  const temp = typeof temperatureC === 'number' ? `${temperatureC}°C` : '';
+  const value = [cond, temp].filter(Boolean).join(' · ');
+  if (!value) return '';
+  return `
+          <div class="live-weather-now" id="live-weather-now" role="group" aria-label="Weather near you" data-provenance="live" data-source="open-meteo">
+            <span class="live-weather-now-label">Weather near you</span>
+            <span class="live-weather-now-value" id="live-weather-now-value">${escapeHtml(value)}</span>
+            <span class="signal-meta" id="live-weather-now-provenance">${escapeHtml(vm.weatherProvenanceLine)}</span>
+          </div>`;
+}
+
 export function renderV2Home(vm: HomeCompositionVM): string {
   // 1. Quiet State
   if (vm.layoutKind === 'quiet') {
@@ -632,6 +658,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           </div>
           <h2 class="quiet-title" id="quiet-title">${escapeHtml(vm.suppressedQuiet?.message || vm.title)}</h2>
           <p class="quiet-subtitle" id="quiet-subtitle">${escapeHtml(vm.headline)}</p>
+          ${renderLiveWeatherNow(vm)}
           ${
             vm.suppressedQuiet
               ? `

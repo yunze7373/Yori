@@ -237,6 +237,8 @@ export interface HomeCompositionVM {
     temperatureC?: number;
     precipProbability?: number;
   };
+  /** D1: "<source> · near you · as of <time>" when Live weather was measured at the consented fix. */
+  readonly weatherProvenanceLine?: string;
   readonly calendarConnected?: boolean;
   readonly calendarSignalValue?: {
     title?: string;

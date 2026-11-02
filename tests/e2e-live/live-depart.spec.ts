@@ -495,7 +495,7 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
     );
 
     let currentWeatherCondition: 'clear' | 'rain' = 'clear';
-    await page.route('**/api/weather/current', route =>
+    await page.route('**/api/weather/current*', route =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',

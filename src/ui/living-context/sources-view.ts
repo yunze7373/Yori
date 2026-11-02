@@ -79,7 +79,7 @@ export function renderSourcesSheet(
 
   const weatherDetail = connectorStatuses?.weather?.detail
     ? connectorStatuses.weather.detail
-    : (liveWeatherEnabled ? 'Live Open-Meteo API (Fixed demo city: San Francisco, CA · owner-gated).' : 'Live weather is off (WEATHER_LIVE_ENABLED flag disabled).');
+    : (liveWeatherEnabled ? 'Open-Meteo · follows your shared location (rounded ~100 m) · owner-gated.' : 'Live weather is off (WEATHER_LIVE_ENABLED flag disabled).');
   const isWeatherLive = connectorStatuses?.weather
     ? connectorStatuses.weather.state === 'connected'
     : liveWeatherEnabled;

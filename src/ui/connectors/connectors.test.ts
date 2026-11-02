@@ -203,6 +203,24 @@ describe('Connectors Suite', () => {
       expect(status.detail).toBe('Open-Meteo · Aomori, Japan · fixed demo city (not your location)');
     });
 
+    it('D1: in Live, reports that weather follows the shared location (never the demo city)', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          enabled: true,
+          provider: 'open-meteo',
+          demoCity: { name: 'San Francisco, CA' },
+        }),
+      } as any);
+
+      const port = new WeatherConnectorPort();
+      const status = await port.status({ live: true });
+      expect(status.state).toBe('connected');
+      expect(status.detail).toBe('Open-Meteo · follows your shared location (rounded ~100 m)');
+      expect(status.detail).not.toContain('San Francisco');
+      expect(status.detail).not.toContain('demo city');
+    });
+
     it('returns connected with location not reported when demoCity is missing', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,

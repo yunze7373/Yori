@@ -159,6 +159,7 @@ import {
   type CardSelectionState,
 } from './desktop-ia.js';
 import { renderDesktopLeftNav } from './desktop-nav.js';
+import { resolveWeatherCurrentUrl } from './weather-request.js';
 import { renderDesktopRightPanel } from './desktop-panel.js';
 import type { HomeCompositionVM } from '../view-models/index.js';
 
@@ -1926,6 +1927,7 @@ export function renderApp(
     enabled: false,
   };
   let liveWeatherSignal: RealSignal<WeatherData> | null = null;
+  let liveWeatherProvenance: { source: string; fetchedAt?: string; atDeviceFix: boolean } | null = null;
   if (contextMode === 'live') {
     defaultLocationPort.setLocation('prompt');
     defaultModelCommandInterpreter.setMode('live');
@@ -1984,17 +1986,43 @@ export function renderApp(
           const data = await resp.json();
           if (data.enabled) {
             weatherStatus = data;
-            try {
-              const currResp = await fetch('/api/weather/current', { cache: 'no-store' });
-              if (currResp.ok) {
-                const currData = await currResp.json();
-                if (currData.signals && currData.signals.length > 0) {
-                  liveWeatherSignal = currData.signals[0];
-                  update();
+            // D1: Live sends only the consented fix (3 decimals); no fix -> no request, no demo city.
+            const currentUrl = resolveWeatherCurrentUrl(
+              contextMode,
+              defaultLocationPort.getLocation(),
+              defaultLocationPort.getConsentStatus?.()
+            );
+            if (!currentUrl) {
+              liveWeatherSignal = null;
+              liveWeatherProvenance = null;
+            } else {
+              try {
+                const currResp = await fetch(currentUrl, { cache: 'no-store' });
+                if (currResp.ok) {
+                  const currData = await currResp.json();
+                  if (currData.signals && currData.signals.length > 0) {
+                    liveWeatherSignal = currData.signals[0];
+                    liveWeatherProvenance = {
+                      source: typeof currData.source === 'string' ? currData.source : 'Open-Meteo',
+                      fetchedAt: typeof currData.fetchedAt === 'string' ? currData.fetchedAt : undefined,
+                      atDeviceFix: currData.coordinate?.kind === 'device_fix',
+                    };
+                    update();
+                  } else if (contextMode === 'live') {
+                    liveWeatherSignal = null;
+                    liveWeatherProvenance = null;
+                  }
+                } else if (contextMode === 'live') {
+                  liveWeatherSignal = null;
+                  liveWeatherProvenance = null;
+                }
+              } catch {
+                // fail-closed
+                if (contextMode === 'live') {
+                  liveWeatherSignal = null;
+                  liveWeatherProvenance = null;
                 }
               }
-            } catch {
-              // fail-closed
             }
           }
         } else if (resp.status >= 500) {
@@ -2458,7 +2486,7 @@ export function renderApp(
 
   async function refreshConnectorStatuses() {
     try {
-      latestConnectorStatuses = await getAllConnectorsStatus();
+      latestConnectorStatuses = await getAllConnectorsStatus({ live: contextMode === 'live' });
     } catch {
       // ignore
     }
@@ -3204,6 +3232,7 @@ export function renderApp(
         const v2Composition = buildHomeComposition({
           isLive: contextMode === 'live',
           weatherEnabled: weatherStatus.enabled,
+          weatherProvenance: liveWeatherProvenance,
           calendarConnected: liveCalendarStatus.configured && liveCalendarStatus.enabled,
           calendarNoRouteReason: liveRouteErrorReason ?? undefined,
           calendarSignalValue: liveCalendarSignal?.value as any,
@@ -5676,6 +5705,7 @@ export function renderApp(
           liveLocationStatus = defaultLocationPort.getLocation();
         }
         if (contextMode === 'live') {
+          await checkWeatherStatus();
           await refreshLiveRoute();
           await checkPlacesStatus();
           await refreshLiveCalendar();
@@ -5696,6 +5726,8 @@ export function renderApp(
         liveLocationStatus = defaultLocationPort.getLocation();
         if (contextMode === 'live') {
           livePlacesList = [];
+          liveWeatherSignal = null;
+          liveWeatherProvenance = null;
         }
         await refreshConnectorStatuses();
         update();

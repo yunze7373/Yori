@@ -6,8 +6,10 @@
  * 1. Loopback-only binding: only local requests (127.0.0.1, localhost) are accepted.
  * 2. Origin/Referer guard: rejects cross-site requests.
  * 3. Feature-flagged: WEATHER_LIVE_ENABLED (boolean, default: false).
- * 4. Privacy: uses strictly configured fixed demo-city coordinates.
- *    Never requests device geolocation or forwards user identifiers.
+ * 4. Privacy: without `coords`, uses the configured fixed demo-city coordinates (dev/recorded only).
+ *    With `coords=lat,lng` (D1), queries at the consented device fix, re-rounded to 3 decimals
+ *    (~100 m) before anything leaves the server. Coordinates are never logged and the server
+ *    never requests device geolocation or forwards user identifiers.
  * 5. Returns attribution metadata for Open-Meteo (CC BY 4.0).
  */
 
@@ -112,6 +114,37 @@ export function resolveWeatherConfig(
       longitude: Number.isFinite(longitude) ? longitude : DEFAULT_DEMO_CITY.longitude,
       name,
       timezone,
+    },
+  };
+}
+
+/** Decimal places kept for any device fix sent to the weather provider (~100 m). */
+export const WEATHER_COORD_DECIMALS = 3;
+
+const WEATHER_COORDS_PATTERN = /^(-?\d{1,3}(?:\.\d{1,6})?),(-?\d{1,3}(?:\.\d{1,6})?)$/;
+
+export type WeatherCoordsParseResult =
+  | { readonly ok: true; readonly coords: { readonly latitude: number; readonly longitude: number } | null }
+  | { readonly ok: false };
+
+/**
+ * Strictly parses the optional `coords=lat,lng` query value for /api/weather/current.
+ * Absent -> { ok: true, coords: null }. Anything malformed or out of range -> { ok: false }.
+ * The parsed fix is re-rounded to 3 decimals so no unrounded value can reach Open-Meteo.
+ */
+export function parseWeatherCoordsParam(raw: string | null): WeatherCoordsParseResult {
+  if (raw === null) return { ok: true, coords: null };
+  const match = WEATHER_COORDS_PATTERN.exec(raw);
+  if (!match) return { ok: false };
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { ok: false };
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return { ok: false };
+  return {
+    ok: true,
+    coords: {
+      latitude: roundCoordinate3Decimals(lat),
+      longitude: roundCoordinate3Decimals(lng),
     },
   };
 }
@@ -304,8 +337,35 @@ export function createWeatherProxyMiddleware(
         return;
       }
 
+      const coordsResult = parseWeatherCoordsParam(parsedUrl.searchParams.get('coords'));
+      if (!coordsResult.ok) {
+        // Never echo the rejected value (it may be an unrounded fix).
+        res.writeHead(400, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            error: 'Invalid coords. Expected coords=lat,lng with lat in [-90,90] and lng in [-180,180]',
+            code: 'invalid_coords',
+          })
+        );
+        return;
+      }
+
+      const deviceFix = coordsResult.coords;
+      const adapterForRequest = deviceFix
+        ? weatherAdapter.withCoordinate({
+            latitude: deviceFix.latitude,
+            longitude: deviceFix.longitude,
+            name: 'Near you',
+            // Open-Meteo resolves the fix's own timezone, so issuedAt is correct for any city.
+            timezone: 'auto',
+          })
+        : weatherAdapter;
+
       try {
-        const signals = await weatherAdapter.signals();
+        const signals = await adapterForRequest.signals();
         res.writeHead(200, {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-store',
@@ -315,14 +375,30 @@ export function createWeatherProxyMiddleware(
             enabled: true,
             signals,
             attribution: OPEN_METEO_ATTRIBUTION,
+            source: 'Open-Meteo',
+            fetchedAt: new Date().toISOString(),
+            coordinate: deviceFix
+              ? {
+                  kind: 'device_fix',
+                  latitude: deviceFix.latitude,
+                  longitude: deviceFix.longitude,
+                  decimals: WEATHER_COORD_DECIMALS,
+                }
+              : {
+                  kind: 'demo_city',
+                  name: config.demoCity.name,
+                  latitude: config.demoCity.latitude,
+                  longitude: config.demoCity.longitude,
+                },
           })
         );
-      } catch (err: any) {
+      } catch {
+        // Fixed message only: provider errors can embed the request URL (and so the fix).
         res.writeHead(500, {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-store',
         });
-        res.end(JSON.stringify({ error: err?.message || 'Failed to fetch weather' }));
+        res.end(JSON.stringify({ error: 'Failed to fetch weather' }));
       }
       return;
     }

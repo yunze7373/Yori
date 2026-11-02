@@ -17,6 +17,7 @@
     "test:drills": "vitest run tests/integration",
     "test:e2e": "playwright test",
     "verify:production": "node scripts/verify-production-build.ts",
+    "demo:https": "node scripts/demo-https.mjs",
     "verify:live:spark": "vite-node scripts/live-verify-spark.ts",
     "verify:live:xmemo": "vite-node scripts/live-verify-xmemo.ts"
   },

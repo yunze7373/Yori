@@ -3,8 +3,9 @@
  * Governed by G-204, Acceptance Criteria AC-204-1, AC-204-2, and Invariants INV-101, INV-102, INV-103, INV-106.
  *
  * Requirements:
- * 1. Location: strictly uses configured fixed demo-city coordinates (DEFAULT_DEMO_CITY).
- *    NEVER calls browser geolocation APIs or accesses device location.
+ * 1. Location: the configured coordinate — the fixed demo city (DEFAULT_DEMO_CITY) by default,
+ *    or a consented device fix already rounded to 3 decimals by the first-party proxy (D1).
+ *    NEVER calls browser geolocation APIs itself.
  * 2. Keyless / Free API: Open-Meteo endpoint (no API keys, zero paid services, CC BY 4.0).
  * 3. Signals: returns RealSignal<WeatherData> (source: 'real', label: 'real', bounded validFor: 1h).
  * 4. Fail-closed: network failure, 5xx, or malformed data returns empty list (INV-106).
@@ -113,6 +114,20 @@ export class OpenMeteoWeatherAdapter implements RealProviderAdapter<WeatherData>
 
   public getCoordinate(): DemoCityCoordinate {
     return this.coordinate;
+  }
+
+  /**
+   * Returns an adapter with the same flag, fetch and validity settings bound to another
+   * coordinate (D1: the consented, 3-decimal-rounded device fix). The caller owns rounding.
+   */
+  public withCoordinate(coordinate: DemoCityCoordinate): OpenMeteoWeatherAdapter {
+    return new OpenMeteoWeatherAdapter({
+      enabled: this.enabled,
+      coordinate,
+      fetchFn: this.fetchFn,
+      validForMs: this.validForMs,
+      timeoutMs: this.timeoutMs,
+    });
   }
 
   /**
