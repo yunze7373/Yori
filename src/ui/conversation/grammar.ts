@@ -231,6 +231,19 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
       };
     }
 
+    // 6a. D2: Chinese "food nearby" asks (附近吃什么 / 附近的餐厅 / 周边有什么好吃的) -> unfiltered FIND_LUNCH
+    if (
+      /(?:附近|周边|周围|旁边|这附近)[^。！？?!]{0,8}(?:吃|饭|餐|馆|美食)/.test(rawText) ||
+      /(?:吃什么|吃点什么|去哪(?:里|儿)?吃|找(?:个|家)?(?:饭店|餐厅|饭馆|吃的))/.test(rawText)
+    ) {
+      return {
+        intent: 'FIND_LUNCH',
+        rawText,
+        slots: {},
+        explanation: 'Finding restaurants near you.',
+      };
+    }
+
     // 6. FIND_LUNCH ('Find a quieter vegetarian lunch spot', 'Find lunch nearby', 'quieter + vegetarian')
     const isLunchQuery =
       /\b(?:lunch|restaurant|restaurants|cafe|food|eat|dining|vegetarian|quieter)\b/i.test(normalized) ||

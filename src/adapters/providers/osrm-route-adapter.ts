@@ -39,6 +39,18 @@ export class OSRMRouteAdapter implements RoutingProvider {
     this.fetchFn = config?.fetchFn ?? globalThis.fetch;
   }
 
+  /**
+   * D2: the exact outbound hosts (host + path, no scheme) for the consent copy, read from the
+   * configured base URLs so the disclosure always matches what is actually called.
+   */
+  public outboundHosts(): readonly { readonly purpose: string; readonly host: string }[] {
+    const hosts = [{ purpose: 'driving routes', host: describeOutboundHost(this.baseUrl) }];
+    if (this.footBaseUrl) {
+      hosts.push({ purpose: 'walking routes', host: describeOutboundHost(this.footBaseUrl) });
+    }
+    return hosts;
+  }
+
   async route(
     origin: Coordinate,
     destination: Coordinate,
@@ -121,5 +133,16 @@ export class OSRMRouteAdapter implements RoutingProvider {
       attribution: OSRM_ATTRIBUTION,
       mode,
     };
+  }
+}
+
+/** "https://routing.openstreetmap.de/routed-foot/" -> "routing.openstreetmap.de/routed-foot". */
+export function describeOutboundHost(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const pathPart = parsed.pathname.replace(/\/+$/, '');
+    return `${parsed.host}${pathPart}`;
+  } catch {
+    return url;
   }
 }

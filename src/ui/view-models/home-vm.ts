@@ -70,6 +70,10 @@ export interface BuildHomeCompositionOptions {
   weatherEnabled?: boolean;
   /** D1: provenance of the Live weather response (device fix vs demo city, source, fetch time). */
   weatherProvenance?: { source: string; fetchedAt?: string; atDeviceFix: boolean } | null;
+  /** D2: on-demand "Nearby now" affordance state (Live with a shared fix only). */
+  nearbyNow?: HomeCompositionVM['nearbyNow'];
+  /** D2: exact hosts of the ENABLED keyless providers, for the location consent copy. */
+  consentHosts?: HomeCompositionVM['consentHosts'];
   calendarConnected?: boolean;
   calendarNoRouteReason?: string;
   calendarSignalValue?: {
@@ -614,7 +618,16 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
             bundle?.getAllRecords().find(r => r.kind === 'habit');
           const isConfirmed = habitRec?.provenance === 'confirmed';
           const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
-          const basis = `Based on taste: ${cuisine} (${provenance})`;
+          // D2: Live options without a confirmed-taste match say why they are shown instead.
+          const reasonKind = (opt as any).reasonKind as 'taste' | 'open_now' | 'nearest' | undefined;
+          const basis =
+            options.isLive && reasonKind === 'open_now'
+              ? 'Open now · from OpenStreetMap opening hours'
+              : options.isLive && reasonKind === 'nearest'
+              ? (opt as any).openingStatus === 'closed'
+                ? 'Nearest to you · closed now (OpenStreetMap hours)'
+                : 'Nearest to you · hours unknown'
+              : `Based on taste: ${cuisine} (${provenance})`;
 
           const recId = (opt as any).recordId || opt.id;
           const sourceRef: SourceRef = { recordId: recId, field: 'name' };
@@ -1012,6 +1025,8 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     weatherEnabled: options.weatherEnabled,
     weatherSignalValue,
     weatherProvenanceLine,
+    nearbyNow: options.isLive ? options.nearbyNow : undefined,
+    consentHosts: options.isLive ? options.consentHosts : undefined,
     calendarConnected: options.calendarConnected,
     calendarSignalValue: options.calendarSignalValue ?? (() => {
       const calSig = options.snapshot?.signals.find(s => s.kind === 'calendar');

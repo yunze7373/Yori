@@ -125,6 +125,8 @@ export interface ActionStateStore {
   isInFlight(): boolean;
   cancelInFlight(): void;
   isLiveMode(): boolean;
+  /** D2: Live registers the on-demand nearby search used by an Ask for food nearby (null = off). */
+  setNearbyRequestHandler(handler: ((source: 'ask') => void) | null): void;
 
   setCommandContext(ctx: ActionCommandContext): void;
   getCommandContext(): ActionCommandContext | undefined;

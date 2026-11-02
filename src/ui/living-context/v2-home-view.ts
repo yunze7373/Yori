@@ -319,6 +319,16 @@ function renderActionRow(vm: HomeCompositionVM): string {
   `;
 }
 
+/** D2: consent copy naming the exact hosts of the enabled providers (from their /status). */
+function describeConsentHosts(vm: HomeCompositionVM): string {
+  const hosts = vm.consentHosts ?? [];
+  if (hosts.length === 0) {
+    return 'Used only while Yori is open. Nearby places, routes and weather are off, so your location is not sent to any provider.';
+  }
+  const list = hosts.map(h => `${h.host} (${h.purpose})`).join(', ');
+  return `Used only while Yori is open, rounded to about 100 m, and sent only to: ${list}. Never stored or tracked.`;
+}
+
 export function renderLocationControls(vm: HomeCompositionVM): string {
   const isPrompt = vm.locationState === 'prompt';
   const isDenied = vm.locationState === 'denied';
@@ -336,6 +346,11 @@ export function renderLocationControls(vm: HomeCompositionVM): string {
               ? 'Grant permission to discover nearby dining options.'
               : 'Grant permission to discover nearby fuel stations or select a location manually.'
           }</div>
+          ${
+            vm.isLive
+              ? `<div class="v2-location-notice-hosts" id="location-consent-hosts">${escapeHtml(describeConsentHosts(vm))}</div>`
+              : ''
+          }
         </div>
         <div class="v2-location-action-row">
           <button type="button" class="btn btn-primary v2-location-btn" id="btn-request-location" aria-label="Use My Location">
@@ -538,9 +553,8 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
   // 3. Transit Value
   let transitValue: string;
   if (vm.isLive) {
-    transitValue = vm.topCandidateDistance
-      ? `${vm.topCandidateDistance} · walk`
-      : (vm.options?.[0]?.detail || 'Nearby dining');
+    // D2: card distances are straight-line (labelled by the provider), never claimed as a walk.
+    transitValue = vm.topCandidateDistance || vm.options?.[0]?.detail || 'Nearby dining';
   } else if (vm.layoutKind === 'journey') {
     transitValue =
       vm.options?.[0]?.detail ||
@@ -626,6 +640,32 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
  * the consented device fix (weatherProvenanceLine is set) and carries a real value; otherwise
  * nothing is rendered (no placeholder temperature, no demo city).
  */
+/**
+ * D2: on-demand "Nearby now" (Live with a shared fix only). Searches restaurants around the
+ * fix at any hour; 'off' says honestly that the places provider is disabled by owner setting.
+ */
+function renderNearbyNow(vm: HomeCompositionVM, placement: 'quiet' | 'card'): string {
+  if (!vm.isLive || !vm.nearbyNow) return '';
+  const { state, note } = vm.nearbyNow;
+  if (state === 'off') {
+    return placement === 'quiet'
+      ? `<p class="nearby-now-off" id="nearby-now-off" data-provenance="none">Nearby restaurants are off (owner setting)</p>`
+      : '';
+  }
+  const loading = state === 'loading';
+  const label = loading ? 'Searching nearby…' : placement === 'quiet' ? 'Nearby now' : 'Refresh nearby';
+  return `
+          <div class="nearby-now nearby-now-${placement}" id="nearby-now">
+            <button type="button" class="btn ${placement === 'quiet' ? 'btn-primary' : 'btn-outline btn-sm'} nearby-now-btn" id="btn-nearby-now" ${loading ? 'disabled aria-busy="true"' : ''} aria-label="${placement === 'quiet' ? 'Find restaurants near you now' : 'Refresh restaurants near you'}">${escapeHtml(label)}</button>
+            ${
+              placement === 'quiet'
+                ? `<span class="nearby-now-caption">Restaurants around you · OpenStreetMap via Overpass</span>`
+                : ''
+            }
+            ${note ? `<span class="nearby-now-note" id="nearby-now-note" role="status">${escapeHtml(note)}</span>` : ''}
+          </div>`;
+}
+
 function renderLiveWeatherNow(vm: HomeCompositionVM): string {
   if (!vm.isLive || !vm.weatherProvenanceLine || !vm.weatherSignalValue) return '';
   if (vm.weatherError || vm.livingHeader?.weatherDisplay === 'Weather unavailable') return '';
@@ -659,6 +699,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           <h2 class="quiet-title" id="quiet-title">${escapeHtml(vm.suppressedQuiet?.message || vm.title)}</h2>
           <p class="quiet-subtitle" id="quiet-subtitle">${escapeHtml(vm.headline)}</p>
           ${renderLiveWeatherNow(vm)}
+          ${vm.suppressedQuiet ? '' : renderNearbyNow(vm, 'quiet')}
           ${
             vm.suppressedQuiet
               ? `
@@ -927,6 +968,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             <div class="now-title ${vm.planDiff ? 'plan-diff-highlight' : ''}" id="now-title" data-slot="chrome" data-slot-reason="Candidates hero headline">${escapeHtml(vm.headline)}</div>
           `
           }
+          ${renderNearbyNow(vm, 'card')}
           <div class="mock-places-notice" data-slot="chrome" data-slot-reason="Places disclosure notice">${
             vm.isLive
               ? 'OpenStreetMap via Overpass (ODbL) · live nearby dining'

@@ -2649,6 +2649,11 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   }
 }
 
+/* D2: the single compact hero card spans the row instead of one third of it. */
+.v2-candidate-list > .v2-candidate-compact-list {
+  grid-column: 1 / -1;
+}
+
 .v2-candidate-card {
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
@@ -2699,6 +2704,19 @@ button:focus-visible, a:focus-visible, select:focus-visible {
 .compact-hero-card .v2-candidate-info {
   padding: 0;
   gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+ * D2: the generic .v2-candidate-art rule (width 100%, height 120px) is declared later with the
+ * same specificity and used to win, stretching the thumb across the card and pushing the name,
+ * distance, open status and reason outside it (clipped by overflow: hidden).
+ */
+.v2-candidate-card.compact-hero-card .compact-hero-thumb {
+  width: 72px;
+  height: 72px;
+  min-width: 72px;
 }
 
 .compact-hero-card .v2-candidate-name {
@@ -5742,6 +5760,42 @@ button.v2-view-detail-link:focus-visible {
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
+}
+
+/* D2: on-demand "Nearby now" search (quiet Live home + lunch card refresh). */
+.nearby-now {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 14px auto 2px;
+}
+
+.nearby-now.nearby-now-card {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin: 6px 0 4px;
+}
+
+.nearby-now-btn {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.nearby-now-caption,
+.nearby-now-note,
+.nearby-now-off {
+  font-size: 0.75rem;
+  color: var(--color-ink-muted, #5C6F68);
+}
+
+.v2-location-notice-hosts {
+  margin-top: 6px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--color-ink-muted, #5C6F68);
+  overflow-wrap: anywhere;
 }
 
 /* D1: weather near the consented fix on the quiet Live home. */

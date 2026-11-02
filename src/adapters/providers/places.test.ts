@@ -470,6 +470,8 @@ describe('L3-REAL-PLACES: Unit Acceptance Matrix', () => {
       enabled: false,
       provider: 'overpass',
       attribution: OVERPASS_ATTRIBUTION,
+      // D2: exact outbound host for the consent copy (reported even while off).
+      outboundHosts: [{ purpose: 'nearby places', host: 'overpass-api.de/api/interpreter' }],
     });
 
     // Query endpoint
@@ -583,12 +585,12 @@ describe('L3-REAL-PLACES: Unit Acceptance Matrix', () => {
     expect(rankedA[0]!.name).toBe('Tokyo Ramen Bar');
     expect(rankedA[0]!.rankingExplanation).toBe('Matches your confirmed taste for ramen');
     expect(rankedA[1]!.name).toBe('Downtown Diner');
-    expect(rankedA[1]!.rankingExplanation).toContain('Closest dining option (200 m (straight-line))');
+    expect(rankedA[1]!.rankingExplanation).toBe('Closest dining option · 200 m (straight-line)');
 
     // Case B: No confirmed taste memory -> ranks purely by distance
     const rankedB = rankPlacesByConfirmedPreferences(places, []);
     expect(rankedB[0]!.name).toBe('Downtown Diner');
-    expect(rankedB[0]!.rankingExplanation).toContain('Closest dining option (200 m (straight-line))');
+    expect(rankedB[0]!.rankingExplanation).toBe('Closest dining option · 200 m (straight-line)');
     expect(rankedB[1]!.name).toBe('Tokyo Ramen Bar');
   });
 });

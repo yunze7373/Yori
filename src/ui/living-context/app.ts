@@ -159,7 +159,7 @@ import {
   type CardSelectionState,
 } from './desktop-ia.js';
 import { renderDesktopLeftNav } from './desktop-nav.js';
-import { resolveWeatherCurrentUrl } from './weather-request.js';
+import { resolveWeatherCurrentUrl, roundFixCoordinate } from './weather-request.js';
 import { renderDesktopRightPanel } from './desktop-panel.js';
 import type { HomeCompositionVM } from '../view-models/index.js';
 
@@ -1928,6 +1928,17 @@ export function renderApp(
   };
   let liveWeatherSignal: RealSignal<WeatherData> | null = null;
   let liveWeatherProvenance: { source: string; fetchedAt?: string; atDeviceFix: boolean } | null = null;
+  // D2: exact provider hosts for the location consent copy, as reported by each /status.
+  type OutboundHost = { purpose: string; host: string };
+  let weatherOutboundHosts: OutboundHost[] = [];
+  const readOutboundHosts = (data: unknown): OutboundHost[] => {
+    const raw = (data as { outboundHosts?: unknown } | null)?.outboundHosts;
+    return Array.isArray(raw)
+      ? raw.filter(
+          (h): h is OutboundHost => typeof h?.purpose === 'string' && typeof h?.host === 'string'
+        )
+      : [];
+  };
   if (contextMode === 'live') {
     defaultLocationPort.setLocation('prompt');
     defaultModelCommandInterpreter.setMode('live');
@@ -1984,6 +1995,7 @@ export function renderApp(
         if (resp.ok) {
           weatherError = null;
           const data = await resp.json();
+          weatherOutboundHosts = data.enabled ? readOutboundHosts(data) : [];
           if (data.enabled) {
             weatherStatus = data;
             // D1: Live sends only the consented fix (3 decimals); no fix -> no request, no demo city.
@@ -2199,6 +2211,18 @@ export function renderApp(
   let livePlacesList: readonly RankedPlaceItem[] = [];
   let livePlacesLoading = false;
   let livePlacesError = false;
+  // D2 (DEMO_RESCUE): on-demand "Nearby now" / Ask path. The explicit request becomes a
+  // user_request signal (lunch detector lifts only the meal window for it); places refresh is
+  // single-flight and honours the proxy's 10 s outbound interval (performance clock, so a
+  // patched Date in tests cannot freeze it).
+  let liveNearbyRequestSignal: LiveSignal | null = null;
+  let nearbyNowPending = false;
+  let nearbyNowNote: string | null = null;
+  let placesRefreshInFlight: Promise<void> | null = null;
+  let lastPlacesFetch: { key: string; atMs: number } | null = null;
+  const PLACES_CLIENT_MIN_INTERVAL_MS = 10000;
+  const nowMonotonicMs = () =>
+    typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
   let selectedLivePlace: PlaceItem | null = null;
 
   async function checkPlacesStatus() {
@@ -2215,7 +2239,40 @@ export function renderApp(
     await refreshLivePlaces();
   }
 
-  async function refreshLivePlaces() {
+  function refreshLivePlaces(): Promise<void> {
+    if (placesRefreshInFlight) return placesRefreshInFlight;
+    placesRefreshInFlight = refreshLivePlacesOnce().finally(() => {
+      placesRefreshInFlight = null;
+    });
+    return placesRefreshInFlight;
+  }
+
+  async function requestNearbyNow(source: 'nearby_now' | 'ask') {
+    if (contextMode !== 'live') return;
+    const requestedAt = new Date().toISOString();
+    liveNearbyRequestSignal = createLiveSignal({
+      kind: 'user_request',
+      value: { intent: 'lunch', source, requestedAt },
+      provider: 'user',
+      asOf: requestedAt,
+      validFor: 30 * 60 * 1000,
+      confidence: 1.0,
+      provenance: 'user',
+      consentScope: 'local_only',
+      status: 'available',
+    });
+    nearbyNowPending = true;
+    nearbyNowNote = null;
+    update();
+    try {
+      await refreshLivePlaces();
+    } finally {
+      nearbyNowPending = false;
+      update();
+    }
+  }
+
+  async function refreshLivePlacesOnce() {
     if (contextMode !== 'live') return;
     if (!livePlacesStatus.enabled) {
       livePlacesList = [];
@@ -2240,12 +2297,32 @@ export function renderApp(
       return;
     }
 
-    const [lat, lng] = locCoords;
+    // D2: only the 3-decimal fix leaves the page (the proxy re-rounds too).
+    const lat = roundFixCoordinate(locCoords[0]);
+    const lng = roundFixCoordinate(locCoords[1]);
+    const fetchKey = `${lat},${lng}`;
+    if (
+      lastPlacesFetch &&
+      lastPlacesFetch.key === fetchKey &&
+      !livePlacesError &&
+      nowMonotonicMs() - lastPlacesFetch.atMs < PLACES_CLIENT_MIN_INTERVAL_MS
+    ) {
+      // Same spot within the provider's 10 s interval: keep the results just fetched.
+      nearbyNowNote = 'Up to date · searched moments ago';
+      update();
+      return;
+    }
     livePlacesLoading = true;
     update();
 
     try {
+      lastPlacesFetch = { key: fetchKey, atMs: nowMonotonicMs() };
       const resp = await fetch(`/api/places?lat=${lat}&lng=${lng}&amenity=restaurant&radius=1500`, { cache: 'no-store' });
+      if (resp.status === 429) {
+        // Provider fair-use interval: keep what is shown, never flip to an error state.
+        nearbyNowNote = 'Searched moments ago · try again in a few seconds';
+        return;
+      }
       if (resp.ok) {
         const data = await resp.json();
         if (data.enabled && Array.isArray(data.places)) {
@@ -2492,6 +2569,10 @@ export function renderApp(
     }
   }
 
+  if (contextMode === 'live') {
+    actionStore.setNearbyRequestHandler(source => void requestNearbyNow(source));
+  }
+
   void checkXMemoStatus();
   void checkWeatherStatus();
   void checkRouteStatus();
@@ -2568,7 +2649,9 @@ export function renderApp(
             liveDestination,
             {
               calendarSignal: liveCalendarSignal,
-              customSignals: liveTravelSignal ? [liveTravelSignal] : undefined,
+              customSignals: [liveTravelSignal, liveNearbyRequestSignal].filter(
+                (sig): sig is LiveSignal => sig != null
+              ),
             }
           )
         : computeSceneState(
@@ -3121,7 +3204,13 @@ export function renderApp(
                 } else if (nowPlan.intentId === 'lunch') {
                   cause = 'nearby dining options';
                   causeMarker = 'What changed: nearby dining options';
-                  heroCauseEffect = 'Found nearby lunch options based on your location and preferences.';
+                  // D2: only claim preferences when a confirmed taste fact was actually used.
+                  heroCauseEffect =
+                    (nowPlan.why?.memoryFactsUsed?.length ?? 0) > 0
+                      ? 'Found nearby lunch options based on your location and preferences.'
+                      : (nowPlan.optionsOrSteps as readonly { reasonKind?: string }[])?.some(o => o?.reasonKind === 'open_now')
+                      ? 'Found restaurants near you that are open now (OpenStreetMap hours).'
+                      : 'Found restaurants near your location.';
                 }
 
                 activeLiveChangeMoment = {
@@ -3233,6 +3322,27 @@ export function renderApp(
           isLive: contextMode === 'live',
           weatherEnabled: weatherStatus.enabled,
           weatherProvenance: liveWeatherProvenance,
+          consentHosts:
+            contextMode === 'live'
+              ? [
+                  ...(livePlacesStatus.enabled ? readOutboundHosts(livePlacesStatus) : []),
+                  ...(liveRouteStatus.enabled ? readOutboundHosts(liveRouteStatus) : []),
+                  ...weatherOutboundHosts,
+                ]
+              : undefined,
+          nearbyNow:
+            contextMode === 'live' &&
+            liveLocationStatus.status === 'available' &&
+            liveLocationStatus.coords != null
+              ? {
+                  state: !livePlacesStatus.enabled
+                    ? 'off'
+                    : nearbyNowPending || livePlacesLoading
+                    ? 'loading'
+                    : 'ready',
+                  note: nearbyNowNote ?? undefined,
+                }
+              : undefined,
           calendarConnected: liveCalendarStatus.configured && liveCalendarStatus.enabled,
           calendarNoRouteReason: liveRouteErrorReason ?? undefined,
           calendarSignalValue: liveCalendarSignal?.value as any,
@@ -4474,6 +4584,8 @@ export function renderApp(
         reasoningState = null;
         reasoningRequestId++;
         defaultModelCommandInterpreter.setMode('scripted_fixture');
+        actionStore.setNearbyRequestHandler(null);
+        liveNearbyRequestSignal = null;
         liveLocationStatus = defaultLocationPort.getLocation();
         await refreshConnectorStatuses();
         update();
@@ -4493,6 +4605,7 @@ export function renderApp(
           defaultLocationPort.setLocation('prompt');
         }
         defaultModelCommandInterpreter.setMode('live');
+        actionStore.setNearbyRequestHandler(source => void requestNearbyNow(source));
         liveLocationStatus = defaultLocationPort.getLocation();
         await refreshConnectorStatuses();
         void checkRouteStatus();
@@ -5715,6 +5828,13 @@ export function renderApp(
       });
     }
 
+    const nearbyNowBtn = root.querySelector('#btn-nearby-now');
+    if (nearbyNowBtn) {
+      nearbyNowBtn.addEventListener('click', () => {
+        void requestNearbyNow('nearby_now');
+      });
+    }
+
     const denyLocBtn = root.querySelector('#btn-deny-location');
     if (denyLocBtn) {
       denyLocBtn.addEventListener('click', async () => {
@@ -5728,6 +5848,7 @@ export function renderApp(
           livePlacesList = [];
           liveWeatherSignal = null;
           liveWeatherProvenance = null;
+          liveNearbyRequestSignal = null;
         }
         await refreshConnectorStatuses();
         update();

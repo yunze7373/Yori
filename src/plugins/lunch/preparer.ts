@@ -38,6 +38,17 @@ export interface RankedPlaceOption {
   readonly osmId?: number;
   readonly fetchedAt?: string;
   readonly attribution?: string;
+  /** D2: why this option is shown — 'taste' (confirmed taste match), 'open_now' or 'nearest'. */
+  readonly reasonKind?: 'taste' | 'open_now' | 'nearest';
+}
+
+/**
+ * D2 (DEMO_RESCUE): Live provider places may be recommended without a confirmed taste fact. The
+ * reason is then open-now (OSM opening_hours only) or nearest (hours unknown) — never invented
+ * taste. Demo/simulated places keep the confirmed-taste fail-closed rule (AC-103-1).
+ */
+function isLiveProviderPlacesSignal(sig: { readonly value?: unknown } | undefined): boolean {
+  return Boolean(sig && (sig as { provenance?: unknown }).provenance === 'live');
 }
 
 export class LunchPreparer implements Preparer {
@@ -73,8 +84,11 @@ export class LunchPreparer implements Preparer {
           f.key.toLowerCase().includes('food'))
     );
 
-    if (confirmedTasteFacts.length === 0) {
-      // Fail closed: cannot prepare lunch recommendation without confirmed taste memory
+    const lunchPlacesSignalEarly = snapshot.signals.find(s => s.kind === 'places_lunch');
+    const liveProviderPlaces = isLiveProviderPlacesSignal(lunchPlacesSignalEarly);
+
+    if (confirmedTasteFacts.length === 0 && !liveProviderPlaces) {
+      // Fail closed: cannot prepare a demo lunch recommendation without confirmed taste memory
       return null;
     }
 
@@ -161,12 +175,21 @@ export class LunchPreparer implements Preparer {
       };
     });
 
-    // Filter to places matching at least one taste keyword (Non-resurrection invariant C1)
-    const matchingPlaces = scoredPlaces.filter(p => p.matchScore > 0);
-    if (matchingPlaces.length === 0) {
+    // Filter to places matching at least one taste keyword (Non-resurrection invariant C1).
+    // D2: with Live provider places and no taste match, fall back to open-now, then nearest.
+    const tasteMatched = scoredPlaces.filter(p => p.matchScore > 0);
+    const usedTaste = tasteMatched.length > 0;
+    if (!usedTaste && !liveProviderPlaces) {
       // If none match confirmed taste, fail closed rather than proposing unsuitable options
       return null;
     }
+    const matchingPlaces = usedTaste
+      ? tasteMatched
+      : scoredPlaces.map(p => ({
+          ...p,
+          // Open now (from OSM opening_hours) ranks above unknown or closed hours.
+          matchScore: (p.place as any).openingStatus === 'open' ? 1 : 0,
+        }));
 
     // 5. Evaluate filters from UserRequestOverride if present
     const filters = override?.kind === 'lunch_filter' && Array.isArray(override.filters)
@@ -250,6 +273,7 @@ export class LunchPreparer implements Preparer {
         osmId: pAny.osmId,
         fetchedAt: pAny.fetchedAt,
         attribution: pAny.attribution,
+        reasonKind: usedTaste ? 'taste' : pAny.openingStatus === 'open' ? 'open_now' : 'nearest',
       });
     });
 
@@ -274,7 +298,12 @@ export class LunchPreparer implements Preparer {
           kind: sig.kind,
           source: sig.source,
           issuedAt: sig.issuedAt,
-          description: `${sig.kind} signal evaluated at ${sig.issuedAt}`,
+          description:
+            sig.kind === 'user_request'
+              ? 'Because you asked for food nearby just now'
+              : sig.kind === 'places_lunch' && liveProviderPlaces
+              ? 'Nearby places from OpenStreetMap via Overpass (ODbL)'
+              : `${sig.kind} signal evaluated at ${sig.issuedAt}`,
         })
       );
     }
@@ -284,7 +313,9 @@ export class LunchPreparer implements Preparer {
           kind: lunchPlacesSignal.kind,
           source: lunchPlacesSignal.source,
           issuedAt: lunchPlacesSignal.issuedAt,
-          description: 'Simulated restaurant places from provider',
+          description: liveProviderPlaces
+            ? 'Nearby places from OpenStreetMap via Overpass (ODbL)'
+            : 'Simulated restaurant places from provider',
         })
       );
     } else if (placesSignal && !evidenceSignals.some(e => e.kind === 'mock_places')) {
@@ -298,7 +329,8 @@ export class LunchPreparer implements Preparer {
       );
     }
 
-    const memoryFactsUsed: (MemoryCitation & { provenance?: unknown })[] = confirmedTasteFacts.map(f =>
+    const citedTasteFacts = usedTaste ? confirmedTasteFacts : [];
+    const memoryFactsUsed: (MemoryCitation & { provenance?: unknown })[] = citedTasteFacts.map(f =>
       Object.freeze({
         key: f.key,
         value: f.value,
@@ -315,9 +347,14 @@ export class LunchPreparer implements Preparer {
       ? `Because you asked: ${filters.join(', ')} · this time only; `
       : '';
 
+    const openCount = optionsOrSteps.filter(o => o.openingStatus === 'open').length;
     const headline = filters.length > 0
       ? `Lunch options near you · prioritized for ${filters.join(', ')}`
-      : `Lunch options near you (${selected.length} places matching your tastes)`;
+      : usedTaste
+      ? `Lunch options near you (${selected.length} places matching your tastes)`
+      : openCount > 0
+      ? `Restaurants near you (${openCount} open now)`
+      : `Restaurants near you (${selected.length} nearest)`;
 
     const isUserConfirmed = confirmedTasteFacts.every(
       f => (f.provenance as any)?.source === 'user_confirmed'
@@ -337,7 +374,9 @@ export class LunchPreparer implements Preparer {
       why: Object.freeze({
         evidenceSignals: Object.freeze(evidenceSignals),
         memoryFactsUsed: Object.freeze(memoryFactsUsed),
-        derivation: `${filterNote}Recommended ${selected.length} options matching ${tasteDesc} (${tasteFactSummary}).`,
+        derivation: usedTaste
+          ? `${filterNote}Recommended ${selected.length} options matching ${tasteDesc} (${tasteFactSummary}).`
+          : `${filterNote}No confirmed taste yet: showing ${selected.length} nearby places, open now first (OSM opening_hours), then nearest.`,
       }),
     });
   }

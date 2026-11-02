@@ -812,14 +812,22 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     const initialCount = placesReqCount;
     expect(initialCount).toBe(1);
 
-    // Dispatch rapid focus and visibilitychange events simultaneously
+    // D2: inside the provider's 10 s outbound interval the client reuses the results just
+    // fetched (a real refetch would only earn the proxy's 429), so no extra fetch yet.
     await page.evaluate(() => {
       window.dispatchEvent(new Event('focus'));
       document.dispatchEvent(new Event('visibilitychange'));
     });
     await page.waitForTimeout(500);
+    expect(placesReqCount - initialCount).toBe(0);
 
-    // Rapid focus and visibilitychange coalesce into exactly 1 additional places fetch
+    // Past the interval, rapid focus and visibilitychange coalesce into exactly 1 places fetch
+    await page.clock.fastForward(11000);
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(500);
     expect(placesReqCount - initialCount).toBe(1);
   });
 

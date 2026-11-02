@@ -118,7 +118,9 @@ describe('S3-LIVE-LUNCH: Overpass Places Adapter', () => {
     // Cold user with no confirmed taste facts: falls back to distance rule
     const rankedCold = rankPlacesByConfirmedPreferences(items, []);
     expect(rankedCold[0]!.name).toBe('Market Street Cafe'); // Closest straight-line distance
-    expect(rankedCold[0]!.rankingExplanation).toContain('Closest dining option');
+    // D2: it is also open now (OSM opening_hours), so the reason says so instead of "closest".
+    expect(rankedCold[0]!.rankingExplanation).toBe('Open now · 113 m (straight-line)');
+    expect(rankedCold.some(p => p.rankingExplanation.startsWith('Closest dining option · '))).toBe(true);
   });
 
   it('executes searchNearby using injected fetchFn with recorded response', async () => {

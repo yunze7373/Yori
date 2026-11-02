@@ -239,6 +239,10 @@ export interface HomeCompositionVM {
   };
   /** D1: "<source> · near you · as of <time>" when Live weather was measured at the consented fix. */
   readonly weatherProvenanceLine?: string;
+  /** D2: "Nearby now" on-demand search ('off' = places provider disabled by owner setting). */
+  readonly nearbyNow?: { readonly state: 'ready' | 'loading' | 'off'; readonly note?: string };
+  /** D2: exact hosts (and purpose) of the enabled keyless providers, from their /status. */
+  readonly consentHosts?: readonly { readonly purpose: string; readonly host: string }[];
   readonly calendarConnected?: boolean;
   readonly calendarSignalValue?: {
     title?: string;

@@ -163,6 +163,16 @@ export class DefaultActionStateStore implements ActionStateStore {
     this.notify();
   }
 
+  /**
+   * D2 (DEMO_RESCUE): Live registers this so an Ask request for food nearby triggers the same
+   * single-flight Overpass refresh as the "Nearby now" button, at any hour.
+   */
+  private nearbyRequestHandler: ((source: 'ask') => void) | null = null;
+
+  public setNearbyRequestHandler(handler: ((source: 'ask') => void) | null): void {
+    this.nearbyRequestHandler = handler;
+  }
+
   public isLiveMode(): boolean {
     return (this.interpreter as any)?.isLiveMode?.() ?? false;
   }
@@ -1182,6 +1192,28 @@ export class DefaultActionStateStore implements ActionStateStore {
           this.notify();
           return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
         }
+      }
+
+      // D2: in Live, an unfiltered ask (or one with no lunch card to filter yet) runs the same
+      // on-demand nearby search as "Nearby now"; results land on Home when the provider answers.
+      const hasLunchPlan = Boolean(ctx?.plan && ctx.plan.intentId === 'lunch' && ctx.candidate && ctx.snapshot && ctx.memory);
+      if (isDynamicLunch && this.nearbyRequestHandler && (filters.length === 0 || !hasLunchPlan)) {
+        this.beginCommand(trimmed, 'Searching nearby · OpenStreetMap via Overpass', 'comparing');
+        this.nearbyRequestHandler('ask');
+        const askMsg =
+          filters.length > 0
+            ? `Searching restaurants near you now (OpenStreetMap via Overpass). Ask for ${filtersDesc} again once they show on Home.`
+            : 'Searching restaurants near you now (OpenStreetMap via Overpass). They will show on Home in a moment.';
+        this.resolveExecutable(askMsg);
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: askMsg,
+          timestamp: new Date().toISOString(),
+        });
+        const collapsed = this.evaluateAutoCollapse('executable_determinate');
+        this.notify();
+        return { collapsed, rule: 'executable_determinate', response: askMsg };
       }
 
       if (!ctx || !ctx.plan || ctx.plan.intentId !== 'lunch' || !ctx.candidate || !ctx.snapshot || !ctx.memory) {

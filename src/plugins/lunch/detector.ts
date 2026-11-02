@@ -24,6 +24,31 @@ export const LUNCH_WINDOW_END_HOUR = 14;   // 14:30 (2:30 PM)
 export const LUNCH_WINDOW_END_MINUTE = 30;
 export const MINIMUM_LUNCH_WINDOW_MINUTES = 20;
 
+/** D2: an explicit "Nearby now" tap or Ask request stays fresh for 30 minutes. */
+export const NEARBY_REQUEST_FRESH_MS = 30 * 60 * 1000;
+export const NEARBY_REQUEST_SOURCES = ['nearby_now', 'ask'] as const;
+
+/**
+ * D2 (DEMO_RESCUE): true when the snapshot carries a fresh, explicit user request for nearby
+ * food (`user_request` signal, intent 'lunch', source 'nearby_now' | 'ask'). Such a request lifts
+ * ONLY the meal-window check; home, schedule and all shared core policy still apply.
+ */
+export function hasFreshNearbyRequest(snapshot: ContextSnapshot): ContextSignal | null {
+  const asOfMs = Date.parse(snapshot.asOf);
+  if (!Number.isFinite(asOfMs)) return null;
+  for (const sig of snapshot.signals) {
+    if (sig.kind !== 'user_request' || !sig.value || typeof sig.value !== 'object') continue;
+    const val = sig.value as Record<string, unknown>;
+    if (val.intent !== 'lunch') continue;
+    if (!(NEARBY_REQUEST_SOURCES as readonly unknown[]).includes(val.source)) continue;
+    const at = Date.parse(typeof val.requestedAt === 'string' ? val.requestedAt : sig.issuedAt);
+    if (!Number.isFinite(at)) continue;
+    const age = asOfMs - at;
+    if (age >= 0 && age <= NEARBY_REQUEST_FRESH_MS) return sig;
+  }
+  return null;
+}
+
 /**
  * Checks whether an ISO timestamp falls within the local lunch window (11:00 - 14:30).
  */
@@ -91,8 +116,10 @@ export class LunchDetector implements IntentDetector {
 
     const timezone = getTimezoneFromSnapshot(snapshot);
 
-    // 1. Lunch window check (Finding 4): Snapshot local time must be in 11:00 - 14:30
-    if (!isWithinLunchWindow(snapshot.asOf, timezone)) {
+    // 1. Lunch window check (Finding 4): Snapshot local time must be in 11:00 - 14:30,
+    //    unless the user explicitly asked for nearby food just now (D2 on-demand path).
+    const nearbyRequest = hasFreshNearbyRequest(snapshot);
+    if (!nearbyRequest && !isWithinLunchWindow(snapshot.asOf, timezone)) {
       return null;
     }
 
@@ -118,6 +145,7 @@ export class LunchDetector implements IntentDetector {
     if (scheduleSignal) relevantSignals.push(scheduleSignal);
     if (eatingSignal) relevantSignals.push(eatingSignal);
     if (mockPlacesSignal) relevantSignals.push(mockPlacesSignal);
+    if (nearbyRequest) relevantSignals.push(nearbyRequest);
 
     if (relevantSignals.length === 0) {
       return null;
@@ -167,6 +195,7 @@ export class LunchDetector implements IntentDetector {
       metadata: Object.freeze({
         isBusy: isUserBusy,
         completedToday: hasEatenToday,
+        userRequested: Boolean(nearbyRequest),
       }),
     });
   }

@@ -460,9 +460,11 @@ test.describe('S2-CONNECTORS: Settings > Connectors Screen', () => {
     const sourcesDialog = page.locator('.sources-modal-card');
     await expect(sourcesDialog).toBeVisible();
 
-    // Verify Weather detail in Sources view matches Connectors description
+    // Verify Weather detail in Sources view matches Connectors description. D1 (DEMO_RESCUE):
+    // Live weather follows the shared fix, so the demo city must never appear in Live.
     const weatherItem = sourcesDialog.locator('#source-item-weather');
-    await expect(weatherItem).toContainText('Kyoto, Japan');
+    await expect(weatherItem).toContainText('Open-Meteo · follows your shared location (rounded ~100 m)');
+    await expect(weatherItem).not.toContainText('Kyoto, Japan');
 
     // Verify Calendar detail in Sources view states not connected
     const calItem = sourcesDialog.locator('#source-item-calendar');

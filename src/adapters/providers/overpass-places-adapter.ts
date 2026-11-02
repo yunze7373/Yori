@@ -336,11 +336,19 @@ export function rankPlacesByConfirmedPreferences(
         rankScore: 10000 - distMeters,
         rankingExplanation: `Matches your confirmed taste for ${matchedFact.keyword}`,
       };
+    } else if (place.openingStatus === 'open') {
+      // D2: without a taste match, open now (OSM opening_hours only) ranks above unknown/closed,
+      // matching the lunch card's order.
+      return {
+        ...place,
+        rankScore: 3000 - distMeters,
+        rankingExplanation: `Open now · ${distLabel}`,
+      };
     } else {
       return {
         ...place,
         rankScore: 1000 - distMeters,
-        rankingExplanation: `Closest dining option (${distLabel})`,
+        rankingExplanation: `Closest dining option · ${distLabel}`,
       };
     }
   });
@@ -352,6 +360,11 @@ export function rankPlacesByConfirmedPreferences(
 export interface OverpassPlacesAdapterOptions {
   readonly endpoint?: string;
   readonly fetchFn?: typeof fetch;
+  /**
+   * D2: the proxy's resolved flag (PLACES_LIVE_ENABLED, or the keyless-trio default) governs
+   * outbound calls. Omitted -> legacy env check (isPlacesLiveEnabled).
+   */
+  readonly liveEnabled?: boolean;
 }
 
 export class OverpassPlacesAdapter implements PlacesProvider {
@@ -360,14 +373,16 @@ export class OverpassPlacesAdapter implements PlacesProvider {
 
   private readonly endpoint: string;
   private readonly fetchFn?: typeof fetch;
+  private readonly liveEnabled?: boolean;
 
   constructor(options: OverpassPlacesAdapterOptions = {}) {
     this.endpoint = options.endpoint ?? DEFAULT_OVERPASS_ENDPOINT;
     this.fetchFn = options.fetchFn;
+    this.liveEnabled = options.liveEnabled;
   }
 
   public async searchNearby(query: PlacesQuery): Promise<readonly PlaceItem[]> {
-    if (!isPlacesLiveEnabled() && !this.fetchFn) {
+    if (!(this.liveEnabled ?? isPlacesLiveEnabled()) && !this.fetchFn) {
       throw new Error(
         'Places live provider is disabled (PLACES_LIVE_ENABLED=false). Real network calls are forbidden in this mode.'
       );

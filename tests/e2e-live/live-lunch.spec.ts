@@ -482,7 +482,10 @@ test.describe('S3-LIVE-LUNCH: Full Live Verification Matrix', () => {
     expect(candidateTiles).toBe(0);
   });
 
-  test('Cold user with no confirmed lunch memory fails closed to quiet state', async ({
+  // D2 (DEMO_RESCUE) contract change: a cold user now gets Live candidates with an honest
+  // non-taste reason (open now from OSM opening_hours, else nearest) instead of a quiet state.
+  // No taste is ever claimed without a confirmed fact.
+  test('Cold user with no confirmed lunch memory gets candidates with an honest non-taste reason', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -494,18 +497,16 @@ test.describe('S3-LIVE-LUNCH: Full Live Verification Matrix', () => {
     await page.waitForSelector('.app-layout[data-context-mode="live"]');
 
     const reqLocBtn = page.locator('#btn-request-location');
-    if (await reqLocBtn.isVisible()) {
-      await reqLocBtn.click();
-    }
+    await expect(reqLocBtn).toBeVisible();
+    await reqLocBtn.click();
 
-    // Since cold user has zero confirmed taste memory facts, lunch recommendation fails closed
-    // No ungrounded lunch candidate card is presented to the user
-    const heroLunch = page.locator('.now-card.v2-candidates-hero');
-    await expect(heroLunch).toHaveCount(0);
-
-    // Quiet neutral state is maintained
-    const quietTitle = page.locator('#quiet-title, .quiet-title');
-    await expect(quietTitle).toBeVisible();
-    await expect(quietTitle).toContainText(/Nothing needs your attention right now|All quiet for now|Location Shared/i);
+    const hero = page.locator('.v2-candidate-card').first();
+    await expect(hero).toBeVisible({ timeout: 10000 });
+    await expect(hero.locator('.v2-candidate-basis')).toHaveText(
+      /^(Open now · from OpenStreetMap opening hours|Nearest to you · (hours unknown|closed now \(OpenStreetMap hours\)))$/
+    );
+    const body = await page.locator('body').innerText();
+    expect(body).not.toMatch(/Based on taste|Demo profile|matching your tastes/i);
+    expect(await page.locator('[data-provenance="fixture"]').count()).toBe(0);
   });
 });

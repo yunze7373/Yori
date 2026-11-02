@@ -27,10 +27,11 @@ import {
   type RouteMode,
 } from './routing-types.js';
 import type { RoutingProvider } from './routing-provider.js';
-import { OSRMRouteAdapter } from './osrm-route-adapter.js';
+import { OSRMRouteAdapter, describeOutboundHost } from './osrm-route-adapter.js';
 import type { PlacesProvider } from './places-types.js';
 import {
   OverpassPlacesAdapter,
+  DEFAULT_OVERPASS_ENDPOINT,
   OVERPASS_ATTRIBUTION,
   OVERPASS_MAX_RADIUS_METERS,
   OVERPASS_MIN_OUTBOUND_INTERVAL_MS,
@@ -96,8 +97,7 @@ export interface WeatherProxyConfig {
 export function resolveWeatherConfig(
   env: NodeJS.ProcessEnv = process.env
 ): WeatherProxyConfig {
-  const enabledVal = env['WEATHER_LIVE_ENABLED'];
-  const enabled = enabledVal === 'true' || enabledVal === '1';
+  const enabled = resolveTrioFlag(env['WEATHER_LIVE_ENABLED']);
 
   const latStr = env['DEMO_CITY_LAT'];
   const lonStr = env['DEMO_CITY_LON'];
@@ -116,6 +116,23 @@ export function resolveWeatherConfig(
       timezone,
     },
   };
+}
+
+/**
+ * DEMO_RESCUE D2 — keyless trio default (Overpass places, OSRM/routed-foot routing, Open-Meteo).
+ * The §9 owner confirmation flips this ONE constant to true. Until then every provider stays
+ * default-off. An explicit env value ('true'/'1' or 'false'/'0') always wins over the default,
+ * so an owner can still disable a single provider after the flip. Shipped: false.
+ */
+export const KEYLESS_TRIO_DEFAULT_ON = false;
+
+export function resolveTrioFlag(
+  raw: string | undefined,
+  defaultOn: boolean = KEYLESS_TRIO_DEFAULT_ON
+): boolean {
+  if (raw === 'true' || raw === '1') return true;
+  if (raw === 'false' || raw === '0') return false;
+  return defaultOn;
 }
 
 /** Decimal places kept for any device fix sent to the weather provider (~100 m). */
@@ -316,6 +333,8 @@ export function createWeatherProxyMiddleware(
           provider: 'open-meteo',
           demoCity: config.demoCity,
           attribution: OPEN_METEO_ATTRIBUTION,
+          // D2: exact outbound host for the consent copy.
+          outboundHosts: [{ purpose: 'weather', host: 'api.open-meteo.com' }],
         })
       );
       return;
@@ -419,8 +438,7 @@ export interface RouteProxyConfig {
 export function resolveRouteConfig(
   env: NodeJS.ProcessEnv = process.env
 ): RouteProxyConfig {
-  const enabledVal = env['ROUTE_LIVE_ENABLED'];
-  const enabled = enabledVal === 'true' || enabledVal === '1';
+  const enabled = resolveTrioFlag(env['ROUTE_LIVE_ENABLED']);
 
   const tilesVal = env['TILES_ENABLED'];
   const tilesEnabled = tilesVal === 'true' || tilesVal === '1';
@@ -578,6 +596,11 @@ export function createRouteProxyMiddleware(
           provider: config.provider,
           attribution: OSRM_ATTRIBUTION,
           tilesEnabled: config.tilesEnabled,
+          // D2: exact outbound hosts (from the adapter's configured base URLs) for the consent copy.
+          outboundHosts:
+            typeof (routeAdapter as { outboundHosts?: unknown }).outboundHosts === 'function'
+              ? (routeAdapter as OSRMRouteAdapter).outboundHosts()
+              : [],
         })
       );
       return;
@@ -698,8 +721,7 @@ export interface PlacesProxyConfig {
 export function resolvePlacesConfig(
   env: NodeJS.ProcessEnv = process.env
 ): PlacesProxyConfig {
-  const enabledVal = env['PLACES_LIVE_ENABLED'] || env['VITE_PLACES_LIVE_ENABLED'];
-  const enabled = enabledVal === 'true' || enabledVal === '1';
+  const enabled = resolveTrioFlag(env['PLACES_LIVE_ENABLED'] || env['VITE_PLACES_LIVE_ENABLED']);
   return {
     enabled,
     provider: 'overpass',
@@ -724,7 +746,7 @@ export function createPlacesProxyMiddleware(
     attribution: configOverride?.attribution ?? baseConfig.attribution,
   };
 
-  const placesAdapter = adapterOverride ?? new OverpassPlacesAdapter();
+  const placesAdapter = adapterOverride ?? new OverpassPlacesAdapter({ liveEnabled: config.enabled });
 
   return async function placesProxyMiddleware(
     req: IncomingMessage,
@@ -856,6 +878,8 @@ export function createPlacesProxyMiddleware(
           enabled: config.enabled,
           provider: config.provider,
           attribution: config.attribution,
+          // D2: exact outbound host for the consent copy.
+          outboundHosts: [{ purpose: 'nearby places', host: describeOutboundHost(DEFAULT_OVERPASS_ENDPOINT) }],
         })
       );
       return;
