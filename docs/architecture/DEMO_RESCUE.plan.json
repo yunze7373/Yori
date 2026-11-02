@@ -307,16 +307,95 @@
       ]
     },
     {
+      "id": "D1b-DEMO-SURFACE-E",
+      "slice": "D1b",
+      "title": "Device surface E verified and documented (ssh reverse localhost, no CA, no LAN)",
+      "priority": "P0",
+      "goal": "Verify the primary phone surface without disturbing released D1: from the Mac, ssh -N -R 4443:localhost:<preview-port> op8t (or adb reverse) and open http://localhost:<port> in phone Chrome; assert window.isSecureContext === true plus the geolocation prompt appearing on the OnePlus 8T; document exact steps in docs/demo/DEMO_HTTPS.md with mkcert and Mac-localhost fallbacks; capture scrcpy/adb-screencap evidence that later slices reuse for device acceptance.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 1,
+      "dependencies": ["D1-LOCATION-WEATHER"],
+      "goal_ids": ["G-204", "G-211"],
+      "acceptance_ids": ["AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "docs/demo/DEMO_HTTPS.md",
+        "tests/e2e-live/"
+      ],
+      "checks": [
+        "Device evidence shows isSecureContext true and the geolocation prompt on phone Chrome via surface E (or records which fallback was used and why); DEMO_HTTPS.md documents all three surfaces exactly; no LAN exposure and no dev-test flag bypass involved",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D1b-DEMO-SURFACE-E --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "D11-GCAL-OAUTH",
+      "slice": "D11",
+      "title": "Google Calendar OAuth connector (owner-wanted; iCal underneath)",
+      "priority": "P2",
+      "goal": "Owner-wanted: Google Calendar OAuth connector sharing its OAuth core with D12. OAuth 2.0 with PKCE S256 (client secret server-side if issued), Testing-mode consent screen with the owner as test user, scope calendar.events.readonly, pre-registered demo:https plus localhost redirect URIs; tokens in proxy memory with gitignored .yori-runtime fallback, refreshed in-proxy, never VITE_-prefixed or logged; Connect button on the Connectors page reusing the XMemo PKCE pattern. S4 iCal stays the honest fallback underneath. Stated caveats: 7-day Testing-mode refresh expiry and LAN-origin redirect brittleness (surface E localhost mitigates).",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": ["D4-MODEL-REASONING-ON"],
+      "goal_ids": ["G-212", "G-204"],
+      "acceptance_ids": ["AC-212-1", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/server-proxy.ts",
+        "src/ui/connectors/ports/calendar-port.ts",
+        "src/ui/connectors/connectors-view.ts"
+      ],
+      "checks": [
+        "OAuth e2e on recorded code-exchange: Connect flow yields CalendarEvent parity with the iCal path for the same account; disconnect and expiry yield the iCal-or-none honest states; no secret, token, or URL in bundle, logs, or chat",
+        "Unconnected run is byte-identical to the iCal-only build; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D11-GCAL-OAUTH --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "D12-GMAIL-CONNECTOR",
+      "slice": "D12",
+      "title": "Gmail connector: plan-relevant mail facts with provenance gmail (restricted scope, no raw storage)",
+      "priority": "P2",
+      "goal": "Share the D11 OAuth core for a Gmail connector at scope gmail.readonly (Google restricted scope: Testing-mode fine, never production without a security assessment). Extract plan-relevant facts from recent mail (reservations, travel, invites) into Living Context with provenance=gmail and confirm-only writeback; raw bodies never stored. Server-side tokens, localhost-only redirect, never VITE_-prefixed or logged; agents never read mail beyond recorded test fixtures. Model parsing, if used, rides an explicit per-provider consent line with payload minimization (Muse Spark parsing stays inside the D4 budget and ledger).",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": ["D11-GCAL-OAUTH"],
+      "goal_ids": ["G-203", "G-204"],
+      "acceptance_ids": ["AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/server-proxy.ts",
+        "src/ui/connectors/ports/",
+        "src/ui/connectors/connectors-view.ts"
+      ],
+      "checks": [
+        "Recorded-mail e2e: a reservation message yields a confirmed fact with provenance=gmail driving lunch or depart context; raw bodies absent from storage, logs, and bundle; unconnected run shows the honest connector state; restricted-scope handling documented (testing-only, no production claim)",
+        "Model-parsing runs, if any, carry the explicit consent line with minimized payloads inside ledger caps; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D12-GMAIL-CONNECTOR --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
       "id": "CLOSEOUT_DEMO_RESCUE",
       "title": "Closeout: demo script evidence, held-smoke verdict, accepted-or-blocked ledger",
       "priority": "P0",
-      "goal": "Close the rescue with the owner-run demo script evidence (section 5 plus full-vision features: licensed lunch cards with photos, live reasoned answers, forecast rationale, multimodal options, Baseten fallback/voice where adopted), the held CLOSEOUT_LIVEFIRST smoke re-verdict on that evidence, and the accepted-or-blocked-or-CUT ledger (cuts per section 8 and 10 order, never silent). Model, Maps, and Baseten spend reviewed against the approved caps. Nothing fixture-green reported as live-done.",
+      "goal": "Close the rescue with the owner-run demo script evidence (section 5 plus full-vision features: licensed lunch cards with photos, live reasoned answers, forecast rationale, multimodal options, Baseten fallback/voice where adopted, Gmail/calendar connector states) on the D1b-verified surface, the held CLOSEOUT_LIVEFIRST smoke re-verdict on that evidence, and the accepted-or-blocked-or-CUT ledger (cuts per sections 8, 10, and 12 order with the 11-04 12:00 JST checkpoint, never silent). Model, Maps, and Baseten spend reviewed against the approved caps. Nothing fixture-green reported as live-done.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
       "pipeline": "new_feature",
       "estimated_hours": 3,
-      "dependencies": ["D3-VISUAL-PASS", "D4-MODEL-REASONING-ON", "D5-LIVE-FORECAST", "D6-MULTIMODAL-TRANSIT", "D7-LICENSED-PLACES", "D8-BASETEN-FALLBACK", "D9-BASETEN-RERANK", "D10-BASETEN-VOICE"],
+      "dependencies": ["D1b-DEMO-SURFACE-E", "D3-VISUAL-PASS", "D4-MODEL-REASONING-ON", "D5-LIVE-FORECAST", "D6-MULTIMODAL-TRANSIT", "D7-LICENSED-PLACES", "D8-BASETEN-FALLBACK", "D9-BASETEN-RERANK", "D10-BASETEN-VOICE", "D11-GCAL-OAUTH", "D12-GMAIL-CONNECTOR"],
       "goal_ids": ["G-204", "G-211", "G-212"],
       "acceptance_ids": ["AC-204-2", "AC-211-2", "AC-212-1", "AC-EXT-1"],
       "arch_contract_refs": ["ADR-101"],
