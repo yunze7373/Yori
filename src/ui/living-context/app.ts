@@ -3354,6 +3354,7 @@ export function renderApp(
       root.querySelector('#desktop-nav-for-you')?.addEventListener('click', () => onNavigateAway('for-you'));
       root.querySelector('#desktop-nav-me')?.addEventListener('click', () => onNavigateAway('me'));
       root.querySelector('#desktop-nav-settings')?.addEventListener('click', () => {
+        if (!isDevMode && !testHooksEnabled) return;
         modalInvokingId = 'desktop-nav-settings';
         demoPanelOpen = true;
         update();
@@ -3766,12 +3767,18 @@ export function renderApp(
               `
                   : `
               <div class="top-meta">
+                ${
+                  (isDevMode || testHooksEnabled)
+                    ? `
                 <div class="mode-switch-group" role="group" aria-label="Context Mode Switch">
                   <button type="button" class="btn-mode-toggle ${contextMode === 'demo' ? 'active' : ''}" id="btn-mode-demo" aria-pressed="${contextMode === 'demo' ? 'true' : 'false'}">Demo scenes</button>
                   <button type="button" class="btn-mode-toggle ${contextMode === 'live' ? 'active' : ''}" id="btn-mode-live" aria-pressed="${contextMode === 'live' ? 'true' : 'false'}">Live context</button>
                 </div>
+                `
+                    : ''
+                }
                 ${
-                  contextMode === 'demo'
+                  (isDevMode || testHooksEnabled) && contextMode === 'demo'
                     ? `
                 <span class="demo-chip" aria-label="Simulation Status">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -3809,7 +3816,7 @@ export function renderApp(
                 </nav>
 
                 ${
-                  contextMode === 'demo'
+                  (isDevMode || testHooksEnabled) && contextMode === 'demo'
                     ? `
                 <div class="scene-switcher">
                   <label for="scene-select" class="scene-select-label">Demo Scene:</label>
@@ -3960,7 +3967,7 @@ export function renderApp(
 
         <!-- Rev3 Isolated Demo Controls Presentation Panel (UI-HOME-QUIET) -->
         ${
-          uiVersion === 'v2' && demoPanelOpen
+          uiVersion === 'v2' && demoPanelOpen && (isDevMode || testHooksEnabled)
             ? `
           <div class="demo-panel-overlay" id="demo-panel-overlay">
             <div
@@ -4087,6 +4094,7 @@ export function renderApp(
     const devDemoBtn = root.querySelector('#btn-dev-demo-controls');
     if (devDemoBtn) {
       devDemoBtn.addEventListener('click', () => {
+        if (!isDevMode && !testHooksEnabled) return;
         modalInvokingId = 'btn-dev-demo-controls';
         demoPanelOpen = true;
         update();
@@ -4155,6 +4163,7 @@ export function renderApp(
     const modeDemoBtn = root.querySelector('#btn-mode-demo') as HTMLButtonElement | null;
     if (modeDemoBtn) {
       modeDemoBtn.addEventListener('click', async () => {
+        if (!testHooksEnabled && !isDevMode) return;
         if (contextMode === 'demo') return;
         contextMode = 'demo';
         selectedCardState = null;
@@ -4230,6 +4239,7 @@ export function renderApp(
     const selectEl = root.querySelector('#scene-select') as HTMLSelectElement | null;
     if (selectEl) {
       selectEl.addEventListener('change', e => {
+        if (!testHooksEnabled && !isDevMode) return;
         const val = (e.target as HTMLSelectElement).value as DemoSceneId;
         currentScene = val;
         activeTimelineBeat = null;
@@ -4418,6 +4428,7 @@ export function renderApp(
     const desktopSettingsBtn = root.querySelector('#desktop-nav-settings');
     if (desktopSettingsBtn) {
       desktopSettingsBtn.addEventListener('click', () => {
+        if (!isDevMode && !testHooksEnabled) return;
         modalInvokingId = 'desktop-nav-settings';
         demoPanelOpen = true;
         update();
