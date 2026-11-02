@@ -1,0 +1,366 @@
+{
+  "schema_version": "1.0.0",
+  "plan": {
+    "id": "yori_demo_rescue",
+    "phase": "PH-002-ui",
+    "title": "DEMO-RESCUE: location weather, visible lunch, visual pass (successor to LIVE_FIRST, to 11/05 11:00 JST)",
+    "source": "ARCH-DEMO-RESCUE-LIVE-UI; design docs/architecture/DEMO_RESCUE.plan.md; S0-S5 approved, CLOSEOUT_LIVEFIRST HELD on owner smoke FAIL; owner verbatim 599a40be",
+    "created_at": "2026-11-03",
+    "status": "pending",
+    "description": "Rev4 full vision (owner lifted zero-paid constraint, chat af77b02f): D1-D3 rescue base plus D4 live model reasoning, D5 target-time forecast with honest rain-earlier leave-by, D6 multimodal transit re-rank, D7 licensed ratings/photos. Owner-approved budgets with hard stops (model ledger 22 to 50, Maps Cloud quotas plus billing alerts); agents never touch keys; honest provenance; core diff 0.",
+    "course_correction_summary": "previous_phase: DEMO_RESCUE rev3 (D1 released, D2/D3 pending review) | core_delivery: full-vision restoration of deferred North-Star items | deviation: rev4 adds D4-D7 plus richer D3 tier; D1 untouched; cuts recorded as CUT, never silent | INBOX_backlog: BACKLOG S4DEPART-P3(e) restored by D4-D7 | next_phase_focus: D7 licensed places plus D3-rich (most visible)"
+  },
+  "tasks": [
+    {
+      "id": "D1-LOCATION-WEATHER",
+      "slice": "D1",
+      "title": "Weather follows the consented device fix (3-decimal rounded, first-party proxy, never logged)",
+      "priority": "P0",
+      "goal": "/api/weather/current accepts optional validated coords=lat,lng; the client sends only the consented fix rounded to 3 decimals; the proxy queries Open-Meteo with those coords and returns coordinate provenance with fetchedAt. No fix or consent yields honest unavailable in Live; demo-city fallback is forbidden in Live and stays dev-only. Server never logs coordinates. D1 also owns the exact trusted-HTTPS demo-serve steps all device evidence depends on: mkcert LAN serve with the owner-installed phone root CA (exact iOS and Android steps), preview with that certificate via --host and same-origin /api through an npm script named demo:https (npm run demo:https); never self-signed click-through (geolocation after bypass is unverified); Android alternative USB debugging with chrome://inspect port forwarding; guaranteed fallback Mac http://localhost:4174; no tunnel, no public exposure. Resolves BACKLOG-20261103-WEATHER-DEMOCITY-P2.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 4,
+      "dependencies": [],
+      "goal_ids": ["G-204", "G-211"],
+      "acceptance_ids": ["AC-204-2", "AC-211-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/server-proxy.ts",
+        "src/adapters/providers/open-meteo-adapter.ts",
+        "src/ui/living-context/app.ts",
+        "src/ui/view-models/home-vm.ts"
+      ],
+      "checks": [
+        "Grant flow on device-shaped e2e shows owner-city weather with source+time; deny flow shows guided card with zero weather render; proxy tests prove unrounded fix never leaves client and no coords in logs; malformed coords rejected 400; D1 acceptance verifies window.isSecureContext === true plus the geolocation prompt appearing on the chosen surface (phone or Mac fallback), and documents the exact serve steps used for every device capture in this plan",
+        "Full suite green; core diff 0; 390x844 and 1280x800 evidence of both flows",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D1-LOCATION-WEATHER --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "D2-LUNCH-DEFAULT-ON",
+      "slice": "D2",
+      "title": "Lunch visibly works on grant behind one consolidated owner confirmation",
+      "priority": "P0",
+      "goal": "Behind the single consolidated owner confirmation (keyless trio default-on in Live: FOSSGIS Overpass https://overpass-api.de/api/interpreter, FOSSGIS/OSM routing with routed-foot walking where served, Open-Meteo), lunch intent fires on meal window plus granted fix and shows real candidates with distance, open-now-or-unknown, and reason. An on-demand Nearby-now affordance plus Ask intent triggers the same Overpass refresh independent of meal window under single-flight and the 10s outbound interval. D2 never waits for a real meal window to verify: on-demand path plus recorded-provider e2e fully gate it. D2 is built and reviewed on clearly labelled recorded provider data without waiting for the owner; only the live default-on flip waits for the section 6 confirmation, and providers stay default-off until then with per-session browser consent mandatory throughout. Simulated provider stays dev-only. No fix or trio-off yields the guided location card. Ratings/photos shown absent; no transit; no background triggers.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": ["D1-LOCATION-WEATHER"],
+      "goal_ids": ["G-211", "G-212"],
+      "acceptance_ids": ["AC-211-2", "AC-212-1", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/plugins/lunch/",
+        "src/adapters/providers/overpass-places-adapter.ts",
+        "src/adapters/providers/server-proxy.ts",
+        "src/ui/view-models/restaurant-detail-vm.ts",
+        "src/ui/living-context/desktop-panel.ts"
+      ],
+      "checks": [
+        "Recorded-provider e2e: candidates carry real IDs/coords/fetchedAt, distance labelled walking-or-straight-line, open-now derived from opening_hours only, FOSSGIS endpoint with ODbL attribution OpenStreetMap via Overpass (ODbL) visible, 10s outbound interval and 8s timeout honored; on-demand refresh fires outside meal window under single-flight; deny/off flows show guided card with zero venues",
+        "Dual gate A+B at both viewports on the lunch card, detail, and handoff; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D2-LUNCH-DEFAULT-ON --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "INBOX_CHECK_DEMO_RESCUE_A",
+      "title": "INBOX checkpoint",
+      "type": "checkpoint",
+      "priority": "meta",
+      "goal": "Read INBOX.md, handle new user instructions, adjust subsequent task priorities",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["D2-LUNCH-DEFAULT-ON"],
+      "inbox_checkpoint": {
+        "actions": [
+          "Read .progress/INBOX.md",
+          "Process high_priority items (insert into subsequent tasks immediately)",
+          "Record medium_priority items (include in Phase R planning)",
+          "Move processed items to INBOX completed section",
+          "Continue immediately to next task, do not ask for confirmation"
+        ]
+      }
+    },
+    {
+      "id": "D3-VISUAL-PASS",
+      "slice": "D3",
+      "title": "Demo-critical visual pass with screenshot acceptance (Ask overlay, cards, chips, copy; gated on D2 live lunch)",
+      "priority": "P0",
+      "goal": "Make demo-critical screens read as product, verified against D2's recorded-data lunch rendering (D3 is never blocked by the section 6 owner confirmation): Ask overlay collapses four status elements to one honest line and moves Decision Log plus Export behind ?dev=1; home cards carry one provenance chip each; consumer-copy sweep removes fixture jargon from Live surfaces; 390 Ask overlay usable (composer reachable, transcript readable, includes BACKLOG-20261103-ASK390-P3). Hierarchy, density, typography, and map-strip product read per design section 4. The executor loads the bundled frontend taste skill before any D3 edit to the Ask overlay, cards, or styles.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "ui_redesign",
+      "estimated_hours": 8,
+      "dependencies": ["D2-LUNCH-DEFAULT-ON", "INBOX_CHECK_DEMO_RESCUE_A"],
+      "goal_ids": ["G-204"],
+      "acceptance_ids": ["AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/conversation/conversation-view.ts",
+        "src/ui/living-context/v2-home-view.ts",
+        "src/ui/living-context/desktop-panel.ts",
+        "src/ui/living-context/strings.ts",
+        "src/ui/living-context/styles.css"
+      ],
+      "checks": [
+        "Screenshot pairs at 390x844 and 1280x800 for home/now, lunch candidates, weather, Ask Yori pass every item: Ask overlay shows exactly one status line; zero Decision-Log, Export, or raw-JSON elements outside ?dev=1; each card carries exactly one provenance chip; label audit finds zero fixture/simulated strings on Live surfaces; at 390 the composer is visible and submittable with no overlap and the transcript scrolls; touch targets at least 44px, AA contrast, CLS at most 0.1 on morph",
+        "Full suite green including goldens and drills; core diff 0; no fixture jargon on Live surfaces by label audit",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D3-VISUAL-PASS --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "D4-MODEL-REASONING-ON",
+      "slice": "D4",
+      "title": "Live model reasoning ON with owner-approved budget and ledger hard stop",
+      "priority": "P0",
+      "goal": "Enable Meta muse-spark via the existing server proxy with MODEL_LIVE_ENABLED and the owner-approved budget: code lifetime ceiling raised 50 to 200 (lowering-only preserved), operating cap 100 calls via env sized from usage (dev ~40 plus smoke ~10 plus margin, about $0.50 expected), per-run 10, max_tokens 300, ledger as source of truth with hard stop inside a USD 20 model ceiling, owner-overridable. MODEL_API_KEY stays owner-managed in .env.local and is never read, printed, or pasted by agents. Exhaustion falls back to labelled deterministic grammar. Live proof replaces the BLOCKED-accepted label with billed, ledger-backed evidence.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 5,
+      "dependencies": ["INBOX_CHECK_DEMO_RESCUE_A"],
+      "goal_ids": ["G-204", "G-203"],
+      "acceptance_ids": ["AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/server-proxy.ts",
+        "src/ui/conversation/model-interpreter.ts",
+        "src/ui/living-context/app.ts"
+      ],
+      "checks": [
+        "Budget tests: zero billed calls before owner approval; ceiling 200 lowering-only with operating cap 100 via env; ledger hard stop proven at exhaustion with labelled fallback; usage math asserted (about $0.50 expected inside USD 20); every live output passes fact post-check; key absent from bundle, logs, responses, and chat",
+        "Live reasoning changes ranking and explanation over real candidates in recorded-plus-budgeted e2e; decision log carries engine status, latency, and ledger position; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D4-MODEL-REASONING-ON --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "D5-LIVE-FORECAST",
+      "slice": "D5",
+      "title": "Target-time forecast with honest rain-earlier leave-by (buffer path, then mode switch)",
+      "priority": "P1",
+      "goal": "Extend the weather proxy with Open-Meteo hourly bins for the [depart, arrive] window (keyless, same ToS) and emit forecast signals with issuedAt, validFor, validAt window, and sub-1.0 confidence, failing closed to current conditions. Earlier leave-by is honest only via the S4c user-confirmed buffer (user minutes, provenance=user) until D6 lands, then also via real mode switch. Retires the corresponding SUBMISSION_READINESS No-Claim lines with evidence.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 4,
+      "dependencies": ["D1-LOCATION-WEATHER"],
+      "goal_ids": ["G-212", "G-204"],
+      "acceptance_ids": ["AC-212-1", "AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/open-meteo-adapter.ts",
+        "src/adapters/providers/server-proxy.ts",
+        "src/plugins/depart/",
+        "tests/e2e-live/"
+      ],
+      "checks": [
+        "Forecast e2e on recorded hourly bins: rain-at-window yields umbrella plus forward rationale with unchanged leave-by absent buffer or second mode; with confirmed buffer, leave-by moves by exactly the user minutes with provenance=user; missing bins fall back to current conditions, never silently",
+        "Core diff 0; no fabricated durations; attribution intact",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D5-LIVE-FORECAST --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "D6-MULTIMODAL-TRANSIT",
+      "slice": "D6",
+      "title": "Multimodal re-rank with real transit ETAs (Google Routes, owner-keyed)",
+      "priority": "P1",
+      "goal": "Add a Google Routes API adapter (computeRoutes DRIVE, TRANSIT, WALK) behind the server proxy reading owner-pasted GOOGLE_ROUTES_API_KEY (server-side only, never VITE_-prefixed, never handled by agents). Real transit ETAs make option re-rank and earlier-leave-by honest; OSRM stays the free fallback with mode_unsupported honesty. Screen rule: Google route geometry never renders on Leaflet — Google-routed views show itinerary plus labelled handoff with no Leaflet map, OSRM views keep Leaflet. Coordinates go to Google only under the owner-approved checklist.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 8,
+      "dependencies": ["D5-LIVE-FORECAST"],
+      "goal_ids": ["G-212"],
+      "acceptance_ids": ["AC-212-1", "AC-212-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/google-routes-adapter.ts",
+        "src/adapters/providers/server-proxy.ts",
+        "src/adapters/providers/routing-provider.ts",
+        "src/ui/view-models/trip-detail-vm.ts"
+      ],
+      "checks": [
+        "Coverage spike first: recorded TRANSIT probe on two Tokyo OD pairs returns real itineraries, or D6 closes CUT with the S4c-buffer path standing and no further transit spend",
+        "Recorded-routes e2e: drive, transit, and walk options carry provider ETAs with source and fetchedAt; rain re-rank orders by real durations and moves leave-by on mode switch; screen-level DOM check passes both directions (Google-route screens hold no map nodes, Leaflet screens hold no Google nodes); key absent from bundle and logs; quota-exceeded and disabled-key states fail closed to OSRM honesty",
+        "Core diff 0; Cloud per-day quotas plus billing alerts configured per the owner checklist",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D6-MULTIMODAL-TRANSIT --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "D7-LICENSED-PLACES",
+      "slice": "D7",
+      "title": "Licensed ratings, photos, and price over D2 candidates (Google Places, attributed)",
+      "priority": "P0",
+      "goal": "Enrich D2 Overpass candidates with Google Places API (New) rating, photo, and price level via field-masked requests, reading owner-pasted GOOGLE_PLACES_API_KEY server-side only. Match rule (deterministic, fail-closed): enrich only when the top Google result is within 150 m of the OSM coordinates and every significant token of the shorter normalized name appears in the longer; otherwise OSM-only. Display Powered by Google plus photo author attributions; OSM remains the free fallback where licensed data is absent. Retires 'ratings shown absent' where licensed data exists.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": ["D2-LUNCH-DEFAULT-ON"],
+      "goal_ids": ["G-211", "G-212"],
+      "acceptance_ids": ["AC-211-2", "AC-212-1", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/google-places-adapter.ts",
+        "src/adapters/providers/server-proxy.ts",
+        "src/ui/view-models/restaurant-detail-vm.ts",
+        "src/ui/living-context/v2-home-view.ts"
+      ],
+      "checks": [
+        "Recorded-places e2e: Overpass-first discovery with Details-per-view and photos-per-shown-card under minimal masks; match rule proven (in-radius plus name-token match enriches, off-radius or name-mismatch stays OSM-only); licensed fields render only from provider records with Powered-by-Google plus photo author attributions visible; screen-level DOM check passes both directions (Google-field screens hold no Leaflet map nodes, OSM map screens hold zero Google strings, photo URIs, or attribution nodes), photos hotlinked never re-hosted; absent fields keep the honest absent state; key absent from bundle and logs",
+        "Lunch cards carry photos with author credit; dual gate A+B at both viewports; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D7-LICENSED-PLACES --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "D8-BASETEN-FALLBACK",
+      "slice": "D8",
+      "title": "Labelled Baseten fallback LLM on proven Muse Spark timeout",
+      "priority": "P1",
+      "goal": "On a proven Muse Spark timeout only, route to one fast Baseten LLM via the server proxy (OpenAI-compatible https://inference.baseten.co/v1, owner-pasted BASETEN_API_KEY plus BASETEN_FALLBACK_MODEL, exact slug verified from the Baseten library at build). Provenance engine status names the fallback engine; never presented as Muse Spark, which stays primary. Ledgered with hard cap inside the USD 10 Baseten sub-budget.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": ["D4-MODEL-REASONING-ON"],
+      "goal_ids": ["G-204"],
+      "acceptance_ids": ["AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/model/server-proxy.ts",
+        "src/ui/conversation/model-interpreter.ts"
+      ],
+      "checks": [
+        "Timeout e2e: forced Muse Spark timeout routes once to the fallback with the fallback engine labelled; non-timeout traffic never touches Baseten; payload-field check passes (prompt plus admitted facts only, no coordinates, no memory content beyond confirmed keys); key absent from bundle, logs, and chat",
+        "Ledger records Baseten calls under the sub-cap with hard stop; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D8-BASETEN-FALLBACK --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "D9-BASETEN-RERANK",
+      "slice": "D9",
+      "title": "Baseten reranker rescoring within rule-admitted candidates",
+      "priority": "P2",
+      "goal": "Rescore the rule-admitted D2/D7 candidate set with a Qwen3-class Baseten reranker (BASETEN_RERANK_MODEL slug verified at build); bounded rules still veto. Recorded-list ranking assertions; reranker failure falls back to rules-only with the fallback labelled. Ledgered under the Baseten sub-budget.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": ["D8-BASETEN-FALLBACK"],
+      "goal_ids": ["G-211", "G-212"],
+      "acceptance_ids": ["AC-211-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/adapters/providers/server-proxy.ts",
+        "src/plugins/lunch/"
+      ],
+      "checks": [
+        "Ranking e2e on recorded lists: reranked order asserted; vetoed candidates never resurface; reranker outage yields rules-only order with fallback label; payload-field check passes (candidate names plus coords plus ratings only, no user identifiers, no memory facts); key absent from bundle and logs",
+        "Core diff 0; sub-budget ledger holds",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D9-BASETEN-RERANK --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "D10-BASETEN-VOICE",
+      "slice": "D10",
+      "title": "CONDITIONAL voice Ask Yori (cut-first): mic-gated speech in, TTS replies",
+      "priority": "P2",
+      "goal": "CONDITIONAL: adopt only with time to spare after D4/D7, else CUT without gating closeout. Mic-gated speech input preferring Muse Spark Open audio input (Meta model) with Whisper/Voxtral-class ASR as documented fallback (BASETEN_VOICE_MODEL slug verified at build), plus TTS spoken replies. Mic permission per-session and explicit; audio never stored or logged; spoken replies carry the same provenance labels as text.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 6,
+      "dependencies": ["D8-BASETEN-FALLBACK"],
+      "goal_ids": ["G-204"],
+      "acceptance_ids": ["AC-204-2", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/ui/conversation/conversation-view.ts",
+        "src/adapters/model/server-proxy.ts"
+      ],
+      "checks": [
+        "Voice e2e with recorded audio: speech-in produces the same intent as typed input; TTS reply matches text content; mic denied yields honest unavailable; payload-field check passes (audio frames plus transcript only with live mic consent, no audio bytes in logs, storage, or bundle)",
+        "Core diff 0; sub-budget ledger holds; 390 composer stays usable with mic control",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id D10-BASETEN-VOICE --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "CLOSEOUT_DEMO_RESCUE",
+      "title": "Closeout: demo script evidence, held-smoke verdict, accepted-or-blocked ledger",
+      "priority": "P0",
+      "goal": "Close the rescue with the owner-run demo script evidence (section 5 plus full-vision features: licensed lunch cards with photos, live reasoned answers, forecast rationale, multimodal options, Baseten fallback/voice where adopted), the held CLOSEOUT_LIVEFIRST smoke re-verdict on that evidence, and the accepted-or-blocked-or-CUT ledger (cuts per section 8 and 10 order, never silent). Model, Maps, and Baseten spend reviewed against the approved caps. Nothing fixture-green reported as live-done.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 3,
+      "dependencies": ["D3-VISUAL-PASS", "D4-MODEL-REASONING-ON", "D5-LIVE-FORECAST", "D6-MULTIMODAL-TRANSIT", "D7-LICENSED-PLACES", "D8-BASETEN-FALLBACK", "D9-BASETEN-RERANK", "D10-BASETEN-VOICE"],
+      "goal_ids": ["G-204", "G-211", "G-212"],
+      "acceptance_ids": ["AC-204-2", "AC-211-2", "AC-212-1", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "docs/architecture/DEMO_RESCUE.plan.md",
+        "docs/architecture/SUBMISSION_READINESS.md",
+        "tests/golden"
+      ],
+      "checks": [
+        "Demo script evidence complete per section 5 with dual-gate review including D3-rich tier (photos on cards, map markers); held smoke re-verdict recorded ACCEPTED or explicitly BLOCKED/CUT with named gate or cut reason",
+        "Clean-checkout matrix green with zero credentials; git diff f43c6c1d -- src/core empty; model ledger within approved cap with hard stop proven; Maps spend within ceiling with quotas and alerts in place",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id CLOSEOUT_DEMO_RESCUE --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
+      ]
+    },
+    {
+      "id": "PHASE_R_DEMO_RESCUE_001",
+      "title": "Phase R planning + generate next phase plan",
+      "type": "meta",
+      "priority": "critical",
+      "auto_trigger": true,
+      "status": "pending",
+      "dependencies": ["CLOSEOUT_DEMO_RESCUE"],
+      "goal": "Demo rescue closed or explicitly blocked-reported against the 2026-11-05 11:00 JST deadline -> Phase R -> draft any next plan for Reviewer plan review AND owner confirmation. Owner gates remain exactly as gated; nothing auto-executes.",
+      "phase_r_trigger": {
+        "auto_execute": true,
+        "tasks": [
+          "Re-read .progress/AI_INSTRUCTIONS.md (ensure rules are not lost after model switch)",
+          "R1: Read INBOX.md (scan mode command section first, then task section)",
+          "R1.5: Convergence gate (no real pending goes to standby)",
+          "R2: Read docs/architecture/goals.yaml and PHASE_PLAN.md, execute target alignment assessment; run phase_r_alignment_check.py to verify the alignment anchor (alignment anchor check)",
+          "R3: Phase review: git diff confirm delivery + archive completed tasks + Git Commit",
+          "R5: Intelligent planning: draft the next phase plan and submit it for Reviewer plan review AND owner confirmation (guarded autonomy); any commercial step requires the privacy-review gate and must not auto-start",
+          "Update PROGRESS_STATUS.json + TODOS.md",
+          "R6: Execute NOTHING from the next plan before the Reviewer + owner gate passes; enter standby and wait for the gate result"
+        ]
+      }
+    }
+  ],
+  "success_criteria": [
+    "Live weather renders from the consented fix with source and time, or honest unavailable; demo-city fallback absent from Live",
+    "Lunch shows licensed nearby venues (rating, photo, price, attributed) with distance, open status, and reason on grant behind the consolidated owner checklist",
+    "Demo-critical screens pass item-by-item screenshot acceptance at both viewports including the richer tier, with zero test-harness reads",
+    "Live reasoning, forecast rationale, and multimodal re-rank evidenced where delivered; cuts recorded as CUT per section 8 order",
+    "Held smoke re-verdict recorded on demo-script evidence; core diff 0, spend within approved caps with hard stops proven, agents never handled keys, no deploy"
+  ]
+}
