@@ -18,6 +18,7 @@ import type {
   SpatialMapEvidence,
   PlanAction,
   ContextSnapshot,
+  MemoryFact,
 } from '../../core/contracts/index.js';
 import { formatTime, formatAheadPlan, humanizeProposalTitle } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
@@ -61,6 +62,7 @@ export interface BuildHomeCompositionOptions {
   livingHeader?: HomeCompositionVM['livingHeader'];
   timelineControls?: HomeCompositionVM['timelineControls'];
   isLive?: boolean;
+  weatherEnabled?: boolean;
 }
 
 export function derivePlanCountdown(
@@ -651,19 +653,23 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
       const locSig = snapshot?.signals?.find(s => s.kind === 'location_status' || s.kind === 'location');
       const locVal = locSig?.value as any;
       const locSource = locVal?.source;
-      locationLabel = 'Selected City (simulated)';
-      if (locSource === 'manual') {
-        if (locVal?.lat && Math.abs(locVal.lat - 34.0522) < 0.05) {
-          locationLabel = 'Los Angeles (manual)';
-        } else if (locVal?.lat && Math.abs(locVal.lat - 37.7749) < 0.05) {
-          locationLabel = 'San Francisco (manual)';
-        } else if (locVal?.lat && locVal?.lng) {
-          locationLabel = `Custom Location (${locVal.lat.toFixed(2)}, ${locVal.lng.toFixed(2)}) (manual)`;
-        } else {
-          locationLabel = 'Manual Location';
+      if (options.isLive) {
+        locationLabel = locVal?.currentArea || locVal?.label || locVal?.name || 'Location shared';
+      } else {
+        locationLabel = 'Selected City (simulated)';
+        if (locSource === 'manual') {
+          if (locVal?.lat && Math.abs(locVal.lat - 34.0522) < 0.05) {
+            locationLabel = 'Los Angeles (manual)';
+          } else if (locVal?.lat && Math.abs(locVal.lat - 37.7749) < 0.05) {
+            locationLabel = 'San Francisco (manual)';
+          } else if (locVal?.lat && locVal?.lng) {
+            locationLabel = `Custom Location (${locVal.lat.toFixed(2)}, ${locVal.lng.toFixed(2)}) (manual)`;
+          } else {
+            locationLabel = 'Manual Location';
+          }
+        } else if (locSource === 'geolocation') {
+          locationLabel = 'Acquired Position (live geolocation)';
         }
-      } else if (locSource === 'geolocation') {
-        locationLabel = 'Acquired Position (live geolocation)';
       }
     }
 
@@ -776,19 +782,23 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
     const locSig = snapshot?.signals?.find(s => s.kind === 'location_status' || s.kind === 'location');
     const locVal = locSig?.value as any;
     const locSource = locVal?.source;
-    let locationLabel = 'Selected City (simulated)';
-    if (locSource === 'manual') {
-      if (locVal?.lat && Math.abs(locVal.lat - 34.0522) < 0.05) {
-        locationLabel = 'Los Angeles (manual)';
-      } else if (locVal?.lat && Math.abs(locVal.lat - 37.7749) < 0.05) {
-        locationLabel = 'San Francisco (manual)';
-      } else if (locVal?.lat && locVal?.lng) {
-        locationLabel = `Custom Location (${locVal.lat.toFixed(2)}, ${locVal.lng.toFixed(2)}) (manual)`;
-      } else {
-        locationLabel = 'Manual Location';
+    let locationLabel = options.isLive
+      ? (locVal?.currentArea || locVal?.label || locVal?.name || 'Location shared')
+      : 'Selected City (simulated)';
+    if (!options.isLive) {
+      if (locSource === 'manual') {
+        if (locVal?.lat && Math.abs(locVal.lat - 34.0522) < 0.05) {
+          locationLabel = 'Los Angeles (manual)';
+        } else if (locVal?.lat && Math.abs(locVal.lat - 37.7749) < 0.05) {
+          locationLabel = 'San Francisco (manual)';
+        } else if (locVal?.lat && locVal?.lng) {
+          locationLabel = `Custom Location (${locVal.lat.toFixed(2)}, ${locVal.lng.toFixed(2)}) (manual)`;
+        } else {
+          locationLabel = 'Manual Location';
+        }
+      } else if (locSource === 'geolocation') {
+        locationLabel = 'Acquired Position (live geolocation)';
       }
-    } else if (locSource === 'geolocation') {
-      locationLabel = 'Acquired Position (live geolocation)';
     }
 
     return {
@@ -848,18 +858,49 @@ function compileAheadItems(aheadPlans: readonly PreparedPlan[]): readonly AheadI
 }
 
 function compileProposals(
-  proposals: readonly { key: string; value?: unknown }[]
+  proposals: readonly { key: string; value?: unknown; status?: string; basis?: string; provenance?: 'user' | 'fixture' | 'none' }[]
 ): readonly ProposalItemVM[] {
   return Object.freeze(
     proposals.map(prop => ({
       key: prop.key,
       title: humanizeProposalTitle(prop.key),
+      basis: prop.basis,
+      provenance: prop.provenance || (prop.status === 'confirmed' || prop.basis?.includes('Confirmed') ? 'user' : 'fixture'),
+      value: prop.value,
     }))
   );
 }
 
 export function buildHomeComposition(options: BuildHomeCompositionOptions): HomeCompositionVM {
   const raw = compileHomeComposition(options);
+
+  const weatherSig = options.snapshot?.signals.find(s => s.kind === 'weather');
+  const weatherVal = weatherSig?.value as any;
+  const weatherSignalValue =
+    weatherVal && typeof weatherVal === 'object'
+      ? {
+          condition: typeof weatherVal.condition === 'string' ? weatherVal.condition : undefined,
+          temperatureC: typeof weatherVal.temperatureC === 'number' ? weatherVal.temperatureC : undefined,
+          precipProbability: typeof weatherVal.precipProbability === 'number' ? weatherVal.precipProbability : undefined,
+        }
+      : undefined;
+
+  const memSig = options.snapshot?.signals.find(s => s.kind === 'memory_facts');
+  const memList = Array.isArray(memSig?.value) ? (memSig.value as MemoryFact[]) : [];
+  const confirmedMemFromSig = memList.find(f => f && f.status === 'confirmed');
+  const confirmedMemFromPlan = options.plan?.why?.memoryFactsUsed?.find(
+    f => f && (f.status === 'confirmed' || options.userConfirmedKeys?.has(f.key))
+  );
+  const confirmedFact = confirmedMemFromSig || confirmedMemFromPlan;
+  let confirmedMemoryFact: string | undefined;
+  let confirmedMemoryNote: string | undefined;
+  if (confirmedFact) {
+    confirmedMemoryFact = confirmedFact.key;
+    const valStr = typeof confirmedFact.value === 'string' ? confirmedFact.value : (confirmedFact.value ? JSON.stringify(confirmedFact.value) : '');
+    const cleanKey = confirmedFact.key.includes('taste') ? 'Taste' : humanizeProposalTitle(confirmedFact.key);
+    confirmedMemoryNote = valStr ? `${cleanKey}: ${valStr} (confirmed)` : `${cleanKey} (confirmed)`;
+  }
+
   return {
     ...raw,
     planDiff: options.planDiff ?? null,
@@ -870,5 +911,9 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     livingHeader: options.livingHeader ?? raw.livingHeader,
     timelineControls: options.timelineControls ?? raw.timelineControls,
     isLive: Boolean(options.isLive),
+    weatherEnabled: options.weatherEnabled,
+    weatherSignalValue,
+    confirmedMemoryFact,
+    confirmedMemoryNote,
   };
 }

@@ -195,6 +195,44 @@ describe('LiveSnapshot Composer & Derivation (LIVE_FIRST S0)', () => {
       expect(header.weatherDisplay).toBe('Weather unavailable');
       expect(header.formattedLine).not.toContain('Clear');
     });
+
+    it('distinguishes owner-disabled weather as "Weather: Off"', () => {
+      const emptySnapshot = buildLiveSnapshot({
+        asOf: '2026-10-28T17:00:00.000Z',
+        timezone: 'America/Los_Angeles',
+      });
+
+      const header = deriveLiveLivingHeaderFromSnapshot(emptySnapshot, 'America/Los_Angeles', {
+        weatherDisabled: true,
+      });
+      expect(header.weatherDisplay).toBe('Weather: Off');
+      expect(header.formattedLine).toBe('10:00 AM · Weather: Off · Location not shared');
+    });
+
+    it('formats stale location fix notice in placeDisplay', () => {
+      const staleLocSig = createLiveSignal({
+        kind: 'location_status',
+        value: {
+          currentArea: 'Downtown Financial',
+          staleFixNotice: 'location from 12m ago',
+        },
+        provider: 'geolocation',
+        asOf: '2026-10-28T18:50:00.000Z',
+        validFor: 300000,
+        confidence: 0.8,
+        provenance: 'live',
+        consentScope: 'device_only',
+      });
+
+      const snapshot = buildLiveSnapshot({
+        asOf: '2026-10-28T18:50:00.000Z',
+        timezone: 'America/Los_Angeles',
+        locationSignal: staleLocSig,
+      });
+
+      const header = deriveLiveLivingHeaderFromSnapshot(snapshot, 'America/Los_Angeles');
+      expect(header.placeDisplay).toBe('Downtown Financial (location from 12m ago)');
+    });
   });
 
   describe('formatLiveTime', () => {

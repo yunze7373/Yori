@@ -49,6 +49,7 @@ export interface DeriveTripDetailOptions {
   } | null;
   acceptedPlanIds?: readonly string[];
   evidenceBundle?: EvidenceBundle;
+  isLive?: boolean;
 }
 
 export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetailVM {
@@ -60,6 +61,7 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     snapshot,
     acceptedPlanIds = [],
     evidenceBundle,
+    isLive = false,
   } = options;
 
   const isRain = Boolean(
@@ -132,7 +134,7 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
       const badge = isFirst ? 'Recommended' : 'Alternative';
       const meta = opt.details || (duration !== undefined ? `${duration} min ${mode} + 5m margin` : '');
       const rankingBasis = opt.rankedByFactKey
-        ? 'Ranked by habit: Rain travel habit (Demo profile · sample)'
+        ? (isLive ? 'Ranked by habit: Rain travel habit' : 'Ranked by habit: Rain travel habit (Demo profile · sample)')
         : (isFirst ? 'Recommended route' : 'Alternative route');
 
       modeTabs.push({
@@ -298,6 +300,8 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
           ? 'You confirmed'
           : factKind === 'synced'
           ? 'Synced from XMemo'
+          : isLive
+          ? 'Confirmed habit preference'
           : 'Demo profile · sample';
       whyHabits.push({
         label,
@@ -344,6 +348,7 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     whyHabits: Object.freeze(whyHabits),
     whyDerivation: buildHumanDerivation(plan),
     isAccepted,
+    isLive,
     actions: Object.freeze(actions),
     evidenceBundle: bundle,
     sourceRef,

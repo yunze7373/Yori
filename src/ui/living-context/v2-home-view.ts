@@ -309,7 +309,11 @@ export function renderLocationControls(vm: HomeCompositionVM): string {
           ? `
         <div class="v2-location-notice-banner prompt" role="status">
           <div class="v2-location-notice-title">Location Permission Needed</div>
-          <div class="v2-location-notice-desc">Grant permission to discover nearby fuel stations or select a location manually.</div>
+          <div class="v2-location-notice-desc">${
+            vm.isLive
+              ? 'Grant permission to discover nearby dining options.'
+              : 'Grant permission to discover nearby fuel stations or select a location manually.'
+          }</div>
         </div>
         <div class="v2-location-action-row">
           <button type="button" class="btn btn-primary v2-location-btn" id="btn-request-location" aria-label="Use My Location">
@@ -324,7 +328,11 @@ export function renderLocationControls(vm: HomeCompositionVM): string {
           ? `
         <div class="v2-location-notice-banner denied" role="status">
           <div class="v2-location-notice-title">Location Access Denied</div>
-          <div class="v2-location-notice-desc">Location access was denied. You can select a city or enter coordinates manually below.</div>
+          <div class="v2-location-notice-desc">${
+            vm.isLive
+              ? 'Location access was denied. Grant permission to discover nearby dining.'
+              : 'Location access was denied. You can select a city or enter coordinates manually below.'
+          }</div>
         </div>
         <div class="v2-location-action-row">
           <button type="button" class="btn btn-outline v2-location-btn" id="btn-request-location" aria-label="Retry Location Access">
@@ -338,13 +346,19 @@ export function renderLocationControls(vm: HomeCompositionVM): string {
           <div class="v2-location-notice-title">Location Unavailable</div>
           <div class="v2-location-notice-desc">${escapeHtml(
             vm.locationNotice ||
-              'Unable to acquire current position. Please select a city or enter coordinates manually.'
+              (vm.isLive
+                ? 'Unable to acquire current position. Check device location services.'
+                : 'Unable to acquire current position. Please select a city or enter coordinates manually.')
           )}</div>
         </div>
       `
           : ''
       }
 
+      ${
+        vm.isLive
+          ? ''
+          : `
       <div class="v2-manual-location-container">
         <button
           type="button"
@@ -400,6 +414,8 @@ export function renderLocationControls(vm: HomeCompositionVM): string {
           </form>
         </div>
       </div>
+      `
+      }
     </div>
   `;
 }
@@ -436,6 +452,125 @@ function renderPlanDiffBanner(diff?: HomeCompositionVM['planDiff']): string {
     <div class="plan-diff-banner" id="plan-diff-banner" role="status" aria-live="polite" aria-label="${escapeHtml(diff.ariaLiveText)}">
       <span class="plan-diff-badge">UPDATED</span>
       <span class="plan-diff-text">${escapeHtml(diff.diffSummary)}</span>
+    </div>
+  `;
+}
+
+function renderSignalTiles(vm: HomeCompositionVM): string {
+  // 1. Weather Value
+  let weatherValue: string;
+  if (vm.isLive) {
+    if (vm.weatherEnabled === false || vm.livingHeader?.weatherDisplay === 'Weather: Off') {
+      weatherValue = 'Off (owner setting)';
+    } else if (vm.weatherSignalValue?.condition) {
+      const cond =
+        vm.weatherSignalValue.condition.charAt(0).toUpperCase() +
+        vm.weatherSignalValue.condition.slice(1);
+      weatherValue =
+        typeof vm.weatherSignalValue.temperatureC === 'number'
+          ? `${cond} · ${vm.weatherSignalValue.temperatureC}°C`
+          : cond;
+    } else if (vm.weatherError) {
+      weatherValue = 'Unavailable';
+    } else {
+      weatherValue = 'Unavailable';
+    }
+  } else {
+    weatherValue = vm.isRain ? 'Rain forecast · 18°C' : 'Clear sky · 20°C';
+  }
+
+  // 2. Calendar Value
+  let calendarValue: string;
+  if (vm.isLive) {
+    calendarValue = 'Not connected';
+  } else if (vm.layoutKind === 'journey') {
+    calendarValue = vm.apptTimeStr
+      ? `${vm.subjectTitle || 'Piano lesson'} at ${vm.apptTimeStr}`
+      : (vm.title || 'Piano lesson at 3:00 PM');
+  } else {
+    calendarValue =
+      vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
+        ? 'Drive route · ongoing'
+        : 'Lunch break · 12:15 PM';
+  }
+
+  // 3. Transit Value
+  let transitValue: string;
+  if (vm.isLive) {
+    transitValue = vm.topCandidateDistance
+      ? `${vm.topCandidateDistance} · walk`
+      : (vm.options?.[0]?.detail || 'Nearby dining');
+  } else if (vm.layoutKind === 'journey') {
+    transitValue =
+      vm.options?.[0]?.detail ||
+      vm.options?.[0]?.label ||
+      (vm.leaveTimeStr ? `Drive · leave ${vm.leaveTimeStr}` : 'Drive · 25 min drive + 5m margin');
+  } else {
+    transitValue = vm.topCandidateDistance || '5m away · walk';
+  }
+
+  // 4. Memory Value & Inclusion (in Live, ONLY render if confirmed fact exists)
+  const shouldRenderMemory = !vm.isLive || Boolean(vm.confirmedMemoryNote || vm.confirmedMemoryFact);
+  let memoryValue = '';
+  if (shouldRenderMemory) {
+    if (vm.isLive) {
+      memoryValue = vm.confirmedMemoryNote || 'Confirmed taste preference';
+    } else if (vm.layoutKind === 'journey') {
+      memoryValue = vm.habitNote || (vm.isRain ? 'Prefers driving when it rains' : 'Buffer before leaving');
+    } else {
+      memoryValue =
+        vm.habitNote ||
+        (vm.title === 'Low Fuel Warning' ? 'Low fuel threshold' : 'Prefers quiet dining');
+    }
+  }
+
+  return `
+    <div class="hero-signals-grid" id="hero-signals-grid" role="group" aria-label="Signal Inputs">
+      <div class="signal-tile" id="signal-tile-weather">
+        <div class="signal-tile-top">
+          <div class="signal-icon-circle weather" aria-hidden="true">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line></svg>
+          </div>
+          <span class="signal-label">WEATHER</span>
+        </div>
+        <div class="signal-value">${escapeHtml(weatherValue)}</div>
+      </div>
+
+      <div class="signal-tile" id="signal-tile-calendar">
+        <div class="signal-tile-top">
+          <div class="signal-icon-circle calendar" aria-hidden="true">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          </div>
+          <span class="signal-label">CALENDAR</span>
+        </div>
+        <div class="signal-value">${escapeHtml(calendarValue)}</div>
+      </div>
+
+      <div class="signal-tile" id="signal-tile-transit">
+        <div class="signal-tile-top">
+          <div class="signal-icon-circle transit" aria-hidden="true">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
+          </div>
+          <span class="signal-label">TRANSIT</span>
+        </div>
+        <div class="signal-value">${escapeHtml(transitValue)}</div>
+      </div>
+
+      ${
+        shouldRenderMemory
+          ? `
+      <div class="signal-tile" id="signal-tile-memory">
+        <div class="signal-tile-top">
+          <div class="signal-icon-circle memory" aria-hidden="true">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.93 7.07"></path></svg>
+          </div>
+          <span class="signal-label">MEMORY</span>
+        </div>
+        <div class="signal-value">${escapeHtml(memoryValue)}</div>
+      </div>
+      `
+          : ''
+      }
     </div>
   `;
 }
@@ -634,48 +769,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
 
               ${renderActionRow(vm)}
 
-              <!-- 4 Signal Tiles Grid -->
-              <div class="hero-signals-grid" id="hero-signals-grid" role="group" aria-label="Signal Inputs">
-                <div class="signal-tile" id="signal-tile-weather">
-                  <div class="signal-tile-top">
-                    <div class="signal-icon-circle weather" aria-hidden="true">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line></svg>
-                    </div>
-                    <span class="signal-label">WEATHER</span>
-                  </div>
-                  <div class="signal-value">${escapeHtml(vm.isRain ? 'Rain forecast · 18°C' : 'Clear sky · 20°C')}</div>
-                </div>
-
-                <div class="signal-tile" id="signal-tile-calendar">
-                  <div class="signal-tile-top">
-                    <div class="signal-icon-circle calendar" aria-hidden="true">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                    </div>
-                    <span class="signal-label">CALENDAR</span>
-                  </div>
-                  <div class="signal-value">${escapeHtml(vm.apptTimeStr ? `${vm.subjectTitle || 'Piano lesson'} at ${vm.apptTimeStr}` : (vm.title || 'Piano lesson at 3:00 PM'))}</div>
-                </div>
-
-                <div class="signal-tile" id="signal-tile-transit">
-                  <div class="signal-tile-top">
-                    <div class="signal-icon-circle transit" aria-hidden="true">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
-                    </div>
-                    <span class="signal-label">TRANSIT</span>
-                  </div>
-                  <div class="signal-value">${escapeHtml(vm.options?.[0]?.detail || vm.options?.[0]?.label || (vm.leaveTimeStr ? `Drive · leave ${vm.leaveTimeStr}` : 'Drive · 25 min drive + 5m margin'))}</div>
-                </div>
-
-                <div class="signal-tile" id="signal-tile-memory">
-                  <div class="signal-tile-top">
-                    <div class="signal-icon-circle memory" aria-hidden="true">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.93 7.07"></path></svg>
-                    </div>
-                    <span class="signal-label">MEMORY</span>
-                  </div>
-                  <div class="signal-value">${escapeHtml(vm.habitNote || (vm.isRain ? 'Prefers driving when it rains' : 'Buffer before leaving'))}</div>
-                </div>
-              </div>
+              <!-- Signal Tiles Grid -->
+              ${renderSignalTiles(vm)}
             </div>
 
             <!-- Compact Map Strip (<= 140px tall, Finding P2) -->
@@ -770,7 +865,15 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 )
           }</div>
           ${
-            vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') || Boolean(vm.locationLabel)
+            vm.isLive
+              ? `
+            <div class="v2-active-location-bar" role="region" aria-label="Active Location" data-slot="chrome" data-slot-reason="Location status bar">
+              <span class="v2-location-badge" data-provenance="live" data-source="geolocation">📍 Location: ${escapeHtml(
+                vm.locationLabel || 'Location shared'
+              )}</span>
+            </div>
+          `
+              : (vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') || Boolean(vm.locationLabel))
               ? `
             <div class="v2-active-location-bar" role="region" aria-label="Active Location" data-slot="chrome" data-slot-reason="Location status bar">
               <span class="v2-location-badge" data-slot="chrome" data-slot-reason="Simulated location status badge">📍 Location: ${escapeHtml(
@@ -912,48 +1015,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             : ''
         }
 
-        <!-- 4 Signal Tiles Grid -->
-        <div class="hero-signals-grid" id="hero-signals-grid" role="group" aria-label="Signal Inputs">
-          <div class="signal-tile" id="signal-tile-weather">
-            <div class="signal-tile-top">
-              <div class="signal-icon-circle weather" aria-hidden="true">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line></svg>
-              </div>
-              <span class="signal-label">WEATHER</span>
-            </div>
-            <div class="signal-value">${escapeHtml(vm.isLive ? (vm.isRain ? 'Rain forecast · 18°C' : vm.livingHeader?.weatherDisplay || 'Weather active') : 'Clear sky · 20°C')}</div>
-          </div>
-
-          <div class="signal-tile" id="signal-tile-calendar">
-            <div class="signal-tile-top">
-              <div class="signal-icon-circle calendar" aria-hidden="true">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-              </div>
-              <span class="signal-label">CALENDAR</span>
-            </div>
-            <div class="signal-value">${escapeHtml(vm.isLive ? 'No events scheduled' : vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'Drive route · ongoing' : 'Lunch break · 12:15 PM')}</div>
-          </div>
-
-          <div class="signal-tile" id="signal-tile-transit">
-            <div class="signal-tile-top">
-              <div class="signal-icon-circle transit" aria-hidden="true">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"></rect><polygon points="16 8 20 8 23 11 23 16 16 16 8"></polygon><circle cx="5.5" cy="18.5" r="2.5"></circle><circle cx="18.5" cy="18.5" r="2.5"></circle></svg>
-              </div>
-              <span class="signal-label">TRANSIT</span>
-            </div>
-            <div class="signal-value">${escapeHtml(vm.topCandidateDistance || (vm.isLive ? 'Nearby dining' : '5m away · walk'))}</div>
-          </div>
-
-          <div class="signal-tile" id="signal-tile-memory">
-            <div class="signal-tile-top">
-              <div class="signal-icon-circle memory" aria-hidden="true">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 1 0 10 10H12V2z"></path><path d="M12 12L2.93 7.07"></path></svg>
-              </div>
-              <span class="signal-label">MEMORY</span>
-            </div>
-            <div class="signal-value">${escapeHtml(vm.habitNote || (vm.isLive ? 'Confirmed taste preference' : vm.title === 'Low Fuel Warning' ? 'Low fuel threshold' : 'Prefers quiet dining'))}</div>
-          </div>
-        </div>
+        <!-- Signal Tiles Grid -->
+        ${renderSignalTiles(vm)}
 
         <!-- Compact Map Strip inside Candidates Card (Finding 5) -->
         ${vm.map ? `<div class="v2-card-inline-map now-inline-map now-map-strip">${renderCompactMapStrip(vm.map, vm.isLive)}</div>` : ''}
@@ -1052,7 +1115,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
               ? proposals
                   .map(
                     prop => `
-            <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.basis?.includes('Confirmed') ? 'user' : vm.isLive ? 'user' : 'fixture'}" data-slot="chrome" data-slot-reason="Proposal card container">
+            <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.provenance || (prop.basis?.includes('Confirmed') ? 'user' : 'fixture')}" data-slot="chrome" data-slot-reason="Proposal card container">
               <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Proposal card title">${escapeHtml(prop.title)}</h3>
               ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Proposal card basis">${escapeHtml(prop.basis)}</p>` : ''}
               <div class="proposal-actions" style="margin-top: 12px; display: flex; gap: 8px;">

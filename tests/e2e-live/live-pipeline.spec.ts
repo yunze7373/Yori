@@ -140,8 +140,48 @@ async function assertElementUnoccluded(page: Page, selector: string, label: stri
   ).toBe(true);
 }
 
-function setupBaseMockApiRoutes(page: Page, options?: { placesEnabled?: boolean; weatherStatus?: number; weatherPayload?: any }) {
+function seedLocalStorage(page: Page, options?: { memoryFacts?: any[]; acceptedPlanIds?: string[] }) {
+  return page.addInitScript((opts) => {
+    if (!localStorage.getItem('yori_state_v1')) {
+      localStorage.setItem(
+        'yori_state_v1',
+        JSON.stringify({
+          schemaVersion: 1,
+          createdAt: '2026-11-02T10:00:00.000Z',
+          updatedAt: '2026-11-02T10:00:00.000Z',
+          payload: {
+            memoryFacts: opts?.memoryFacts ?? [
+              {
+                key: 'taste_preference',
+                value: 'Japanese',
+                status: 'confirmed',
+                provenance: { source: 'user_confirmed', recordedAt: '2026-11-02T10:00:00.000Z' },
+                updatedAt: '2026-11-02T10:00:00.000Z',
+              },
+            ],
+            proposals: [],
+            suppressions: [],
+            promptBudget: { date: '2026-11-02', count: 0 },
+            acceptedPlanIds: opts?.acceptedPlanIds ?? [],
+          },
+        })
+      );
+    }
+  }, options);
+}
+
+function setupBaseMockApiRoutes(
+  page: Page,
+  options?: {
+    placesEnabled?: boolean;
+    weatherEnabled?: boolean;
+    weatherStatus?: number;
+    weatherPayload?: any;
+    places?: any[];
+  }
+) {
   const placesEnabled = options?.placesEnabled ?? true;
+  const weatherEnabled = options?.weatherEnabled ?? true;
 
   return Promise.all([
     page.route('**/api/xmemo/**', (route) =>
@@ -163,12 +203,19 @@ function setupBaseMockApiRoutes(page: Page, options?: { placesEnabled?: boolean;
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          enabled: true,
+          enabled: weatherEnabled,
           attribution: { text: 'Weather data from Open-Meteo', url: 'https://open-meteo.com/' },
         }),
       })
     ),
     page.route('**/api/weather/current', (route) => {
+      if (!weatherEnabled) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ enabled: false }),
+        });
+      }
       if (options?.weatherStatus && options.weatherStatus !== 200) {
         return route.fulfill({ status: options.weatherStatus });
       }
@@ -213,7 +260,7 @@ function setupBaseMockApiRoutes(page: Page, options?: { placesEnabled?: boolean;
         contentType: 'application/json',
         body: JSON.stringify({
           enabled: true,
-          places: MOCK_PLACES_CANDIDATES,
+          places: options?.places ?? MOCK_PLACES_CANDIDATES,
         }),
       });
     }),
@@ -503,6 +550,233 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     const bodyText = await page.textContent('body');
     expect(bodyText).not.toContain('Fiore Caffe');
     expect(bodyText).not.toContain('Soba Place');
+
+    await context.close();
+  });
+
+  // =========================================================================
+  // 7. Reviewer Probes: Signal Tiles, Details View Provenance, Tick Refresh, and Ack Persistence
+  // =========================================================================
+  test('Reviewer Probe 1: Weather OFF & confirmed taste memory - Honest signal tiles and provenance on Home and Details', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      timezoneId: 'UTC',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    const page = await context.newPage();
+
+    await mockClockAndStorage(page, '2026-11-02T12:15:00.000Z');
+    await setupBaseMockApiRoutes(page, { placesEnabled: true, weatherEnabled: false });
+
+    await page.goto('/?mode=live');
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+
+    const grantBtn = page.locator('#btn-request-location');
+    if (await grantBtn.isVisible()) {
+      await grantBtn.click();
+    }
+    await page.waitForSelector('#btn-accept', { timeout: 10000 });
+
+    // Signal tile honesty
+    const weatherTileVal = await page.locator('#signal-tile-weather .signal-value').innerText();
+    expect(weatherTileVal).toBe('Off (owner setting)');
+
+    const calendarTileVal = await page.locator('#signal-tile-calendar .signal-value').innerText();
+    expect(calendarTileVal).toBe('Not connected');
+
+    const memoryTile = page.locator('#signal-tile-memory');
+    await expect(memoryTile).toBeVisible();
+    await expect(memoryTile).toContainText('Japanese or Italian (confirmed)');
+
+    // Provenance honesty on Home
+    const homeFixtureCount = await page.locator('[data-provenance="fixture"]').count();
+    expect(homeFixtureCount).toBe(0);
+
+    const homeBody = (await page.textContent('body')) ?? '';
+    expect(homeBody).not.toMatch(/Selected City|fuel station|\(simulated\)|Demo/i);
+
+    // Details view honesty
+    const detailsBtn = page.locator('#btn-view-trip-details');
+    await expect(detailsBtn).toBeVisible();
+    await detailsBtn.click();
+    await page.waitForSelector('.v2-detail-view', { timeout: 10000 });
+
+    const detailViewProv = await page.locator('.v2-detail-view').getAttribute('data-provenance');
+    expect(detailViewProv).toBe('live');
+
+    const detailFixtureCount = await page.locator('[data-provenance="fixture"]').count();
+    expect(detailFixtureCount).toBe(0);
+
+    const detailBadges = await page.locator('.v2-detail-badge').allInnerTexts();
+    for (const b of detailBadges) {
+      expect(b).not.toMatch(/SIMULATED/i);
+    }
+
+    const detailBody = (await page.textContent('body')) ?? '';
+    expect(detailBody).not.toMatch(/Selected City|fuel station|\(simulated\)|Demo/i);
+
+    await context.close();
+  });
+
+  test('Reviewer Probe 2: Weather Rain 9°C derives honest signal tile (never hardcoded 18°C)', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      timezoneId: 'UTC',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    const page = await context.newPage();
+
+    await mockClockAndStorage(page, '2026-11-02T12:15:00.000Z');
+    await setupBaseMockApiRoutes(page, {
+      placesEnabled: true,
+      weatherEnabled: true,
+      weatherPayload: {
+        signals: [
+          {
+            kind: 'weather',
+            value: { condition: 'Rain', temperatureC: 9, precipProbability: 80 },
+            issuedAt: '2026-11-02T12:15:00.000Z',
+            validFor: 300000,
+          },
+        ],
+      },
+    });
+
+    await mockClockAndStorage(page, '2026-11-02T12:15:00.000Z');
+    await page.goto('/?mode=live');
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+
+    const grantBtn = page.locator('#btn-request-location');
+    if (await grantBtn.isVisible()) {
+      await grantBtn.click();
+    }
+    await page.waitForSelector('#btn-accept', { timeout: 10000 });
+
+    const weatherTileVal = await page.locator('#signal-tile-weather .signal-value').innerText();
+    expect(weatherTileVal).toBe('Rain · 9°C');
+    expect(weatherTileVal).not.toContain('18°C');
+
+    await context.close();
+  });
+
+  test('Reviewer Probe 3: Zero-input tick crosses lunch window (10:58 -> 11:01)', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      timezoneId: 'UTC',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    const page = await context.newPage();
+
+    await page.clock.install({ time: new Date('2026-11-02T10:58:00Z') });
+    seedLocalStorage(page);
+    await setupBaseMockApiRoutes(page, { placesEnabled: true, weatherEnabled: false });
+
+    await page.goto('/?mode=live');
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+
+    const grantBtn = page.locator('#btn-request-location');
+    if (await grantBtn.isVisible()) {
+      await grantBtn.click();
+    }
+    await page.waitForTimeout(500);
+
+    // Before crossing window: quiet state, no accept button
+    expect(await page.locator('#btn-accept').count()).toBe(0);
+
+    // Advance clock 3 minutes (10:58 -> 11:01) to cross into lunch window
+    await page.clock.runFor(3 * 60_000);
+    await page.waitForTimeout(500);
+
+    // Plan and What-changed marker appeared without any user interaction!
+    await expect(page.locator('#btn-accept')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#what-changed-marker')).toBeVisible({ timeout: 10000 });
+
+    await context.close();
+  });
+
+  test('Reviewer Probe 4: Acknowledged change moment stays gone across tick and reload', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      timezoneId: 'UTC',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    const page = await context.newPage();
+
+    await page.clock.install({ time: new Date('2026-11-02T12:15:00Z') });
+    seedLocalStorage(page);
+    await setupBaseMockApiRoutes(page, { placesEnabled: true, weatherEnabled: false });
+
+    await page.goto('/?mode=live');
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+
+    const grantBtn = page.locator('#btn-request-location');
+    if (await grantBtn.isVisible()) {
+      await grantBtn.click();
+    }
+    await page.waitForSelector('#what-changed-marker', { timeout: 10000 });
+
+    // Accept the plan -> dismisses marker
+    await page.locator('#btn-accept').click();
+    await page.waitForTimeout(300);
+    expect(await page.locator('#what-changed-marker').count()).toBe(0);
+
+    // Advance clock across a 60s tick
+    await page.clock.runFor(65_000);
+    await page.waitForTimeout(300);
+    expect(await page.locator('#what-changed-marker').count()).toBe(0);
+
+    // Reload the page
+    await page.reload();
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+    const reloadGrantBtn = page.locator('#btn-request-location');
+    if (await reloadGrantBtn.isVisible()) {
+      await reloadGrantBtn.click();
+    }
+    await page.waitForTimeout(500);
+
+    // Marker must remain gone because plan was already acknowledged and accepted
+    expect(await page.locator('#what-changed-marker').count()).toBe(0);
+
+    await context.close();
+  });
+
+  test('Reviewer Probe 5: Stale fix (>300s) re-acquired during 6-minute ticks', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      timezoneId: 'UTC',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    const page = await context.newPage();
+
+    await page.clock.install({ time: new Date('2026-11-02T12:15:00Z') });
+    seedLocalStorage(page);
+    await setupBaseMockApiRoutes(page, { placesEnabled: true, weatherEnabled: false });
+
+    await page.goto('/?mode=live');
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+
+    const grantBtn = page.locator('#btn-request-location');
+    if (await grantBtn.isVisible()) {
+      await grantBtn.click();
+    }
+    await page.waitForSelector('#btn-accept', { timeout: 10000 });
+
+    // Advance clock by 6 minutes (exceeds 300s fix freshness)
+    await page.clock.runFor(6 * 60_000);
+    await page.waitForTimeout(500);
+
+    // Plan must still be visible (not vanished to quiet state)
+    await expect(page.locator('#btn-accept')).toBeVisible({ timeout: 10000 });
 
     await context.close();
   });

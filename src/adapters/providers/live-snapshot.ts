@@ -219,16 +219,17 @@ export function formatLiveTime(isoString: string | undefined, timeZone?: string)
  */
 export function deriveLiveLivingHeaderFromSnapshot(
   snapshot: ContextSnapshot,
-  timeZone?: string
+  timeZone?: string,
+  options?: { weatherDisabled?: boolean }
 ): DerivedLivingHeader {
   const effectiveTz = timeZone || snapshot.timezone || 'UTC';
   const timeDisplay = formatLiveTime(snapshot.asOf, effectiveTz);
 
   // 1. Weather condition
   const weatherSignal = snapshot.signals.find(s => s.kind === 'weather');
-  let weatherDisplay = 'Weather unavailable';
+  let weatherDisplay = options?.weatherDisabled ? 'Weather: Off' : 'Weather unavailable';
 
-  if (weatherSignal) {
+  if (!options?.weatherDisabled && weatherSignal) {
     const liveSig = weatherSignal as Partial<LiveSignal>;
     if (liveSig.status === 'unavailable' || liveSig.status === 'stale' || liveSig.status === 'error') {
       weatherDisplay = 'Weather unavailable';
@@ -253,7 +254,9 @@ export function deriveLiveLivingHeaderFromSnapshot(
 
   if (locSignal) {
     const liveSig = locSignal as Partial<LiveSignal>;
-    if (
+    if ((liveSig as any).isStale) {
+      placeDisplay = (liveSig as any).note || 'Location stale';
+    } else if (
       liveSig.status === 'permission_needed' ||
       liveSig.status === 'unavailable' ||
       liveSig.status === 'error'
@@ -267,7 +270,10 @@ export function deriveLiveLivingHeaderFromSnapshot(
         (val.isHome ? 'Home' : undefined);
 
       if (area && area.trim().length > 0 && area !== 'Location not shared') {
-        placeDisplay = area.trim();
+        const staleNotice =
+          (val.staleFixNotice as string | undefined) ||
+          ((liveSig as any).staleFixNotice as string | undefined);
+        placeDisplay = staleNotice ? `${area.trim()} (${staleNotice})` : area.trim();
       }
     }
   }

@@ -470,4 +470,83 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
       expect(html).toContain('data-slot="chrome" data-slot-reason="Option late meta"');
     });
   });
+
+  describe('V2 Live Signal Tiles & Provenance (Reviewer Findings)', () => {
+    const baseCandidateVM: HomeCompositionVM = {
+      layoutKind: 'candidates',
+      title: 'Lunch options near you',
+      headline: 'Lunch options near you',
+      basis: 'Based on your current location and time',
+      isRain: false,
+      options: [
+        {
+          id: 'place-1',
+          label: 'Udon House',
+          title: 'Udon House',
+          detail: '450m · 6 min walk',
+          mode: 'walk',
+          isSelected: false,
+          isRecommended: true,
+        },
+      ],
+      isAccepted: false,
+      actions: [],
+      aheadItems: [],
+      proposals: [],
+      isLive: true,
+      weatherEnabled: true,
+      weatherSignalValue: { condition: 'Rain', temperatureC: 9 },
+      locationLabel: 'Downtown Financial',
+    };
+
+    it('renders real weather condition and temperature (e.g. Rain · 9°C), NEVER hardcoded 18°C', () => {
+      const html = renderV2Home(baseCandidateVM);
+      expect(html).toContain('Rain · 9°C');
+      expect(html).not.toContain('18°C');
+    });
+
+    it('renders "Off (owner setting)" when weather is disabled', () => {
+      const disabledVM: HomeCompositionVM = {
+        ...baseCandidateVM,
+        weatherEnabled: false,
+        weatherSignalValue: undefined,
+      };
+      const html = renderV2Home(disabledVM);
+      expect(html).toContain('Off (owner setting)');
+      expect(html).not.toContain('18°C');
+      expect(html).not.toContain('Rain');
+    });
+
+    it('renders calendar as "Not connected" in Live mode', () => {
+      const html = renderV2Home(baseCandidateVM);
+      expect(html).toContain('Not connected');
+      expect(html).not.toContain('Lunch break · 12:15 PM');
+    });
+
+    it('omits memory signal tile in Live mode when no confirmed fact exists', () => {
+      const html = renderV2Home(baseCandidateVM);
+      expect(html).not.toContain('id="signal-tile-memory"');
+      expect(html).not.toContain('Confirmed taste preference');
+    });
+
+    it('renders memory signal tile in Live mode when confirmed memory fact is present', () => {
+      const withMemoryVM: HomeCompositionVM = {
+        ...baseCandidateVM,
+        confirmedMemoryFact: 'taste',
+        confirmedMemoryNote: 'Taste: udon (confirmed)',
+      };
+      const html = renderV2Home(withMemoryVM);
+      expect(html).toContain('id="signal-tile-memory"');
+      expect(html).toContain('Taste: udon (confirmed)');
+    });
+
+    it('renders Live location bar with data-provenance="live" and honest copy without "(simulated)" or demo city presets', () => {
+      const html = renderV2Home(baseCandidateVM);
+      expect(html).toContain('data-provenance="live"');
+      expect(html).not.toContain('(simulated)');
+      expect(html).not.toContain('Selected City');
+      expect(html).not.toContain('fuel station');
+      expect(html).not.toContain('select-demo-city');
+    });
+  });
 });

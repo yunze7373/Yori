@@ -225,6 +225,14 @@ export interface HomeCompositionVM {
     readonly timelineLabel: string;
   };
   readonly isLive?: boolean;
+  readonly weatherEnabled?: boolean;
+  readonly weatherSignalValue?: {
+    condition?: string;
+    temperatureC?: number;
+    precipProbability?: number;
+  };
+  readonly confirmedMemoryFact?: string;
+  readonly confirmedMemoryNote?: string;
 }
 
 // -------------------------------------------------------------
@@ -273,6 +281,7 @@ export interface TripDetailVM {
   readonly whyDerivation: string;
   readonly isAccepted: boolean;
   readonly actions: readonly PlanAction[];
+  readonly isLive?: boolean;
   readonly evidenceBundle?: EvidenceBundle;
   readonly sourceRef?: SourceRef;
   readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
@@ -296,6 +305,7 @@ export interface RestaurantDetailVM {
   readonly basis: string;
   readonly map: MapVM;
   readonly isSaved: boolean;
+  readonly isLive?: boolean;
   readonly directions: readonly RestaurantDirectionStepVM[];
   readonly simulatedNotice: string;
   readonly navigateUrl?: string;

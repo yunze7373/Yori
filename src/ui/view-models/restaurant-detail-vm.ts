@@ -36,6 +36,7 @@ export interface DeriveRestaurantDetailOptions {
   } | null;
   timezone?: string;
   evidenceBundle?: EvidenceBundle;
+  isLive?: boolean;
 }
 
 export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions): RestaurantDetailVM {
@@ -48,6 +49,7 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     snapshot,
     timezone,
     evidenceBundle,
+    isLive = false,
   } = options;
 
   const bundle = evidenceBundle;
@@ -154,17 +156,22 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     ? 'You confirmed'
     : factKind === 'synced'
     ? 'Synced from XMemo'
+    : isLive
+    ? 'Confirmed taste preference'
     : 'Demo profile · sample';
-  const basis = `Based on taste: ${cuisine} (${provenance})`;
+  const basis = isLive && !tasteFact
+    ? `Nearby dining: ${cuisine}`
+    : `Based on taste: ${cuisine} (${provenance})`;
 
   // Compact schematic map
   const map = deriveMapVM(plan, spatialEvidence, 'compact')!;
 
   // In-app schematic walk directions strictly from fixture data (zero invented street names)
-  const walkDesc =
-    distanceMinutes !== undefined
-      ? `About ${distanceMinutes} min walk · simulated route`
-      : 'Simulated route';
+  const walkDesc = isLive
+    ? (distanceText ? `About ${distanceText}` : undefined)
+    : (distanceMinutes !== undefined
+        ? `About ${distanceMinutes} min walk · simulated route`
+        : 'Simulated route');
 
   const directions: RestaurantDirectionStepVM[] = [
     {
@@ -174,7 +181,7 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     },
     {
       id: 'step-dir-2',
-      instruction: `Follow schematic pedestrian route toward ${name}`,
+      instruction: isLive ? `Follow pedestrian route toward ${name}` : `Follow schematic pedestrian route toward ${name}`,
     },
     {
       id: 'step-dir-3',
@@ -262,8 +269,11 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     basis,
     map,
     isSaved,
+    isLive,
     directions: Object.freeze(directions),
-    simulatedNotice: 'Demonstration place · simulated context',
+    simulatedNotice: isLive
+      ? 'OpenStreetMap via Overpass (ODbL) · live nearby dining'
+      : 'Demonstration place · simulated context',
     navigateUrl,
     evidenceBundle: bundle,
     sourceRef,

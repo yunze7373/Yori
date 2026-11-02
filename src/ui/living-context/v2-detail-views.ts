@@ -82,7 +82,7 @@ export function renderTripDetail(vm: TripDetailVM): string {
                 }
 
                 const badgeText = tab.badge || (tab.mode === 'drive' ? 'Recommended' : 'Alternative');
-                const basisText = tab.rankingBasis || (tab.mode === 'drive' ? 'Ranked by habit: Rain travel habit (Demo profile · sample)' : '');
+                const basisText = tab.rankingBasis || (tab.mode === 'drive' ? (isLive ? 'Ranked by habit: Rain travel habit' : 'Ranked by habit: Rain travel habit (Demo profile · sample)') : '');
                 const modeCap = tab.mode ? (tab.mode.charAt(0).toUpperCase() + tab.mode.slice(1)) : 'Option';
                 const labelText = tab.leaveTime ? `${modeCap} · leave ${tab.leaveTime}` : tab.label;
 
@@ -158,7 +158,7 @@ export function renderTripDetail(vm: TripDetailVM): string {
       </section>
 
       <!-- Prominent Labelled Schematic Route Map -->
-      ${vm.map ? renderMapCard(vm.map) : ''}
+      ${vm.map ? renderMapCard(vm.map, { isLive }) : ''}
 
       <!-- "Why this plan?" Provenance Section -->
       <section class="card v2-why-plan-card" aria-label="Why this plan?">
@@ -241,7 +241,7 @@ export function renderRestaurantDetail(vm: RestaurantDetailVM): string {
       <!-- Local Labelled SVG Illustration (Zero Remote URLs) -->
       <div class="v2-restaurant-hero-art" role="img" aria-label="${escapeHtml(vm.photo.altText)}">
         ${vm.photo.svgMarkup}
-        <span class="v2-illustration-badge">${escapeHtml(vm.photo.simulatedBadge)}</span>
+        ${isLive ? '' : `<span class="v2-illustration-badge">${escapeHtml(vm.photo.simulatedBadge)}</span>`}
       </div>
 
       <header class="v2-detail-header">
@@ -292,7 +292,7 @@ export function renderRestaurantDetail(vm: RestaurantDetailVM): string {
       <section class="card v2-directions-panel" id="restaurant-directions-panel" aria-label="Walking Directions" style="display: none;">
         <div class="v2-panel-header">
           <h2 class="v2-section-heading">Walking Directions</h2>
-          <span class="v2-in-app-badge">In-app route · simulated</span>
+          <span class="v2-in-app-badge">${isLive ? 'In-app route' : 'In-app route · simulated'}</span>
         </div>
         <p class="v2-directions-intro">Schematic route to ${escapeHtml(vm.name)}${vm.distanceText ? ` (${escapeHtml(vm.distanceText)})` : ''}:</p>
         <ol class="v2-directions-list">
@@ -317,7 +317,7 @@ export function renderRestaurantDetail(vm: RestaurantDetailVM): string {
       </section>
 
       <!-- Compact Location Schematic Map -->
-      ${vm.map ? renderMapCard(vm.map) : ''}
+      ${vm.map ? renderMapCard(vm.map, { isLive }) : ''}
     </div>
   `;
 }

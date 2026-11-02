@@ -1169,7 +1169,7 @@ export function computeLiveState(
   let locationSignal: LiveSignal | null = null;
   const locStatus = liveLocationStatus ?? defaultLocationPort.getLocation();
   const isLocAvailable =
-    (locStatus.status === 'available' || (locStatus as any).status === 'granted') &&
+    (locStatus.status === 'available' || (locStatus as any).status === 'granted' || locStatus.isStale) &&
     (locStatus.coords != null || (locStatus as any).latitude != null);
 
   if (isLocAvailable) {
@@ -1177,23 +1177,30 @@ export function computeLiveState(
       ? { lat: locStatus.coords.lat, lng: locStatus.coords.lng }
       : { lat: (locStatus as any).latitude, lng: (locStatus as any).longitude };
     const area = (locStatus as any).coords?.city || 'Location shared';
+    let staleFixNotice: string | undefined;
+    if (locStatus.isStale) {
+      const fixAgeMs = Date.now() - (locStatus.updatedAt ? Date.parse(locStatus.updatedAt) : Date.now());
+      const mins = Math.max(1, Math.round(fixAgeMs / 60000));
+      staleFixNotice = `location from ${mins}m ago`;
+    }
     locationSignal = createLiveSignal({
       kind: 'location_status',
       value: {
-        status: 'available',
+        status: locStatus.isStale ? 'stale' : 'available',
         coords,
         accuracy: locStatus.accuracy,
         isHome: false,
         label: area,
         currentArea: area,
+        staleFixNotice,
       },
       provider: 'geolocation',
       asOf: snapshotAsOf,
       validFor: 60000,
-      confidence: 1.0,
+      confidence: locStatus.isStale ? 0.7 : 1.0,
       provenance: 'live',
       consentScope: 'device_only',
-      status: 'available',
+      status: locStatus.isStale ? 'stale' : 'available',
     });
   } else if (locStatus.status === 'denied') {
     locationSignal = createLiveSignal({
@@ -1306,7 +1313,7 @@ export function computeLiveState(
         })),
       },
       provider: 'overpass',
-      asOf: placesList[0]?.fetchedAt || snapshotAsOf,
+      asOf: snapshotAsOf,
       validFor: 300000,
       confidence: 1.0,
       provenance: 'live',
@@ -1980,7 +1987,7 @@ export function renderApp(
     }
 
     const hasLocation =
-      (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted') &&
+      (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted' || liveLocationStatus.isStale) &&
       (liveLocationStatus.coords != null || (liveLocationStatus as any).latitude != null);
 
     const locCoords: [number, number] | null = liveLocationStatus.coords
@@ -2047,7 +2054,7 @@ export function renderApp(
     }
 
     const hasLocation =
-      (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted') &&
+      (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted' || liveLocationStatus.isStale) &&
       (liveLocationStatus.coords != null || (liveLocationStatus as any).latitude != null);
 
     if (liveDestination && hasLocation && liveRouteStatus && !liveRouteStatus.enabled) {
@@ -2099,7 +2106,7 @@ export function renderApp(
     }
 
     const hasLocation =
-      (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted') &&
+      (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted' || liveLocationStatus.isStale) &&
       (liveLocationStatus.coords != null || (liveLocationStatus as any).latitude != null);
 
     const locCoords: [number, number] | null = liveLocationStatus.coords
@@ -2207,7 +2214,18 @@ export function renderApp(
     if (contextMode !== 'live') return;
     liveRefreshInFlight = true;
     try {
-      liveLocationStatus = defaultLocationPort.getLocation();
+      let loc = defaultLocationPort.getLocation();
+      const consent = defaultLocationPort.getConsentStatus?.();
+      if (consent === 'granted' && (loc.status === 'unavailable' || loc.isStale)) {
+        if (typeof defaultLocationPort.acquireSessionFix === 'function') {
+          try {
+            loc = await defaultLocationPort.acquireSessionFix();
+          } catch {
+            // retain stale state
+          }
+        }
+      }
+      liveLocationStatus = loc;
       await checkWeatherStatus();
       await checkPlacesStatus();
       await checkRouteStatus();
@@ -2475,7 +2493,7 @@ export function renderApp(
     const derivedLivingHeader =
       contextMode === 'demo'
         ? deriveLivingHeaderFromSnapshot(effectiveSnapshot, effectiveTz)
-        : deriveLiveLivingHeaderFromSnapshot(effectiveSnapshot, effectiveTz);
+        : deriveLiveLivingHeaderFromSnapshot(effectiveSnapshot, effectiveTz, { weatherDisabled: !weatherStatus.enabled });
 
     const currentLivingHeaderLine =
       derivedLivingHeader
@@ -2575,6 +2593,7 @@ export function renderApp(
       });
     } else if (uiVersion === 'v2') {
       let v2BodyHtml = '';
+      const isLiveContext = contextMode === 'live';
       if (activeDetail?.type === 'trip' && nowPlan) {
         const tripVM = deriveTripDetailVM({
           plan: nowPlan,
@@ -2583,6 +2602,7 @@ export function renderApp(
           userConfirmedKeys,
           snapshot,
           acceptedPlanIds,
+          isLive: isLiveContext,
         });
         v2BodyHtml = renderTripDetail(tripVM);
       } else if (activeDetail?.type === 'restaurant' && nowPlan) {
@@ -2592,13 +2612,24 @@ export function renderApp(
         const candidateId = activeDetail.candidateId || defaultCandId;
         const restaurantBundle =
           effectiveEvidenceBundle ??
-          createLunchEvidenceBundle({
-            sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
-            timezone: snapshotTimezone,
-            userConfirmedKeys,
-            isConfirmedTaste: userConfirmedKeys.has('taste_preference_lunch_cuisine'),
-            memory: combinedMemory,
-          });
+          (isLiveContext
+            ? createLunchPlacesEvidenceBundle({
+                places: livePlacesList as any,
+                snapshot,
+                timezone: snapshotTimezone,
+                userConfirmedKeys,
+                isConfirmedTaste:
+                  userConfirmedKeys.has('taste_preference') ||
+                  userConfirmedKeys.has('taste_preference_lunch_cuisine'),
+                memory: combinedMemory,
+              })
+            : createLunchEvidenceBundle({
+                sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
+                timezone: snapshotTimezone,
+                userConfirmedKeys,
+                isConfirmedTaste: userConfirmedKeys.has('taste_preference_lunch_cuisine'),
+                memory: combinedMemory,
+              }));
         const restaurantVM = deriveRestaurantDetailVM({
           candidateId,
           plan: nowPlan,
@@ -2608,6 +2639,7 @@ export function renderApp(
           snapshot,
           timezone: snapshotTimezone,
           evidenceBundle: restaurantBundle,
+          isLive: isLiveContext,
         });
         v2BodyHtml = renderRestaurantDetail(restaurantVM);
       } else if (activeTab === 'plans') {
@@ -2699,18 +2731,29 @@ export function renderApp(
                 )
               : null;
 
-            if (
+            const nowPlanSig = `${nowPlan.intentId}:${nowPlan.headline}`;
+            const persistedAcks: Record<string, string> =
+              (storedEnvelope?.payload as any)?.liveAcknowledgedMoments ?? {};
+            const isPersistedAck =
+              persistedAcks[nowPlan.intentId] === nowPlanSig ||
+              persistedAcks[nowPlan.id] != null;
+            const isAlreadyAccepted =
+              acceptedPlanIds.includes(nowPlan.id) ||
+              acceptedPlanIds.includes(nowPlan.intentId) ||
+              acceptedPlanIds.some(id => id.startsWith(`plan-${nowPlan.intentId}`));
+
+            const hasTimeShift = Boolean(priorLeaveTimeStr && newLeaveTimeStr && priorLeaveTimeStr !== newLeaveTimeStr);
+            const hasMeaningfulDiff = Boolean(planDiff || hasTimeShift);
+
+            if (isPersistedAck || (isAlreadyAccepted && !hasMeaningfulDiff)) {
+              activeLiveChangeMoment = null;
+            } else if (
               !activeLiveChangeMoment ||
               activeLiveChangeMoment.intentId !== nowPlan.intentId ||
-              planDiff ||
-              (priorLeaveTimeStr && newLeaveTimeStr && priorLeaveTimeStr !== newLeaveTimeStr) ||
+              hasMeaningfulDiff ||
               (!priorLivePlan && (liveLocationStatus.status === 'available' || (liveLocationStatus as any).status === 'granted'))
             ) {
-              if (
-                planDiff ||
-                (priorLeaveTimeStr && newLeaveTimeStr && priorLeaveTimeStr !== newLeaveTimeStr) ||
-                !priorLivePlan
-              ) {
+              if (hasMeaningfulDiff || !priorLivePlan) {
                 const weatherSig = effectiveSnapshot?.signals.find(s => s.kind === 'weather');
                 const isRain =
                   (weatherSig?.value as any)?.condition === 'rain' ||
@@ -2831,6 +2874,7 @@ export function renderApp(
 
         const v2Composition = buildHomeComposition({
           isLive: contextMode === 'live',
+          weatherEnabled: weatherStatus.enabled,
           plan: nowPlan,
           spatialEvidence: spatialMapEvidence,
           aheadPlans,
@@ -3365,13 +3409,24 @@ export function renderApp(
     let panelState = createInitialPanelState(selectedCardState);
 
     const locConn = latestConnectorStatuses?.location;
-    const locState = locConn?.state === 'connected' ? 'available' : locConn?.state === 'permission_needed' ? 'prompt' : 'unavailable';
-    const locLabel = locConn?.state === 'connected' ? 'Available' : locConn?.state === 'permission_needed' ? 'Prompt' : locConn?.state === 'denied' ? 'Denied' : 'Unavailable';
+    const isLiveConnected = isLive
+      ? (liveLocationStatus.status === 'available')
+      : (locConn?.state === 'connected');
+    const isLivePrompt = isLive
+      ? (liveLocationStatus.status === 'prompt')
+      : (locConn?.state === 'permission_needed');
+    const isLiveDenied = isLive
+      ? (liveLocationStatus.status === 'denied')
+      : (locConn?.state === 'denied');
+    const isLiveStale = isLive && Boolean(liveLocationStatus.isStale);
+
+    const locState = isLiveConnected ? 'available' : isLivePrompt ? 'prompt' : isLiveDenied ? 'denied' : 'unavailable';
+    const locLabel = isLiveConnected ? 'Available' : isLivePrompt ? 'Prompt' : isLiveDenied ? 'Denied' : isLiveStale ? 'Stale' : 'Unavailable';
     const calLabel = 'N/A';
     const weatherSig = effectiveSnapshot?.signals?.find(s => s.kind === 'weather');
     const weatherCondition = (weatherSig?.value as any)?.condition;
     const weatherLabel = contextMode === 'live'
-      ? (weatherStatus.enabled ? 'Open-Meteo' : 'Off')
+      ? (weatherStatus.enabled ? (liveWeatherSignal ? 'Open-Meteo' : 'Unavailable') : 'Off')
       : (weatherCondition === 'rain' || currentScene === 'rain' ? 'Rain forecast' : (weatherCondition === 'clear' ? 'Clear' : '20°C'));
     const xmemoConn = latestConnectorStatuses?.xmemo;
     const xmemoLabel = contextMode === 'live'
@@ -4424,8 +4479,9 @@ export function renderApp(
       if (tripDetailsBtn && nowPlan) {
         tripDetailsBtn.addEventListener('click', e => {
           e.stopPropagation();
+          const isLunchPlan = nowPlan.intentId === 'lunch' || nowPlan.intentId === 'nearby_dining';
           activeDetail = {
-            type: 'trip',
+            type: isLunchPlan ? 'restaurant' : 'trip',
             planId: nowPlan.id,
             originatingElementId: 'btn-view-trip-details',
           };
@@ -4688,19 +4744,26 @@ export function renderApp(
         }
         const envelope = sharedStorage.load();
         const existingAccepted = envelope?.payload.acceptedPlanIds ?? [];
-        if (!existingAccepted.includes(nowPlan.id)) {
-          const updatedAccepted = [...existingAccepted, nowPlan.id];
-          sharedStorage.save(
-            {
-              memoryFacts: envelope?.payload.memoryFacts ?? [],
-              proposals: envelope?.payload.proposals ?? [],
-              suppressions: envelope?.payload.suppressions ?? [],
-              promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
-              acceptedPlanIds: updatedAccepted,
-            },
-            snapshotAsOf
-          );
-        }
+        const existingAcks = (envelope?.payload as any)?.liveAcknowledgedMoments ?? {};
+        const nowPlanSig = `${nowPlan.intentId}:${nowPlan.headline}`;
+        const updatedAcks = {
+          ...existingAcks,
+          [nowPlan.intentId]: nowPlanSig,
+          [nowPlan.id]: nowPlanSig,
+        };
+
+        const updatedAccepted = Array.from(new Set([...existingAccepted, nowPlan.id, nowPlan.intentId]));
+        sharedStorage.save(
+          {
+            memoryFacts: envelope?.payload.memoryFacts ?? [],
+            proposals: envelope?.payload.proposals ?? [],
+            suppressions: envelope?.payload.suppressions ?? [],
+            promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
+            acceptedPlanIds: updatedAccepted,
+            liveAcknowledgedMoments: updatedAcks,
+          } as any,
+          snapshotAsOf
+        );
         update();
       });
     }
@@ -4944,7 +5007,11 @@ export function renderApp(
               suppressions: envelope?.payload.suppressions ?? [],
               promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
               acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
-            },
+              liveAcknowledgedMoments: {
+                ...((envelope?.payload as any)?.liveAcknowledgedMoments ?? {}),
+                [planToAdjust.intentId]: `${planToAdjust.id}:${planToAdjust.headline}`,
+              },
+            } as any,
             snapshotAsOf
           );
 
@@ -5024,7 +5091,11 @@ export function renderApp(
               suppressions: updatedSuppressions,
               promptBudget: { date: snapshotAsOf.slice(0, 10), count: newBudgetCount },
               acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
-            },
+              liveAcknowledgedMoments: {
+                ...((envelope?.payload as any)?.liveAcknowledgedMoments ?? {}),
+                [planToDismiss.intentId]: `${planToDismiss.id}:${planToDismiss.headline}`,
+              },
+            } as any,
             snapshotAsOf
           );
 
@@ -5219,13 +5290,14 @@ export function renderApp(
           await refreshLiveRoute();
           await checkPlacesStatus();
         }
+        await refreshConnectorStatuses();
         update();
       });
     }
 
     const denyLocBtn = root.querySelector('#btn-deny-location');
     if (denyLocBtn) {
-      denyLocBtn.addEventListener('click', () => {
+      denyLocBtn.addEventListener('click', async () => {
         if ('denyConsent' in defaultLocationPort && typeof (defaultLocationPort as any).denyConsent === 'function') {
           (defaultLocationPort as any).denyConsent();
         } else {
@@ -5235,6 +5307,7 @@ export function renderApp(
         if (contextMode === 'live') {
           livePlacesList = [];
         }
+        await refreshConnectorStatuses();
         update();
       });
     }

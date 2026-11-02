@@ -80,7 +80,7 @@ export function renderRealMapCard(
   // For places maps without route coordinates, render schematic directly
   if (isPlacesMap) {
     return `
-      <section class="card v2-map-card${options?.isDesktopPanel ? ' desktop-map-card' : ''}${options?.isCompactStrip ? ' compact compact-map-strip' : ''} ${map.sizeHint}" aria-label="${escapeHtml(map.label)}" data-provenance="fixture">
+      <section class="card v2-map-card${options?.isDesktopPanel ? ' desktop-map-card' : ''}${options?.isCompactStrip ? ' compact compact-map-strip' : ''} ${map.sizeHint}" aria-label="${escapeHtml(map.label)}" data-provenance="${options?.isLive ? 'live' : 'fixture'}">
         <div class="${options?.isDesktopPanel ? 'desktop-map-header' : `map-header${options?.isCompactStrip ? ' map-strip-header' : ''}`}">
           <span class="${options?.isCompactStrip ? 'map-strip-label ' : ''}section-label" data-slot="chrome" data-slot-reason="Map section heading">
             ${
@@ -99,7 +99,7 @@ export function renderRealMapCard(
                 : `<span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span>`
             }
           </span>
-          <span class="card-badge" ${options?.isDesktopPanel ? 'data-provenance="fixture"' : 'data-slot="chrome" data-slot-reason="Simulated map badge"'}>${escapeHtml(map.simulatedBadge)}</span>
+          <span class="card-badge" ${options?.isDesktopPanel ? (options?.isLive ? 'data-provenance="live"' : 'data-provenance="fixture"') : (options?.isLive ? 'data-provenance="live"' : 'data-slot="chrome" data-slot-reason="Simulated map badge"')}>${options?.isLive ? 'OpenStreetMap (ODbL)' : escapeHtml(map.simulatedBadge)}</span>
         </div>
         <div class="v2-map-canvas${options?.isCompactStrip ? ' compact-canvas' : ''} ${map.sizeHint}" role="img" aria-label="${escapeHtml(map.ariaDescription)}">
           ${renderSchematicSvg(map)}
@@ -148,7 +148,7 @@ export function renderRealMapCard(
   const schematicHtml = renderSchematicSvg(map);
 
   return `
-    <section class="card v2-map-card${options?.isDesktopPanel ? ' desktop-map-card' : ''}${options?.isCompactStrip ? ' compact compact-map-strip' : ''} ${sizeClass}" aria-label="${escapeHtml(map.label)}" data-provenance="fixture">
+    <section class="card v2-map-card${options?.isDesktopPanel ? ' desktop-map-card' : ''}${options?.isCompactStrip ? ' compact compact-map-strip' : ''} ${sizeClass}" aria-label="${escapeHtml(map.label)}" data-provenance="${options?.isLive ? 'live' : 'fixture'}">
       <div class="${options?.isDesktopPanel ? 'desktop-map-header' : `map-header${options?.isCompactStrip ? ' map-strip-header' : ''}`}">
         <span class="${options?.isCompactStrip ? 'map-strip-label ' : ''}section-label" data-slot="chrome" data-slot-reason="Map section heading">
           ${
@@ -167,7 +167,7 @@ export function renderRealMapCard(
               : `<span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span>`
           }
         </span>
-        <span class="card-badge" ${options?.isDesktopPanel ? 'data-provenance="fixture"' : 'data-slot="chrome" data-slot-reason="Simulated map badge"'}>${initialBadge}</span>
+        <span class="card-badge" ${options?.isDesktopPanel ? (options?.isLive ? 'data-provenance="live"' : 'data-provenance="fixture"') : (options?.isLive ? 'data-provenance="live"' : 'data-slot="chrome" data-slot-reason="Simulated map badge"')}>${options?.isLive ? (tilesConfig === 'osm' ? 'Map © OSM' : 'Live map') : initialBadge}</span>
       </div>
 
       <div class="v2-map-canvas${options?.isDesktopPanel ? ' desktop-map-canvas' : ''}${options?.isCompactStrip ? ' compact-canvas' : ''} ${sizeClass}"
