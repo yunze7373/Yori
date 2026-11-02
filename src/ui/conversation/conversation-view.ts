@@ -5,6 +5,7 @@
 
 import { escapeHtml } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
+import { renderModelStatusPill } from '../living-context/components/model-status-pill.js';
 import type { ActionStateStore, MessageItem } from '../action-state/types.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 
@@ -37,7 +38,8 @@ export function renderConversationOverlay(store: ActionStateStore): string {
               <div class="conversation-subtitle-row">
                 <span class="v2-offline-badge" id="conversation-status-badge" ${store.isLiveMode() ? `data-provenance="live" data-source="model_interpreter" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}>${store.isLiveMode() ? 'Live assistant' : 'Offline demo · simulated'}</span>
                 <span class="context-chip conversation-context-chip ${store.isLiveMode() ? 'live-chip' : 'demo-chip'}" id="conversation-context-chip" ${store.isLiveMode() ? `data-provenance="live" data-source="device_clock" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}>${store.isLiveMode() ? 'Live context' : 'Demo scene · simulated'}</span>
-                <span class="engine-status-chip" id="engine-status-chip">${escapeHtml(engineStatusLabel)}</span>
+                <span class="engine-status-chip" id="engine-status-chip" data-engine-status="${store.getEngineStatus()}">${escapeHtml(engineStatusLabel)}</span>
+                ${renderModelStatusPill({ status: store.getEngineStatus(), label: engineStatusLabel, id: 'conversation-model-status-pill', latencyMs: globalDecisionLogger.getLatest()?.latencyMs })}
               </div>
             </div>
           </div>

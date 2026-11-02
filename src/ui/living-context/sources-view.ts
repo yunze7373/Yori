@@ -54,7 +54,9 @@ export function renderSourcesSheet(
   snapshot: ContextSnapshot,
   liveWeatherEnabled: boolean,
   liveLocation?: LocationStatus | null,
-  connectorStatuses?: Record<string, { state: string; detail: string }>
+  connectorStatuses?: Record<string, { state: string; detail: string }>,
+  engineStatus?: string,
+  engineStatusLabel?: string
 ): string {
   const isLive = mode === 'live';
   const title = isLive ? 'Active Sources · Live context' : 'Sources & Provenance · Demo';
@@ -138,6 +140,13 @@ export function renderSourcesSheet(
           ${isXmemoConnected ? `<span class="signal-badge live-badge">Connected</span>` : `<span class="signal-badge local-badge">Local only</span>`}
         </div>
         <div class="sources-item-desc">${escapeHtml(xmemoDetail)}</div>
+      </li>
+      <li class="sources-item" id="source-item-model" data-provenance="${engineStatus === 'meta_model_live' ? 'live' : 'deterministic'}">
+        <div class="sources-item-header">
+          <span class="sources-item-title">Reasoning Engine</span>
+          <span class="signal-badge ${engineStatus === 'meta_model_live' ? 'live-badge' : 'local-badge'}">${escapeHtml(engineStatusLabel || (engineStatus === 'meta_model_live' ? 'Meta model · live' : 'Offline fallback · deterministic'))}</span>
+        </div>
+        <div class="sources-item-desc">${engineStatus === 'meta_model_live' ? 'Live Meta model API (constrained decision engine · owner budget gated)' : 'Deterministic fallback grammar · offline execution (zero external model calls)'}</div>
       </li>
     `
     : (!snapshot.signals || snapshot.signals.length === 0)

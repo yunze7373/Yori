@@ -83,6 +83,7 @@ import {
 } from '../../core/storage/index.js';
 import { renderWhySheet } from '../review/why-sheet.js';
 import { renderSourcesSheet } from './sources-view.js';
+import { renderModelStatusPill } from './components/model-status-pill.js';
 import { renderAdjustDialog, type AdjustDialogValues } from '../review/adjust-dialog.js';
 import { renderDismissDialog } from '../review/dismiss-dialog.js';
 import { attachModalAccessibility, restoreInvokingFocus } from '../review/modal-accessibility.js';
@@ -1895,9 +1896,10 @@ export function renderApp(
   let actionFeedbackMessage: string | null = null;
   const timingOverrides: Record<string, { prepMinutes: number; bufferMinutes: number }> = {};
 
-  let coordinatedScene: DemoSceneId | null = null;
+  let coordinatedScene: string | null = null;
   let reasoningRequestId = 0;
   let reasoningState: {
+    key?: string;
     scene: DemoSceneId;
     now: PreparedPlan | null;
     ahead: readonly PreparedPlan[];
@@ -2634,7 +2636,18 @@ export function renderApp(
     }
 
     const living = pipelineResult.livingContext;
-    const baseNowPlan = reasoningState && reasoningState.scene === currentScene ? reasoningState.now : living.now;
+    const coordinationKey =
+      contextMode === 'live'
+        ? `live:${[living.now, ...living.ahead].filter((p): p is PreparedPlan => p !== null).map(p => `${p.id}:${p.intentId}`).join('|')}`
+        : currentScene;
+
+    const isMatchingReasoning =
+      reasoningState &&
+      (contextMode === 'live'
+        ? reasoningState.key === coordinationKey
+        : reasoningState.scene === currentScene);
+
+    const baseNowPlan = isMatchingReasoning ? reasoningState!.now : living.now;
     const actionState = actionStore.getActionState();
     const isPlanSuppressed = actionState.plan
       ? storedSuppressions.some(s => s.targetIntent === actionState.plan?.intentId || (s as any).intentId === actionState.plan?.intentId)
@@ -2724,7 +2737,7 @@ export function renderApp(
       ((nowPlan?.intentId === 'fuel' || nowPlan?.intentId === 'lunch' || nowPlan?.intentId === 'depart') ? actionStore.getActiveSnapshot() : undefined) ?? snapshot;
 
     currentEvidenceBundle = effectiveEvidenceBundle;
-    const aheadPlans = reasoningState && reasoningState.scene === currentScene ? reasoningState.ahead : living.ahead;
+    const aheadPlans = isMatchingReasoning ? reasoningState!.ahead : living.ahead;
     const notices = pipelineResult.notices;
 
     // Keep ActionStateStore command context synchronized with the pipeline-admitted plan and candidate
@@ -3856,6 +3869,7 @@ export function renderApp(
                     <div class="living-header-ambient" id="living-header-ambient" role="region" aria-label="Living Context Line">
                       <span class="living-header-line" id="living-header-line">${escapeHtml(currentLivingHeaderLine)}</span>
                       <span class="living-header-chip card-badge" id="living-header-chip">${contextMode === 'live' ? 'live' : 'simulated'}</span>
+                      ${renderModelStatusPill({ status: actionStore.getEngineStatus(), label: actionStore.getEngineStatusLabel(), latencyMs: globalDecisionLogger.getLatest()?.latencyMs })}
                     </div>
                     <h1 class="greeting-title" id="desktop-greeting-title">${escapeHtml(greeting.greeting)}</h1>
                     <p class="greeting-subheading desktop-greeting-sub">${escapeHtml(greeting.subheading)}</p>
@@ -4196,7 +4210,7 @@ export function renderApp(
                 syncedKeys
               )
             : activeModal?.type === 'sources'
-            ? renderSourcesSheet(activeModal.mode, snapshot, weatherStatus.enabled, defaultLocationPort.getLocation(), latestConnectorStatuses)
+            ? renderSourcesSheet(activeModal.mode, snapshot, weatherStatus.enabled, defaultLocationPort.getLocation(), latestConnectorStatuses, actionStore.getEngineStatus(), actionStore.getEngineStatusLabel())
             : activeModal?.type === 'adjust'
             ? renderAdjustDialog(activeModal.values)
             : activeModal?.type === 'dismiss'
@@ -4413,6 +4427,9 @@ export function renderApp(
         if (contextMode === 'demo') return;
         contextMode = 'demo';
         selectedCardState = null;
+        coordinatedScene = null;
+        reasoningState = null;
+        reasoningRequestId++;
         defaultModelCommandInterpreter.setMode('scripted_fixture');
         liveLocationStatus = defaultLocationPort.getLocation();
         await refreshConnectorStatuses();
@@ -4426,6 +4443,9 @@ export function renderApp(
         if (contextMode === 'live') return;
         contextMode = 'live';
         selectedCardState = null;
+        coordinatedScene = null;
+        reasoningState = null;
+        reasoningRequestId++;
         if (!defaultLocationPort.hasSessionFix?.()) {
           defaultLocationPort.setLocation('prompt');
         }
@@ -5786,18 +5806,19 @@ export function renderApp(
     // Initialize Leaflet real maps if real map containers are present (TID: INBOX-20261101-12065C)
     initRealMaps(root).catch(() => {});
 
-    // Coordinate reasoning asynchronously after deterministic composition (Requirement 4)
-    if (coordinatedScene !== currentScene) {
+    // Coordinate reasoning asynchronously after deterministic composition (Requirement 4 & S5-LIVE-REASON)
+    if (coordinatedScene !== coordinationKey) {
       const allPlans = [living.now, ...living.ahead].filter((p): p is PreparedPlan => p !== null);
       if (allPlans.length > 0) {
-        coordinatedScene = currentScene;
+        coordinatedScene = coordinationKey;
+        const requestKey = coordinationKey;
         const requestScene = currentScene;
         const requestId = ++reasoningRequestId;
 
         coordinateReasoning(living, snapshot, combinedMemory)
           .then(res => {
-            // Guard against scene race: only apply if the user hasn't switched scene (Finding 2)
-            if (currentScene !== requestScene || requestId !== reasoningRequestId) {
+            // Guard against scene race: only apply if the user hasn't switched scene or mode (Finding 2)
+            if (coordinationKey !== requestKey || currentScene !== requestScene || requestId !== reasoningRequestId) {
               return;
             }
             if (res.applied) {
@@ -5806,6 +5827,7 @@ export function renderApp(
                 rationales[id] = text;
               });
               reasoningState = {
+                key: requestKey,
                 scene: requestScene,
                 now: res.now,
                 ahead: res.ahead,

@@ -33,6 +33,11 @@ import {
   type ReasoningValidationFailureReason,
   type ReasoningReasonCode,
 } from '../adapters/model/reasoning.js';
+import {
+  globalDecisionLogger,
+  type DecisionLogger,
+  type EngineStatus,
+} from '../adapters/model/decision-log.js';
 import { STRINGS } from '../ui/living-context/strings.js';
 
 export interface ModelReasoningApiResponse {
@@ -43,6 +48,7 @@ export interface ModelReasoningApiResponse {
     | 'timeout'
     | 'error'
     | ReasoningValidationFailureReason;
+  readonly engineStatus?: EngineStatus;
 }
 
 export interface ReasoningCoordinationResult {
@@ -53,6 +59,7 @@ export interface ReasoningCoordinationResult {
   readonly proposedIntentCandidate?: IntentCandidate;
   readonly proposedIntentSuppression?: SuppressionReason;
   readonly fallbackReason?: string;
+  readonly engineStatus?: EngineStatus;
 }
 
 export interface ReasoningCoordinatorOptions {
@@ -62,6 +69,7 @@ export interface ReasoningCoordinatorOptions {
   readonly policyContext?: PolicyEvaluationContext;
   readonly fetchFn?: typeof fetch;
   readonly logger?: (msg: string) => void;
+  readonly decisionLogger?: DecisionLogger;
 }
 
 /**
@@ -100,6 +108,8 @@ export async function coordinateReasoning(
   const timeoutMs = options?.timeoutMs || 2000;
   const fetchFn = options?.fetchFn || globalThis.fetch;
   const logger = options?.logger || (() => {});
+  const dLogger = options?.decisionLogger || globalDecisionLogger;
+  const startTime = Date.now();
 
   let responseData: ModelReasoningApiResponse;
 
@@ -116,52 +126,134 @@ export async function coordinateReasoning(
     clearTimeout(timer);
 
     if (!response.ok) {
+      const latencyMs = Date.now() - startTime;
       logger(`[ReasoningCoordinator] HTTP ${response.status} from ${endpoint}`);
+      dLogger.log({
+        timestamp: new Date().toISOString(),
+        templateId: 'reason_rank',
+        inputSignalIds: reasoningInput.availableSignalIds,
+        inputFactKeys: reasoningInput.confirmedFactKeys,
+        outputReasonCodes: [],
+        outputIntent: undefined,
+        validationResult: { valid: false, reason: `http_${response.status}` },
+        engineStatus: 'offline_deterministic',
+        latencyMs,
+      });
+      dLogger.setEngineStatus('offline_deterministic');
       return {
         applied: false,
         now: originalNow,
         ahead: originalAhead,
         rationaleMap: emptyRationaleMap,
         fallbackReason: `http_${response.status}`,
+        engineStatus: 'offline_deterministic',
       };
     }
 
     responseData = (await response.json()) as ModelReasoningApiResponse;
   } catch (err: unknown) {
+    const latencyMs = Date.now() - startTime;
     const isTimeout = err instanceof Error && err.name === 'AbortError';
     logger(`[ReasoningCoordinator] Request failed: ${err}`);
+    dLogger.log({
+      timestamp: new Date().toISOString(),
+      templateId: 'reason_rank',
+      inputSignalIds: reasoningInput.availableSignalIds,
+      inputFactKeys: reasoningInput.confirmedFactKeys,
+      outputReasonCodes: [],
+      outputIntent: undefined,
+      validationResult: { valid: false, reason: isTimeout ? 'timeout' : 'error', error: String(err) },
+      engineStatus: 'offline_deterministic',
+      latencyMs,
+    });
+    dLogger.setEngineStatus('offline_deterministic');
     return {
       applied: false,
       now: originalNow,
       ahead: originalAhead,
       rationaleMap: emptyRationaleMap,
       fallbackReason: isTimeout ? 'timeout' : 'error',
+      engineStatus: 'offline_deterministic',
     };
   }
 
   // 3. Fallback or discard: keep deterministic order
   if (responseData.usedFallback || !responseData.result) {
+    const latencyMs = Date.now() - startTime;
+    dLogger.log({
+      timestamp: new Date().toISOString(),
+      templateId: 'reason_rank',
+      inputSignalIds: reasoningInput.availableSignalIds,
+      inputFactKeys: reasoningInput.confirmedFactKeys,
+      outputReasonCodes: [],
+      outputIntent: undefined,
+      validationResult: { valid: false, reason: responseData.fallbackReason || 'fallback' },
+      engineStatus: 'offline_deterministic',
+      latencyMs,
+    });
+    dLogger.setEngineStatus('offline_deterministic');
     return {
       applied: false,
       now: originalNow,
       ahead: originalAhead,
       rationaleMap: emptyRationaleMap,
       fallbackReason: responseData.fallbackReason || 'fallback',
+      engineStatus: 'offline_deterministic',
     };
   }
 
   // Defense in depth: Client-side validation against supplied plans (Finding 1)
   const clientValidation = validateReasoningOutput(responseData.result, reasoningInput);
   if (!clientValidation.valid) {
+    const latencyMs = Date.now() - startTime;
     logger(`[ReasoningCoordinator] Client validation failed: ${clientValidation.error}`);
+    dLogger.log({
+      timestamp: new Date().toISOString(),
+      templateId: 'reason_rank',
+      inputSignalIds: reasoningInput.availableSignalIds,
+      inputFactKeys: reasoningInput.confirmedFactKeys,
+      outputReasonCodes: [],
+      outputIntent: undefined,
+      validationResult: { valid: false, reason: clientValidation.reason, error: clientValidation.error },
+      engineStatus: 'offline_deterministic',
+      latencyMs,
+    });
+    dLogger.setEngineStatus('offline_deterministic');
     return {
       applied: false,
       now: originalNow,
       ahead: originalAhead,
       rationaleMap: emptyRationaleMap,
       fallbackReason: clientValidation.reason,
+      engineStatus: 'offline_deterministic',
     };
   }
+
+  const latencyMs = Date.now() - startTime;
+  const engineStatus: EngineStatus =
+    responseData.engineStatus ||
+    (options?.endpoint?.includes('fixture') ? 'scripted_fixture' : 'meta_model_live');
+
+  const outputReasonCodes: string[] = [];
+  if (Array.isArray(responseData.result.rationale)) {
+    for (const r of responseData.result.rationale) {
+      if (r.reasonCode) outputReasonCodes.push(r.reasonCode);
+      if (Array.isArray(r.reasonCodes)) outputReasonCodes.push(...r.reasonCodes);
+    }
+  }
+
+  dLogger.log({
+    timestamp: new Date().toISOString(),
+    templateId: 'reason_rank',
+    inputSignalIds: reasoningInput.availableSignalIds,
+    inputFactKeys: reasoningInput.confirmedFactKeys,
+    outputReasonCodes,
+    outputIntent: responseData.result.proposedIntent?.intent,
+    validationResult: { valid: true },
+    engineStatus,
+    latencyMs,
+  });
+  dLogger.setEngineStatus(engineStatus);
 
   // 4. Valid reorder: reorder plans keeping plan data byte-for-byte intact
   const reorderedPlans = reorderPlansWithReasoning(allPlans, responseData.result);
@@ -218,5 +310,6 @@ export async function coordinateReasoning(
     rationaleMap: Object.freeze(rationaleMap),
     proposedIntentCandidate,
     proposedIntentSuppression,
+    engineStatus,
   };
 }

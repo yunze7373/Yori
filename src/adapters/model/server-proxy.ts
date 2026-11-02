@@ -37,6 +37,7 @@ import {
   validateReasoningInputSchema,
   validateDecisionCommandOutput,
 } from './reasoning.js';
+import type { EngineStatus } from './decision-log.js';
 
 export interface ModelCommandResponse {
   readonly result: DecisionCommandOutput | null;
@@ -56,6 +57,7 @@ export interface ModelCommandResponse {
     | 'extraction_fault'
     | 'extra_keys';
   readonly rejectedReasonCodes?: readonly RejectedReasonCodeTelemetry[];
+  readonly engineStatus?: EngineStatus;
 }
 
 export interface ModelReasoningResponse {
@@ -68,6 +70,7 @@ export interface ModelReasoningResponse {
     | 'truncated'
     | 'extraction_fault'
     | ReasoningValidationFailureReason;
+  readonly engineStatus?: EngineStatus;
 }
 
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -1514,6 +1517,7 @@ export class ModelDevProxy {
         result: fallback,
         usedFallback: true,
         fallbackReason: 'schema_invalid',
+        engineStatus: 'offline_deterministic',
       };
     }
     const input = inputValidation.data!;
@@ -1525,6 +1529,7 @@ export class ModelDevProxy {
         result: fallback,
         usedFallback: true,
         fallbackReason: 'disabled',
+        engineStatus: 'offline_deterministic',
       };
     }
 
@@ -1534,6 +1539,7 @@ export class ModelDevProxy {
         result: fallback,
         usedFallback: true,
         fallbackReason: 'error',
+        engineStatus: 'offline_deterministic',
       };
     }
 
@@ -1545,6 +1551,7 @@ export class ModelDevProxy {
         result: fallback,
         usedFallback: true,
         fallbackReason: 'disabled',
+        engineStatus: 'offline_deterministic',
       };
     }
 
@@ -1557,6 +1564,7 @@ export class ModelDevProxy {
         result: fallback,
         usedFallback: true,
         fallbackReason: 'disabled',
+        engineStatus: 'offline_deterministic',
       };
     }
 
@@ -1580,6 +1588,7 @@ export class ModelDevProxy {
         result: fallback,
         usedFallback: true,
         fallbackReason: 'disabled',
+        engineStatus: 'offline_deterministic',
       };
     }
     processLiveCallCount += 1;
@@ -1625,6 +1634,7 @@ export class ModelDevProxy {
           result: fallback,
           usedFallback: true,
           fallbackReason: 'error',
+          engineStatus: 'offline_deterministic',
         };
       }
 
@@ -1659,6 +1669,7 @@ export class ModelDevProxy {
           result: fallback,
           usedFallback: true,
           fallbackReason: extraction.reason,
+          engineStatus: 'offline_deterministic',
         };
       }
 
@@ -1671,6 +1682,7 @@ export class ModelDevProxy {
           result: fallback,
           usedFallback: true,
           fallbackReason: 'schema_invalid',
+          engineStatus: 'offline_deterministic',
         };
       }
 
@@ -1683,12 +1695,14 @@ export class ModelDevProxy {
           result: fallback,
           usedFallback: true,
           fallbackReason: validation.reason,
+          engineStatus: 'offline_deterministic',
         };
       }
 
       return {
         result: validation.data,
         usedFallback: false,
+        engineStatus: 'meta_model_live',
       };
     } catch (err: unknown) {
       const isTimeout =
@@ -1698,6 +1712,7 @@ export class ModelDevProxy {
         result: fallback,
         usedFallback: true,
         fallbackReason: isTimeout ? 'timeout' : 'error',
+        engineStatus: 'offline_deterministic',
       };
     }
   }
@@ -1715,6 +1730,7 @@ export class ModelDevProxy {
         result: null,
         usedFallback: true,
         fallbackReason: 'error',
+        engineStatus: 'offline_deterministic',
       };
     }
 
@@ -1729,6 +1745,7 @@ export class ModelDevProxy {
         result: null,
         usedFallback: true,
         fallbackReason: 'schema_invalid',
+        engineStatus: 'offline_deterministic',
       };
     }
 
@@ -1738,6 +1755,7 @@ export class ModelDevProxy {
         result: null,
         usedFallback: true,
         fallbackReason: 'disabled',
+        engineStatus: 'offline_deterministic',
       };
     }
 
@@ -1749,6 +1767,7 @@ export class ModelDevProxy {
         result: null,
         usedFallback: true,
         fallbackReason: 'disabled',
+        engineStatus: 'offline_deterministic',
       };
     }
 
@@ -1761,6 +1780,7 @@ export class ModelDevProxy {
         result: null,
         usedFallback: true,
         fallbackReason: 'disabled',
+        engineStatus: 'offline_deterministic',
       };
     }
 
@@ -1784,6 +1804,7 @@ export class ModelDevProxy {
         result: null,
         usedFallback: true,
         fallbackReason: 'disabled',
+        engineStatus: 'offline_deterministic',
       };
     }
     processLiveCallCount += 1;
@@ -1829,6 +1850,7 @@ export class ModelDevProxy {
           result: null,
           usedFallback: true,
           fallbackReason: 'error',
+          engineStatus: 'offline_deterministic',
         };
       }
 
@@ -1863,6 +1885,7 @@ export class ModelDevProxy {
           result: null,
           usedFallback: true,
           fallbackReason: extraction.reason,
+          engineStatus: 'offline_deterministic',
         };
       }
 
@@ -1875,6 +1898,7 @@ export class ModelDevProxy {
           result: null,
           usedFallback: true,
           fallbackReason: 'schema_invalid',
+          engineStatus: 'offline_deterministic',
         };
       }
 
@@ -1897,12 +1921,14 @@ export class ModelDevProxy {
           usedFallback: true,
           fallbackReason: (validation.reason as any) || 'schema_invalid',
           rejectedReasonCodes: validation.rejectedReasonCodes,
+          engineStatus: 'offline_deterministic',
         };
       }
 
       return {
         result: validation.data,
         usedFallback: false,
+        engineStatus: 'meta_model_live',
       };
     } catch (err: unknown) {
       const isTimeout =
@@ -1912,6 +1938,7 @@ export class ModelDevProxy {
         result: null,
         usedFallback: true,
         fallbackReason: isTimeout ? 'timeout' : 'error',
+        engineStatus: 'offline_deterministic',
       };
     }
   }

@@ -1653,6 +1653,54 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   border: 1px solid var(--color-chip-border);
 }
 
+.model-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.model-status-pill .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.model-status-pill .dot-live {
+  background-color: #10b981;
+  box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);
+}
+
+.model-status-pill .dot-fallback {
+  background-color: var(--color-tertiary, #9ca3af);
+}
+
+.model-status-pill.pill-engine-live {
+  background: rgba(16, 185, 129, 0.08);
+  color: #065f46;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.model-status-pill.pill-engine-fallback {
+  background: var(--color-chip-bg, rgba(0, 0, 0, 0.04));
+  color: var(--color-secondary, #4b5563);
+  border: 1px solid var(--color-chip-border, rgba(0, 0, 0, 0.1));
+}
+
+.model-status-pill.pill-engine-replay {
+  background: rgba(59, 130, 246, 0.08);
+  color: #1e40af;
+  border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
 .v2-offline-badge {
   display: inline-block;
   font-size: var(--text-caption);

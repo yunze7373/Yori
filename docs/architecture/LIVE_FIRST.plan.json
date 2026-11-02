@@ -148,9 +148,9 @@
     {
       "id": "S4-LIVE-DEPART",
       "slice": "S4",
-      "title": "LIVE-DEPART (narrative A): ICS calendar port plus Nominatim geocode to OSRM ETA and target-time weather",
+      "title": "LIVE-DEPART (narrative A): ICS calendar port plus Nominatim geocode to OSRM ETA and current-conditions weather",
       "priority": "P1",
-      "goal": "Add a read-only ICS calendar port (server-proxy fetch of the owner-pasted secret-iCal URL, parsed to events; no write scope; secret never client-visible) plus Nominatim geocoder (1 req/s, cached, attributed) resolving event locations to coordinates. Depart intent recomputes leave-by from OSRM ETA plus Open-Meteo at target time; weather changes re-rank options with umbrella preparation. BLOCKED-accepted outcome: without the owner calendar source, ship the explicit connection-block state and an ICS parser proven on synthetic samples, and report BLOCKED naming the owner action. No fake events ever.",
+      "goal": "Add a read-only ICS calendar port (server-proxy fetch of the owner-pasted secret-iCal URL, parsed to events; no write scope; secret never client-visible) plus Nominatim geocoder (1 req/s, cached, attributed) resolving event locations to coordinates. Depart intent recomputes leave-by from OSRM ETA plus current-conditions Open-Meteo: rain yields umbrella preparation plus 'Rain now' rationale with leave-by unchanged under single driving mode (target-time forecast evaluation and multimodal re-rank deferred per ARCH-LIVE-FIRST-S4-AC2). BLOCKED-accepted outcome: without the owner calendar source, ship the explicit connection-block state and an ICS parser proven on synthetic samples, and report BLOCKED naming the owner action. No fake events ever.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
@@ -170,8 +170,33 @@
       ],
       "checks": [
         "ICS parser tests on synthetic feeds (recurrence, timezone, all-day, cancelled); geocoder tests on recorded Nominatim responses at capped rate; no event renders without a parsed source event; secret URL absent from bundle and logs",
-        "Depart differential e2e (recorded calendar+geo+route+weather): worsening rain moves leave-by earlier with umbrella and re-ranked options; no-source run shows connection-block; core diff 0",
+        "Depart differential e2e (recorded calendar+geo+route+weather): worsening rain yields umbrella preparation plus 'Rain now' rationale with leave-by truthfully unchanged under single driving mode (ACCEPTED-NARROWED per ARCH-LIVE-FIRST-S4-AC2); zero fabricated transit durations, bus arithmetic absent; no-source run shows connection-block; core diff 0",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id S4-LIVE-DEPART --plan-ref docs/architecture/LIVE_FIRST.plan.json"
+      ]
+    },
+    {
+      "id": "S4c-RAIN-BUFFER-OPT",
+      "slice": "S4",
+      "title": "CONDITIONAL rain buffer: user-confirmed preference moves leave-by earlier with provenance (default off)",
+      "priority": "P2",
+      "goal": "CONDITIONAL: executes only on an explicit owner-confirmed rain-buffer preference; otherwise closes NOT-APPLICABLE without gating S6. Implement the buffer in src/plugins/depart (never core): leave-by moves earlier solely by the user's own confirmed minutes, labelled provenance=user with the confirmed fact key. Default off; no heuristic defaults, no per-mode penalties, no fabricated provider durations. Multimodal transit re-rank stays deferred to a future owner-gated slice.",
+      "type": "implementation",
+      "status": "pending",
+      "agent": "agent-orchestrator",
+      "pipeline": "new_feature",
+      "estimated_hours": 2,
+      "dependencies": ["S4-LIVE-DEPART"],
+      "goal_ids": ["G-212"],
+      "acceptance_ids": ["AC-212-1", "AC-EXT-1"],
+      "arch_contract_refs": ["ADR-101"],
+      "phase_plan_ref": "PH-002",
+      "files": [
+        "src/plugins/depart/",
+        "src/ui/view-models/trip-detail-vm.ts"
+      ],
+      "checks": [
+        "Buffer matrix: applies only with a confirmed rain-buffer fact (provenance=user shown); default-off run leaves single-mode outcome byte-identical; unconfirmed/heuristic buffers impossible by construction; core diff 0",
+        "python .progress/scripts/emit_convergence_event.py task_complete --task-id S4c-RAIN-BUFFER-OPT --plan-ref docs/architecture/LIVE_FIRST.plan.json"
       ]
     },
     {
@@ -222,7 +247,7 @@
         "docs/architecture/SUBMISSION_READINESS.md"
       ],
       "checks": [
-        "Evidence index lists every live module as ACCEPTED on real-provider evidence or terminally BLOCKED with its named owner gate (BLOCKED states verified via their shipped connection-block UX); video/stills at 390x844 and 1280x800 reviewed under dual gate A+B+C",
+        "Evidence index lists every live module as ACCEPTED on real-provider evidence or terminally BLOCKED with its named owner gate (BLOCKED states verified via their shipped connection-block UX); S4 smoked on current-conditions evidence only (target-time forecast plus transit re-rank deferred per ARCH-LIVE-FIRST-S4-AC2); video/stills at 390x844 and 1280x800 reviewed under dual gate A+B+C",
         "Ledger shows zero unapproved billed calls; no credentials in repo, bundle, logs, or chat transcripts",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id S6-OWNER-SMOKE --plan-ref docs/architecture/LIVE_FIRST.plan.json"
       ]
@@ -249,7 +274,7 @@
       ],
       "checks": [
         "Full matrix green from a clean checkout with zero credentials (Live shows honest empty states; Demo only behind ?dev=1); git diff f43c6c1d -- src/core empty (AC-EXT-1)",
-        "Each live module listed ACCEPTED on real evidence or BLOCKED with its owner gate named; nothing fixture-green reported as live-done",
+        "Each live module listed ACCEPTED on real evidence or BLOCKED with its owner gate named; S4 recorded ACCEPTED-NARROWED per amended check 2 (single-mode honest outcome; transit re-rank deferred); nothing fixture-green reported as live-done",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id CLOSEOUT_LIVEFIRST --plan-ref docs/architecture/LIVE_FIRST.plan.json"
       ]
     },

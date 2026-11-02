@@ -72,6 +72,18 @@ A slice reporting BLOCKED is terminal, never pending: the report names the owner
 
 Executor in-flight WIP owned by INBOX-20261101-070938 (recorded 2026-11-02, do not touch from this plan): `src/ui/living-context/app.ts`, `src/ui/living-context/styles.css`, `src/ui/living-context/v2-home-view.ts`, `src/ui/view-models/home-vm.ts`, `src/ui/view-models/types.ts`, `src/app/timeline/`. Rules: (a) no LIVE_FIRST `files` entry spans these paths — directory scopes replaced with exact owned files; (b) S1 proves snapshot-to-composer through the S0 harness plus new modules only, with zero edits to WIP files; (c) the `app.ts` live-wiring and mode-override hunks (S1/S2 integration) are authored against post-timeline-merge HEAD, after the timeline slice passes its own gate — the timeline slice owns `app.ts` until then; shared components are otherwise reused read-only. UI review of the WIP paths happens under the timeline slice's own gate, never under this plan.
 
+## 11. S4-AC2 amendment: honest single-mode outcome (revision 3, ARCH-LIVE-FIRST-S4-AC2)
+
+Reviewer approved S4 with AC check 2 (`worsening rain moves leave-by earlier with re-ranked options`) explicitly NOT passed. Verified in code: the routing adapters expose no transit-duration source (no `transit|bus|multimodal|GTFS` in OSRM/ORS/routing-provider adapters; Rework 3 removed mock-only `busMinutes`), so re-ranking cannot be met honestly. Delivered honest outcome (evidence `docs/evidence/live-depart/`, 10/10 e2e): rain → umbrella preparation plus `Rain now` rationale, leave-by truthfully unchanged.
+
+| Criterion | A: accept honest single-mode (verdict) | B: transit slice now | C: user-confirmed buffer (conditional) |
+|---|---|---|---|
+| Honesty | Proven, no fabrication | No free transit router exists; would need backend plus budget | Honest iff strictly user-confirmed with provenance |
+| Constraint fit | Full (zero-fee, core-free) | Fails (backend, billing, 11/05) | Fits with default-off guard |
+| S6 effect | S4 counts done (ACCEPTED-NARROWED) | S4 waits indefinitely | No S6 gating either way |
+
+Verdict: **A**. S4 check 2 is amended to the honest single-mode clause; S4 closes ACCEPTED-NARROWED and S6 counts it done. Narrowing recorded (revision 4): S4 title and goal now promise current-conditions weather only — target-time forecast evaluation for the departure window is deferred together with multimodal re-rank, since neither can be served honestly by the approved providers. **B deferred**, not scheduled: multimodal re-rank needs a dedicated transit router/GTFS proxy behind a future owner budget plus backend — recorded as a candidate slice, out of 11/05 scope. **C conditional** (new P2 task S4c): only on an explicit owner-confirmed rain-buffer preference, a `src/plugins/depart` (never core) buffer moves leave-by earlier by the user's own minutes, labelled `provenance=user`; default off, no heuristic defaults, no mode penalties; without owner confirmation it closes NOT-APPLICABLE. S5 stays released and unblocked.
+
 ## 9. Reviewer coordination note
 
 This design accepts the Reviewer's evidence matrix and critical path as the baseline and answers all six requested items. Recorded risk outside this plan's control: Reviewer capacity was reported quota-exhausted at the last sentinel check — if review bandwidth is short before 11/05, the requester should sequence S0–S2 first (they unblock everything and need no owner spend) and hold S4/S5 on their explicit owner gates. Formal submission follows via `architect_reply.py --completed --submit-for-review`.
