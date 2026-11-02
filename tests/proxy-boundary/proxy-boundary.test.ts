@@ -17,6 +17,8 @@ import {
   createWeatherProxyMiddleware,
   createRouteProxyMiddleware,
   createPlacesProxyMiddleware,
+  createCalendarProxyMiddleware,
+  createGeocodeProxyMiddleware,
   setProxyTestSeam,
   resetProxyTestSeams,
 } from '../../src/adapters/providers/server-proxy.js';
@@ -339,7 +341,110 @@ describe('Proxy-Boundary Mock Harness (/api/* seams)', () => {
   });
 
   // =========================================================================
-  // 4. End-to-End Snapshot Composition Under Failure Modes
+  // 4. Calendar Proxy Seam (/api/calendar)
+  // =========================================================================
+  describe('Calendar Proxy Seam (/api/calendar)', () => {
+    it('returns honest unconfigured status and connection-block action requirement', async () => {
+      const middleware = createCalendarProxyMiddleware({ enabled: false, configured: false });
+      const { req, res, next, response } = createMockReqRes('/api/calendar/status');
+      await middleware(req, res, next);
+
+      expect(response.statusCode).toBe(200);
+      const data = JSON.parse(response.body);
+      expect(data.enabled).toBe(false);
+      expect(data.configured).toBe(false);
+      expect(data.provider).toBe('ics');
+      expect(data.actionRequired).toContain('paste the secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat');
+    });
+
+    it('returns connection-block payload when /api/calendar queried while unconfigured', async () => {
+      const middleware = createCalendarProxyMiddleware({ enabled: false, configured: false });
+      const { req, res, next, response } = createMockReqRes('/api/calendar');
+      await middleware(req, res, next);
+
+      expect(response.statusCode).toBe(200);
+      const data = JSON.parse(response.body);
+      expect(data.enabled).toBe(false);
+      expect(data.configured).toBe(false);
+      expect(data.events).toEqual([]);
+      expect(data.actionRequired).toContain('paste the secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat');
+    });
+
+    it('provokes DENIED path deterministically (403 Forbidden)', async () => {
+      const middleware = createCalendarProxyMiddleware({ enabled: true, configured: true });
+      setProxyTestSeam('calendar', {
+        forceMode: 'denied',
+        errorMessage: 'Calendar access denied',
+      });
+
+      const { req, res, next, response } = createMockReqRes('/api/calendar');
+      await middleware(req, res, next);
+
+      expect(response.statusCode).toBe(403);
+      const data = JSON.parse(response.body);
+      expect(data.code).toBe('permission_denied');
+    });
+
+    it('provokes TIMEOUT path deterministically (504 Gateway Timeout)', async () => {
+      const middleware = createCalendarProxyMiddleware({ enabled: true, configured: true });
+      setProxyTestSeam('calendar', {
+        forceMode: 'timeout',
+      });
+
+      const { req, res, next, response } = createMockReqRes('/api/calendar');
+      await middleware(req, res, next);
+
+      expect(response.statusCode).toBe(504);
+      const data = JSON.parse(response.body);
+      expect(data.code).toBe('timeout');
+    });
+  });
+
+  // =========================================================================
+  // 5. Geocode Proxy Seam (/api/geocode)
+  // =========================================================================
+  describe('Geocode Proxy Seam (/api/geocode)', () => {
+    it('rejects empty query parameter with 400', async () => {
+      const middleware = createGeocodeProxyMiddleware({ enabled: true });
+      const { req, res, next, response } = createMockReqRes('/api/geocode?q=');
+      await middleware(req, res, next);
+
+      expect(response.statusCode).toBe(400);
+      const data = JSON.parse(response.body);
+      expect(data.error).toContain('Missing required query parameter: q');
+    });
+
+    it('provokes TIMEOUT path deterministically (504 Gateway Timeout)', async () => {
+      const middleware = createGeocodeProxyMiddleware({ enabled: true });
+      setProxyTestSeam('geocode', {
+        forceMode: 'timeout',
+      });
+
+      const { req, res, next, response } = createMockReqRes('/api/geocode?q=San+Francisco');
+      await middleware(req, res, next);
+
+      expect(response.statusCode).toBe(504);
+      const data = JSON.parse(response.body);
+      expect(data.code).toBe('timeout');
+    });
+
+    it('provokes ERROR path deterministically (500 Internal Error)', async () => {
+      const middleware = createGeocodeProxyMiddleware({ enabled: true });
+      setProxyTestSeam('geocode', {
+        forceMode: 'error',
+      });
+
+      const { req, res, next, response } = createMockReqRes('/api/geocode?q=San+Francisco');
+      await middleware(req, res, next);
+
+      expect(response.statusCode).toBe(500);
+      const data = JSON.parse(response.body);
+      expect(data.code).toBe('provider_error');
+    });
+  });
+
+  // =========================================================================
+  // 6. End-to-End Snapshot Composition Under Failure Modes
   // =========================================================================
   describe('Snapshot Composition Under Failure Modes', () => {
     it('composes snapshot gracefully when all providers are in failed/denied states', () => {

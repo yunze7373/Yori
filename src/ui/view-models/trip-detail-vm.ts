@@ -44,7 +44,8 @@ export interface DeriveTripDetailOptions {
   selectedMode?: string;
   userConfirmedKeys?: ReadonlySet<string>;
   snapshot?: {
-    signals: readonly { kind: string; value?: unknown }[];
+    asOf?: string;
+    signals: readonly { kind: string; value?: unknown; issuedAt?: string; id?: string }[];
     timezone?: string;
   } | null;
   acceptedPlanIds?: readonly string[];
@@ -75,6 +76,7 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
       ? createRainEvidenceBundle({
           plan,
           snapshot: snapshot ? { timezone: snapshot.timezone, signals: snapshot.signals as any } : undefined,
+          sceneClockIso: snapshot?.asOf,
           timezone: plan.timezone ?? snapshot?.timezone ?? 'America/Los_Angeles',
           isConfirmedHabit: userConfirmedKeys?.has('rain_transport_preference'),
           userConfirmedKeys,
@@ -315,10 +317,18 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
   const isAccepted = acceptedPlanIds.includes(plan.id);
   const actions: PlanAction[] = plan.actions ? [...plan.actions] : [];
 
-  const sourceRef: SourceRef = { recordId: 'cal-piano', field: 'subjectTitle' };
+  const calSig =
+    snapshot?.signals?.find(s => s.kind === 'calendar') ??
+    plan.why?.evidenceSignals?.find(s => s.kind === 'calendar');
+  const calRecId =
+    (calSig as any)?.id ||
+    ((calSig as any)?.issuedAt ? `${calSig!.kind}:${(calSig as any).issuedAt}` : undefined) ||
+    'cal-piano';
+
+  const sourceRef: SourceRef = { recordId: calRecId, field: 'subjectTitle' };
   const fieldSourceRefs: Record<string, SourceRef> = {
-    destinationName: { recordId: 'cal-piano', field: 'subjectTitle' },
-    apptTime: { recordId: 'cal-piano', field: 'apptTime' },
+    destinationName: { recordId: calRecId, field: 'subjectTitle' },
+    apptTime: { recordId: calRecId, field: 'apptTime' },
     bufferText: { recordId: 'habit-rain-transport', field: 'bufferText' },
     prepText: { recordId: 'habit-rain-transport', field: 'prepText' },
   };
@@ -346,7 +356,7 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
     map,
     steps,
     whyHabits: Object.freeze(whyHabits),
-    whyDerivation: buildHumanDerivation(plan),
+    whyDerivation: buildHumanDerivation(plan, userConfirmedKeys),
     isAccepted,
     isLive,
     actions: Object.freeze(actions),

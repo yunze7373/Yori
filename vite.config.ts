@@ -8,6 +8,8 @@ import {
   createWeatherProxyMiddleware,
   createRouteProxyMiddleware,
   createPlacesProxyMiddleware,
+  createCalendarProxyMiddleware,
+  createGeocodeProxyMiddleware,
 } from './src/adapters/providers/server-proxy.js';
 
 function modelProxyPlugin(): Plugin {
@@ -80,6 +82,34 @@ function placesProxyPlugin(): Plugin {
   };
 }
 
+function calendarProxyPlugin(): Plugin {
+  const middleware = createCalendarProxyMiddleware();
+
+  return {
+    name: 'calendar-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
+
+function geocodeProxyPlugin(): Plugin {
+  const middleware = createGeocodeProxyMiddleware();
+
+  return {
+    name: 'geocode-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
+
 /**
  * Vite Configuration for Yori Living Context
  *
@@ -112,6 +142,8 @@ export default defineConfig(({ mode }) => {
       weatherProxyPlugin(),
       routeProxyPlugin(),
       placesProxyPlugin(),
+      calendarProxyPlugin(),
+      geocodeProxyPlugin(),
     ],
     server: {
       port: 5173,

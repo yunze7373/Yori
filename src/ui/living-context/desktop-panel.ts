@@ -51,6 +51,7 @@ export interface DesktopPanelRenderOptions {
   readonly livePlacesLoading?: boolean;
   readonly livePlacesError?: boolean;
   readonly selectedLivePlace?: PlaceItem | null;
+  readonly liveCalendarConfigured?: boolean;
   readonly ariaAnnouncement?: string;
 }
 
@@ -717,6 +718,31 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                   <span class="live-source-chip">Empty</span>
                 </div>
                 <p class="live-card-desc">No dining options found nearby</p>
+              </div>
+            </div>
+          </div>
+          `
+              : ''
+          }
+          ${
+            opts.liveCalendarConfigured === false
+              ? `
+          <div class="live-card live-notice-card notice-calendar-unconfigured" id="desktop-notice-calendar-unconfigured-quiet" role="status" data-provenance="none">
+            <div class="live-card-row">
+              <div class="live-card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+              </div>
+              <div class="live-card-body">
+                <div class="live-card-header">
+                  <h3 class="live-card-title">Calendar</h3>
+                  <span class="live-source-chip">Owner Source Needed</span>
+                </div>
+                <p class="live-card-desc">No calendar source · paste secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat</p>
               </div>
             </div>
           </div>

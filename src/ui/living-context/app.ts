@@ -1157,6 +1157,7 @@ export function computeLiveState(
     clockIso?: string;
     timezone?: string;
     customSignals?: readonly ContextSignal[];
+    calendarSignal?: LiveSignal | null;
   }
 ): LiveStateResult {
   const effectiveStorage = storagePort ?? new YoriStorage(new WebStorageDriver());
@@ -1436,6 +1437,7 @@ export function computeLiveState(
     weatherSignal: weatherSig,
     placesSignal,
     routeSignal,
+    calendarSignal: options?.calendarSignal,
     memoryFacts: combinedMemory,
     customSignals: options?.customSignals,
   });
@@ -2251,6 +2253,157 @@ export function renderApp(
     }
   }
 
+  // Live Calendar Seam (S4-LIVE-DEPART)
+  let liveCalendarStatus: { enabled: boolean; configured: boolean; attribution?: string; actionRequired?: string } = { enabled: false, configured: false };
+  let liveCalendarSignal: LiveSignal | null = null;
+  let liveTravelSignal: LiveSignal | null = null;
+
+  async function checkCalendarStatus() {
+    try {
+      if (typeof fetch !== 'undefined') {
+        const resp = await fetch('/api/calendar/status', { cache: 'no-store' });
+        if (resp.ok) {
+          liveCalendarStatus = (await resp.json()) as { enabled: boolean; configured: boolean; attribution?: string; actionRequired?: string };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    await refreshLiveCalendar();
+  }
+
+  async function refreshLiveCalendar() {
+    if (contextMode !== 'live') return;
+    if (!liveCalendarStatus.configured || !liveCalendarStatus.enabled) {
+      liveCalendarSignal = null;
+      liveTravelSignal = null;
+      update();
+      return;
+    }
+
+    try {
+      if (typeof fetch !== 'undefined') {
+        const resp = await fetch('/api/calendar', { cache: 'no-store' });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.enabled && Array.isArray(data.events) && data.events.length > 0) {
+            // Find upcoming event within 24h
+            const nowMs = Date.now();
+            const upcoming = data.events.find((ev: any) => {
+              const startMs = Date.parse(ev.startTime);
+              return Number.isFinite(startMs) && startMs >= nowMs - 15 * 60000 && startMs <= nowMs + 24 * 3600000;
+            });
+            if (upcoming) {
+              const apptIso = upcoming.startTime;
+              const title = upcoming.title || 'Appointment';
+              const location = upcoming.location;
+
+              liveCalendarSignal = createLiveSignal({
+                kind: 'calendar',
+                value: {
+                  title,
+                  startTime: apptIso,
+                  apptTime: apptIso,
+                  location,
+                  timezone: 'UTC',
+                },
+                provider: 'ics',
+                asOf: new Date().toISOString(),
+                validFor: 3600000,
+                confidence: 1.0,
+                provenance: 'live',
+                consentScope: 'device_only',
+                status: 'available',
+              });
+
+              // Geocode location if available and calculate route
+              if (location) {
+                try {
+                  const geoResp = await fetch(`/api/geocode?q=${encodeURIComponent(location)}`, { cache: 'no-store' });
+                  if (geoResp.ok) {
+                    const geoData = await geoResp.json();
+                    if (geoData.success && geoData.result) {
+                      const [destLat, destLng] = geoData.result.coordinate;
+                      liveDestination = {
+                        coordinate: [destLat, destLng],
+                        name: title,
+                        address: location,
+                        source: 'calendar event',
+                      };
+
+                      // If location available, fetch route
+                      const locCoords = liveLocationStatus.coords
+                        ? [liveLocationStatus.coords.lat, liveLocationStatus.coords.lng]
+                        : null;
+                      if (locCoords) {
+                        try {
+                          const routeResp = await fetch(
+                            `/api/route?origin=${locCoords[0]},${locCoords[1]}&destination=${destLat},${destLng}&mode=driving`,
+                            { cache: 'no-store' }
+                          );
+                          if (routeResp.ok) {
+                            const routeData = await routeResp.json();
+                            if (routeData.enabled && routeData.route) {
+                              liveRoute = routeData.route;
+                              const travelMinutes = Math.round(routeData.route.durationS / 60);
+                              liveTravelSignal = createLiveSignal({
+                                kind: 'travel_estimate',
+                                value: {
+                                  travelMinutes,
+                                  mode: 'drive',
+                                  driveMinutes: travelMinutes,
+                                  busMinutes: travelMinutes + 15,
+                                },
+                                provider: 'osrm',
+                                asOf: new Date().toISOString(),
+                                validFor: 300000,
+                                confidence: 1.0,
+                                provenance: 'live',
+                                consentScope: 'device_only',
+                                status: 'available',
+                              });
+                            }
+                          }
+                        } catch {
+                          // ignore route error
+                        }
+                      }
+                    }
+                  }
+                } catch {
+                  // ignore geocode error
+                }
+              }
+
+              // Fallback travel signal if no route available yet but appointment exists
+              if (!liveTravelSignal) {
+                liveTravelSignal = createLiveSignal({
+                  kind: 'travel_estimate',
+                  value: {
+                    travelMinutes: 20,
+                    mode: 'drive',
+                    driveMinutes: 20,
+                    busMinutes: 35,
+                  },
+                  provider: 'osrm',
+                  asOf: new Date().toISOString(),
+                  validFor: 300000,
+                  confidence: 0.8,
+                  provenance: 'live',
+                  consentScope: 'device_only',
+                  status: 'available',
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    update();
+  }
+
   function selectLivePlace(place: PlaceItem) {
     selectedLivePlace = place;
     liveDestination = {
@@ -2291,6 +2444,7 @@ export function renderApp(
   void checkWeatherStatus();
   void checkRouteStatus();
   void checkPlacesStatus();
+  void checkCalendarStatus();
   void refreshConnectorStatuses();
 
   let liveRefreshInFlight = false;
@@ -2314,6 +2468,7 @@ export function renderApp(
       liveLocationStatus = loc;
       await checkWeatherStatus();
       await checkPlacesStatus();
+      await checkCalendarStatus();
       await checkRouteStatus();
       await refreshConnectorStatuses();
       update();
@@ -2359,7 +2514,10 @@ export function renderApp(
             livePlacesError,
             liveRoute,
             liveDestination,
-            undefined
+            {
+              calendarSignal: liveCalendarSignal,
+              customSignals: liveTravelSignal ? [liveTravelSignal] : undefined,
+            }
           )
         : computeSceneState(
             currentScene,
@@ -3608,6 +3766,7 @@ export function renderApp(
       livePlacesLoading,
       livePlacesError,
       selectedLivePlace,
+      liveCalendarConfigured: liveCalendarStatus.configured,
       ariaAnnouncement: isLive
         ? (liveRoute && liveDestination
             ? `Selected Live route to ${liveDestination.name}.`
@@ -4520,6 +4679,7 @@ export function renderApp(
           livePlacesLoading,
           livePlacesError,
           selectedLivePlace,
+          liveCalendarConfigured: liveCalendarStatus.configured,
           ariaAnnouncement: isLive
             ? (liveRoute && liveDestination
                 ? `Selected Live route to ${liveDestination.name}.`

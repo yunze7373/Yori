@@ -216,4 +216,19 @@ describe('Desktop Contextual Detail Panel (S4-DESKTOP-IA)', () => {
     expect(html).not.toContain('data-provenance="fixture"');
     expect(html).not.toContain('SIMULATED');
   });
+
+  it('renders honest S4 connection-block notice when calendar is unconfigured in quiet state', () => {
+    const opts: DesktopPanelRenderOptions = {
+      contextMode: 'live',
+      panelKind: 'quiet',
+      cardKind: 'quiet',
+      liveCalendarConfigured: false,
+    };
+
+    const html = renderDesktopRightPanel(opts);
+    expect(html).toContain('notice-calendar-unconfigured');
+    expect(html).toContain('data-provenance="none"');
+    expect(html).toContain('CALENDAR_ICS_URL');
+    expect(html).toContain('never in chat');
+  });
 });

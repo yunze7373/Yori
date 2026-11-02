@@ -36,8 +36,16 @@ import {
   isAllowedAmenity,
   ALLOWED_AMENITIES,
 } from './overpass-places-adapter.js';
+import {
+  IcsCalendarAdapter,
+} from './ics-calendar-adapter.js';
+import {
+  NominatimGeocoder,
+  NOMINATIM_ATTRIBUTION,
+} from './nominatim-geocoder.js';
 
 export type ProxyFailureMode = 'denied' | 'stale' | 'timeout' | 'error' | 'none';
+export type ProxyEndpoint = 'weather' | 'route' | 'places' | 'calendar' | 'geocode';
 
 export interface ProxyTestSeamConfig {
   readonly forceMode?: ProxyFailureMode;
@@ -48,14 +56,16 @@ export interface ProxyTestSeamConfig {
   readonly payload?: unknown;
 }
 
-const activeProxyTestSeams: Record<string, ProxyTestSeamConfig | null> = {
+const activeProxyTestSeams: Record<ProxyEndpoint, ProxyTestSeamConfig | null> = {
   weather: null,
   route: null,
   places: null,
+  calendar: null,
+  geocode: null,
 };
 
 export function setProxyTestSeam(
-  endpoint: 'weather' | 'route' | 'places',
+  endpoint: ProxyEndpoint,
   config: ProxyTestSeamConfig | null
 ): void {
   activeProxyTestSeams[endpoint] = config;
@@ -65,10 +75,12 @@ export function resetProxyTestSeams(): void {
   activeProxyTestSeams.weather = null;
   activeProxyTestSeams.route = null;
   activeProxyTestSeams.places = null;
+  activeProxyTestSeams.calendar = null;
+  activeProxyTestSeams.geocode = null;
 }
 
 export function getProxyTestSeam(
-  endpoint: 'weather' | 'route' | 'places'
+  endpoint: ProxyEndpoint
 ): ProxyTestSeamConfig | null {
   return activeProxyTestSeams[endpoint] ?? null;
 }
@@ -894,6 +906,374 @@ export function createPlacesProxyMiddleware(
     }
 
     // Method Not Allowed / Not Found
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Endpoint not found' }));
+  };
+}
+
+export interface CalendarProxyConfig {
+  readonly enabled: boolean;
+  readonly configured: boolean;
+  readonly provider: 'ics';
+  readonly attribution: string;
+  readonly icsUrl?: string | null;
+}
+
+export function resolveCalendarConfig(
+  env: NodeJS.ProcessEnv = process.env
+): CalendarProxyConfig {
+  const enabledVal = env['CALENDAR_LIVE_ENABLED'] || env['VITE_CALENDAR_LIVE_ENABLED'];
+  const enabled = enabledVal === 'true' || enabledVal === '1';
+  const icsUrl = env['CALENDAR_ICS_URL']?.trim() || null;
+  const configured = Boolean(icsUrl && icsUrl.length > 0);
+
+  return {
+    enabled,
+    configured,
+    provider: 'ics',
+    attribution: 'iCalendar (RFC 5545)',
+    icsUrl,
+  };
+}
+
+export function createCalendarProxyMiddleware(
+  configOverride?: Partial<CalendarProxyConfig>,
+  adapterOverride?: IcsCalendarAdapter
+) {
+  const baseConfig = resolveCalendarConfig();
+  const config: CalendarProxyConfig = {
+    enabled: configOverride?.enabled ?? baseConfig.enabled,
+    configured: configOverride?.configured ?? baseConfig.configured,
+    provider: 'ics',
+    attribution: configOverride?.attribution ?? baseConfig.attribution,
+    icsUrl: configOverride?.icsUrl !== undefined ? configOverride.icsUrl : baseConfig.icsUrl,
+  };
+
+  const calendarAdapter = adapterOverride ?? new IcsCalendarAdapter();
+
+  return async function calendarProxyMiddleware(
+    req: IncomingMessage,
+    res: ServerResponse,
+    next: () => void
+  ): Promise<void> {
+    const urlStr = req.url || '';
+    const rawPathname = urlStr.split('?')[0] || '';
+
+    if (!rawPathname.startsWith('/api/calendar')) {
+      return next();
+    }
+
+    // --- TEST SEAM INJECTION (provokes denied / stale / timeout / error) ---
+    const calSeam = getProxyTestSeam('calendar');
+    if (calSeam && calSeam.forceMode && calSeam.forceMode !== 'none') {
+      if (calSeam.forceMode === 'denied') {
+        const code = calSeam.forceStatusCode || 403;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error: calSeam.errorMessage || 'Access denied: calendar disabled (provoked by test seam)',
+            code: 'permission_denied',
+            provider: config.provider,
+          })
+        );
+        return;
+      }
+      if (calSeam.forceMode === 'timeout') {
+        if (calSeam.forceDelayMs && calSeam.forceDelayMs > 0) {
+          await new Promise(resolve => setTimeout(resolve, calSeam.forceDelayMs));
+        }
+        const code = calSeam.forceStatusCode || 504;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error: calSeam.errorMessage || 'Calendar gateway timeout (provoked by test seam)',
+            code: 'timeout',
+            provider: config.provider,
+          })
+        );
+        return;
+      }
+      if (calSeam.forceMode === 'error') {
+        const code = calSeam.forceStatusCode || 500;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            error: calSeam.errorMessage || 'Calendar provider error (provoked by test seam)',
+            code: 'provider_error',
+            provider: config.provider,
+          })
+        );
+        return;
+      }
+      if (calSeam.forceMode === 'stale') {
+        const staleOffset = calSeam.staleAgeMs || 7200000;
+        const staleAsOf = new Date(Date.now() - staleOffset).toISOString();
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        const payload =
+          calSeam.payload || {
+            enabled: true,
+            configured: true,
+            stale: true,
+            asOf: staleAsOf,
+            events: [],
+            attribution: config.attribution,
+          };
+        res.end(JSON.stringify(payload));
+        return;
+      }
+    }
+
+    const hostHeader = req.headers['host'];
+    let baseUrl = 'http://127.0.0.1:5173';
+    if (hostHeader) {
+      if (!isAllowlistedLoopbackHost(hostHeader) && process.env.DEV_DEVICE_TESTING !== 'true') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Access forbidden: allowlisted loopback host required' }));
+        return;
+      }
+      if (isAllowlistedLoopbackHost(hostHeader)) {
+        baseUrl = `http://${hostHeader.trim()}`;
+      }
+    }
+
+    // Security Guard: Sec-Fetch-Site / Cross-site check
+    const secFetchSite = req.headers['sec-fetch-site'];
+    if (secFetchSite === 'cross-site') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Cross-site requests forbidden' }));
+      return;
+    }
+
+    // Security Guard: Referer check
+    const referer = req.headers['referer'];
+    if (referer && !isLocalOriginOrReferer(referer) && process.env.DEV_DEVICE_TESTING !== 'true') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Untrusted referer' }));
+      return;
+    }
+
+    const parsedUrl = new URL(urlStr, baseUrl);
+    const pathname = parsedUrl.pathname;
+
+    // Route 1: GET /api/calendar/status
+    if (pathname === '/api/calendar/status' && req.method === 'GET') {
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store',
+      });
+      res.end(
+        JSON.stringify({
+          enabled: config.enabled,
+          configured: config.configured,
+          provider: config.provider,
+          attribution: config.attribution,
+          actionRequired: config.configured
+            ? undefined
+            : 'paste the secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat',
+        })
+      );
+      return;
+    }
+
+    // Route 2: GET /api/calendar or /api/calendar/events
+    if ((pathname === '/api/calendar' || pathname === '/api/calendar/' || pathname === '/api/calendar/events') && req.method === 'GET') {
+      if (!config.configured) {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            enabled: false,
+            configured: false,
+            events: [],
+            attribution: config.attribution,
+            actionRequired: 'paste the secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat',
+          })
+        );
+        return;
+      }
+
+      if (!config.enabled) {
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            enabled: false,
+            configured: true,
+            events: [],
+            error: 'Live calendar is disabled (set CALENDAR_LIVE_ENABLED=true)',
+          })
+        );
+        return;
+      }
+
+      try {
+        if (!config.icsUrl) {
+          throw new Error('CALENDAR_ICS_URL missing');
+        }
+        const events = await calendarAdapter.fetchAndParse(config.icsUrl);
+        res.writeHead(200, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            enabled: true,
+            configured: true,
+            events,
+            attribution: config.attribution,
+          })
+        );
+      } catch (err: any) {
+        res.writeHead(502, {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-store',
+        });
+        res.end(
+          JSON.stringify({
+            error: 'Failed to fetch calendar feed',
+            code: 'provider_error',
+          })
+        );
+      }
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Endpoint not found' }));
+  };
+}
+
+export interface GeocodeProxyConfig {
+  readonly enabled: boolean;
+  readonly attribution: string;
+}
+
+export function resolveGeocodeConfig(
+  env: NodeJS.ProcessEnv = process.env
+): GeocodeProxyConfig {
+  const enabledVal = env['GEOCODE_LIVE_ENABLED'];
+  const enabled = enabledVal !== 'false' && enabledVal !== '0';
+  return {
+    enabled,
+    attribution: NOMINATIM_ATTRIBUTION,
+  };
+}
+
+export function createGeocodeProxyMiddleware(
+  configOverride?: Partial<GeocodeProxyConfig>,
+  geocoderOverride?: NominatimGeocoder
+) {
+  const baseConfig = resolveGeocodeConfig();
+  const config: GeocodeProxyConfig = {
+    enabled: configOverride?.enabled ?? baseConfig.enabled,
+    attribution: configOverride?.attribution ?? baseConfig.attribution,
+  };
+
+  const geocoder = geocoderOverride ?? new NominatimGeocoder();
+
+  return async function geocodeProxyMiddleware(
+    req: IncomingMessage,
+    res: ServerResponse,
+    next: () => void
+  ): Promise<void> {
+    const urlStr = req.url || '';
+    const rawPathname = urlStr.split('?')[0] || '';
+
+    if (!rawPathname.startsWith('/api/geocode')) {
+      return next();
+    }
+
+    // --- TEST SEAM INJECTION ---
+    const geoSeam = getProxyTestSeam('geocode');
+    if (geoSeam && geoSeam.forceMode && geoSeam.forceMode !== 'none') {
+      if (geoSeam.forceMode === 'denied') {
+        const code = geoSeam.forceStatusCode || 403;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: geoSeam.errorMessage || 'Geocode access denied', code: 'permission_denied' }));
+        return;
+      }
+      if (geoSeam.forceMode === 'timeout') {
+        if (geoSeam.forceDelayMs && geoSeam.forceDelayMs > 0) {
+          await new Promise(resolve => setTimeout(resolve, geoSeam.forceDelayMs));
+        }
+        const code = geoSeam.forceStatusCode || 504;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: geoSeam.errorMessage || 'Geocode timeout', code: 'timeout' }));
+        return;
+      }
+      if (geoSeam.forceMode === 'error') {
+        const code = geoSeam.forceStatusCode || 500;
+        res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: geoSeam.errorMessage || 'Geocode error', code: 'provider_error' }));
+        return;
+      }
+      if (geoSeam.forceMode === 'stale') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(geoSeam.payload || { success: true, result: null, attribution: config.attribution }));
+        return;
+      }
+    }
+
+    const hostHeader = req.headers['host'];
+    let baseUrl = 'http://127.0.0.1:5173';
+    if (hostHeader) {
+      if (!isAllowlistedLoopbackHost(hostHeader) && process.env.DEV_DEVICE_TESTING !== 'true') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Access forbidden: allowlisted loopback host required' }));
+        return;
+      }
+      if (isAllowlistedLoopbackHost(hostHeader)) {
+        baseUrl = `http://${hostHeader.trim()}`;
+      }
+    }
+
+    const secFetchSite = req.headers['sec-fetch-site'];
+    if (secFetchSite === 'cross-site') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Cross-site requests forbidden' }));
+      return;
+    }
+
+    const referer = req.headers['referer'];
+    if (referer && !isLocalOriginOrReferer(referer) && process.env.DEV_DEVICE_TESTING !== 'true') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Untrusted referer' }));
+      return;
+    }
+
+    const parsedUrl = new URL(urlStr, baseUrl);
+    const pathname = parsedUrl.pathname;
+
+    if (pathname === '/api/geocode' && req.method === 'GET') {
+      const q = parsedUrl.searchParams.get('q');
+      if (!q || !q.trim()) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Missing required query parameter: q' }));
+        return;
+      }
+
+      try {
+        const result = await geocoder.geocode(q.trim());
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            success: Boolean(result),
+            query: q.trim(),
+            result: result ?? null,
+            attribution: config.attribution,
+          })
+        );
+      } catch (err: any) {
+        res.writeHead(500, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify({ error: err?.message || 'Geocoding failed', code: 'provider_error' }));
+      }
+      return;
+    }
+
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Endpoint not found' }));
   };
