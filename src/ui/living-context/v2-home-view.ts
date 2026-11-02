@@ -195,6 +195,28 @@ export function renderCompactMapStrip(map: MapVM, isLive?: boolean): string {
     ? (STRINGS.map.mobilePlacesLabel || 'Places Map')
     : (STRINGS.map.mobileLabel || 'Route Map');
 
+  if (isLive) {
+    return `
+    <section class="card v2-map-card compact compact-map-strip" aria-label="${escapeHtml(map.label)}" data-provenance="none">
+      <div class="map-header map-strip-header">
+        <span class="map-strip-label section-label" data-slot="chrome" data-slot-reason="Map strip label">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+          </svg>
+          <span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span>
+        </span>
+        <span class="card-badge" data-provenance="none">Map not available</span>
+      </div>
+      <div class="v2-map-canvas compact-canvas map-unavailable-canvas" role="img" aria-label="Map not available">
+        <div class="map-unavailable-message" style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 48px; color: var(--color-text-secondary, #5B6B65); font-size: 0.8125rem;">
+          Map view not available
+        </div>
+      </div>
+    </section>
+  `;
+  }
+
   return `
     <section class="card v2-map-card compact compact-map-strip" aria-label="${escapeHtml(map.label)}" data-provenance="${isLive ? 'live' : 'fixture'}">
       <div class="map-header map-strip-header">
@@ -462,18 +484,27 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
   if (vm.isLive) {
     if (vm.weatherEnabled === false || vm.livingHeader?.weatherDisplay === 'Weather: Off') {
       weatherValue = 'Off (owner setting)';
-    } else if (vm.weatherSignalValue?.condition) {
-      const cond =
-        vm.weatherSignalValue.condition.charAt(0).toUpperCase() +
-        vm.weatherSignalValue.condition.slice(1);
-      weatherValue =
-        typeof vm.weatherSignalValue.temperatureC === 'number'
-          ? `${cond} · ${vm.weatherSignalValue.temperatureC}°C`
-          : cond;
-    } else if (vm.weatherError) {
+    } else if (
+      vm.weatherError ||
+      (!vm.weatherSignalValue?.condition && typeof vm.weatherSignalValue?.temperatureC !== 'number') ||
+      vm.livingHeader?.weatherDisplay === 'Weather unavailable'
+    ) {
       weatherValue = 'Unavailable';
     } else {
-      weatherValue = 'Unavailable';
+      const cond =
+        vm.weatherSignalValue?.condition
+          ? vm.weatherSignalValue.condition.charAt(0).toUpperCase() +
+            vm.weatherSignalValue.condition.slice(1)
+          : '';
+      if (cond && typeof vm.weatherSignalValue?.temperatureC === 'number') {
+        weatherValue = `${cond} · ${vm.weatherSignalValue.temperatureC}°C`;
+      } else if (cond) {
+        weatherValue = cond;
+      } else if (typeof vm.weatherSignalValue?.temperatureC === 'number') {
+        weatherValue = `${vm.weatherSignalValue.temperatureC}°C`;
+      } else {
+        weatherValue = 'Unavailable';
+      }
     }
   } else {
     weatherValue = vm.isRain ? 'Rain forecast · 18°C' : 'Clear sky · 20°C';

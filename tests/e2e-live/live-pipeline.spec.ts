@@ -323,6 +323,12 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     await expect(heroCard).toBeVisible();
     await expect(heroCard).toContainText('Tokyo Soba Garden');
 
+    // Ranking citation: cites confirmed taste preference
+    const candidateBasis = page.locator('.v2-candidate-basis').first();
+    await expect(candidateBasis).toBeVisible();
+    await expect(candidateBasis).toContainText('Based on taste:');
+    await expect(candidateBasis).toContainText('You confirmed');
+
     // Primary action buttons exist and are visible
     await expect(page.locator('#btn-accept')).toBeVisible();
     await expect(page.locator('#btn-adjust')).toBeVisible();
@@ -777,6 +783,380 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
 
     // Plan must still be visible (not vanished to quiet state)
     await expect(page.locator('#btn-accept')).toBeVisible({ timeout: 10000 });
+
+    await context.close();
+  });
+
+  test('Single-flight suppression: rapid focus and visibilitychange trigger coalescing into exactly 1 places fetch', async ({
+    page,
+  }) => {
+    await page.clock.install({ time: new Date('2026-11-02T12:15:00.000Z') });
+    seedLocalStorage(page);
+    let placesReqCount = 0;
+    await page.route('**/api/places?*', async route => {
+      placesReqCount++;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ enabled: true, places: MOCK_PLACES_CANDIDATES }),
+      });
+    });
+    await setupBaseMockApiRoutes(page, { placesEnabled: true, weatherEnabled: false });
+
+    await page.goto('/?mode=live');
+    const grantBtn = page.locator('#btn-request-location');
+    if (await grantBtn.isVisible()) {
+      await grantBtn.click();
+    }
+    await page.waitForSelector('#btn-accept', { timeout: 10000 });
+    const initialCount = placesReqCount;
+
+    // Dispatch rapid focus and visibilitychange events simultaneously
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('focus'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await page.waitForTimeout(500);
+
+    // Must coalesce to at most 1 additional fetch (single-flight coalescing)
+    expect(placesReqCount - initialCount).toBeLessThanOrEqual(1);
+  });
+
+  test('Reviewer Probe 6: Ack then real candidate change -> marker reappears (P-A)', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      timezoneId: 'Asia/Tokyo',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    const page = await context.newPage();
+
+    await page.clock.install({ time: new Date('2026-11-02T03:15:00Z') }); // 12:15 JST
+    seedLocalStorage(page);
+    let currentPlaces = [
+      {
+        placeId: 'p1',
+        osmId: 101,
+        name: 'Tokyo Soba Garden',
+        cuisine: 'japanese',
+        category: 'restaurant',
+        coords: { lat: 37.776, lng: -122.417 },
+        source: 'live',
+        fetchedAt: new Date().toISOString(),
+        straightLineDistanceMeters: 450,
+        straightLineDistanceLabel: '450m',
+        openingStatus: 'open',
+      },
+    ];
+
+    await page.route('**/api/**', route => {
+      const u = route.request().url();
+      let b: any = { enabled: false };
+      if (u.includes('/api/places/status')) b = { enabled: true, provider: 'overpass', attribution: 'OpenStreetMap (ODbL)' };
+      else if (u.includes('/api/places?')) b = { enabled: true, places: currentPlaces };
+      else if (u.includes('/api/weather/status')) b = { enabled: false };
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(b) });
+    });
+
+    await page.goto('/?mode=live');
+    await page.locator('#btn-request-location').click();
+    await page.waitForSelector('#btn-accept');
+
+    // 1. Initial state: marker is visible
+    expect(await page.locator('#what-changed-marker').count()).toBe(1);
+
+    // 2. Accept plan: marker disappears
+    await page.locator('#btn-accept').click();
+    await page.waitForTimeout(300);
+    expect(await page.locator('#what-changed-marker').count()).toBe(0);
+
+    // 3. Tick 65s (same candidates): marker remains gone
+    await page.clock.runFor(65_000);
+    await page.waitForTimeout(400);
+    expect(await page.locator('#what-changed-marker').count()).toBe(0);
+
+    // 4. Candidate set changes (new top place Kyoto Ramen House) & 6-minute tick: marker MUST reappear!
+    currentPlaces = [
+      {
+        placeId: 'p9',
+        osmId: 109,
+        name: 'Kyoto Ramen House',
+        cuisine: 'japanese',
+        category: 'restaurant',
+        coords: { lat: 37.776, lng: -122.417 },
+        source: 'live',
+        fetchedAt: new Date().toISOString(),
+        straightLineDistanceMeters: 120,
+        straightLineDistanceLabel: '120m',
+        openingStatus: 'open',
+      },
+      currentPlaces[0]!,
+    ];
+    await page.clock.runFor(6 * 60_000);
+    await page.waitForTimeout(600);
+
+    expect(await page.locator('#what-changed-marker').count()).toBe(1);
+    const bodyText = await page.locator('main').first().innerText();
+    expect(bodyText).toContain('Kyoto Ramen House');
+
+    await context.close();
+  });
+
+  test('Reviewer Probe 7: Next local day with prior accept -> marker appears and plan unaccepted (P-B)', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      timezoneId: 'Asia/Tokyo',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    const page = await context.newPage();
+
+    await page.clock.install({ time: new Date('2026-11-03T03:15:00Z') });
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'yori_state_v1',
+        JSON.stringify({
+          schemaVersion: 1,
+          createdAt: '2026-11-01T10:00:00.000Z',
+          updatedAt: '2026-11-01T10:00:00.000Z',
+          payload: {
+            memoryFacts: [
+              {
+                key: 'taste_preference',
+                value: 'Japanese',
+                status: 'confirmed',
+                provenance: { source: 'user_confirmed', recordedAt: '2026-11-01T10:00:00.000Z' },
+                updatedAt: '2026-11-01T10:00:00.000Z',
+              },
+            ],
+            proposals: [],
+            suppressions: [],
+            promptBudget: { date: '2026-11-02', count: 0 },
+            acceptedPlanIds: ['plan-lunch-20261102031500000', 'lunch'],
+            liveAcknowledgedMoments: { lunch: 'lunch:__HEADLINE__' },
+          },
+        })
+      );
+    });
+
+    await page.route('**/api/**', route => {
+      const u = route.request().url();
+      let b: any = { enabled: false };
+      if (u.includes('/api/places/status')) b = { enabled: true, provider: 'overpass', attribution: 'OpenStreetMap (ODbL)' };
+      else if (u.includes('/api/places?')) b = { enabled: true, places: MOCK_PLACES_CANDIDATES };
+      else if (u.includes('/api/weather/status')) b = { enabled: false };
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(b) });
+    });
+
+    await page.goto('/?mode=live');
+    await page.locator('#btn-request-location').click();
+    await page.waitForTimeout(800);
+
+    // On the next local day, the lunch plan must be unaccepted and show the What-changed marker
+    expect(await page.locator('#btn-accept').count()).toBe(1);
+    expect(await page.locator('#what-changed-marker').count()).toBe(1);
+
+    await context.close();
+  });
+
+  test('Reviewer Probe 8: Stale weather -> tile and strip both show Unavailable, header shows Weather unavailable (P-C)', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      timezoneId: 'Asia/Tokyo',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    const page = await context.newPage();
+
+    await page.clock.install({ time: new Date('2026-11-02T03:15:00Z') });
+    seedLocalStorage(page);
+
+    await page.route('**/api/**', route => {
+      const u = route.request().url();
+      let b: any = { enabled: false };
+      if (u.includes('/api/places/status')) b = { enabled: true, provider: 'overpass', attribution: 'OpenStreetMap (ODbL)' };
+      else if (u.includes('/api/places?')) b = { enabled: true, places: MOCK_PLACES_CANDIDATES };
+      else if (u.includes('/api/weather/status')) b = { enabled: true };
+      else if (u.includes('/api/weather/current')) {
+        b = {
+          signals: [
+            {
+              kind: 'weather',
+              value: { condition: 'Clear', temperatureC: 21 },
+              issuedAt: '2026-11-02T01:00:00.000Z', // 2h15m old
+              validFor: 300000, // 5 minutes validity
+            },
+          ],
+        };
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(b) });
+    });
+
+    await page.goto('/?mode=live');
+    await page.locator('#btn-request-location').click();
+    await page.waitForTimeout(800);
+
+    // 1. Living Context Line header: 'Weather unavailable'
+    const headerText = await page.locator('[aria-label="Living Context Line"]').innerText();
+    expect(headerText).toContain('Weather unavailable');
+    expect(headerText).not.toContain('Clear');
+
+    // 2. Weather Signal Tile: 'Unavailable' (NEVER '21°C' or 'Clear')
+    const weatherTileVal = await page.locator('#signal-tile-weather .signal-value').innerText();
+    expect(weatherTileVal).toBe('Unavailable');
+    expect(weatherTileVal).not.toContain('21');
+    expect(weatherTileVal).not.toContain('Clear');
+
+    // 3. Connector strip chip: 'Unavailable' (NEVER 'Open-Meteo')
+    const stripWeatherChip = await page.locator('#chip-status-weather').innerText();
+    expect(stripWeatherChip).toContain('Unavailable');
+    expect(stripWeatherChip).not.toContain('Open-Meteo');
+
+    await context.close();
+  });
+
+  test('Reviewer Probe 9: Details view title equals top candidate name (never unknown) and no schematic SVG lines under OSM badge (P-E)', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      timezoneId: 'Asia/Tokyo',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    const page = await context.newPage();
+
+    await page.clock.install({ time: new Date('2026-11-02T03:15:00Z') });
+    seedLocalStorage(page);
+
+    const testPlaces = [
+      {
+        placeId: 'p9',
+        osmId: 109,
+        name: 'Kyoto Ramen House',
+        cuisine: 'japanese',
+        category: 'restaurant',
+        coords: { lat: 37.776, lng: -122.417 },
+        source: 'live',
+        fetchedAt: new Date().toISOString(),
+        straightLineDistanceMeters: 120,
+        straightLineDistanceLabel: '120m',
+        openingStatus: 'open',
+      },
+    ];
+
+    await page.route('**/api/**', route => {
+      const u = route.request().url();
+      let b: any = { enabled: false };
+      if (u.includes('/api/places/status')) b = { enabled: true, provider: 'overpass', attribution: 'OpenStreetMap (ODbL)' };
+      else if (u.includes('/api/places?')) b = { enabled: true, places: testPlaces };
+      else if (u.includes('/api/weather/status')) b = { enabled: true };
+      else if (u.includes('/api/weather/current')) {
+        b = {
+          signals: [
+            {
+              kind: 'weather',
+              value: { condition: 'rain', temperatureC: 9 },
+              issuedAt: '2026-11-02T03:15:00.000Z',
+              validFor: 300000,
+            },
+          ],
+        };
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(b) });
+    });
+
+    await page.goto('/?mode=live');
+    await page.locator('#btn-request-location').click();
+    await page.waitForSelector('#btn-accept');
+
+    // Scan Home body text for forbidden simulated copy
+    const forbiddenRegex = /simulated|Selected City|fuel|Demo|sample|schematic|fixture|Fiore|Soba Place/gi;
+    const homeText = await page.locator('body').innerText();
+    const homeMatches = [...new Set(homeText.match(forbiddenRegex) || [])];
+    expect(homeMatches).toEqual([]);
+    expect(await page.locator('[data-provenance="fixture"]').count()).toBe(0);
+
+    // Open Restaurant Details
+    await page.locator('#btn-view-trip-details').click();
+    await page.waitForSelector('.v2-detail-view');
+    await page.waitForTimeout(300);
+
+    // Details view title MUST equal top candidate name 'Kyoto Ramen House' (NEVER 'unknown')
+    const detailTitle = await page.locator('.v2-detail-title').innerText();
+    expect(detailTitle).toBe('Kyoto Ramen House');
+    expect(detailTitle).not.toBe('unknown');
+
+    // Details body text must contain zero forbidden words
+    const detailText = await page.locator('body').innerText();
+    const detailMatches = [...new Set(detailText.match(forbiddenRegex) || [])];
+    expect(detailMatches).toEqual([]);
+    expect(await page.locator('[data-provenance="fixture"]').count()).toBe(0);
+
+    // False Provenance assertion: In Live, no element with an OSM/ODbL badge contains schematic grid lines
+    const osmElements = await page.locator('.v2-map-card:has(.card-badge:has-text("OpenStreetMap")), .v2-map-card[data-provenance="live"]').all();
+    for (const el of osmElements) {
+      const svgLineCount = await el.locator('.v2-map-canvas svg line').count();
+      expect(svgLineCount, 'No schematic SVG lines allowed under live/OSM badge').toBe(0);
+    }
+
+    await context.close();
+  });
+
+  test('Reviewer Probe 10 (Migrated from legacy suite): Partial weather payload renders present fields only without invented defaults', async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      timezoneId: 'UTC',
+      permissions: ['geolocation'],
+      geolocation: { latitude: 37.7749, longitude: -122.4194 },
+    });
+    const page = await context.newPage();
+
+    await mockClockAndStorage(page, '2026-11-02T12:15:00.000Z');
+    await setupBaseMockApiRoutes(page, {
+      placesEnabled: true,
+      weatherEnabled: true,
+      weatherPayload: {
+        signals: [
+          {
+            id: 'sig-live-weather-partial',
+            kind: 'weather',
+            source: 'real',
+            label: 'real',
+            value: {
+              temperatureC: 18,
+              // condition, city, and summary intentionally omitted
+            },
+            issuedAt: '2026-11-02T12:15:00.000Z',
+            validFor: 3600000,
+          },
+        ],
+      },
+    });
+
+    await mockClockAndStorage(page, '2026-11-02T12:15:00.000Z');
+    await page.goto('/?mode=live');
+    await page.waitForSelector('.app-layout[data-context-mode="live"]');
+
+    const grantBtn = page.locator('#btn-request-location');
+    if (await grantBtn.isVisible()) {
+      await grantBtn.click();
+    }
+    await page.waitForSelector('#btn-accept', { timeout: 10000 });
+
+    const weatherTileVal = await page.locator('#signal-tile-weather .signal-value').innerText();
+    expect(weatherTileVal).toBe('18°C');
+    expect(weatherTileVal).not.toContain('Clear');
+    expect(weatherTileVal).not.toContain('65°F');
+    expect(weatherTileVal).not.toContain('San Francisco');
+
+    const headerText = await page.locator('[aria-label="Living Context Line"]').innerText();
+    expect(headerText).toContain('18°C');
+    expect(headerText).not.toContain('Clear');
 
     await context.close();
   });

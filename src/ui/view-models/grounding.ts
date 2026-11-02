@@ -1344,18 +1344,21 @@ export function createLunchPlacesEvidenceBundle(options?: {
       ? place.cuisine.charAt(0).toUpperCase() + place.cuisine.slice(1)
       : 'Dining';
 
+    const prov = (place as any).source === 'live' ? 'live' : 'simulated';
+    const provider = (place as any).source === 'live' ? 'overpass' : 'simulated-places';
+
     recordMap.set(pid, {
       id: pid,
-      provider: 'simulated-places',
+      provider,
       kind: 'poi',
       fetchedAt: sceneClockIso,
-      provenance: 'simulated',
+      provenance: prov,
       fields: {
         id: pid,
         name: place.name,
         coords: place.coords,
-        lat: place.coords.lat,
-        lng: place.coords.lng,
+        lat: place.coords?.lat,
+        lng: place.coords?.lng,
         category: place.category,
         address: place.address,
         brand: place.brand,
@@ -1365,12 +1368,15 @@ export function createLunchPlacesEvidenceBundle(options?: {
         distanceMeters: distMeters,
         straightLineDistance: distLabel,
         straightLineDistanceLabel: distLabel,
-        provenance: 'simulated',
+        provenance: prov,
         straight_line: true,
       },
     });
     aliases.set(place.name.toLowerCase(), pid);
     aliases.set(`candidate-${recordMap.size - 1}`, pid);
+    aliases.set(`opt-${recordMap.size}-${place.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`, pid);
+    if (place.id) aliases.set(place.id, pid);
+    if (place.placeId) aliases.set(place.placeId, pid);
   }
 
   // Location record (only when originCoords exists)

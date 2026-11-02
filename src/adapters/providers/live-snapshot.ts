@@ -242,6 +242,8 @@ export function deriveLiveLivingHeaderFromSnapshot(
         weatherDisplay = `Rain from ${onset}`;
       } else if (cond && cond.toLowerCase() !== 'unknown' && cond.toLowerCase() !== 'unavailable') {
         weatherDisplay = cond.charAt(0).toUpperCase() + cond.slice(1).toLowerCase();
+      } else if (typeof val.temperatureC === 'number') {
+        weatherDisplay = `${val.temperatureC}°C`;
       }
     }
   }

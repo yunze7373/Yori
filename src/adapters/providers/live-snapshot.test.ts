@@ -233,6 +233,27 @@ describe('LiveSnapshot Composer & Derivation (LIVE_FIRST S0)', () => {
       const header = deriveLiveLivingHeaderFromSnapshot(snapshot, 'America/Los_Angeles');
       expect(header.placeDisplay).toBe('Downtown Financial (location from 12m ago)');
     });
+
+    it('degrades expired weather signal to unavailable status so header and composition agree (no 21°C)', () => {
+      const expiredWeather = createLiveSignal({
+        kind: 'weather',
+        value: { condition: 'Clear', temperatureC: 21 },
+        provider: 'open-meteo',
+        asOf: '2026-11-02T01:00:00.000Z',
+        validFor: 300000,
+        confidence: 1.0,
+        provenance: 'live',
+        consentScope: 'local_only',
+      });
+      const snapshot = buildLiveSnapshot({
+        asOf: '2026-11-02T03:15:00.000Z',
+        timezone: 'Asia/Tokyo',
+        weatherSignal: expiredWeather,
+      });
+      const header = deriveLiveLivingHeaderFromSnapshot(snapshot, 'Asia/Tokyo');
+      expect(header.weatherDisplay).toBe('Weather unavailable');
+      expect(header.formattedLine).toContain('Weather unavailable');
+    });
   });
 
   describe('formatLiveTime', () => {

@@ -42,6 +42,7 @@ import type {
   AheadItemVM,
   ProposalItemVM,
 } from './types.js';
+import { isLiveSignalExpired, type LiveSignal } from '../../adapters/providers/live-signal.js';
 
 export interface BuildHomeCompositionOptions {
   plan: PreparedPlan | null;
@@ -875,7 +876,26 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
   const raw = compileHomeComposition(options);
 
   const weatherSig = options.snapshot?.signals.find(s => s.kind === 'weather');
-  const weatherVal = weatherSig?.value as any;
+  const liveWeatherSig = weatherSig as (Partial<LiveSignal> | undefined);
+  const isWeatherUnavailable =
+    !weatherSig ||
+    options.weatherEnabled === false ||
+    options.weatherError ||
+    liveWeatherSig?.status === 'unavailable' ||
+    liveWeatherSig?.status === 'stale' ||
+    liveWeatherSig?.status === 'error' ||
+    liveWeatherSig?.status === 'permission_needed' ||
+    Boolean((liveWeatherSig as any)?.isStale) ||
+    Boolean(
+      options.isLive &&
+        liveWeatherSig &&
+        liveWeatherSig.validFor &&
+        liveWeatherSig.asOf &&
+        options.snapshot?.asOf &&
+        isLiveSignalExpired(liveWeatherSig as LiveSignal, options.snapshot.asOf)
+    );
+
+  const weatherVal = isWeatherUnavailable ? undefined : (weatherSig?.value as any);
   const weatherSignalValue =
     weatherVal && typeof weatherVal === 'object'
       ? {

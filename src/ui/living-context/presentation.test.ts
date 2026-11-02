@@ -517,6 +517,25 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
       expect(html).not.toContain('Rain');
     });
 
+    it('renders "Unavailable" when weather is stale or livingHeader shows Weather unavailable (no 21°C)', () => {
+      const staleVM: HomeCompositionVM = {
+        ...baseCandidateVM,
+        weatherSignalValue: undefined,
+        livingHeader: {
+          timeDisplay: '12:15 PM',
+          weatherDisplay: 'Weather unavailable',
+          placeDisplay: 'Location shared',
+          formattedLine: '12:15 PM · Weather unavailable · Location shared',
+          isSimulated: false,
+        },
+      };
+      const html = renderV2Home(staleVM);
+      const weatherVal = html.match(/id="signal-tile-weather"[\s\S]*?<div class="signal-value">([^<]*)<\/div>/)?.[1];
+      expect(weatherVal).toBe('Unavailable');
+      expect(weatherVal).not.toContain('21');
+      expect(weatherVal).not.toContain('Clear');
+    });
+
     it('renders calendar as "Not connected" in Live mode', () => {
       const html = renderV2Home(baseCandidateVM);
       expect(html).toContain('Not connected');

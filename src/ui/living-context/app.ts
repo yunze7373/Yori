@@ -263,6 +263,31 @@ export function getEffectiveDefaultMode(): ContextMode {
   return resolveContextMode(envRaw);
 }
 
+/**
+ * Builds a deterministic, uniform acknowledged-moment signature for Live mode.
+ * Combines intentId + local date + ordered candidate IDs + headline (Finding 5).
+ */
+export function buildLiveAckSignature(plan: PreparedPlan, asOfIso: string, timezone?: string): string {
+  let localDate: string;
+  try {
+    const d = new Date(asOfIso);
+    if (timezone) {
+      localDate = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+    } else {
+      localDate = asOfIso.slice(0, 10);
+    }
+  } catch {
+    localDate = asOfIso.slice(0, 10);
+  }
+
+  const candidateIds = (plan.optionsOrSteps ?? [])
+    .map(o => (typeof o === 'string' ? o : ((o as any).recordId || (o as any).placeId || (o as any).id || '')))
+    .filter(Boolean)
+    .join(',');
+
+  return `${plan.intentId}:${localDate}:${candidateIds}:${plan.headline}`;
+}
+
 export interface AppState {
   currentScene: DemoSceneId;
   pipelineResult: PipelineResult;
@@ -1396,7 +1421,8 @@ export function computeLiveState(
         spatialEvidence: placesSignal,
       };
     }
-    evidenceBundle = createLunchEvidenceBundle({
+    evidenceBundle = createLunchPlacesEvidenceBundle({
+      places: placesList as any,
       snapshot,
       sceneClockIso: snapshotAsOf,
       timezone: snapshotTimezone,
@@ -2611,11 +2637,13 @@ export function renderApp(
           typeof firstOpt !== 'string' && firstOpt ? firstOpt.id : 'cand-1';
         const candidateId = activeDetail.candidateId || defaultCandId;
         const restaurantBundle =
-          effectiveEvidenceBundle ??
           (isLiveContext
             ? createLunchPlacesEvidenceBundle({
-                places: livePlacesList as any,
-                snapshot,
+                places: (livePlacesList && livePlacesList.length > 0
+                  ? livePlacesList
+                  : ((effectiveSnapshot?.signals?.find(s => s.kind === 'places_lunch')?.value as any)?.places ?? [])) as any,
+                snapshot: effectiveSnapshot,
+                sceneClockIso: effectiveSnapshot?.asOf ?? snapshotAsOf,
                 timezone: snapshotTimezone,
                 userConfirmedKeys,
                 isConfirmedTaste:
@@ -2623,7 +2651,8 @@ export function renderApp(
                   userConfirmedKeys.has('taste_preference_lunch_cuisine'),
                 memory: combinedMemory,
               })
-            : createLunchEvidenceBundle({
+            : effectiveEvidenceBundle ??
+              createLunchEvidenceBundle({
                 sceneClockIso: snapshot?.asOf ?? '2026-10-28T19:10:00.000Z',
                 timezone: snapshotTimezone,
                 userConfirmedKeys,
@@ -2731,19 +2760,25 @@ export function renderApp(
                 )
               : null;
 
-            const nowPlanSig = `${nowPlan.intentId}:${nowPlan.headline}`;
+            const nowPlanSig = buildLiveAckSignature(nowPlan, snapshotAsOf, snapshotTimezone);
             const persistedAcks: Record<string, string> =
               (storedEnvelope?.payload as any)?.liveAcknowledgedMoments ?? {};
             const isPersistedAck =
               persistedAcks[nowPlan.intentId] === nowPlanSig ||
-              persistedAcks[nowPlan.id] != null;
-            const isAlreadyAccepted =
-              acceptedPlanIds.includes(nowPlan.id) ||
-              acceptedPlanIds.includes(nowPlan.intentId) ||
-              acceptedPlanIds.some(id => id.startsWith(`plan-${nowPlan.intentId}`));
+              persistedAcks[nowPlan.id] === nowPlanSig;
+            const isAlreadyAccepted = acceptedPlanIds.includes(nowPlan.id);
 
+            const priorCandIds = (priorLivePlan?.optionsOrSteps ?? [])
+              .map(o => (typeof o === 'string' ? o : ((o as any).recordId || (o as any).placeId || (o as any).id || '')))
+              .filter(Boolean)
+              .join(',');
+            const newCandIds = (nowPlan.optionsOrSteps ?? [])
+              .map(o => (typeof o === 'string' ? o : ((o as any).recordId || (o as any).placeId || (o as any).id || '')))
+              .filter(Boolean)
+              .join(',');
+            const hasCandidateChange = Boolean(priorLivePlan && priorCandIds !== newCandIds);
             const hasTimeShift = Boolean(priorLeaveTimeStr && newLeaveTimeStr && priorLeaveTimeStr !== newLeaveTimeStr);
-            const hasMeaningfulDiff = Boolean(planDiff || hasTimeShift);
+            const hasMeaningfulDiff = Boolean(planDiff || hasTimeShift || hasCandidateChange);
 
             if (isPersistedAck || (isAlreadyAccepted && !hasMeaningfulDiff)) {
               activeLiveChangeMoment = null;
@@ -3423,10 +3458,19 @@ export function renderApp(
     const locState = isLiveConnected ? 'available' : isLivePrompt ? 'prompt' : isLiveDenied ? 'denied' : 'unavailable';
     const locLabel = isLiveConnected ? 'Available' : isLivePrompt ? 'Prompt' : isLiveDenied ? 'Denied' : isLiveStale ? 'Stale' : 'Unavailable';
     const calLabel = 'N/A';
-    const weatherSig = effectiveSnapshot?.signals?.find(s => s.kind === 'weather');
+    const weatherSig = effectiveSnapshot?.signals?.find(s => s.kind === 'weather') as Partial<LiveSignal> | undefined;
+    const isWeatherSigStaleOrUnavail =
+      !weatherSig ||
+      weatherSig.status === 'unavailable' ||
+      weatherSig.status === 'stale' ||
+      weatherSig.status === 'error' ||
+      weatherSig.status === 'permission_needed' ||
+      Boolean((weatherSig as any)?.isStale) ||
+      (liveWeatherSignal ? isWeatherStale(liveWeatherSignal, Date.parse(snapshotAsOf || new Date().toISOString())) : false);
+
     const weatherCondition = (weatherSig?.value as any)?.condition;
     const weatherLabel = contextMode === 'live'
-      ? (weatherStatus.enabled ? (liveWeatherSignal ? 'Open-Meteo' : 'Unavailable') : 'Off')
+      ? (weatherStatus.enabled ? (isWeatherSigStaleOrUnavail ? 'Unavailable' : 'Open-Meteo') : 'Off')
       : (weatherCondition === 'rain' || currentScene === 'rain' ? 'Rain forecast' : (weatherCondition === 'clear' ? 'Clear' : '20°C'));
     const xmemoConn = latestConnectorStatuses?.xmemo;
     const xmemoLabel = contextMode === 'live'
@@ -3671,7 +3715,7 @@ export function renderApp(
                 </div>
 
                 ${
-                  weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || !isWeatherStale(liveWeatherSignal))
+                  weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || (!isWeatherStale(liveWeatherSignal) && !isWeatherSigStaleOrUnavail))
                     ? `
                 <div class="weather-attribution" id="weather-attribution" data-provenance="${contextMode === 'live' ? 'live' : 'fixture'}" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal.issuedAt || (liveWeatherSignal.value as any)?.fetchedAt || new Date().toISOString())}">
                   <a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</a>
@@ -3706,7 +3750,7 @@ export function renderApp(
                 `
                 }
                 ${
-                  weatherStatus.enabled && liveWeatherSignal
+                  weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || !isWeatherSigStaleOrUnavail)
                     ? `
                 <span class="live-weather-chip" id="chip-live-weather" aria-label="Live Weather Active">
                   ${escapeHtml(STRINGS.header.liveWeatherBadge)}
@@ -3755,7 +3799,7 @@ export function renderApp(
                 <h1 class="greeting-title">${escapeHtml(greeting.greeting)}</h1>
                 <p class="greeting-subheading">${escapeHtml(greeting.subheading)}</p>
                 ${
-                  weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || !isWeatherStale(liveWeatherSignal))
+                  weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || (!isWeatherStale(liveWeatherSignal) && !isWeatherSigStaleOrUnavail))
                     ? `
                 <div class="weather-attribution" id="weather-attribution" data-provenance="${contextMode === 'live' ? 'live' : 'fixture'}" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal.issuedAt || (liveWeatherSignal.value as any)?.fetchedAt || new Date().toISOString())}">
                   <a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</a>
@@ -3967,7 +4011,7 @@ export function renderApp(
                     `
                     }
                     ${
-                      weatherStatus.enabled && liveWeatherSignal
+                      weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || !isWeatherSigStaleOrUnavail)
                         ? `
                     <span class="live-weather-chip" id="chip-live-weather" aria-label="Live Weather Active">
                       ${escapeHtml(STRINGS.header.liveWeatherBadge)}
@@ -4745,14 +4789,14 @@ export function renderApp(
         const envelope = sharedStorage.load();
         const existingAccepted = envelope?.payload.acceptedPlanIds ?? [];
         const existingAcks = (envelope?.payload as any)?.liveAcknowledgedMoments ?? {};
-        const nowPlanSig = `${nowPlan.intentId}:${nowPlan.headline}`;
+        const nowPlanSig = buildLiveAckSignature(nowPlan, snapshotAsOf, snapshotTimezone);
         const updatedAcks = {
           ...existingAcks,
           [nowPlan.intentId]: nowPlanSig,
           [nowPlan.id]: nowPlanSig,
         };
 
-        const updatedAccepted = Array.from(new Set([...existingAccepted, nowPlan.id, nowPlan.intentId]));
+        const updatedAccepted = Array.from(new Set([...existingAccepted, nowPlan.id]));
         sharedStorage.save(
           {
             memoryFacts: envelope?.payload.memoryFacts ?? [],
@@ -5000,6 +5044,7 @@ export function renderApp(
           const updatedProposals = existingProposals.filter(p => p.key !== proposal.key);
           updatedProposals.push(proposal);
 
+          const adjustAckSig = buildLiveAckSignature(planToAdjust, snapshotAsOf, snapshotTimezone);
           sharedStorage.save(
             {
               memoryFacts: envelope?.payload.memoryFacts ?? [],
@@ -5009,7 +5054,8 @@ export function renderApp(
               acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
               liveAcknowledgedMoments: {
                 ...((envelope?.payload as any)?.liveAcknowledgedMoments ?? {}),
-                [planToAdjust.intentId]: `${planToAdjust.id}:${planToAdjust.headline}`,
+                [planToAdjust.intentId]: adjustAckSig,
+                [planToAdjust.id]: adjustAckSig,
               },
             } as any,
             snapshotAsOf
@@ -5084,6 +5130,7 @@ export function renderApp(
           const currentBudgetCount = envelope?.payload.promptBudget?.count ?? 0;
           const newBudgetCount = Math.max(1, currentBudgetCount);
 
+          const dismissAckSig = buildLiveAckSignature(planToDismiss, snapshotAsOf, snapshotTimezone);
           sharedStorage.save(
             {
               memoryFacts: envelope?.payload.memoryFacts ?? [],
@@ -5093,7 +5140,8 @@ export function renderApp(
               acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
               liveAcknowledgedMoments: {
                 ...((envelope?.payload as any)?.liveAcknowledgedMoments ?? {}),
-                [planToDismiss.intentId]: `${planToDismiss.id}:${planToDismiss.headline}`,
+                [planToDismiss.intentId]: dismissAckSig,
+                [planToDismiss.id]: dismissAckSig,
               },
             } as any,
             snapshotAsOf

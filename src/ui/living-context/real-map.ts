@@ -79,6 +79,38 @@ export function renderRealMapCard(
 
   // For places maps without route coordinates, render schematic directly
   if (isPlacesMap) {
+    if (options?.isLive) {
+      return `
+        <section class="card v2-map-card${options?.isDesktopPanel ? ' desktop-map-card' : ''}${options?.isCompactStrip ? ' compact compact-map-strip' : ''} ${map.sizeHint}" aria-label="${escapeHtml(map.label)}" data-provenance="none">
+          <div class="${options?.isDesktopPanel ? 'desktop-map-header' : `map-header${options?.isCompactStrip ? ' map-strip-header' : ''}`}">
+            <span class="${options?.isCompactStrip ? 'map-strip-label ' : ''}section-label" data-slot="chrome" data-slot-reason="Map section heading">
+              ${
+                options?.isCompactStrip
+                  ? `
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+              `
+                  : ''
+              }
+              ${
+                options?.isDesktopPanel
+                  ? 'Route Map'
+                  : `<span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span>`
+              }
+            </span>
+            <span class="card-badge" data-provenance="none">Map not available</span>
+          </div>
+          <div class="v2-map-canvas map-unavailable-canvas" role="img" aria-label="Map not available">
+            <div class="map-unavailable-message" style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 80px; color: var(--color-text-secondary, #5B6B65); font-size: 0.875rem;">
+              Map view not available for this location
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
     return `
       <section class="card v2-map-card${options?.isDesktopPanel ? ' desktop-map-card' : ''}${options?.isCompactStrip ? ' compact compact-map-strip' : ''} ${map.sizeHint}" aria-label="${escapeHtml(map.label)}" data-provenance="${options?.isLive ? 'live' : 'fixture'}">
         <div class="${options?.isDesktopPanel ? 'desktop-map-header' : `map-header${options?.isCompactStrip ? ' map-strip-header' : ''}`}">
@@ -167,7 +199,7 @@ export function renderRealMapCard(
               : `<span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span>`
           }
         </span>
-        <span class="card-badge" ${options?.isDesktopPanel ? (options?.isLive ? 'data-provenance="live"' : 'data-provenance="fixture"') : (options?.isLive ? 'data-provenance="live"' : 'data-slot="chrome" data-slot-reason="Simulated map badge"')}>${options?.isLive ? (tilesConfig === 'osm' ? 'Map © OSM' : 'Live map') : initialBadge}</span>
+        <span class="card-badge" ${options?.isDesktopPanel ? (options?.isLive ? 'data-provenance="none"' : 'data-provenance="fixture"') : (options?.isLive ? 'data-provenance="none"' : 'data-slot="chrome" data-slot-reason="Simulated map badge"')}>${options?.isLive ? (tilesConfig === 'osm' ? 'Map © OSM' : 'Map not available') : initialBadge}</span>
       </div>
 
       <div class="v2-map-canvas${options?.isDesktopPanel ? ' desktop-map-canvas' : ''}${options?.isCompactStrip ? ' compact-canvas' : ''} ${sizeClass}"
@@ -188,10 +220,10 @@ export function renderRealMapCard(
 
           <!-- Attribution and route sample disclosure -->
           <div class="real-map-caption" data-slot="chrome">
-            Map © OpenStreetMap · route shape: recorded sample · simulated
+            ${options?.isLive ? 'Map © OpenStreetMap' : 'Map © OpenStreetMap · route shape: recorded sample · simulated'}
           </div>
 
-          <!-- Schematic Fallback on tile failure or offline/CSP -->
+          <!-- Fallback on tile failure or offline/CSP -->
           <div class="schematic-map-fallback hidden" aria-hidden="true">
             <div class="map-fallback-banner" role="status">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="margin-right: 4px; display: inline-block; vertical-align: middle;">
@@ -199,9 +231,9 @@ export function renderRealMapCard(
                 <line x1="12" y1="8" x2="12" y2="12"></line>
                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
               </svg>
-              Map tiles unavailable · schematic shown
+              ${options?.isLive ? 'Map tiles unavailable' : 'Map tiles unavailable · schematic shown'}
             </div>
-            ${schematicHtml}
+            ${options?.isLive ? '' : schematicHtml}
           </div>
         </div>
       </div>
@@ -288,7 +320,12 @@ export async function initRealMaps(root: HTMLElement): Promise<void> {
       container.setAttribute('data-map-status', 'fallback');
       const badgeEl = container.closest('.v2-map-card')?.querySelector('.card-badge');
       if (badgeEl) {
-        badgeEl.textContent = 'Schematic · simulated';
+        const isLiveCard = container.closest('.v2-map-card')?.getAttribute('data-provenance') === 'live' || container.closest('.v2-map-card')?.getAttribute('data-provenance') === 'none';
+        badgeEl.textContent = isLiveCard ? 'Map not available' : 'Schematic · simulated';
+        if (isLiveCard) {
+          badgeEl.setAttribute('data-provenance', 'none');
+          container.closest('.v2-map-card')?.setAttribute('data-provenance', 'none');
+        }
       }
       if (fallbackEl) {
         fallbackEl.classList.remove('hidden');
