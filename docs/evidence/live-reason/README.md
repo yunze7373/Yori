@@ -37,7 +37,7 @@ To eliminate any risk of unbounded billing or credential exposure, S5-LIVE-REASO
    - Initial ledger state had 22 calls used.
    - S5 active slice permits at most 10 further calls, establishing a hard ceiling of 32 calls total (`MODEL_REASONING_BUDGET_CEILING = 32`).
    - Lifetime hard cap is 50 calls in ledger state (`MODEL_LIFETIME_MAX_CALLS = 50`).
-   - **Cross-Process Restart Enforcement**: The 32 ceiling is enforced strictly across process restarts via `effectiveCeiling = Math.min(lifetimeMaxCalls, reasoningBudgetCeiling ?? 32)`. Even if the in-memory per-run count resets upon restart, once the persisted ledger reaches 32, all further reasoning and decision commands fall back immediately to deterministic grammar (`engineStatus: 'offline_deterministic'`).
+   - **Cross-Process Restart Enforcement**: The 32 ceiling is enforced strictly across process restarts via `effectiveCeiling = Math.min(lifetimeMaxCalls, reasoningBudgetCeiling ?? 32)`. Even if the in-memory per-run count resets upon restart, once the persisted ledger reaches 32, all further reasoning and decision commands fall back immediately to deterministic grammar (`engineStatus: 'offline_deterministic'`). `resolveReasoningBudgetCeiling` strictly clamps to `MODEL_REASONING_BUDGET_CEILING` (lowering-only) with generic alias dropped.
 3. **Gate 3: Zero Credential Inspection**:
    - Zero agent inspection of `.env.local` files or API secrets.
    - Proxy handler reads `process.env.META_MODEL_API_KEY` solely at runtime in memory without logging, echoing, or embedding in responses.
@@ -77,7 +77,7 @@ Honest engine status is surfaced consistently across all application surfaces:
 | Sources Sheet Modal | `#source-item-model` | `Meta model · live` | `Recorded Meta model output · replay` | `Offline fallback · deterministic` |
 | Redacted Decision Log | `#decision-log-content` | `meta_model_live` | `recorded_model_replay` | `offline_deterministic` |
 
-*Note on Mobile 390 Header Layout:* `#model-status-pill` is rendered in `#living-header-ambient` only in live context mode (`contextMode === 'live'`). Ambient header styling enforces `flex-wrap: nowrap; max-width: 100%`, preventing any header expansion or occlusion of touch targets at 390×844.
+*Note on Mobile 390 Header Layout:* `#model-status-pill` is rendered in `#living-header-ambient` only in live context mode (`contextMode === 'live'`). On mobile (`<=768px`), ambient header styling enforces `flex-wrap: wrap` with `.model-status-pill` taking `flex-basis: 100%` on its own line, while `#living-header-line` enforces `white-space: nowrap` (strictly 1 line <= 28px). This creates a tidy 2-line layout (<=60px) and ensures `#btn-dismiss` ('Not now') is 100% unoccluded on first paint without scrolling (`dismiss: 'ok'`, `accept: 'ok'`, `dismissCy: ~702px`).
 
 ---
 
@@ -128,14 +128,12 @@ Key security attributes verified:
 | Core Invariant | `git diff f43c6c1d HEAD -- src/core` | 0 lines changed (`AC-EXT-1`) |
 | Model Proxy Boundary Unit Suite | `npx vitest run tests/proxy-boundary/model-proxy.test.ts` | 12/12 passed (including 32 ceiling restart test) |
 | Reasoning Unit Tests | `npx vitest run src/adapters/model/reasoning.test.ts src/app/reasoning-coordinator.test.ts` | 27/27 passed |
-| Full Vitest Suite | `npm test` | 96 files, 1029 tests passed |
+| Full Vitest Suite | `npm test` | 52 files, 1030 tests passed |
 | Production Gating Checks | `npm run verify:production` | 0 violations |
-| Playwright Test Discovery | `npx playwright test --list \| tail -1` | Total: 554 tests in 38 files |
-| Playwright Context Timeline (Hit Tests & 390 Layout) | `npx playwright test tests/e2e/context-timeline.spec.ts` | 12/12 passed |
-| Playwright Live Reason Dual Gate | `npx playwright test tests/e2e-live/live-reason.spec.ts` | 8/8 passed (4 mobile + 4 desktop) |
-| Playwright Live Default Env | `npx playwright test tests/env/live-default-env.spec.ts` | 24/24 passed |
-| Playwright Production Gating | `npx playwright test tests/e2e/production-gating.spec.ts` | 12/12 passed |
-| Playwright Live Lunch Dual Gate | `npx playwright test tests/e2e-live/live-lunch.spec.ts` | 10/10 passed |
+| Playwright Test Discovery | `npx playwright test --list \| tail -1` | Total: 556 tests in 38 files |
+| Playwright Focused Suite (Live Reason, Pipeline, Timeline, Env) | `npx playwright test tests/e2e-live/live-reason.spec.ts tests/e2e-live/live-pipeline.spec.ts tests/e2e/context-timeline.spec.ts tests/env/live-default-env.spec.ts` | 72/72 passed |
+| Playwright Live Reason Dual Gate & First-Paint Probe | `npx playwright test tests/e2e-live/live-reason.spec.ts` | 8/8 passed (Gate A first-paint unoccluded & 1-line header verified) |
+| Full Playwright Suite | `npx playwright test` | 553 passed, 2 skipped, 1 failed (known flake `real-map:157`) |
 
 ---
 

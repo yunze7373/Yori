@@ -148,11 +148,11 @@ export const MODEL_REASONING_BUDGET_CEILING = 32;
 export function resolveReasoningBudgetCeiling(
   env: Record<string, string | undefined> = process.env
 ): number {
-  const raw = env['MODEL_REASONING_BUDGET_CEILING'] ?? env['MODEL_BUDGET_CEILING'];
+  const raw = env['MODEL_REASONING_BUDGET_CEILING'];
   if (raw === undefined || raw.trim() === '') return MODEL_REASONING_BUDGET_CEILING;
   const parsed = parseInt(raw, 10);
   if (isNaN(parsed) || parsed < 0) return MODEL_REASONING_BUDGET_CEILING;
-  return Math.min(parsed, MODEL_LIFETIME_MAX_CALLS);
+  return Math.min(parsed, MODEL_REASONING_BUDGET_CEILING);
 }
 
 import {

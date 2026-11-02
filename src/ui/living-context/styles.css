@@ -5985,7 +5985,7 @@ button.v2-view-detail-link:focus-visible {
 .living-header-ambient {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   min-height: 24px;
   margin-bottom: 4px;
   flex-wrap: nowrap;
@@ -5999,6 +5999,18 @@ button.v2-view-detail-link:focus-visible {
   color: var(--color-ink-muted, #5C6F68);
   letter-spacing: 0.02em;
   transition: opacity 250ms ease;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .living-header-ambient {
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+  .living-header-ambient .model-status-pill {
+    flex-basis: 100%;
+    width: max-content;
+  }
 }
 
 .living-header-line.living-header-morphing {

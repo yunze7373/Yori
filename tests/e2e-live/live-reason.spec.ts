@@ -322,6 +322,47 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     await expect(modelStatusPill).toHaveAttribute('data-provenance', 'replay');
     await expect(modelStatusPill).toContainText('Recorded Meta model output · replay');
 
+    // Verify #living-header-line height <= 2 lines (strictly 1 line <= 28px) at 390
+    const headerLine = page.locator('#living-header-line');
+    await expect(headerLine).toBeVisible();
+    const headerLineBox = await headerLine.boundingBox();
+    expect(headerLineBox).not.toBeNull();
+    expect(headerLineBox!.height).toBeLessThanOrEqual(28);
+
+    // Verify #living-header-ambient height <= 2 lines of elements (<= 60px)
+    const headerAmbient = page.locator('#living-header-ambient');
+    const headerAmbientBox = await headerAmbient.boundingBox();
+    expect(headerAmbientBox).not.toBeNull();
+    expect(headerAmbientBox!.height).toBeLessThanOrEqual(60);
+
+    // Verify #btn-dismiss ('Not now') is unoccluded on first paint without any scrolling
+    const btnDismiss = page.locator('#btn-dismiss');
+    await expect(btnDismiss).toBeVisible();
+    const probeMetrics = await page.evaluate(() => {
+      const q = (s: string) => document.querySelector(s) as HTMLElement | null;
+      const hit = (s: string) => {
+        const el = q(s);
+        if (!el) return 'none';
+        const r = el.getBoundingClientRect();
+        const t = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return el === t || el.contains(t!) ? 'ok' : 'hit:' + (t ? t.tagName + '.' + String(t.className).slice(0, 40) : 'null');
+      };
+      return {
+        scrollY: window.scrollY,
+        amb: q('#living-header-ambient')?.getBoundingClientRect().height,
+        line: q('#living-header-line')?.getBoundingClientRect().height,
+        dismissCy: (() => {
+          const r = q('#btn-dismiss')?.getBoundingClientRect();
+          return r ? r.top + r.height / 2 : null;
+        })(),
+        dismiss: hit('#btn-dismiss'),
+        accept: hit('#btn-accept'),
+      };
+    });
+    console.log('PROBE_REPLAY390_E2E', JSON.stringify(probeMetrics));
+    expect(probeMetrics.dismiss).toBe('ok');
+    expect(probeMetrics.accept).toBe('ok');
+
     // Capture home view mobile screenshot
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, 'live-reason-mobile-390x844-home.png'),
