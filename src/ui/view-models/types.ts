@@ -198,6 +198,32 @@ export interface HomeCompositionVM {
   readonly evidenceBundle?: EvidenceBundle;
   readonly sourceRef?: SourceRef;
   readonly fieldSourceRefs?: Readonly<Record<string, SourceRef>>;
+
+  // CONTEXT-TIMELINE (INBOX-20261101-070938)
+  readonly livingHeader?: {
+    readonly formattedLine: string;
+    readonly timeDisplay: string;
+    readonly weatherDisplay: string;
+    readonly placeDisplay: string;
+    readonly isSimulated: boolean;
+  };
+  readonly changeMoment?: {
+    readonly cause: string;
+    readonly causeMarker: string;
+    readonly heroCauseEffect: string;
+    readonly priorLeaveTime?: string;
+    readonly newLeaveTime?: string;
+    readonly statusTransition?: string;
+  };
+  readonly suppressedQuiet?: {
+    readonly message: string;
+    readonly budgetMeter: string;
+  };
+  readonly timelineControls?: {
+    readonly isPlaying: boolean;
+    readonly simulatedTimeStr: string;
+    readonly timelineLabel: string;
+  };
 }
 
 // -------------------------------------------------------------

@@ -262,7 +262,7 @@ function renderActionRow(vm: HomeCompositionVM): string {
             Details →
           </button>
           <button type="button" class="btn-secondary-link" id="btn-dismiss" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Dismiss plan button">
-            ${escapeHtml(STRINGS.actions.dismiss)}
+            Not now
           </button>
         </div>
       </div>
@@ -286,7 +286,7 @@ function renderActionRow(vm: HomeCompositionVM): string {
           Details →
         </button>
         <button type="button" class="btn-secondary-link" id="btn-dismiss" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Dismiss plan button">
-          ${escapeHtml(STRINGS.actions.dismiss)}
+          Not now
         </button>
       </div>
     </div>
@@ -442,7 +442,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
     return `
       <div class="v2-home-container quiet">
         ${renderStateNotices(vm)}
-        <section class="card quiet-card" aria-label="Quiet State" data-provenance="fixture">
+        <section class="card quiet-card ${vm.suppressedQuiet ? 'suppressed-quiet-card' : ''}" aria-label="Quiet State" data-provenance="fixture">
           <div class="quiet-icon" aria-hidden="true">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="5"></circle>
@@ -450,8 +450,21 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               <line x1="12" y1="21" x2="12" y2="23"></line>
             </svg>
           </div>
-          <h2 class="quiet-title">${escapeHtml(vm.title)}</h2>
-          <p class="quiet-subtitle">${escapeHtml(vm.headline)}</p>
+          <h2 class="quiet-title" id="quiet-title">${escapeHtml(vm.suppressedQuiet?.message || vm.title)}</h2>
+          <p class="quiet-subtitle" id="quiet-subtitle">${escapeHtml(vm.headline)}</p>
+          ${
+            vm.suppressedQuiet
+              ? `
+            <div class="suppressed-quiet-notice" id="suppressed-quiet-notice" role="status">
+              <div class="budget-meter" id="budget-meter" aria-label="Prompt budget">
+                <span class="budget-meter-icon" aria-hidden="true">⏱️</span>
+                <span class="budget-meter-label">Daily prompt budget: </span>
+                <span class="budget-meter-value" id="budget-meter-value">${escapeHtml(vm.suppressedQuiet.budgetMeter)}</span>
+              </div>
+            </div>
+          `
+              : ''
+          }
           ${vm.basis ? `<p class="quiet-basis">${escapeHtml(vm.basis)}</p>` : ''}
           ${vm.locationState ? renderLocationControls(vm) : ''}
         </section>
@@ -528,6 +541,38 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   <span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
                 </div>
               </div>
+
+              ${
+                vm.changeMoment
+                  ? `
+                <div class="change-moment-container" id="change-moment-container">
+                  <div class="plan-status-transition" id="plan-status-transition" role="status" aria-live="polite">
+                    ${escapeHtml(vm.changeMoment.statusTransition || 'Updated plan ready')}
+                  </div>
+                  <div class="what-changed-marker" id="what-changed-marker">
+                    <span class="what-changed-chip">
+                      <span class="what-changed-icon" aria-hidden="true">⚡</span>
+                      <span class="what-changed-text">${escapeHtml(vm.changeMoment.causeMarker)}</span>
+                    </span>
+                  </div>
+                  <div class="hero-cause-effect" id="hero-cause-effect" data-slot="chrome">
+                    ${escapeHtml(vm.changeMoment.heroCauseEffect)}
+                  </div>
+                  ${
+                    vm.changeMoment.priorLeaveTime && vm.changeMoment.newLeaveTime
+                      ? `
+                    <div class="time-diff-display" id="time-diff-display" aria-label="Leave time updated from ${escapeHtml(vm.changeMoment.priorLeaveTime)} to ${escapeHtml(vm.changeMoment.newLeaveTime)}">
+                      <span class="prior-time-struck"><s class="struck-through">${escapeHtml(vm.changeMoment.priorLeaveTime)}</s></span>
+                      <span class="time-arrow" aria-hidden="true"> → </span>
+                      <span class="new-time-highlight">${escapeHtml(vm.changeMoment.newLeaveTime)}</span>
+                    </div>
+                  `
+                      : ''
+                  }
+                </div>
+              `
+                  : ''
+              }
 
               ${
                 vm.fieldSourceRefs?.subjectTitle && vm.fieldSourceRefs?.apptTime && vm.apptTimeStr

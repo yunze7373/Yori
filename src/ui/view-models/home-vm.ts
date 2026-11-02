@@ -56,6 +56,10 @@ export interface BuildHomeCompositionOptions {
   weatherError?: string;
   isLoading?: boolean;
   sceneClockIso?: string;
+  changeMoment?: HomeCompositionVM['changeMoment'];
+  suppressedQuiet?: HomeCompositionVM['suppressedQuiet'];
+  livingHeader?: HomeCompositionVM['livingHeader'];
+  timelineControls?: HomeCompositionVM['timelineControls'];
 }
 
 export function derivePlanCountdown(
@@ -826,5 +830,9 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     planDiff: options.planDiff ?? null,
     weatherError: options.weatherError,
     isLoading: Boolean(options.isLoading),
+    changeMoment: options.changeMoment ?? raw.changeMoment,
+    suppressedQuiet: options.suppressedQuiet ?? raw.suppressedQuiet,
+    livingHeader: options.livingHeader ?? raw.livingHeader,
+    timelineControls: options.timelineControls ?? raw.timelineControls,
   };
 }

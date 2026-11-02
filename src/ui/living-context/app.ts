@@ -34,6 +34,14 @@ import {
   createScenarioPlayer,
   createFixedClock,
 } from '../../app/scenario-player/index.js';
+import {
+  ContinuousTimelineController,
+  TIMELINE_BEATS,
+  CONTINUOUS_MEMORY_FACTS,
+  buildSnapshotAt,
+  type TimelineBeat,
+  type TimelineBeatId,
+} from '../../app/timeline/continuous-timeline.js';
 import type {
   SpatialMapEvidence,
   PreparedPlan,
@@ -266,7 +274,8 @@ export function computeSceneState(
   storage?: YoriStorage,
   liveWeatherSignal?: ContextSignal | null,
   externalMemoryFacts?: readonly MemoryFact[],
-  locationPort?: LocationPort
+  locationPort?: LocationPort,
+  timelineBeat?: TimelineBeat | null
 ): {
   pipelineResult: PipelineResult;
   spatialMapEvidence: SpatialMapEvidence | null;
@@ -369,6 +378,79 @@ export function computeSceneState(
   }
 
   const storedUserConfirmedKeys = new Set(activeConfirmedFacts.map(f => f.key));
+
+  if (timelineBeat) {
+    const rawSnapshot = buildSnapshotAt(timelineBeat.clockIso);
+    const latestSnapshot = injectWeather(rawSnapshot);
+
+    const combinedMemory = [
+      ...CONTINUOUS_MEMORY_FACTS.filter(f => !activeConfirmedFacts.some(sc => sc.key === f.key)),
+      ...activeConfirmedFacts,
+      ...storedProposals,
+    ];
+
+    let effectiveSuppressions = storedSuppressions;
+    if (timelineBeat.id === 'S1q' && !effectiveSuppressions.some(s => s.targetIntent === 'lunch')) {
+      effectiveSuppressions = [
+        ...effectiveSuppressions,
+        {
+          code: 'user_suppressed',
+          reason: "User dismissed: Don't suggest this today",
+          scope: 'today',
+          recordedAt: '2026-10-28T18:55:00.000Z',
+          targetIntent: 'lunch',
+        },
+      ];
+    }
+
+    const result = runPipeline({
+      snapshot: latestSnapshot,
+      memory: combinedMemory,
+      clock: timelineBeat.clockIso,
+      plugins,
+      storage: effectiveStorage,
+      suppressions: effectiveSuppressions,
+    });
+
+    const calendarSig = latestSnapshot.signals.find(s => s.kind === 'calendar');
+    const mapEvidence: SpatialMapEvidence | null = calendarSig
+      ? {
+          placeOrRoute: { name: 'Piano Studio (Downtown)', destination: '123 Harmony Way' },
+          spatialEvidence: calendarSig,
+        }
+      : null;
+
+    let evidenceBundle: EvidenceBundle | undefined;
+    if (latestSnapshot.signals.some(s => s.kind === 'mock_places')) {
+      evidenceBundle = createLunchEvidenceBundle({
+        snapshot: latestSnapshot,
+        sceneClockIso: timelineBeat.clockIso,
+        timezone: latestSnapshot.timezone || 'America/Los_Angeles',
+        userConfirmedKeys: storedUserConfirmedKeys,
+        isConfirmedTaste: storedUserConfirmedKeys.has('taste_preference'),
+      });
+    } else if (calendarSig) {
+      evidenceBundle = createRainEvidenceBundle({
+        snapshot: latestSnapshot,
+        sceneClockIso: timelineBeat.clockIso,
+        timezone: latestSnapshot.timezone || 'America/Los_Angeles',
+        userConfirmedKeys: storedUserConfirmedKeys,
+        isConfirmedHabit: storedUserConfirmedKeys.has('rain_transport_preference'),
+      });
+    }
+
+    return {
+      pipelineResult: result,
+      spatialMapEvidence: mapEvidence,
+      storageError: false,
+      storage: effectiveStorage,
+      snapshotAsOf: latestSnapshot.asOf,
+      snapshotTimezone: latestSnapshot.timezone || 'America/Los_Angeles',
+      snapshot: latestSnapshot,
+      combinedMemory,
+      evidenceBundle,
+    };
+  }
 
   switch (scene) {
     case 'clear': {
@@ -1239,6 +1321,63 @@ export function renderApp(
 
   let currentEvidenceBundle: EvidenceBundle | undefined = undefined;
 
+  const timelineController = new ContinuousTimelineController({
+    storage: sharedStorage,
+    autoPlay: false,
+    onUpdate: () => {
+      update();
+    },
+  });
+
+  let activeTimelineBeat: TimelineBeat | null = null;
+  if (typeof window !== 'undefined') {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const beatParam = p.get('beat') as TimelineBeatId | null;
+      const timelineParam = p.get('timeline');
+      if (beatParam && TIMELINE_BEATS.some(b => b.id === beatParam)) {
+        activeTimelineBeat = timelineController.goTo(beatParam);
+      } else if (timelineParam === '1') {
+        activeTimelineBeat = timelineController.getCurrentBeat();
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    (window as any).__YORI_TIMELINE__ = {
+      step: () => {
+        activeTimelineBeat = timelineController.step();
+        update();
+        return activeTimelineBeat;
+      },
+      goTo: (beatId: TimelineBeatId) => {
+        activeTimelineBeat = timelineController.goTo(beatId);
+        update();
+        return activeTimelineBeat;
+      },
+      pause: () => {
+        timelineController.pause();
+        update();
+      },
+      play: () => {
+        timelineController.play();
+        update();
+      },
+      reset: () => {
+        activeTimelineBeat = timelineController.restart();
+        update();
+        return activeTimelineBeat;
+      },
+      getClock: () => timelineController.getClockIso(),
+      getState: () => ({
+        ...timelineController.getState(),
+        activeBeat: activeTimelineBeat,
+      }),
+    };
+  }
+
   if (isDevOrTest && typeof window !== 'undefined') {
     (window as any).__YORI_SET_LOCATION__ = (
       status: 'available' | 'unavailable' | 'denied' | 'prompt',
@@ -1679,7 +1818,9 @@ export function renderApp(
       currentScene,
       sharedStorage,
       weatherStatus.enabled ? liveWeatherSignal : null,
-      activeLoadedFacts
+      activeLoadedFacts,
+      undefined,
+      contextMode === 'demo' ? activeTimelineBeat : null
     );
 
     currentEvidenceBundle = evidenceBundle;
@@ -1868,6 +2009,28 @@ export function renderApp(
         : snapshotTimezone;
     const baseGreeting = getGreeting(effectiveNowIso, effectiveTz);
 
+    const currentLivingHeaderLine =
+      contextMode === 'demo' && activeTimelineBeat
+        ? activeTimelineBeat.livingHeaderLine
+        : contextMode === 'demo'
+        ? (currentScene === 'rain'
+            ? '1:35 PM · Rain from 2:00 · Home'
+            : currentScene === 'away-lunch'
+            ? '11:50 AM · Clear · Downtown'
+            : '1:20 PM · Clear · Home')
+        : (() => {
+            const timeStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            const weatherStr =
+              weatherStatus.enabled && liveWeatherSignal
+                ? (liveWeatherSignal.value as any)?.condition || 'Weather active'
+                : 'Weather off';
+            const locStr =
+              liveLocationStatus.status === 'available'
+                ? (liveLocationStatus as any).coords?.city || 'Location shared'
+                : 'Home';
+            return `${timeStr} · ${weatherStr} · ${locStr}`;
+          })();
+
     const hasPreparedCard = Boolean(
       contextMode !== 'live' &&
       (
@@ -1895,7 +2058,7 @@ export function renderApp(
 
     const sourcesSubline =
       contextMode === 'demo'
-        ? 'Demo · simulated scenes'
+        ? (activeTimelineBeat ? 'Demo timeline · simulated time' : 'Demo · simulated scenes')
         : (() => {
             const parts = ['Device clock'];
             const locConn = latestConnectorStatuses?.location;
@@ -2478,6 +2641,30 @@ export function renderApp(
           weatherError: weatherError ?? undefined,
           isLoading: isWeatherLoading,
           sceneClockIso: effectiveSceneClock,
+          livingHeader: {
+            formattedLine: currentLivingHeaderLine,
+            timeDisplay: activeTimelineBeat?.timeDisplay ?? '',
+            weatherDisplay: activeTimelineBeat?.weatherDisplay ?? '',
+            placeDisplay: activeTimelineBeat?.placeDisplay ?? '',
+            isSimulated: true,
+          },
+          changeMoment: (activeTimelineBeat?.id === 'S3' || currentScene === 'rain') ? {
+            cause: 'rain forecast',
+            causeMarker: 'What changed: rain forecast',
+            heroCauseEffect: 'Rain starts before your lesson. I moved your leave time to 2:30.',
+            priorLeaveTime: '2:25 PM',
+            newLeaveTime: '2:30 PM',
+            statusTransition: 'Updated plan ready',
+          } : undefined,
+          suppressedQuiet: (activeTimelineBeat?.id === 'S1q') ? {
+            message: "Okay — I'll stay quiet about lunch today",
+            budgetMeter: `${storedEnvelope?.payload.promptBudget?.count ?? 1} of 3 used today`,
+          } : undefined,
+          timelineControls: {
+            isPlaying: timelineController.isPlaying(),
+            simulatedTimeStr: activeTimelineBeat?.timeDisplay ?? '10:00 AM',
+            timelineLabel: 'Demo timeline · simulated time',
+          },
         });
         currentV2Composition = v2Composition;
         v2BodyHtml = renderV2Home(v2Composition);
@@ -3093,27 +3280,88 @@ export function renderApp(
                 <div class="desktop-greeting-row">
                   <div class="greeting-text-group">
                     ${!isDesktopLayout ? `<div class="v2-mobile-brand-bar"><span class="v2-brand-wordmark">Yori</span></div>` : ''}
+                    <div class="living-header-ambient" id="living-header-ambient" role="region" aria-label="Living Context Line">
+                      <span class="living-header-line" id="living-header-line">${escapeHtml(currentLivingHeaderLine)}</span>
+                      <span class="living-header-chip card-badge" id="living-header-chip">${contextMode === 'live' ? 'live' : 'simulated'}</span>
+                    </div>
                     <h1 class="greeting-title" id="desktop-greeting-title">${escapeHtml(greeting.greeting)}</h1>
                     <p class="greeting-subheading desktop-greeting-sub">${escapeHtml(greeting.subheading)}</p>
                   </div>
 
                   <div class="desktop-header-controls">
+                    ${
+                      contextMode === 'demo'
+                        ? `
+                    <div class="timeline-controls-bar" id="timeline-controls" role="toolbar" aria-label="Demo timeline controls">
+                      <button
+                        type="button"
+                        class="context-pill demo timeline-pill"
+                        id="pill-context-status"
+                        aria-label="View sources and truth status"
+                        data-provenance="fixture"
+                      >
+                        <div class="context-pill-content">
+                          <div class="context-pill-header">
+                            <span class="context-pill-dot" aria-hidden="true"></span>
+                            <span class="context-pill-title">${STRINGS.header.demoPill}</span>
+                            <span class="context-pill-chevron" aria-hidden="true">›</span>
+                          </div>
+                          <div class="context-pill-subtitle" id="pill-subline">Demo timeline · simulated time</div>
+                        </div>
+                      </button>
+
+                      <div class="timeline-action-buttons">
+                        <button
+                          type="button"
+                          class="btn-timeline-ctrl"
+                          id="timeline-play-pause-btn"
+                          aria-label="${timelineController.isPlaying() ? 'Pause simulated timeline' : 'Play simulated timeline'}"
+                          title="${timelineController.isPlaying() ? 'Pause' : 'Play'}"
+                        >
+                          ${timelineController.isPlaying() ? '⏸' : '▶'}
+                        </button>
+                        <button
+                          type="button"
+                          class="btn-timeline-ctrl"
+                          id="timeline-step-btn"
+                          aria-label="Step to next simulated beat"
+                          title="Step"
+                        >
+                          ⏭
+                        </button>
+                        <button
+                          type="button"
+                          class="btn-timeline-ctrl"
+                          id="timeline-restart-btn"
+                          aria-label="Restart simulated timeline"
+                          title="Restart"
+                        >
+                          ↺
+                        </button>
+                      </div>
+                    </div>
+                    `
+                        : `
                     <button
                       type="button"
-                      class="context-pill ${contextMode === 'live' ? 'live' : 'demo'}"
+                      class="context-pill live"
                       id="pill-context-status"
                       aria-label="View sources and truth status"
-                      ${contextMode === 'live' ? `data-provenance="live" data-source="device_clock" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}
+                      data-provenance="live"
+                      data-source="device_clock"
+                      data-fetched-at="${new Date().toISOString()}"
                     >
                       <div class="context-pill-content">
                         <div class="context-pill-header">
                           <span class="context-pill-dot" aria-hidden="true"></span>
-                          <span class="context-pill-title">${contextMode === 'live' ? STRINGS.header.livePill : STRINGS.header.demoPill}</span>
+                          <span class="context-pill-title">${STRINGS.header.livePill}</span>
                           <span class="context-pill-chevron" aria-hidden="true">›</span>
                         </div>
                         <div class="context-pill-subtitle" id="pill-subline">${escapeHtml(sourcesSubline)}</div>
                       </div>
                     </button>
+                    `
+                    }
 
                     ${
                       isDevMode
@@ -3656,7 +3904,9 @@ export function renderApp(
     const selectEl = root.querySelector('#scene-select') as HTMLSelectElement | null;
     if (selectEl) {
       selectEl.addEventListener('change', e => {
-        currentScene = (e.target as HTMLSelectElement).value as DemoSceneId;
+        const val = (e.target as HTMLSelectElement).value as DemoSceneId;
+        currentScene = val;
+        activeTimelineBeat = null;
         selectedCardState = null;
         actionStore.resetToIdle();
         actionStore.clearOverride();
@@ -3664,6 +3914,29 @@ export function renderApp(
         coordinatedScene = null;
         reasoningRequestId++;
         reasoningState = null;
+        update();
+      });
+    }
+
+    // Timeline Controls (Play/Pause, Step, Restart)
+    const playPauseBtn = root.querySelector('#timeline-play-pause-btn') as HTMLButtonElement | null;
+    if (playPauseBtn) {
+      playPauseBtn.addEventListener('click', () => {
+        timelineController.togglePlay();
+        update();
+      });
+    }
+    const stepBtn = root.querySelector('#timeline-step-btn') as HTMLButtonElement | null;
+    if (stepBtn) {
+      stepBtn.addEventListener('click', () => {
+        activeTimelineBeat = timelineController.step();
+        update();
+      });
+    }
+    const restartBtn = root.querySelector('#timeline-restart-btn') as HTMLButtonElement | null;
+    if (restartBtn) {
+      restartBtn.addEventListener('click', () => {
+        activeTimelineBeat = timelineController.restart();
         update();
       });
     }
@@ -3682,6 +3955,7 @@ export function renderApp(
 
         // Step 1: Switch to clear scene first
         currentScene = 'clear';
+        activeTimelineBeat = timelineController.goTo('S2');
         update();
 
         // Step 2: Transition to rain scene (delay 600ms, or instant 0ms if reduced motion)
@@ -3690,6 +3964,7 @@ export function renderApp(
 
         setTimeout(() => {
           currentScene = 'rain';
+          activeTimelineBeat = timelineController.goTo('S3');
           selectedCardState = null;
           actionFeedbackMessage = 'Rain forecast arrived · Umbrella recommended';
           update();
@@ -4515,16 +4790,23 @@ export function renderApp(
             updatedProposals.push(...filtered);
           }
 
+          const currentBudgetCount = envelope?.payload.promptBudget?.count ?? 0;
+          const newBudgetCount = Math.max(1, currentBudgetCount);
+
           sharedStorage.save(
             {
               memoryFacts: envelope?.payload.memoryFacts ?? [],
               proposals: updatedProposals,
               suppressions: updatedSuppressions,
-              promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
+              promptBudget: { date: snapshotAsOf.slice(0, 10), count: newBudgetCount },
               acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
             },
             snapshotAsOf
           );
+
+          if (activeTimelineBeat && (activeTimelineBeat.id === 'S1' || planToDismiss.intentId === 'lunch')) {
+            activeTimelineBeat = timelineController.goTo('S1q');
+          }
 
           actionStore.resetToIdle();
           closeModal();

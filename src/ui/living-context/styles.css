@@ -5895,6 +5895,212 @@ button.v2-view-detail-link:focus-visible {
   gap: 6px;
 }
 
+/* -------------------------------------------------------------
+ * CONTEXT-TIMELINE (INBOX-20261101-070938)
+ * Living header line, timeline control bar, change moment, budget meter
+ * ------------------------------------------------------------- */
+
+/* Living Header Line */
+.living-header-ambient {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  margin-bottom: 4px;
+}
+
+.living-header-line {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink-muted, #5C6F68);
+  letter-spacing: 0.02em;
+  transition: opacity 250ms ease;
+}
+
+.living-header-line.living-header-morphing {
+  opacity: 0.2;
+}
+
+.living-header-chip {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #E9F1E8;
+  color: #16382F;
+}
+
+/* Timeline Controls Bar */
+.timeline-controls-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E4DCD3);
+  border-radius: 12px;
+  padding: 4px 8px;
+}
+
+.timeline-action-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-timeline-ctrl {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-ground, #F8F6F0);
+  border: 1px solid var(--color-border, #E4DCD3);
+  border-radius: 8px;
+  color: var(--color-ink, #162824);
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.btn-timeline-ctrl:hover {
+  background: #E9F1E8;
+  border-color: #2D6A4F;
+  color: #16382F;
+}
+
+.btn-timeline-ctrl:focus-visible {
+  outline: 2px solid #2D6A4F;
+  outline-offset: 2px;
+}
+
+/* Change Moment (Beat S3) */
+.change-moment-container {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: rgba(45, 106, 79, 0.06);
+  border: 1px solid rgba(45, 106, 79, 0.2);
+  border-radius: 10px;
+}
+
+.plan-status-transition {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #1b5e20;
+  background: #E9F1E8;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  margin-bottom: 6px;
+  transition: opacity 200ms ease;
+}
+
+.what-changed-marker {
+  margin-bottom: 4px;
+}
+
+.what-changed-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #16382F;
+}
+
+.hero-cause-effect {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-ink, #162824);
+  margin-bottom: 6px;
+}
+
+.time-diff-display {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.prior-time-struck {
+  color: #374151;
+}
+
+.prior-time-struck s,
+.struck-through {
+  color: #374151;
+  text-decoration: line-through;
+  text-decoration-color: #4B5563;
+}
+
+.time-arrow {
+  color: var(--color-ink-muted, #5C6F68);
+  font-size: 0.875rem;
+}
+
+.new-time-highlight {
+  color: #2D6A4F;
+}
+
+/* Suppressed / Quiet Beat Notice (S1q) */
+.suppressed-quiet-card .quiet-title {
+  color: var(--color-ink, #162824);
+}
+
+.suppressed-quiet-notice {
+  margin: 12px 0;
+  padding: 10px 14px;
+  background: var(--color-ground, #F8F6F0);
+  border: 1px solid var(--color-border, #E4DCD3);
+  border-radius: 8px;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.budget-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #2D6A4F;
+}
+
+.budget-meter-icon {
+  font-size: 0.875rem;
+}
+
+.budget-meter-label {
+  color: var(--color-ink-muted, #5C6F68);
+}
+
+.budget-meter-value {
+  color: #16382F;
+  font-weight: 700;
+}
+
+/* prefers-reduced-motion fallback */
+@media (prefers-reduced-motion: reduce) {
+  .living-header-line,
+  .living-header-line.living-header-morphing,
+  .plan-status-transition,
+  .btn-timeline-ctrl {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+
 
 
 
