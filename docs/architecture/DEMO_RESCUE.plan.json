@@ -176,7 +176,7 @@
       "slice": "D6",
       "title": "Multimodal re-rank with real transit ETAs (Google Routes, owner-keyed)",
       "priority": "P1",
-      "goal": "Add a Google Routes API adapter (computeRoutes DRIVE, TRANSIT, WALK) behind the server proxy reading owner-pasted GOOGLE_ROUTES_API_KEY (server-side only, never VITE_-prefixed, never handled by agents). Real transit ETAs make option re-rank and earlier-leave-by honest; OSRM stays the free fallback with mode_unsupported honesty. Screen rule: Google route geometry never renders on Leaflet — Google-routed views show itinerary plus labelled handoff with no Leaflet map, OSRM views keep Leaflet. Coordinates go to Google only under the owner-approved checklist.",
+      "goal": "Add a Google Routes API adapter (computeRoutes DRIVE, TRANSIT, WALK) behind the server proxy reading owner-filled GOOGLE_MAPS_API_KEY (server-side only, never VITE_-prefixed, never handled by agents). Real transit ETAs make option re-rank and earlier-leave-by honest; OSRM stays the free fallback with mode_unsupported honesty. Screen rule: Google route geometry never renders on Leaflet — Google-routed views show itinerary plus labelled handoff with no Leaflet map, OSRM views keep Leaflet. Coordinates go to Google only under the owner-approved checklist.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
@@ -205,7 +205,7 @@
       "slice": "D7",
       "title": "Licensed ratings, photos, and price over D2 candidates (Google Places, attributed)",
       "priority": "P0",
-      "goal": "Enrich D2 Overpass candidates with Google Places API (New) rating, photo, and price level via field-masked requests, reading owner-pasted GOOGLE_PLACES_API_KEY server-side only. Match rule (deterministic, fail-closed): enrich only when the top Google result is within 150 m of the OSM coordinates and every significant token of the shorter normalized name appears in the longer; otherwise OSM-only. Display Powered by Google plus photo author attributions; OSM remains the free fallback where licensed data is absent. Retires 'ratings shown absent' where licensed data exists.",
+      "goal": "Google-primary restaurant discovery with Overpass fallback (rev12, D1b device proof: public Overpass not demo-reliable). When owner-filled GOOGLE_MAPS_API_KEY is present, one searchNearby per Nearby-now (10 s reuse, 1.5 km circle, minimal mask with rating/openNow/photos) discovers candidates with rating, open status, and photo references; per-candidate provenance google. Overpass (flagship plus verified mirror, 20-25 s timeout, honest progress copy) is the fallback for no-key or Google failure, where the rev6 match rule governs enrichment; fallback candidates carry provenance osm. Attribution split: Powered-by-Google plus photo credits on google cards, ODbL on osm ones. Retires 'ratings shown absent' where licensed data exists.",
       "type": "implementation",
       "status": "pending",
       "agent": "agent-orchestrator",
@@ -218,12 +218,15 @@
       "phase_plan_ref": "PH-002",
       "files": [
         "src/adapters/providers/google-places-adapter.ts",
+        "src/adapters/providers/overpass-places-adapter.ts",
         "src/adapters/providers/server-proxy.ts",
         "src/ui/view-models/restaurant-detail-vm.ts",
         "src/ui/living-context/v2-home-view.ts"
       ],
       "checks": [
-        "Recorded-places e2e: Overpass-first discovery with Details-per-view and photos-per-shown-card under minimal masks; match rule proven (in-radius plus name-token match enriches, off-radius or name-mismatch stays OSM-only); licensed fields render only from provider records with Powered-by-Google plus photo author attributions visible; screen-level DOM check passes both directions (Google-field screens hold no Leaflet map nodes, OSM map screens hold zero Google strings, photo URIs, or attribution nodes), photos hotlinked never re-hosted; absent fields keep the honest absent state; key absent from bundle and logs",
+        "Recorded-places e2e for both paths: Google path discovers with one searchNearby (mask asserted, per-candidate provenance google, attributions visible); Overpass path (flagship plus mirror, 20-25 s timeout, progress copy) enriches only under the rev6 match rule with provenance osm; Google-failure test fails over to Overpass honestly; per-day quota plus ledger bound spend",
+        "Screen-level DOM check passes both directions (Google-field screens hold no Leaflet map nodes, OSM map screens hold zero Google strings, photo URIs, or attribution nodes), photos hotlinked never re-hosted; absent fields keep the honest absent state; key absent from bundle and logs",
+        "Device proof on op8t via surface E port 4174 (redacted): Nearby-now returns real candidates on the phone; D3 sequencing untouched",
         "Lunch cards carry photos with author credit; dual gate A+B at both viewports; core diff 0",
         "python .progress/scripts/emit_convergence_event.py task_complete --task-id D7-LICENSED-PLACES --plan-ref docs/architecture/DEMO_RESCUE.plan.json"
       ]
