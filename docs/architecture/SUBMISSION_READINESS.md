@@ -82,7 +82,8 @@ In adherence to Yori's core principle of **ruthless engineering truthfulness**, 
    npm install && npm run build
    ```
 3. **Configure Optional Local Gates** (in `.env.local` — NEVER commit; agents never read or paste secrets):
-   - **Location**: Granted directly via browser permission dialog upon clicking **Use My Location**.
+   - **Location**: Granted directly via browser permission dialog upon clicking **Use My Location**. Consent is per session: every new session asks again, and no provider is called before it.
+   - **Phone demo surface (E, primary)**: serve on Mac port 4174 (`npm run preview -- --port 4174`), forward it with `ssh -N -R 4174:localhost:4174 op8t`, and open `http://localhost:4174` in phone Chrome (a secure context, no certificate). The proxies accept only Host ports 4173/4174/5173, so the phone must use port 4174. Exact steps and the mkcert / USB / Mac fallbacks: `docs/demo/DEMO_HTTPS.md`.
    - **Keyless trio (default ON since your §9 confirmation)**: `WEATHER_LIVE_ENABLED`, `PLACES_LIVE_ENABLED` and `ROUTE_LIVE_ENABLED` need no setting. Set any of them to `false` to switch that provider off. Weather follows your shared location; the `DEMO_CITY_NAME` / `DEMO_CITY_LAT` / `DEMO_CITY_LON` / `DEMO_CITY_TIMEZONE` variables only affect the dev demo (`?dev=1`).
    - **Places (Overpass)**: on by default; live dining queries via OpenStreetMap Overpass (ODbL) after location consent.
    - **Routing (OSRM)**: on by default; live road routing via OSRM demo. For walking routes, `OSRM_FOOT_BASE_URL` defaults to FOSSGIS (`https://routing.openstreetmap.de/routed-foot`).

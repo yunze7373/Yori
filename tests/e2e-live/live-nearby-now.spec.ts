@@ -223,6 +223,11 @@ test.describe('D2-LUNCH-DEFAULT-ON: nearby restaurants visibly work once locatio
     await page.locator('#btn-request-location').click();
     await expect(page.locator('#btn-nearby-now')).toBeVisible({ timeout: 10000 });
     expect(traffic.places.length).toBe(1);
+    // D1b (seen on the real device when Overpass answered 502): the failure is said, not silent.
+    await expect(page.locator('#nearby-now-note')).toHaveText(
+      'Nearby search failed · OpenStreetMap Overpass did not answer · try again'
+    );
+    await expect(page.locator('.v2-candidate-card')).toHaveCount(0);
 
     await page.locator('#btn-nearby-now').click();
     await expect(page.locator('.v2-candidate-card').first()).toBeVisible({ timeout: 10000 });

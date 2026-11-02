@@ -2336,6 +2336,9 @@ export function renderApp(
           const confirmedFacts = activeLoadedFacts.filter(f => f.status === 'confirmed');
           livePlacesList = rankPlacesByConfirmedPreferences(data.places, confirmedFacts);
           livePlacesError = false;
+          // D1b: say so when the provider answered with nothing (instead of a silent quiet card).
+          nearbyNowNote =
+            livePlacesList.length === 0 ? 'No restaurants found within 1.5 km (OpenStreetMap)' : null;
           if (selectedCardState == null && livePlacesList.length > 0) {
             selectedCardState = {
               selectedId: 'places',
@@ -2350,10 +2353,12 @@ export function renderApp(
       } else {
         livePlacesList = [];
         livePlacesError = true;
+        nearbyNowNote = 'Nearby search failed · OpenStreetMap Overpass did not answer · try again';
       }
     } catch {
       livePlacesList = [];
       livePlacesError = true;
+      nearbyNowNote = 'Nearby search failed · OpenStreetMap Overpass did not answer · try again';
     } finally {
       livePlacesLoading = false;
       update();

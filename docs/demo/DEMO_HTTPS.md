@@ -1,16 +1,59 @@
-# Demo serve: phone over trusted LAN HTTPS (DEMO_RESCUE D1)
+# Demo serve: the phone surfaces (DEMO_RESCUE D1 / D1b)
 
 Phone browsers only allow geolocation in a **secure context**. Over plain LAN HTTP
 (`http://192.168.x.x:4174`) the location request is silently denied, so the weather near you never
-appears. This page lists the exact owner steps for the three supported demo surfaces. There is no
-production URL, no tunnel and no public exposure: everything runs on the owner's Mac for the length
-of the demo.
+appears. `http://localhost` is a secure context by definition, which is why the primary phone path
+forwards the phone's own `localhost:4174` to the Mac. There is no production URL, no tunnel to the
+internet and no public exposure: everything runs on the owner's Mac for the length of the demo.
 
 | Surface | Secure context | When to use |
 |---|---|---|
-| A. Phone over trusted LAN HTTPS (`npm run demo:https`) | Yes, after a one-time mkcert root CA install on the phone | Primary phone demo |
-| B. Android over USB (`chrome://inspect` port forwarding) | Yes (`localhost` on the phone) | Android, if installing a CA is unwanted |
-| C. Mac browser at `http://localhost:4174` | Yes (`localhost`) | Guaranteed fallback. It leads the demo script if A/B is not verified before the run |
+| **E. Phone `localhost:4174` forwarded to the Mac over ssh (`ssh -N -R`)** | Yes (`localhost`), no certificate needed | **Primary phone demo** (verified on the OnePlus 8T in D1b) |
+| A. Phone over trusted LAN HTTPS (`npm run demo:https`) | Yes, after a one-time mkcert root CA install on the phone | Phone without ssh/Termux |
+| B. Android over USB (`chrome://inspect` or `adb reverse`) | Yes (`localhost` on the phone) | Android on a cable |
+| C. Mac browser at `http://localhost:4174` | Yes (`localhost`) | Guaranteed fallback |
+
+## E. Phone `localhost:4174` over ssh (primary)
+
+The first-party `/api` proxies accept only a loopback Host on port **4173, 4174 or 5173**; any other
+port gets `403`. The phone must therefore open exactly `http://localhost:4174` (its Host header is then
+`localhost:4174`). The Mac-side port only has to match the `-R` target.
+
+On the Mac (repo folder), each demo run:
+
+```bash
+npm run build && npm run preview -- --port 4174
+```
+
+In a second Terminal tab (keep it open for the demo; Ctrl+C ends the forward):
+
+```bash
+ssh -N -R 4174:localhost:4174 op8t
+```
+
+If something else already holds Mac port 4174, serve on a free port and forward to it instead; the
+phone still opens `localhost:4174`, so the Host check passes:
+
+```bash
+npx vite preview --port 4294
+```
+
+```bash
+ssh -N -R 4174:localhost:4294 op8t
+```
+
+On the phone (Chrome):
+1. Open `http://localhost:4174`. The page is a secure context; no certificate step.
+2. Tap **Use My Location**. Chrome shows its own location prompt; pick **Only this time** (仅此一次)
+   so nothing is remembered on the phone.
+3. "Weather near you" appears with `Open-Meteo · near you · as of <time>`.
+4. Tap **Nearby now** for restaurants around you (OpenStreetMap via Overpass). If the public
+   Overpass server is slow, the card says `Nearby search failed · OpenStreetMap Overpass did not
+   answer · try again` instead of showing anything invented.
+5. End: Ctrl+C the `ssh -N -R` tab and the preview tab.
+
+USB alternative (no ssh): with USB debugging on, run `adb reverse tcp:4174 tcp:4174` from the Mac, then
+open `http://localhost:4174` on the phone; remove it afterwards with `adb reverse --remove tcp:4174`.
 
 Never tap through a certificate warning ("Show details → visit this website", "Advanced →
 Proceed"). Geolocation after a certificate-error bypass is not reliable on iOS Safari or Android
