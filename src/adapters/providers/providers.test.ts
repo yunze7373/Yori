@@ -422,9 +422,10 @@ describe('PH-002 D1: Open-Meteo Real Weather Adapter (AC-204-1, AC-204-2)', () =
 });
 
 describe('PH-002 D1: Weather Dev Server Proxy Middleware Security', () => {
-  it('resolves config with WEATHER_LIVE_ENABLED default false', () => {
+  it('resolves config with WEATHER_LIVE_ENABLED default ON (D2 §9 trio flip) and explicit false off', () => {
+    expect(resolveWeatherConfig({ WEATHER_LIVE_ENABLED: 'false' }).enabled).toBe(false);
     const config = resolveWeatherConfig({});
-    expect(config.enabled).toBe(false);
+    expect(config.enabled).toBe(true);
     expect(config.demoCity.latitude).toBe(DEFAULT_DEMO_CITY.latitude);
     expect(config.demoCity.longitude).toBe(DEFAULT_DEMO_CITY.longitude);
   });

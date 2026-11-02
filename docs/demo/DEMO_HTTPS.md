@@ -16,9 +16,11 @@ Never tap through a certificate warning ("Show details → visit this website", 
 Proceed"). Geolocation after a certificate-error bypass is not reliable on iOS Safari or Android
 Chrome. If you see a warning, the CA step below is missing, so fix that or use surface C.
 
-Provider flags are unchanged by any of these commands. Live weather stays off unless you start the
-serve with `WEATHER_LIVE_ENABLED=true` (the §6 confirmation in `docs/architecture/DEMO_RESCUE.plan.md`).
-With it off, the app shows the weather tile as `Off (owner setting)`.
+Provider flags are unchanged by any of these commands. Since the owner's §9 confirmation (D2), the
+keyless trio (nearby places, routes, weather) is on by default. Start a serve with
+`WEATHER_LIVE_ENABLED=false` (or `PLACES_LIVE_ENABLED=false`, `ROUTE_LIVE_ENABLED=false`) to switch
+one off; the app then shows it as `Off (owner setting)`. Browser location consent is still asked
+every session.
 
 ## A. Phone over trusted LAN HTTPS
 
@@ -57,7 +59,7 @@ Install the root CA on the phone (one time):
 Each demo run (Mac and phone on the same Wi-Fi):
 
 ```bash
-WEATHER_LIVE_ENABLED=true npm run demo:https
+npm run demo:https
 ```
 
 1. The script builds the shipping bundle and prints `open https://<mac-lan-ip>:4443/`.
@@ -73,8 +75,7 @@ phone cannot reach the Mac.
 
 1. On the phone: **Settings → About phone**, tap **Build number** seven times, then turn on
    **Developer options → USB debugging**.
-2. On the Mac: `npm run build && npm run preview -- --port 4174` (add `WEATHER_LIVE_ENABLED=true`
-   in front for live weather).
+2. On the Mac: `npm run build && npm run preview -- --port 4174`.
 3. Connect the phone by USB and accept the "Allow USB debugging" prompt.
 4. In desktop Chrome open `chrome://inspect/#devices`, click **Port forwarding…**, add
    `4174` → `localhost:4174`, tick **Enable port forwarding**, then **Done**.
@@ -84,7 +85,7 @@ phone cannot reach the Mac.
 ## C. Mac fallback: `http://localhost:4174`
 
 ```bash
-npm run build && WEATHER_LIVE_ENABLED=true npm run preview -- --port 4174
+npm run build && npm run preview -- --port 4174
 ```
 
 Open `http://localhost:4174` in Safari or Chrome on the Mac, click **Use My Location**, then

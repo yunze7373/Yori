@@ -127,12 +127,18 @@ describe('D2 /api/places over a recorded Overpass response', () => {
   });
 });
 
-describe('D2 keyless trio default switch (shipped OFF)', () => {
-  it('ships OFF: the constant is false and unset env keeps every provider disabled', () => {
-    expect(KEYLESS_TRIO_DEFAULT_ON).toBe(false);
-    expect(resolvePlacesConfig({}).enabled).toBe(false);
-    expect(resolveRouteConfig({}).enabled).toBe(false);
-    expect(resolveWeatherConfig({}).enabled).toBe(false);
+describe('D2 keyless trio default switch (shipped ON after §9)', () => {
+  it('ships ON after the §9 confirmation: unset env enables all three keyless providers', () => {
+    expect(KEYLESS_TRIO_DEFAULT_ON).toBe(true);
+    expect(resolvePlacesConfig({}).enabled).toBe(true);
+    expect(resolveRouteConfig({}).enabled).toBe(true);
+    expect(resolveWeatherConfig({}).enabled).toBe(true);
+  });
+
+  it('an explicit false still disables each provider after the flip', () => {
+    expect(resolvePlacesConfig({ PLACES_LIVE_ENABLED: 'false' }).enabled).toBe(false);
+    expect(resolveRouteConfig({ ROUTE_LIVE_ENABLED: '0' }).enabled).toBe(false);
+    expect(resolveWeatherConfig({ WEATHER_LIVE_ENABLED: 'false' }).enabled).toBe(false);
   });
 
   it('explicit env always wins; the default applies only when unset', () => {

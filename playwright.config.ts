@@ -1,5 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 
+/** D2 (DEMO_RESCUE): keep every e2e preview server offline even though the trio defaults ON. */
+const offlineProviderEnv: Record<string, string> = {
+  ...(process.env as Record<string, string>),
+  PLACES_LIVE_ENABLED: 'false',
+  ROUTE_LIVE_ENABLED: 'false',
+  WEATHER_LIVE_ENABLED: 'false',
+};
+
 export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.ts/,
@@ -31,12 +39,15 @@ export default defineConfig({
   ],
   webServer: [
     {
+      // D2: the keyless trio defaults ON in shipping; e2e pins it OFF so no test reaches a provider.
+      env: { ...offlineProviderEnv },
       command: 'npm run build:test && npm run preview:test -- --port 4173',
       port: 4173,
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
     },
     {
+      env: { ...offlineProviderEnv },
       command: 'npm run build && npm run preview -- --port 4174',
       port: 4174,
       reuseExistingServer: !process.env.CI,

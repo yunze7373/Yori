@@ -24,6 +24,11 @@ Asserted by the spec, beyond the pictures:
 - An Ask "附近吃什么" while a search is in flight joins it: exactly one `/api/places` request, and the lunch card appears.
 - Zero `data-provenance="fixture"`. No "simulated", "Demo profile", "Based on taste" (cold user) or "· walk" claims.
 
-Default-on switch: implemented as `KEYLESS_TRIO_DEFAULT_ON` in `src/adapters/providers/server-proxy.ts`
-and **shipped OFF**, because no §9 owner confirmation ("同意") was recorded before submission.
-Flipping it is a one-line change once the owner confirms. An explicit env value always wins.
+Default-on switch: `KEYLESS_TRIO_DEFAULT_ON` in `src/adapters/providers/server-proxy.ts`, **shipped ON**
+after the owner's §9 confirmation (review chat 3738319b, 2026-11-03 05:36 JST, "key已填，同意 1–4，手机。").
+Verified on a fresh shipping preview with no env: `/api/places/status`, `/api/route/status` and
+`/api/weather/status` all report `enabled: true` with hosts `overpass-api.de/api/interpreter`,
+`router.project-osrm.org` + `routing.openstreetmap.de/routed-foot`, and `api.open-meteo.com`. An explicit
+`WEATHER_LIVE_ENABLED=false` reports `enabled: false`. Browser location consent is still asked every
+session, and `?dev=1` keeps the simulated places provider. The Playwright preview servers pin all three
+flags to `false`, so no test reaches a provider.

@@ -120,11 +120,12 @@ export function resolveWeatherConfig(
 
 /**
  * DEMO_RESCUE D2 — keyless trio default (Overpass places, OSRM/routed-foot routing, Open-Meteo).
- * The §9 owner confirmation flips this ONE constant to true. Until then every provider stays
- * default-off. An explicit env value ('true'/'1' or 'false'/'0') always wins over the default,
- * so an owner can still disable a single provider after the flip. Shipped: false.
+ * ON since the §9 owner confirmation (review chat 3738319b, 2026-11-03 05:36 JST:
+ * "key已填，同意 1–4，手机。"). Per-session browser location consent stays mandatory, and an
+ * explicit env value ('true'/'1' or 'false'/'0') always wins, so the owner can still disable a
+ * single provider (and the e2e preview servers pin all three to 'false' to stay offline).
  */
-export const KEYLESS_TRIO_DEFAULT_ON = false;
+export const KEYLESS_TRIO_DEFAULT_ON = true;
 
 export function resolveTrioFlag(
   raw: string | undefined,
