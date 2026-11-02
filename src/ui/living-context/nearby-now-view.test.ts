@@ -50,9 +50,19 @@ describe('D2 Nearby now on the quiet Live home', () => {
     ).not.toContain('btn-nearby-now');
   });
 
-  it('a cooldown note is announced politely', () => {
-    const html = renderV2Home({ ...quiet, nearbyNow: { state: 'ready', note: 'Up to date · searched moments ago' } });
-    expect(html).toContain('id="nearby-now-note" role="status"');
+  it('notes are a designed state (icon + title + guidance), announced politely', () => {
+    const html = renderV2Home({
+      ...quiet,
+      nearbyNow: { state: 'ready', note: { kind: 'error', title: 'Nearby search failed', desc: 'OpenStreetMap Overpass did not answer. Try again in a moment.' } },
+    });
+    expect(html).toContain('class="nearby-state nearby-state-error" id="nearby-now-note" role="status"');
+    expect(html).toContain('<span class="nearby-state-title">Nearby search failed</span>');
+    expect(html).toContain('Try again in a moment.');
+  });
+
+  it('off is a designed state too', () => {
+    const html = renderV2Home({ ...quiet, nearbyNow: { state: 'off' } });
+    expect(html).toContain('class="nearby-state nearby-state-off" id="nearby-now-off"');
   });
 });
 

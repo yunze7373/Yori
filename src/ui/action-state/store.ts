@@ -223,7 +223,11 @@ export class DefaultActionStateStore implements ActionStateStore {
       const isFuel =
         this.commandContext?.sceneId === 'fuel' ||
         this.commandContext?.plan?.intentId === 'fuel';
-      const welcomeText = isFuel
+      // D3: Live with nothing on Home yet gets a greeting that matches what Live can do now.
+      const isLiveIdle = this.commandContext?.sceneId === 'live' && !this.commandContext?.plan;
+      const welcomeText = isLiveIdle
+        ? "I can find restaurants near you: ask 'nearby restaurants' or '附近吃什么'. When a plan shows on Home, ask 'Why this?' or say 'Looks good' to confirm."
+        : isFuel
         ? "I can help find nearby gas stations: ask 'find gas', 'Why this station?', 'Looks good' to confirm, or 'Undo' to restore."
         : isLunch
         ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Why this restaurant?', 'Looks good' to confirm, or 'Undo' to restore."

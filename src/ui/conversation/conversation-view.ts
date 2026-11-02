@@ -9,7 +9,16 @@ import { renderModelStatusPill } from '../living-context/components/model-status
 import type { ActionStateStore, MessageItem } from '../action-state/types.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 
-export function renderConversationOverlay(store: ActionStateStore): string {
+/**
+ * D3 (DEMO_RESCUE): consumer Live shows exactly ONE status line (the engine status pill) and no
+ * Decision Log / Export / raw JSON. Developer tools (badge, context chip, engine chip, log drawer)
+ * render only with devTools — ?dev=1 (or the test build's ?test=1) or the dev-only Demo mode.
+ */
+export function renderConversationOverlay(
+  store: ActionStateStore,
+  options: { devTools?: boolean } = {}
+): string {
+  const devTools = options.devTools ?? true;
   const isPinned = store.isPinned();
   const transcript = store.getTranscript();
   const isInteractive = store.getActionState().status === 'needs-confirmation';
@@ -35,10 +44,14 @@ export function renderConversationOverlay(store: ActionStateStore): string {
             </div>
             <div class="conversation-title-block">
               <h2 class="conversation-title" id="conversation-title">${escapeHtml(STRINGS.conversation.title)}</h2>
-              <div class="conversation-subtitle-row">
-                <span class="v2-offline-badge" id="conversation-status-badge" ${store.isLiveMode() ? `data-provenance="live" data-source="model_interpreter" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}>${store.isLiveMode() ? 'Live assistant' : 'Offline demo · simulated'}</span>
+              <div class="conversation-subtitle-row ${devTools ? '' : 'single-status'}">
+                ${
+                  devTools
+                    ? `<span class="v2-offline-badge" id="conversation-status-badge" ${store.isLiveMode() ? `data-provenance="live" data-source="model_interpreter" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}>${store.isLiveMode() ? 'Live assistant' : 'Offline demo · simulated'}</span>
                 <span class="context-chip conversation-context-chip ${store.isLiveMode() ? 'live-chip' : 'demo-chip'}" id="conversation-context-chip" ${store.isLiveMode() ? `data-provenance="live" data-source="device_clock" data-fetched-at="${new Date().toISOString()}"` : 'data-provenance="fixture"'}>${store.isLiveMode() ? 'Live context' : 'Demo scene · simulated'}</span>
-                <span class="engine-status-chip" id="engine-status-chip" data-engine-status="${store.getEngineStatus()}">${escapeHtml(engineStatusLabel)}</span>
+                <span class="engine-status-chip" id="engine-status-chip" data-engine-status="${store.getEngineStatus()}">${escapeHtml(engineStatusLabel)}</span>`
+                    : ''
+                }
                 ${renderModelStatusPill({ status: store.getEngineStatus(), label: engineStatusLabel, id: 'conversation-model-status-pill', latencyMs: globalDecisionLogger.getLatest()?.latencyMs })}
               </div>
             </div>
@@ -58,7 +71,9 @@ export function renderConversationOverlay(store: ActionStateStore): string {
           ${renderTranscriptItems(transcript, isInteractive)}
         </main>
 
-        <div class="decision-log-bar">
+        ${
+          devTools
+            ? `<div class="decision-log-bar">
           <button type="button" class="btn-dev-decision-log" id="btn-toggle-decision-log" aria-expanded="false" title="Inspect Redacted Decision Log">
             Decision Log
           </button>
@@ -72,7 +87,9 @@ export function renderConversationOverlay(store: ActionStateStore): string {
             <span class="decision-log-count">${logEntries.length} entries</span>
           </div>
           <pre class="decision-log-viewer" id="decision-log-content">${escapeHtml(globalDecisionLogger.exportJson())}</pre>
-        </div>
+        </div>`
+            : ''
+        }
 
         <footer class="conversation-footer">
           <form class="conversation-composer" id="conversation-composer-form" autocomplete="off">

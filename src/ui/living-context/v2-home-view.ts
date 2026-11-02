@@ -206,7 +206,7 @@ export function renderCompactMapStrip(map: MapVM, isLive?: boolean): string {
           </svg>
           <span class="v2-heading-desktop">${escapeHtml(map.label)}</span><span class="v2-heading-mobile">${escapeHtml(mobileLabel)}</span>
         </span>
-        <span class="card-badge" data-provenance="none">Map not available</span>
+        <span class="card-badge provenance-chip" data-provenance="none">Map not available</span>
       </div>
       <div class="v2-map-canvas compact-canvas map-unavailable-canvas" role="img" aria-label="Map not available">
         <div class="map-unavailable-message" style="display: flex; align-items: center; justify-content: center; height: 100%; min-height: 48px; color: var(--color-text-secondary, #5B6B65); font-size: 0.8125rem;">
@@ -229,8 +229,8 @@ export function renderCompactMapStrip(map: MapVM, isLive?: boolean): string {
         </span>
         ${
           isLive
-            ? `<span class="card-badge live-badge" data-provenance="live" data-source="osm">Live map</span>`
-            : `<span class="card-badge" data-slot="chrome" data-slot-reason="Simulated map badge">Schematic · simulated</span>`
+            ? `<span class="card-badge live-badge provenance-chip" data-provenance="live" data-source="osm">Live map</span>`
+            : `<span class="card-badge provenance-chip" data-slot="chrome" data-slot-reason="Simulated map badge">Schematic · simulated</span>`
         }
       </div>
       <div class="v2-map-canvas compact-canvas" role="img" aria-label="${escapeHtml(map.ariaDescription)}">
@@ -644,14 +644,31 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
  * D2: on-demand "Nearby now" (Live with a shared fix only). Searches restaurants around the
  * fix at any hour; 'off' says honestly that the places provider is disabled by owner setting.
  */
+/**
+ * D3: the ONE provenance chip a card carries (floor item b). Text says where the card's content
+ * comes from: live sensing, the user's own confirmation, or (dev-only Demo) a simulation.
+ */
+function renderProvenanceChip(provenance: string | undefined): string {
+  const kind = provenance === 'user' ? 'user' : provenance === 'fixture' ? 'fixture' : 'live';
+  const text = kind === 'user' ? 'You confirmed' : kind === 'fixture' ? 'Simulated' : 'Live';
+  // A label, not data: it must not carry data-provenance (that attribute marks data elements, which
+  // the truth audit requires to cite data-source and data-fetched-at).
+  return `<span class="card-badge provenance-chip provenance-${kind}" data-chip-provenance="${kind}">${text}</span>`;
+}
+
 function renderNearbyNow(vm: HomeCompositionVM, placement: 'quiet' | 'card'): string {
   if (!vm.isLive || !vm.nearbyNow) return '';
   const { state, note } = vm.nearbyNow;
   if (state === 'off') {
     return placement === 'quiet'
-      ? `<p class="nearby-now-off" id="nearby-now-off" data-provenance="none">Nearby restaurants are off (owner setting)</p>`
+      ? `<div class="nearby-state nearby-state-off" id="nearby-now-off" role="status" data-provenance="none">
+            <span class="nearby-state-icon" aria-hidden="true">–</span>
+            <span class="nearby-state-text"><span class="nearby-state-title">Nearby restaurants are off (owner setting)</span><span class="nearby-state-desc">Turn them on in Settings › Connectors.</span></span>
+          </div>`
       : '';
   }
+  // On the lunch card the results speak for themselves; only failures/empties keep their note.
+  const shownNote = placement === 'card' && note?.kind === 'info' ? undefined : note;
   const loading = state === 'loading';
   const label = loading ? 'Searching nearby…' : placement === 'quiet' ? 'Nearby now' : 'Refresh nearby';
   return `
@@ -662,7 +679,14 @@ function renderNearbyNow(vm: HomeCompositionVM, placement: 'quiet' | 'card'): st
                 ? `<span class="nearby-now-caption">Restaurants around you · OpenStreetMap via Overpass</span>`
                 : ''
             }
-            ${note ? `<span class="nearby-now-note" id="nearby-now-note" role="status">${escapeHtml(note)}</span>` : ''}
+            ${
+              shownNote
+                ? `<div class="nearby-state nearby-state-${shownNote.kind}" id="nearby-now-note" role="status">
+              <span class="nearby-state-icon" aria-hidden="true">${shownNote.kind === 'error' ? '!' : shownNote.kind === 'empty' ? '∅' : '✓'}</span>
+              <span class="nearby-state-text"><span class="nearby-state-title">${escapeHtml(shownNote.title)}</span><span class="nearby-state-desc">${escapeHtml(shownNote.desc)}</span></span>
+            </div>`
+                : ''
+            }
           </div>`;
 }
 
@@ -696,6 +720,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               <line x1="12" y1="21" x2="12" y2="23"></line>
             </svg>
           </div>
+          ${vm.isLive ? renderProvenanceChip('live') : ''}
           <h2 class="quiet-title" id="quiet-title">${escapeHtml(vm.suppressedQuiet?.message || vm.title)}</h2>
           <p class="quiet-subtitle" id="quiet-subtitle">${escapeHtml(vm.headline)}</p>
           ${renderLiveWeatherNow(vm)}
@@ -899,124 +924,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
   }
 
   // 3. Candidates Layout (Lunch Away)
-  return `
-    <div class="v2-home-container candidates">
-      ${renderStateNotices(vm)}
-      <section class="card now-card v2-candidates-hero" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="${vm.isLive ? 'live' : 'fixture'}" ${vm.isLive ? 'data-source="live_pipeline"' : ''}>
-        ${!vm.changeMoment ? renderPlanDiffBanner(vm.planDiff) : ''}
-        <div class="v2-card-header">
-          <!-- Hero Thought Badge & Relative Time -->
-          <div class="hero-thought-header">
-            <span class="hero-thought-badge">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right: 4px;">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-              </svg>
-              <span>THOUGHT AHEAD FOR YOU</span>
-            </span>
-            <div class="hero-header-meta">
-              <span class="now-relative-time">${vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'nearby' : (vm.isLive ? 'nearby' : 'nearby · 12:15 PM')}</span>
-              ${
-                vm.isLive
-                  ? `<span class="card-badge live-badge" data-provenance="live" data-source="live_pipeline">Live</span>`
-                  : `<span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>`
-              }
-            </div>
-          </div>
+  const candidateListHtml: string =
 
-          ${
-            vm.changeMoment
-              ? `
-            <div class="change-moment-container" id="change-moment-container">
-              <div class="plan-status-transition" id="plan-status-transition" role="status" aria-live="polite">
-                ${escapeHtml(vm.changeMoment.statusTransition || 'Updated plan ready')}
-              </div>
-              <div class="what-changed-marker" id="what-changed-marker">
-                <span class="what-changed-chip">
-                  <span class="what-changed-icon" aria-hidden="true">⚡</span>
-                  <span class="what-changed-text">${escapeHtml(vm.changeMoment.causeMarker)}</span>
-                </span>
-              </div>
-              <div class="hero-cause-effect" id="hero-cause-effect" data-slot="chrome">
-                ${escapeHtml(vm.changeMoment.heroCauseEffect)}
-              </div>
-              ${
-                vm.changeMoment.priorLeaveTime &&
-                vm.changeMoment.newLeaveTime &&
-                vm.changeMoment.priorLeaveTime !== vm.changeMoment.newLeaveTime
-                  ? `
-                <div class="time-diff-display" id="time-diff-display" aria-label="Leave time updated from ${escapeHtml(vm.changeMoment.priorLeaveTime)} to ${escapeHtml(vm.changeMoment.newLeaveTime)}">
-                  <span class="prior-time-struck"><s class="struck-through">${escapeHtml(vm.changeMoment.priorLeaveTime)}</s></span>
-                  <span class="time-arrow" aria-hidden="true"> → </span>
-                  <span class="new-time-highlight">${escapeHtml(vm.changeMoment.newLeaveTime)}</span>
-                </div>
-              `
-                  : ''
-              }
-            </div>
-          `
-              : ''
-          }
-          <h2 class="now-subject" data-slot="chrome" data-slot-reason="Candidates hero title">${escapeHtml(vm.title)}</h2>
-          ${
-            vm.fieldSourceRefs?.topCandidateName && vm.fieldSourceRefs?.topCandidateDistance && vm.topCandidateName && vm.topCandidateDistance
-              ? `
-            <div class="now-title ${vm.planDiff ? 'plan-diff-highlight' : ''}" id="now-title">
-              <span class="hero-candidate-name" data-source-ref="${escapeHtml(vm.fieldSourceRefs.topCandidateName.recordId)}.${escapeHtml(vm.fieldSourceRefs.topCandidateName.field)}" data-slot="domain">${escapeHtml(vm.topCandidateName)}</span><span data-slot="chrome" data-slot-reason="Hero candidate separator"> · </span><span class="hero-candidate-dist" data-source-ref="${escapeHtml(vm.fieldSourceRefs.topCandidateDistance.recordId)}.${escapeHtml(vm.fieldSourceRefs.topCandidateDistance.field)}" data-slot="domain">${escapeHtml(vm.topCandidateDistance)}</span>
-            </div>
-          `
-              : `
-            <div class="now-title ${vm.planDiff ? 'plan-diff-highlight' : ''}" id="now-title" data-slot="chrome" data-slot-reason="Candidates hero headline">${escapeHtml(vm.headline)}</div>
-          `
-          }
-          ${renderNearbyNow(vm, 'card')}
-          <div class="mock-places-notice" data-slot="chrome" data-slot-reason="Places disclosure notice">${
-            vm.isLive
-              ? 'OpenStreetMap via Overpass (ODbL) · live nearby dining'
-              : escapeHtml(
-                  vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
-                    ? STRINGS.fuel.mockPlacesNotice
-                    : STRINGS.lunch.mockPlacesNotice
-                )
-          }</div>
-          ${
-            vm.isLive
-              ? `
-            <div class="v2-active-location-bar" role="region" aria-label="Active Location" data-slot="chrome" data-slot-reason="Location status bar">
-              <span class="v2-location-badge" data-provenance="live" data-source="geolocation">📍 Location: ${escapeHtml(
-                vm.locationLabel || 'Location shared'
-              )}</span>
-            </div>
-          `
-              : (vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') || Boolean(vm.locationLabel))
-              ? `
-            <div class="v2-active-location-bar" role="region" aria-label="Active Location" data-slot="chrome" data-slot-reason="Location status bar">
-              <span class="v2-location-badge" data-slot="chrome" data-slot-reason="Simulated location status badge">📍 Location: ${escapeHtml(
-                vm.locationLabel || 'Selected City (simulated)'
-              )}</span>
-              <button type="button" class="btn btn-outline btn-sm v2-change-loc-btn" id="btn-change-location" aria-expanded="false" aria-controls="v2-manual-location-section" data-slot="chrome" data-slot-reason="Change location button">
-                Change Location
-              </button>
-            </div>
-            <div class="v2-manual-location-section" id="v2-manual-location-section" style="display: none; margin-bottom: var(--space-4);">
-              <div class="v2-city-chips-label" data-slot="chrome" data-slot-reason="City preset selector label">Demo City Presets:</div>
-              <div class="v2-city-chips-group" role="group" aria-label="Demo City Presets">
-                <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-sf" data-lat="37.7749" data-lng="-122.4194" data-slot="chrome" data-slot-reason="City preset selection button">
-                  San Francisco
-                </button>
-                <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-la" data-lat="34.0522" data-lng="-118.2437" data-slot="chrome" data-slot-reason="City preset selection button">
-                  Los Angeles
-                </button>
-              </div>
-            </div>
-          `
-              : ''
-          }
-        </div>
-
-        ${renderActionRow(vm)}
-
-        <!-- Candidate Cards with Local Labelled SVG Illustrations -->
-        ${
           vm.candidateCards && vm.candidateCards.length > 0
             ? (() => {
                 const topC = vm.candidateCards[0];
@@ -1129,7 +1038,140 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 `;
               })()
             : ''
-        }
+        ;
+
+  return `
+    <div class="v2-home-container candidates">
+      ${renderStateNotices(vm)}
+      <section class="card now-card v2-candidates-hero" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="${vm.isLive ? 'live' : 'fixture'}" ${vm.isLive ? 'data-source="live_pipeline"' : ''}>
+        ${!vm.changeMoment ? renderPlanDiffBanner(vm.planDiff) : ''}
+        <div class="v2-card-header">
+          <!-- Hero Thought Badge & Relative Time -->
+          <div class="hero-thought-header">
+            <span class="hero-thought-badge">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right: 4px;">
+                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+              </svg>
+              <span>THOUGHT AHEAD FOR YOU</span>
+            </span>
+            <div class="hero-header-meta">
+              <span class="now-relative-time">${vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'nearby' : (vm.isLive ? 'nearby' : 'nearby · 12:15 PM')}</span>
+              ${
+                vm.isLive
+                  ? `<span class="card-badge live-badge provenance-chip" data-provenance="live" data-source="live_pipeline">Live</span>`
+                  : `<span class="card-badge provenance-chip" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>`
+              }
+            </div>
+          </div>
+
+          ${
+            vm.changeMoment && vm.isLive
+              ? `
+            <details class="change-moment-compact" id="change-moment-container">
+              <summary class="what-changed-marker" id="what-changed-marker">
+                <span class="what-changed-chip">
+                  <span class="what-changed-icon" aria-hidden="true">⚡</span>
+                  <span class="what-changed-text">${escapeHtml(vm.changeMoment.causeMarker)}</span>
+                </span>
+              </summary>
+              <div class="plan-status-transition" id="plan-status-transition" role="status" aria-live="polite">
+                ${escapeHtml(vm.changeMoment.statusTransition || 'Updated plan ready')}
+              </div>
+              <div class="hero-cause-effect" id="hero-cause-effect" data-slot="chrome">
+                ${escapeHtml(vm.changeMoment.heroCauseEffect)}
+              </div>
+            </details>
+          `
+              : vm.changeMoment
+              ? `
+            <div class="change-moment-container" id="change-moment-container">
+              <div class="plan-status-transition" id="plan-status-transition" role="status" aria-live="polite">
+                ${escapeHtml(vm.changeMoment.statusTransition || 'Updated plan ready')}
+              </div>
+              <div class="what-changed-marker" id="what-changed-marker">
+                <span class="what-changed-chip">
+                  <span class="what-changed-icon" aria-hidden="true">⚡</span>
+                  <span class="what-changed-text">${escapeHtml(vm.changeMoment.causeMarker)}</span>
+                </span>
+              </div>
+              <div class="hero-cause-effect" id="hero-cause-effect" data-slot="chrome">
+                ${escapeHtml(vm.changeMoment.heroCauseEffect)}
+              </div>
+              ${
+                vm.changeMoment.priorLeaveTime &&
+                vm.changeMoment.newLeaveTime &&
+                vm.changeMoment.priorLeaveTime !== vm.changeMoment.newLeaveTime
+                  ? `
+                <div class="time-diff-display" id="time-diff-display" aria-label="Leave time updated from ${escapeHtml(vm.changeMoment.priorLeaveTime)} to ${escapeHtml(vm.changeMoment.newLeaveTime)}">
+                  <span class="prior-time-struck"><s class="struck-through">${escapeHtml(vm.changeMoment.priorLeaveTime)}</s></span>
+                  <span class="time-arrow" aria-hidden="true"> → </span>
+                  <span class="new-time-highlight">${escapeHtml(vm.changeMoment.newLeaveTime)}</span>
+                </div>
+              `
+                  : ''
+              }
+            </div>
+          `
+              : ''
+          }
+          <h2 class="now-subject" data-slot="chrome" data-slot-reason="Candidates hero title">${escapeHtml(vm.title)}</h2>
+          ${vm.isLive ? candidateListHtml : ''}
+          ${
+            vm.isLive
+              ? ''
+              : vm.fieldSourceRefs?.topCandidateName && vm.fieldSourceRefs?.topCandidateDistance && vm.topCandidateName && vm.topCandidateDistance
+              ? `
+            <div class="now-title ${vm.planDiff ? 'plan-diff-highlight' : ''}" id="now-title">
+              <span class="hero-candidate-name" data-source-ref="${escapeHtml(vm.fieldSourceRefs.topCandidateName.recordId)}.${escapeHtml(vm.fieldSourceRefs.topCandidateName.field)}" data-slot="domain">${escapeHtml(vm.topCandidateName)}</span><span data-slot="chrome" data-slot-reason="Hero candidate separator"> · </span><span class="hero-candidate-dist" data-source-ref="${escapeHtml(vm.fieldSourceRefs.topCandidateDistance.recordId)}.${escapeHtml(vm.fieldSourceRefs.topCandidateDistance.field)}" data-slot="domain">${escapeHtml(vm.topCandidateDistance)}</span>
+            </div>
+          `
+              : `
+            <div class="now-title ${vm.planDiff ? 'plan-diff-highlight' : ''}" id="now-title" data-slot="chrome" data-slot-reason="Candidates hero headline">${escapeHtml(vm.headline)}</div>
+          `
+          }
+          ${renderNearbyNow(vm, 'card')}
+          <div class="mock-places-notice" data-slot="chrome" data-slot-reason="Places disclosure notice">${
+            vm.isLive
+              ? 'OpenStreetMap via Overpass (ODbL) · live nearby dining'
+              : escapeHtml(
+                  vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
+                    ? STRINGS.fuel.mockPlacesNotice
+                    : STRINGS.lunch.mockPlacesNotice
+                )
+          }</div>
+          ${
+            vm.isLive
+              ? '' /* D3: the header line already says "Location shared"; no separate location row in Live */
+              : (vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') || Boolean(vm.locationLabel))
+              ? `
+            <div class="v2-active-location-bar" role="region" aria-label="Active Location" data-slot="chrome" data-slot-reason="Location status bar">
+              <span class="v2-location-badge" data-slot="chrome" data-slot-reason="Simulated location status badge">📍 Location: ${escapeHtml(
+                vm.locationLabel || 'Selected City (simulated)'
+              )}</span>
+              <button type="button" class="btn btn-outline btn-sm v2-change-loc-btn" id="btn-change-location" aria-expanded="false" aria-controls="v2-manual-location-section" data-slot="chrome" data-slot-reason="Change location button">
+                Change Location
+              </button>
+            </div>
+            <div class="v2-manual-location-section" id="v2-manual-location-section" style="display: none; margin-bottom: var(--space-4);">
+              <div class="v2-city-chips-label" data-slot="chrome" data-slot-reason="City preset selector label">Demo City Presets:</div>
+              <div class="v2-city-chips-group" role="group" aria-label="Demo City Presets">
+                <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-sf" data-lat="37.7749" data-lng="-122.4194" data-slot="chrome" data-slot-reason="City preset selection button">
+                  San Francisco
+                </button>
+                <button type="button" class="btn btn-outline v2-city-chip" id="btn-city-la" data-lat="34.0522" data-lng="-118.2437" data-slot="chrome" data-slot-reason="City preset selection button">
+                  Los Angeles
+                </button>
+              </div>
+            </div>
+          `
+              : ''
+          }
+        </div>
+
+        ${renderActionRow(vm)}
+
+        <!-- Candidate Cards with Local Labelled SVG Illustrations (Demo order; Live renders them under the title) -->
+        ${vm.isLive ? '' : candidateListHtml}
 
         <!-- Signal Tiles Grid -->
         ${renderSignalTiles(vm)}
@@ -1182,6 +1224,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
             </div>
             <span class="feed-countdown-pill">${escapeHtml(nowCountdown)}</span>
           </div>
+          ${renderProvenanceChip(vm.isLive ? 'live' : 'fixture')}
         </div>
       </section>
 
@@ -1201,6 +1244,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
                   .map(
                     item => `
             <div class="card ahead-card" data-ahead-id="${escapeHtml(item.id)}" data-provenance="${vm.isLive ? 'live' : 'fixture'}" data-slot="chrome" data-slot-reason="Ahead card container">
+              ${renderProvenanceChip(vm.isLive ? 'live' : 'fixture')}
               <h3 class="ahead-title" data-slot="chrome" data-slot-reason="Ahead card title">${escapeHtml(item.title)}</h3>
               <p class="ahead-subtitle" data-slot="chrome" data-slot-reason="Ahead card subtitle">${escapeHtml(item.subtitle)}</p>
             </div>
@@ -1209,6 +1253,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
                   .join('')
               : `
             <div class="card ahead-card feed-empty-card" data-provenance="${vm.isLive ? 'none' : 'fixture'}">
+              ${renderProvenanceChip(vm.isLive ? 'live' : 'fixture')}
               <p class="ahead-subtitle" style="color: var(--color-muted);">No other plans scheduled for today.</p>
             </div>
           `
@@ -1232,6 +1277,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
                   .map(
                     prop => `
             <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.provenance || (prop.basis?.includes('Confirmed') ? 'user' : 'fixture')}" data-slot="chrome" data-slot-reason="Proposal card container">
+              ${renderProvenanceChip(prop.provenance || (prop.basis?.includes('Confirmed') ? 'user' : 'fixture'))}
               <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Proposal card title">${escapeHtml(prop.title)}</h3>
               ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Proposal card basis">${escapeHtml(prop.basis)}</p>` : ''}
               <div class="proposal-actions" style="margin-top: 12px; display: flex; gap: 8px;">
@@ -1248,6 +1294,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
                   .join('')
               : `
             <div class="card proposal-card feed-empty-card" data-provenance="${vm.isLive ? 'none' : 'fixture'}">
+              ${renderProvenanceChip(vm.isLive ? 'live' : 'fixture')}
               <p class="proposal-basis" style="color: var(--color-muted);">No suggestions pending right now.</p>
             </div>
           `

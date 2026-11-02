@@ -5783,10 +5783,73 @@ button.v2-view-detail-link:focus-visible {
   min-width: 44px;
 }
 
-.nearby-now-caption,
-.nearby-now-note,
-.nearby-now-off {
+.nearby-now-caption {
   font-size: 0.75rem;
+  color: var(--color-ink-muted, #5C6F68);
+}
+
+/* D3: nearby search states are a designed component (icon + title + one-line guidance). */
+.nearby-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  max-width: 340px;
+  margin: 4px auto 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  text-align: left;
+  background: var(--color-card-muted-bg, #f3efe4);
+  border: 1px solid var(--color-card-border, #e4ddcc);
+}
+
+.nearby-now-card .nearby-state {
+  margin: 4px 0 0;
+}
+
+.nearby-state-icon {
+  flex: 0 0 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--color-accent, #2d6a4f);
+}
+
+.nearby-state-error {
+  background: #fbf1ec;
+  border-color: #efd5c9;
+}
+
+.nearby-state-error .nearby-state-icon {
+  background: #9a3412;
+}
+
+.nearby-state-empty .nearby-state-icon,
+.nearby-state-off .nearby-state-icon {
+  background: var(--color-ink-muted, #5C6F68);
+}
+
+.nearby-state-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nearby-state-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+}
+
+.nearby-state-desc {
+  font-size: 0.8125rem;
+  line-height: 1.35;
   color: var(--color-ink-muted, #5C6F68);
 }
 
@@ -6353,3 +6416,87 @@ button.v2-view-detail-link:focus-visible {
 
 
 
+
+
+/* D3: visually hidden but announced (composer label etc.). Was referenced but never defined. */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* D3: in Live the change moment folds into one line; the detail opens on tap. */
+.change-moment-compact {
+  margin: 6px 0 2px;
+}
+
+.change-moment-compact > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+}
+
+.change-moment-compact > summary::-webkit-details-marker {
+  display: none;
+}
+
+.change-moment-compact[open] > summary {
+  margin-bottom: 6px;
+}
+
+.v2-candidates-hero .now-subject + .v2-candidate-list {
+  margin-top: 8px;
+}
+
+/* D3: one quiet provenance chip per card. */
+.provenance-chip {
+  white-space: nowrap;
+}
+
+.feed-now-card .provenance-chip,
+.ahead-card .provenance-chip,
+.proposal-card .provenance-chip {
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.feed-now-card .provenance-chip {
+  margin: 8px 0 0;
+}
+
+.quiet-card > .provenance-chip {
+  display: inline-block;
+  margin: 0 auto 8px;
+}
+
+/* D3: open status reads as a chip next to cuisine and distance (it was unstyled body text). */
+.v2-open-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #1f5c43;
+  background: #e3efe7;
+}
+
+.v2-open-chip.closed {
+  color: #8a2f12;
+  background: #f7e6df;
+}
+
+.v2-open-chip.unknown {
+  color: var(--color-ink-muted, #5C6F68);
+  background: var(--color-card-muted-bg, #f0ece2);
+}

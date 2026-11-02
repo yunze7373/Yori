@@ -2217,7 +2217,7 @@ export function renderApp(
   // patched Date in tests cannot freeze it).
   let liveNearbyRequestSignal: LiveSignal | null = null;
   let nearbyNowPending = false;
-  let nearbyNowNote: string | null = null;
+  let nearbyNowNote: { kind: 'info' | 'empty' | 'error'; title: string; desc: string } | null = null;
   let placesRefreshInFlight: Promise<void> | null = null;
   let lastPlacesFetch: { key: string; atMs: number } | null = null;
   const PLACES_CLIENT_MIN_INTERVAL_MS = 10000;
@@ -2308,7 +2308,7 @@ export function renderApp(
       nowMonotonicMs() - lastPlacesFetch.atMs < PLACES_CLIENT_MIN_INTERVAL_MS
     ) {
       // Same spot within the provider's 10 s interval: keep the results just fetched.
-      nearbyNowNote = 'Up to date · searched moments ago';
+      nearbyNowNote = { kind: 'info', title: 'Up to date', desc: 'Searched moments ago.' };
       update();
       return;
     }
@@ -2320,7 +2320,7 @@ export function renderApp(
       const resp = await fetch(`/api/places?lat=${lat}&lng=${lng}&amenity=restaurant&radius=1500`, { cache: 'no-store' });
       if (resp.status === 429) {
         // Provider fair-use interval: keep what is shown, never flip to an error state.
-        nearbyNowNote = 'Searched moments ago · try again in a few seconds';
+        nearbyNowNote = { kind: 'info', title: 'Searched moments ago', desc: 'Try again in a few seconds.' };
         return;
       }
       if (resp.ok) {
@@ -2338,7 +2338,9 @@ export function renderApp(
           livePlacesError = false;
           // D1b: say so when the provider answered with nothing (instead of a silent quiet card).
           nearbyNowNote =
-            livePlacesList.length === 0 ? 'No restaurants found within 1.5 km (OpenStreetMap)' : null;
+            livePlacesList.length === 0
+              ? { kind: 'empty', title: 'No restaurants found nearby', desc: 'Nothing within 1.5 km on OpenStreetMap. Try again somewhere else.' }
+              : null;
           if (selectedCardState == null && livePlacesList.length > 0) {
             selectedCardState = {
               selectedId: 'places',
@@ -2353,12 +2355,12 @@ export function renderApp(
       } else {
         livePlacesList = [];
         livePlacesError = true;
-        nearbyNowNote = 'Nearby search failed · OpenStreetMap Overpass did not answer · try again';
+        nearbyNowNote = { kind: 'error', title: 'Nearby search failed', desc: 'OpenStreetMap Overpass did not answer. Try again in a moment.' };
       }
     } catch {
       livePlacesList = [];
       livePlacesError = true;
-      nearbyNowNote = 'Nearby search failed · OpenStreetMap Overpass did not answer · try again';
+      nearbyNowNote = { kind: 'error', title: 'Nearby search failed', desc: 'OpenStreetMap Overpass did not answer. Try again in a moment.' };
     } finally {
       livePlacesLoading = false;
       update();
@@ -2933,14 +2935,17 @@ export function renderApp(
       contextMode === 'demo'
         ? (activeTimelineBeat ? 'Demo timeline · simulated time' : 'Demo · simulated scenes')
         : (() => {
+            // D3 (DEMO_RESCUE): list only sources delivering data right now, not merely enabled
+            // connectors (a denied fix or a weather provider with no reading is not a source).
             const parts = ['Device clock'];
-            const locConn = latestConnectorStatuses?.location;
-            if (locConn?.state === 'connected' || liveLocationStatus.status === 'available') {
+            if (liveLocationStatus.status === 'available' && liveLocationStatus.coords) {
               parts.push('Location');
             }
-            const weatherConn = latestConnectorStatuses?.weather;
-            if (weatherConn?.state === 'connected' || (weatherStatus.enabled && liveWeatherSignal)) {
+            if (weatherStatus.enabled && liveWeatherSignal && !isWeatherStale(liveWeatherSignal)) {
               parts.push('Weather');
+            }
+            if (livePlacesList.length > 0) {
+              parts.push('Nearby places');
             }
             const xmemoConn = latestConnectorStatuses?.xmemo;
             if (xmemoConn?.state === 'connected' || (xmemoStatus.enabled && xmemoStatus.connected)) {
@@ -4379,7 +4384,7 @@ export function renderApp(
         <!-- V2 Full-Page Conversation Shell -->
         ${
           uiVersion === 'v2' && actionStore.getInteractionState() === 'CONVERSATION'
-            ? renderConversationOverlay(actionStore)
+            ? renderConversationOverlay(actionStore, { devTools: isDevMode || contextMode !== 'live' })
             : ''
         }
 

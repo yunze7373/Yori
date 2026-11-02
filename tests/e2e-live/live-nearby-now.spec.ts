@@ -224,8 +224,9 @@ test.describe('D2-LUNCH-DEFAULT-ON: nearby restaurants visibly work once locatio
     await expect(page.locator('#btn-nearby-now')).toBeVisible({ timeout: 10000 });
     expect(traffic.places.length).toBe(1);
     // D1b (seen on the real device when Overpass answered 502): the failure is said, not silent.
-    await expect(page.locator('#nearby-now-note')).toHaveText(
-      'Nearby search failed · OpenStreetMap Overpass did not answer · try again'
+    await expect(page.locator('#nearby-now-note .nearby-state-title')).toHaveText('Nearby search failed');
+    await expect(page.locator('#nearby-now-note .nearby-state-desc')).toHaveText(
+      'OpenStreetMap Overpass did not answer. Try again in a moment.'
     );
     await expect(page.locator('.v2-candidate-card')).toHaveCount(0);
 
@@ -280,7 +281,7 @@ test.describe('D2-LUNCH-DEFAULT-ON: nearby restaurants visibly work once locatio
     await openLive(page);
     await expect(page.locator('#location-consent-hosts')).toContainText('not sent to any provider');
     await page.locator('#btn-request-location').click();
-    await expect(page.locator('#nearby-now-off')).toHaveText('Nearby restaurants are off (owner setting)', { timeout: 10000 });
+    await expect(page.locator('#nearby-now-off .nearby-state-title')).toHaveText('Nearby restaurants are off (owner setting)', { timeout: 10000 });
     await expect(page.locator('#btn-nearby-now')).toHaveCount(0);
     await expect(page.locator('.v2-candidate-card')).toHaveCount(0);
     expect(traffic.places).toEqual([]);
