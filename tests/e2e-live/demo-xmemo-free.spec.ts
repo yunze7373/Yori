@@ -6,7 +6,8 @@
  * value of every element contain no case-insensitive 'xmemo', and the page makes ZERO requests to
  * /api/xmemo. Memory stays honest and local ('saved on this device'). Zero paid calls: places are
  * recorded; model/route/weather providers are pinned off. D3 floor: the lunch hero is above the
- * docked Ask bar at first paint (scroll top).
+ * docked Ask bar at first paint (scroll top). Fail closed: the build carries the recording marker
+ * (VITE_YORI_DEMO_HIDE_XMEMO=1), so a failed / aborted / slow status answer cannot bring XMemo back.
  */
 
 import { test, expect, type Page, type Browser } from '@playwright/test';
@@ -165,6 +166,31 @@ test.describe('DEMO-XMEMO-FREE: no XMemo anywhere on the demo-recording build', 
         'live-consent', 'live-lunch', 'sources-sheet', 'why-sheet', 'ask-panel', 'plans', 'for-you',
         'me-memories', 'connectors', 'demo-home', 'demo-rain', 'demo-lunch', 'decision-log',
       ]);
+      await context.close();
+    });
+  }
+
+  // Reviewer 51c59ea7: the recording build fails CLOSED even when the status route carrying the
+  // server flag fails, is aborted, or is slower than the 5 s flag timeout.
+  for (const mode of ['http500', 'aborted', 'delayed6s'] as const) {
+    test(`fail closed: weather status ${mode} -> still no XMemo and zero /api/xmemo requests`, async ({ browser }) => {
+      const { context, page } = await device(browser, { width: 390, height: 844 });
+      const watch = await setup(page);
+      await page.route(u => u.pathname === '/api/weather/status', async r => {
+        if (mode === 'http500') return r.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"boom"}' });
+        if (mode === 'aborted') return r.abort('failed');
+        await new Promise(res => setTimeout(res, 6000));
+        return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: false }) });
+      });
+      await page.goto(`${APP}/?mode=live`);
+      await page.waitForSelector('.app-layout[data-context-mode="live"]');
+      await page.waitForTimeout(6500); // past the 5 s flag timeout (and the delayed answer)
+      expect(await scanForXmemo(page), `live home (${mode})`).toEqual([]);
+      await page.goto(`${APP}/?mode=live&tab=connectors`);
+      await page.waitForSelector('.app-layout');
+      await page.waitForTimeout(1500);
+      expect(await scanForXmemo(page), `connectors (${mode})`).toEqual([]);
+      expect(watch.xmemoRequests, `zero /api/xmemo requests (${mode})`).toEqual([]);
       await context.close();
     });
   }

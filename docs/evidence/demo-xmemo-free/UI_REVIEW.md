@@ -24,5 +24,7 @@ demo-recording build (`YORI_DEMO_HIDE_XMEMO=1`, providers and model pinned off, 
 **Mutation check:** with the client flag forced off, the same spec fails at its first screen
 (`live-consent`), so the scan does detect XMemo when it is present.
 
+**Fail closed:** the recording build carries the marker `VITE_YORI_DEMO_HIDE_XMEMO=1`. With the weather status at HTTP 500, aborted or delayed 6 s, the live home and Connectors still show no XMemo and make zero `/api/xmemo` requests (`fail closed` tests, mutation-checked).
+
 **Switch off (default):** the weather status carries no `demo` field and every XMemo surface and
 test behaves as before (boundary test plus the unchanged suites).
