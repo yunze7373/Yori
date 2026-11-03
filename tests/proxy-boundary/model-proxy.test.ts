@@ -464,7 +464,8 @@ describe('S5-LIVE-REASON: Model Proxy Boundary & Budget Hard Gates', () => {
 
     it('clamps MODEL_LIVE_MAX_CALLS to <= 10 (MODEL_PER_RUN_MAX_CALLS)', () => {
       expect(MODEL_PER_RUN_MAX_CALLS).toBe(10);
-      expect(MODEL_LIFETIME_MAX_CALLS).toBe(50);
+      // D4: code ceiling raised 50 -> 200 (owner §9); the operating cap (100) is the hard stop.
+      expect(MODEL_LIFETIME_MAX_CALLS).toBe(200);
 
       // Attempting to set MODEL_LIVE_MAX_CALLS=25 is safely clamped to 10
       const proxy = new ModelDevProxy({
@@ -473,7 +474,7 @@ describe('S5-LIVE-REASON: Model Proxy Boundary & Budget Hard Gates', () => {
       expect(proxy.getConfig().maxCalls).toBe(10);
     });
 
-    it('enforces 32/50 budget ceiling across process restarts (Finding 6)', async () => {
+    it('D4: enforces the operating-cap hard stop (100) across process restarts (Finding 6, re-based)', async () => {
       const validSigId = 'places:2026-11-02T12:00:00Z';
       const mockFetchResponse = {
         ok: true,
@@ -503,11 +504,11 @@ describe('S5-LIVE-REASON: Model Proxy Boundary & Budget Hard Gates', () => {
       const fetchSpy = vi.fn().mockImplementation(() => Promise.resolve(mockFetchResponse));
       globalThis.fetch = fetchSpy as any;
 
-      // Seed ledger at 31 calls (1 remaining under the 32 ceiling)
+      // Seed ledger at 99 calls (1 remaining under the operating cap of 100)
       const seededLedger = {
         version: 1,
-        call_count: 31,
-        reservations: Array.from({ length: 31 }, (_, i) => ({
+        call_count: 99,
+        reservations: Array.from({ length: 99 }, (_, i) => ({
           id: `seed-${i + 1}`,
           timestamp: new Date().toISOString(),
           endpoint: 'reason_rank',
@@ -532,12 +533,12 @@ describe('S5-LIVE-REASON: Model Proxy Boundary & Budget Hard Gates', () => {
         confirmedFactKeys: ['fact_one'],
       };
 
-      // Instance 1 in process 1: makes 1 call -> succeeds and brings ledger to 32
+      // Instance 1 in process 1: makes 1 call -> succeeds and brings ledger to 100
       const proxy1 = new ModelDevProxy({
         apiKey: 'sk-test-key',
         liveEnabled: true,
         maxCalls: 10,
-        lifetimeMaxCalls: 50,
+        lifetimeMaxCalls: 200,
         ledgerPath: testLedgerPath,
       });
 
@@ -547,7 +548,7 @@ describe('S5-LIVE-REASON: Model Proxy Boundary & Budget Hard Gates', () => {
       expect(fetchSpy).toHaveBeenCalledTimes(1);
 
       const stateAfter1 = readLedgerState(testLedgerPath);
-      expect(stateAfter1.callCount).toBe(32);
+      expect(stateAfter1.callCount).toBe(100);
 
       // Simulate process restart: reset in-memory count, instantiate new proxy instance 2
       resetProcessLiveCallCount();
@@ -556,11 +557,11 @@ describe('S5-LIVE-REASON: Model Proxy Boundary & Budget Hard Gates', () => {
         apiKey: 'sk-test-key',
         liveEnabled: true,
         maxCalls: 10,
-        lifetimeMaxCalls: 50,
+        lifetimeMaxCalls: 200,
         ledgerPath: testLedgerPath,
       });
 
-      // Call in new process instance MUST be blocked by the 32 ceiling despite per-run cap resetting!
+      // Call in new process instance MUST be blocked by the operating cap despite per-run cap resetting!
       const res2 = await proxy2.handleReasoning(input);
       expect(res2.usedFallback).toBe(true);
       expect(res2.fallbackReason).toBe('disabled');
@@ -569,9 +570,9 @@ describe('S5-LIVE-REASON: Model Proxy Boundary & Budget Hard Gates', () => {
       // Zero additional fetch! Fetch count remains strictly 1.
       expect(fetchSpy).toHaveBeenCalledTimes(1);
 
-      // Ledger count remained strictly capped at 32/50
+      // Ledger count remained strictly capped at 100
       const finalState = readLedgerState(testLedgerPath);
-      expect(finalState.callCount).toBe(32);
+      expect(finalState.callCount).toBe(100);
     });
   });
 

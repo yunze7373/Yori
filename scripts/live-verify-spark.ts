@@ -80,7 +80,18 @@ import {
   MAX_VERIFICATION_TIMEOUT_MS,
   MODEL_LIFETIME_MAX_CALLS,
   MODEL_PER_RUN_MAX_CALLS,
+  resolveLifetimeMaxCalls,
+  resolveOperatingCap,
 } from '../src/adapters/model/server-proxy.js';
+
+/**
+ * D4: the effective hard stop the proxy enforces — min(code ceiling 200 lowered by
+ * MODEL_LIFETIME_MAX_CALLS, operating cap 100 lowered by MODEL_OPERATING_CAP). Read per call so a
+ * test or owner env change applies immediately.
+ */
+function effectiveLifetimeCap(): number {
+  return Math.min(resolveLifetimeMaxCalls(process.env), resolveOperatingCap(process.env), MODEL_LIFETIME_MAX_CALLS);
+}
 import type { RejectedReasonCodeTelemetry } from '../src/adapters/model/types.js';
 import {
   evaluateCommandAcceptance,
@@ -972,8 +983,8 @@ async function runCommandDryRunAudit(options?: { prompts?: string | readonly str
       modelName: 'muse-spark-1.3',
       authorizedCap: effectiveCap,
       preRunLedgerCount: 0,
-      lifetimeRemaining: MODEL_LIFETIME_MAX_CALLS - postCount,
-      lifetimeCap: MODEL_LIFETIME_MAX_CALLS,
+      lifetimeRemaining: effectiveLifetimeCap() - postCount,
+      lifetimeCap: effectiveLifetimeCap(),
       totalCallsDispatched: plannedCount,
       ledgerCallCount: postCount,
       ledgerDelta,
@@ -1553,8 +1564,8 @@ export async function runDryRunAudit(options?: {
       JSON.stringify(
         {
           version: 1,
-          call_count: MODEL_LIFETIME_MAX_CALLS,
-          reservations: Array.from({ length: MODEL_LIFETIME_MAX_CALLS }, (_, idx) => ({
+          call_count: effectiveLifetimeCap(),
+          reservations: Array.from({ length: effectiveLifetimeCap() }, (_, idx) => ({
             id: crypto.randomUUID(),
             timestamp: new Date().toISOString(),
             endpoint: 'refine',
@@ -1599,7 +1610,7 @@ export async function runDryRunAudit(options?: {
     console.log('\n--- Safety Cap Verification ---');
     console.log(`Process Call Count:     ${getProcessLiveCallCount()} / 10`);
     console.log(`Per-Run Cap Probe:      ${perRunCapBlocked ? '✅ BLOCKED (per-run cap enforced without fetch)' : '❌ FAILED'}`);
-    console.log(`Lifetime Cap Probe:     ${lifetimeCapBlocked ? '✅ BLOCKED (lifetime cap 50/50 enforced at ledger level)' : '❌ FAILED'}`);
+    console.log(`Lifetime Cap Probe:     ${lifetimeCapBlocked ? '✅ BLOCKED (lifetime cap enforced at ledger level)' : '❌ FAILED'}`);
     console.log(`Diagnostics:            "${proxy.getDiagnostics().message}"`);
 
     // 4. Token budget check across captured bodies
@@ -2011,14 +2022,14 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
 
   const initialLedger = readLedgerState(ledgerPath);
   const lifetimeUsed = initialLedger.status === 'ok' ? initialLedger.callCount : 0;
-  const lifetimeRemaining = Math.max(0, MODEL_LIFETIME_MAX_CALLS - lifetimeUsed);
+  const lifetimeRemaining = Math.max(0, effectiveLifetimeCap() - lifetimeUsed);
 
   if (lifetimeRemaining <= 0) {
-    throw new Error(`REFUSING EXECUTION: Lifetime call allowance (${MODEL_LIFETIME_MAX_CALLS}) exhausted (${lifetimeUsed}/${MODEL_LIFETIME_MAX_CALLS} used).`);
+    throw new Error(`REFUSING EXECUTION: Lifetime call allowance (${effectiveLifetimeCap()}) exhausted (${lifetimeUsed}/${effectiveLifetimeCap()} used).`);
   }
 
   if (rawMax > lifetimeRemaining) {
-    throw new Error(`REFUSING EXECUTION: Requested per-run cap (${rawMax}) exceeds lifetime remaining calls (${lifetimeRemaining}/${MODEL_LIFETIME_MAX_CALLS}).`);
+    throw new Error(`REFUSING EXECUTION: Requested per-run cap (${rawMax}) exceeds lifetime remaining calls (${lifetimeRemaining}/${effectiveLifetimeCap()}).`);
   }
 
   // 3. Telemetry and Safety Interceptor Setup
@@ -2152,7 +2163,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   console.log('----------------------------------------------------------------------');
   console.log(`Planned Calls:          ${effectiveCap} (${isCommandOnly ? 'command-only verification' : 'up to 3 accepted, 1 per objective'})`);
   console.log(`Per-Run Call Cap:       ${rawMax} (valid 1..${perRunCapLimit})`);
-  console.log(`Lifetime Cap:           ${MODEL_LIFETIME_MAX_CALLS}`);
+  console.log(`Lifetime Cap:           ${effectiveLifetimeCap()}`);
   console.log(`Lifetime Calls Used:    ${lifetimeUsed}`);
   console.log(`Lifetime Remaining:     ${lifetimeRemaining}`);
   console.log(`Per-Call max_tokens:    ${maxTokensDisplay}`);
@@ -2366,8 +2377,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
 
       // Check lifetime cap before executing
       const preLedger = readLedgerState(ledgerPath);
-      if (preLedger.status === 'ok' && preLedger.callCount >= MODEL_LIFETIME_MAX_CALLS) {
-        console.log(`\n🛑 Lifetime call cap reached (${preLedger.callCount}/${MODEL_LIFETIME_MAX_CALLS}). Stopping planned calls.`);
+      if (preLedger.status === 'ok' && preLedger.callCount >= effectiveLifetimeCap()) {
+        console.log(`\n🛑 Lifetime call cap reached (${preLedger.callCount}/${effectiveLifetimeCap()}). Stopping planned calls.`);
         break;
       }
 
@@ -2524,7 +2535,7 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
   console.log('======================================================================');
   console.log(`Total Calls Dispatched:  ${totalCalls}`);
   console.log(`Pre-Run Ledger Count:    ${lifetimeUsed}`);
-  console.log(`Post-Run Ledger Count:   ${ledgerCallCount} / ${MODEL_LIFETIME_MAX_CALLS} (lifetime)`);
+  console.log(`Post-Run Ledger Count:   ${ledgerCallCount} / ${effectiveLifetimeCap()} (lifetime)`);
   console.log(`Ledger Delta:            ${ledgerDelta}`);
   console.log(`Ledger Reconciliation:   ${ledgerReconciled ? 'MATCH (dispatched == ledger delta) ✅' : 'MISMATCH ❌'}`);
   console.log(`Execution Status:        ${hardStopTriggered ? `HARD STOP (${hardStopMessage})` : 'COMPLETED'}`);
@@ -2555,8 +2566,8 @@ export async function runLiveVerification(options?: LiveVerificationOptions): Pr
     modelName,
     authorizedCap: rawMax,
     preRunLedgerCount: lifetimeUsed,
-    lifetimeRemaining: Math.max(0, MODEL_LIFETIME_MAX_CALLS - ledgerCallCount),
-    lifetimeCap: MODEL_LIFETIME_MAX_CALLS,
+    lifetimeRemaining: Math.max(0, effectiveLifetimeCap() - ledgerCallCount),
+    lifetimeCap: effectiveLifetimeCap(),
     totalCallsDispatched: totalCalls,
     ledgerCallCount,
     ledgerDelta,

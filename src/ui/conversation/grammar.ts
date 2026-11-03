@@ -141,7 +141,10 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
     if (
       /^(?:why|why\s+this\s+one|why\s+this\s+plan|why\s+this\s+route|why\s+so\s+early|explain(?:\s+this|\s+why)?|how\s+was\s+this\s+calculated)$/i.test(
         normalized
-      )
+      ) ||
+      // D4: "why this restaurant/place/cafe?" and Chinese "为什么(推荐)这家" ask for the pick's reason.
+      /^why\s+(?:this|that|the)\s+(?:restaurant|place|spot|cafe|one\s+for\s+lunch)$/i.test(normalized) ||
+      /^为什么(?:推荐|选)?(?:这家|这个|它)/.test(rawText.trim())
     ) {
       return {
         intent: 'WHY',
@@ -229,6 +232,14 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
         slots: { mode },
         explanation: `Switch primary travel mode to ${mode}.`,
       };
+    }
+
+    // 6b. D4: bare refinements of the lunch card ("closer", "quieter", 近一点, 安静一点)
+    if (/^(?:something\s+|somewhere\s+)?(?:closer|nearer)(?:\s+please)?$/i.test(normalized) || /^(?:近一点|更近|再近一点)/.test(rawText.trim())) {
+      return { intent: 'FIND_LUNCH', rawText, slots: { filters: ['nearer'] }, explanation: 'Finding lunch options matching nearer.' };
+    }
+    if (/^(?:something\s+|somewhere\s+)?quieter(?:\s+please)?$/i.test(normalized) || /^(?:安静一点|更安静)/.test(rawText.trim())) {
+      return { intent: 'FIND_LUNCH', rawText, slots: { filters: ['quieter'] }, explanation: 'Finding lunch options matching quieter.' };
     }
 
     // 6a. D2: Chinese "food nearby" asks (附近吃什么 / 附近的餐厅 / 周边有什么好吃的) -> unfiltered FIND_LUNCH

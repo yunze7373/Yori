@@ -76,6 +76,8 @@ export interface BuildHomeCompositionOptions {
   consentHosts?: HomeCompositionVM['consentHosts'];
   /** D7: discovery line for the lunch card. */
   placesAttributionLine?: string;
+  /** D4: live (or labelled deterministic) reasoning over the real candidates: order + one reason. */
+  candidateReasoning?: { order: readonly string[]; reason: string; statusLabel: string };
   calendarConnected?: boolean;
   calendarNoRouteReason?: string;
   calendarSignalValue?: {
@@ -702,6 +704,14 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
       }
     }
 
+    // D4: live reasoning may only reorder the real candidates it was given (ids = place record ids).
+    if (options.isLive && options.candidateReasoning && candidateCards.length > 1) {
+      const rank = new Map(options.candidateReasoning.order.map((id, i) => [id, i] as const));
+      const pos = (c: CandidateCardVM) => rank.get(c.sourceRef?.recordId ?? '') ?? Number.MAX_SAFE_INTEGER;
+      candidateCards.sort((a, b) => pos(a) - pos(b));
+      candidateCards.forEach((c, i) => ((c as { isSelected: boolean }).isSelected = i === 0));
+    }
+
     const map = deriveMapVM(plan, spatialEvidence, 'compact', { snapshot, evidenceBundle: bundle });
 
     let locationLabel: string | undefined;
@@ -1039,6 +1049,10 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     nearbyNow: options.isLive ? options.nearbyNow : undefined,
     consentHosts: options.isLive ? options.consentHosts : undefined,
     placesAttributionLine: options.isLive ? options.placesAttributionLine : undefined,
+    candidateReasonLine:
+      options.isLive && options.candidateReasoning
+        ? { text: options.candidateReasoning.reason, statusLabel: options.candidateReasoning.statusLabel }
+        : undefined,
     calendarConnected: options.calendarConnected,
     calendarSignalValue: options.calendarSignalValue ?? (() => {
       const calSig = options.snapshot?.signals.find(s => s.kind === 'calendar');

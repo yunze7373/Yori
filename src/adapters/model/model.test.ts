@@ -1063,33 +1063,43 @@ describe('Slice A2: Proxy Guard Regression Suite & Prompt-Injection Fixtures (AC
       expect(recoveredRes.statusCode).toBe(200);
     });
 
-    it('DEV_DEVICE_TESTING=true binds to 0.0.0.0 AND blocks model proxy routes with 403', async () => {
-      // 1. Host resolution check
+    it('D4: DEV_DEVICE_TESTING binds 0.0.0.0 but never opens /api/model to LAN hosts (loopback-only, allowlisted ports)', async () => {
+      // 1. Host resolution check (device testing still binds the LAN interface for the web app)
       expect(resolveBindHost({ DEV_DEVICE_TESTING: 'true' })).toBe('0.0.0.0');
       expect(resolveBindHost({})).toBe('127.0.0.1');
 
       process.env.DEV_DEVICE_TESTING = 'true';
-      const proxy = new ModelDevProxy();
-      const middleware = createModelProxyMiddleware(proxy);
+      try {
+        const proxy = new ModelDevProxy();
+        const middleware = createModelProxyMiddleware(proxy);
 
-      // 2. Check /api/model/diagnostics blocked with 403
-      const reqDiag = createMockReq({ url: '/api/model/diagnostics', method: 'GET' });
-      const resDiag = createMockRes();
-      await middleware(reqDiag, resDiag, vi.fn());
-      expect(resDiag.statusCode).toBe(403);
-      expect(resDiag.body).toContain('model proxy disabled in device-testing mode');
+        // 2. A LAN Host is refused on every model route, even in device-testing mode.
+        for (const url of ['/api/model/diagnostics', '/api/model/refine', '/api/model/reason', '/api/model/command', '/api/model/candidates']) {
+          const req = createMockReq({
+            url,
+            method: url.endsWith('diagnostics') ? 'GET' : 'POST',
+            headers: { host: '192.168.31.45:4443', 'content-type': 'application/json' },
+            body: '{}',
+          });
+          const res = createMockRes();
+          await middleware(req, res, vi.fn());
+          expect(res.statusCode, url).toBe(403);
+          expect(res.body).toContain('non-local host');
+        }
 
-      // 3. Check /api/model/refine blocked with 403
-      const reqRefine = createMockReq({
-        url: '/api/model/refine',
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ templateId: 'depart', facts: { headline: 'Test' } }),
-      });
-      const resRefine = createMockRes();
-      await middleware(reqRefine, resRefine, vi.fn());
-      expect(resRefine.statusCode).toBe(403);
-      expect(resRefine.body).toContain('model proxy disabled in device-testing mode');
+        // 3. Loopback on a non-allowlisted port is refused too; allowlisted loopback is served.
+        const offPort = createMockReq({ url: '/api/model/diagnostics', method: 'GET', headers: { host: 'localhost:4294' } });
+        const offRes = createMockRes();
+        await middleware(offPort, offRes, vi.fn());
+        expect(offRes.statusCode).toBe(403);
+
+        const ok = createMockReq({ url: '/api/model/diagnostics', method: 'GET', headers: { host: 'localhost:4174' } });
+        const okRes = createMockRes();
+        await middleware(ok, okRes, vi.fn());
+        expect(okRes.statusCode).toBe(200);
+      } finally {
+        delete process.env.DEV_DEVICE_TESTING;
+      }
     });
   });
 

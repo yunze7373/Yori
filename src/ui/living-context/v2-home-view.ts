@@ -1015,6 +1015,11 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                       ? `data-source-ref="${escapeHtml(topC.fieldSourceRefs.basis.recordId)}.${escapeHtml(topC.fieldSourceRefs.basis.field)}" data-slot="domain"`
                       : `data-slot="chrome" data-slot-reason="Recommendation ranking basis label"`
                   }>${escapeHtml(topC.basis)}</div>
+                  ${
+                    vm.isLive && vm.candidateReasonLine
+                      ? `<div class="v2-candidate-model-reason" id="candidate-model-reason" data-engine="${vm.candidateReasonLine.statusLabel.includes('live') ? 'meta_model_live' : 'offline_deterministic'}"><span class="model-reason-status">${escapeHtml(vm.candidateReasonLine.statusLabel)}</span><span class="model-reason-text">${escapeHtml(vm.candidateReasonLine.text)}</span></div>`
+                      : ''
+                  }
                   <div class="v2-candidate-footer">
                     <button
                       type="button"

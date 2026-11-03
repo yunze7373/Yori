@@ -2221,6 +2221,92 @@ export function renderApp(
   // single-flight and honours the proxy's 10 s outbound interval (performance clock, so a
   // patched Date in tests cannot freeze it).
   let liveNearbyRequestSignal: LiveSignal | null = null;
+  // D4 (DEMO_RESCUE): live Muse Spark reasoning over the real lunch candidates. One call per new
+  // candidate set (plus explicit Ask requests); the server owns the budget, cap and post-check.
+  let candidateReasoning: {
+    key: string;
+    order: string[];
+    reason: string;
+    live: boolean;
+  } | null = null;
+  let candidateReasoningInFlightKey: string | null = null;
+  // D4: at most one S5 plan-reasoning request in flight.
+  let planReasoningInFlight = false;
+  let lastLiveLunchPlan: PreparedPlan | null = null;
+
+  function candidateReasoningInput(plan: PreparedPlan, request: 'rank' | 'why' | 'closer' | 'quieter') {
+    const candidates = (plan.optionsOrSteps as readonly any[])
+      .filter(o => o && typeof o.recordId === 'string' && typeof o.straightLineDistanceMeters === 'number')
+      .slice(0, 5)
+      .map(o => ({
+        id: String(o.recordId).slice(0, 120),
+        name: String(o.name || o.label).slice(0, 80),
+        cuisine: typeof o.cuisine === 'string' ? o.cuisine.slice(0, 40) : undefined,
+        distanceMeters: Math.round(o.straightLineDistanceMeters),
+        openNow: o.openingStatus === 'open' ? true : o.openingStatus === 'closed' ? false : null,
+        rating: typeof o.rating === 'number' ? o.rating : undefined,
+        userRatingCount: typeof o.userRatingCount === 'number' ? o.userRatingCount : undefined,
+        priceLevel: typeof o.priceLevel === 'number' ? o.priceLevel : undefined,
+        source: o.provenance === 'google' ? 'google' : 'osm',
+      }));
+    const confirmedFacts = (plan.why?.memoryFactsUsed ?? [])
+      .filter(f => f.status === 'confirmed' && typeof f.value === 'string' && /^[a-z0-9_]{1,60}$/.test(f.key))
+      .slice(0, 5)
+      .map(f => ({ key: f.key, value: String(f.value).slice(0, 80) }));
+    return { request, candidates, confirmedFacts };
+  }
+
+  async function requestCandidateReasoning(
+    request: 'rank' | 'why' | 'closer' | 'quieter'
+  ): Promise<{ reason: string; statusLabel: string } | null> {
+    const plan = lastLiveLunchPlan;
+    if (contextMode !== 'live' || !plan) return null;
+    const input = candidateReasoningInput(plan, request);
+    if (input.candidates.length === 0) return null;
+    const key = `${request}|${input.candidates.map(c => c.id).join(',')}`;
+    if (request === 'rank') candidateReasoningInFlightKey = key;
+    const started = Date.now();
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20000);
+      const resp = await fetch('/api/model/candidates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      const data = (await resp.json()) as {
+        result?: { order?: string[]; reason?: string };
+        engineStatus?: string;
+        fallbackReason?: string;
+        latencyMs?: number;
+        ledger?: { callCount: number; cap: number } | null;
+      };
+      if (!data.result?.reason || !Array.isArray(data.result.order)) return null;
+      const live = data.engineStatus === 'meta_model_live';
+      candidateReasoning = { key: `rank|${input.candidates.map(c => c.id).join(',')}`, order: data.result.order, reason: data.result.reason, live };
+      globalDecisionLogger.log({
+        timestamp: new Date().toISOString(),
+        templateId: `candidates_${request}`,
+        inputSignalIds: input.candidates.map(c => c.id),
+        inputFactKeys: input.confirmedFacts.map(f => f.key),
+        outputReasonCodes: [],
+        outputIntent: undefined,
+        validationResult: { valid: live, reason: live ? undefined : data.fallbackReason },
+        engineStatus: live ? 'meta_model_live' : 'offline_deterministic',
+        latencyMs: typeof data.latencyMs === 'number' ? data.latencyMs : Date.now() - started,
+        ledgerPosition: data.ledger ? `${data.ledger.callCount}/${data.ledger.cap}` : undefined,
+      });
+      update();
+      return { reason: data.result.reason, statusLabel: live ? 'Meta Muse Spark · live' : 'Reasoned locally' };
+    } catch {
+      return null;
+    } finally {
+      if (candidateReasoningInFlightKey === key) candidateReasoningInFlightKey = null;
+    }
+  }
   let nearbyNowPending = false;
   let nearbyNowNote: { kind: 'info' | 'empty' | 'error'; title: string; desc: string } | null = null;
   let placesRefreshInFlight: Promise<void> | null = null;
@@ -2591,8 +2677,14 @@ export function renderApp(
     }
   }
 
+  const liveCandidateReasoner = async (request: 'why' | 'closer' | 'quieter') =>
+    (await requestCandidateReasoning(request)) ?? {
+      reason: 'I could not reason about these places right now.',
+      statusLabel: 'Reasoned locally',
+    };
   if (contextMode === 'live') {
     actionStore.setNearbyRequestHandler(source => void requestNearbyNow(source));
+    actionStore.setCandidateReasoner(liveCandidateReasoner);
   }
 
   void checkXMemoStatus();
@@ -2769,9 +2861,19 @@ export function renderApp(
     }
 
     const living = pipelineResult.livingContext;
+    // D4: in Live the key must be STABLE across renders. Plan ids embed the snapshot time, so keying
+    // on them re-ran (and billed) reasoning on every update; key on intent + real option ids instead.
     const coordinationKey =
       contextMode === 'live'
-        ? `live:${[living.now, ...living.ahead].filter((p): p is PreparedPlan => p !== null).map(p => `${p.id}:${p.intentId}`).join('|')}`
+        ? `live:${[living.now, ...living.ahead]
+            .filter((p): p is PreparedPlan => p !== null)
+            .map(
+              p =>
+                `${p.intentId}:${((p.optionsOrSteps ?? []) as readonly any[])
+                  .map(o => (o && (o.recordId || o.id)) || '')
+                  .join(',')}`
+            )
+            .join('|')}`
         : currentScene;
 
     const isMatchingReasoning =
@@ -3345,7 +3447,29 @@ export function renderApp(
         const isLunchSuppressed =
           storedSuppressions.some((s: any) => s.targetIntent === 'lunch' || (s as any).intentId === 'lunch');
 
+        // D4: one live reasoning call per new Live lunch candidate set.
+        let candidateReasoningForVm: { order: string[]; reason: string; statusLabel: string } | undefined;
+        if (contextMode === 'live' && nowPlan?.intentId === 'lunch') {
+          lastLiveLunchPlan = nowPlan;
+          const ids = candidateReasoningInput(nowPlan, 'rank').candidates.map(c => c.id).join(',');
+          const key = `rank|${ids}`;
+          if (ids && candidateReasoning?.key !== key && candidateReasoningInFlightKey !== key) {
+            candidateReasoningInFlightKey = key;
+            setTimeout(() => void requestCandidateReasoning('rank'), 0);
+          }
+          if (candidateReasoning?.key === key) {
+            candidateReasoningForVm = {
+              order: candidateReasoning.order,
+              reason: candidateReasoning.reason,
+              statusLabel: candidateReasoning.live ? 'Meta Muse Spark · live' : 'Reasoned locally',
+            };
+          }
+        } else if (contextMode === 'live') {
+          lastLiveLunchPlan = null;
+        }
+
         const v2Composition = buildHomeComposition({
+          candidateReasoning: candidateReasoningForVm,
           isLive: contextMode === 'live',
           weatherEnabled: weatherStatus.enabled,
           weatherProvenance: liveWeatherProvenance,
@@ -4628,6 +4752,7 @@ export function renderApp(
         reasoningRequestId++;
         defaultModelCommandInterpreter.setMode('scripted_fixture');
         actionStore.setNearbyRequestHandler(null);
+        actionStore.setCandidateReasoner(null);
         liveNearbyRequestSignal = null;
         liveLocationStatus = defaultLocationPort.getLocation();
         await refreshConnectorStatuses();
@@ -4649,6 +4774,7 @@ export function renderApp(
         }
         defaultModelCommandInterpreter.setMode('live');
         actionStore.setNearbyRequestHandler(source => void requestNearbyNow(source));
+        actionStore.setCandidateReasoner(liveCandidateReasoner);
         liveLocationStatus = defaultLocationPort.getLocation();
         await refreshConnectorStatuses();
         void checkRouteStatus();
@@ -6024,15 +6150,20 @@ export function renderApp(
     initRealMaps(root).catch(() => {});
 
     // Coordinate reasoning asynchronously after deterministic composition (Requirement 4 & S5-LIVE-REASON)
-    if (coordinatedScene !== coordinationKey) {
+    // D4: single-flight, once per STABLE plan set (see coordinationKey).
+    if (coordinatedScene !== coordinationKey && !planReasoningInFlight) {
       const allPlans = [living.now, ...living.ahead].filter((p): p is PreparedPlan => p !== null);
       if (allPlans.length > 0) {
+        planReasoningInFlight = true;
         coordinatedScene = coordinationKey;
         const requestKey = coordinationKey;
         const requestScene = currentScene;
         const requestId = ++reasoningRequestId;
 
         coordinateReasoning(living, snapshot, combinedMemory)
+          .finally(() => {
+            planReasoningInFlight = false;
+          })
           .then(res => {
             // Guard against scene race: only apply if the user hasn't switched scene or mode (Finding 2)
             if (coordinationKey !== requestKey || currentScene !== requestScene || requestId !== reasoningRequestId) {

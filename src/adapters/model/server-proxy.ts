@@ -22,6 +22,39 @@ import type {
   RejectedReasonCodeTelemetry,
 } from './types.js';
 import { validateFactsInWording } from './fact-checker.js';
+import { isAllowlistedLoopbackHost } from '../xmemo/loopback-allowlist.js';
+import {
+  validateCandidateReasoningInput,
+  validateCandidateReasoningOutput,
+  deterministicCandidateReasoning,
+  buildCandidateUserMessage,
+  CANDIDATE_SYSTEM_PROMPT,
+  type CandidateReasoningOutput,
+} from './candidate-reasoning.js';
+
+/** D4: response of POST /api/model/candidates (live or labelled deterministic). */
+export interface ModelCandidatesResponse {
+  readonly result: CandidateReasoningOutput;
+  readonly usedFallback: boolean;
+  readonly fallbackReason?: string;
+  readonly engineStatus: 'meta_model_live' | 'offline_deterministic';
+  readonly latencyMs?: number;
+  /** Ledger position after this call (null when nothing was reserved). */
+  readonly ledger?: { readonly callCount: number; readonly cap: number } | null;
+}
+
+/** D4: per-call token usage for spend reporting (counts only; never prompts, keys or places). */
+export function appendModelUsage(
+  ledgerPath: string,
+  entry: { endpoint: string; promptTokens?: number; completionTokens?: number; latencyMs: number; callCount: number }
+): void {
+  try {
+    const file = path.join(path.dirname(ledgerPath), 'model-usage-log.jsonl');
+    fs.appendFileSync(file, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + '\n');
+  } catch {
+    // usage logging must never break the request
+  }
+}
 import {
   validateTemplateRequest,
   getTemplate,
@@ -102,12 +135,56 @@ export function resetProcessLiveCallCount(): void {
 }
 
 /**
- * Lifetime and per-run call budget limits for Meta Model API (S1-CAP50).
- * MODEL_LIFETIME_MAX_CALLS: 50 total lifetime calls enforced atomically in persistent ledger.
+ * Lifetime and per-run call budget limits for Meta Model API.
+ * MODEL_LIFETIME_MAX_CALLS: code ceiling, 200 lifetime calls (DEMO_RESCUE D4, owner §9; was 50),
+ *   enforced atomically in the persistent ledger; env can only LOWER it.
+ * MODEL_OPERATING_CAP_DEFAULT: the operating cap (100) that is the actual hard stop; env
+ *   MODEL_OPERATING_CAP can only lower it, and never above the ceiling.
  * MODEL_PER_RUN_MAX_CALLS: 10 calls maximum per verification session.
  */
-export const MODEL_LIFETIME_MAX_CALLS = 50;
+export const MODEL_LIFETIME_MAX_CALLS = 200;
+export const MODEL_OPERATING_CAP_DEFAULT = 100;
 export const MODEL_PER_RUN_MAX_CALLS = 10;
+/** D4: completion budget for app reasoning calls (owner-overridable via MODEL_MAX_TOKENS). */
+export const MODEL_APP_MAX_TOKENS = 300;
+
+/**
+ * D4 usage math (plan: "dev ~40 plus smoke ~10 plus margin, about $0.50 expected, USD 20 ceiling").
+ * A call is bounded by ~1.5k prompt + 300 completion tokens; at the planning estimate of USD 0.005
+ * per call the operating cap (100) is ~USD 0.50 and even the code ceiling (200) stays ~USD 1.00,
+ * far inside the USD 20 guardrail. Actual tokens per call are logged for the spend report.
+ */
+export const MODEL_USD_GUARDRAIL = 20;
+export const MODEL_EST_USD_PER_CALL = 0.005;
+export function estimateModelSpendUsd(calls: number): number {
+  return Math.round(calls * MODEL_EST_USD_PER_CALL * 100) / 100;
+}
+
+/**
+ * D4: MODEL_LIVE_ENABLED defaults ON for the demo after the owner §9 approval (the owner-managed
+ * MODEL_API_KEY is still required, and the caps/ledger still apply). Only '1' enables explicitly;
+ * any other explicit value (e.g. '0') turns it off; the e2e preview servers pin '0' and unit runs
+ * never take the default, so tests never bill.
+ */
+export const MODEL_LIVE_DEFAULT_ON = true;
+export function resolveModelLiveEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  const raw = env['MODEL_LIVE_ENABLED'];
+  // Explicit switch contract (S1 GATE): only '1' enables; any other explicit value disables.
+  if (raw === '1') return true;
+  if (raw !== undefined && raw.trim() !== '') return false;
+  // Unit runs never take the default: no test may depend on an unset flag meaning "live".
+  if (env['VITEST'] || env['NODE_ENV'] === 'test') return false;
+  return MODEL_LIVE_DEFAULT_ON;
+}
+
+/** D4: operating cap, lowering-only: min(env MODEL_OPERATING_CAP, 100, code ceiling). */
+export function resolveOperatingCap(env: Record<string, string | undefined> = process.env): number {
+  const raw = env['MODEL_OPERATING_CAP'];
+  if (raw === undefined || raw.trim() === '') return MODEL_OPERATING_CAP_DEFAULT;
+  const parsed = parseInt(raw, 10);
+  if (isNaN(parsed) || parsed < 0) return MODEL_OPERATING_CAP_DEFAULT;
+  return Math.min(parsed, MODEL_OPERATING_CAP_DEFAULT, MODEL_LIFETIME_MAX_CALLS);
+}
 
 /**
  * Resolves MODEL_LIVE_MAX_CALLS from environment with strict bounds [1, MODEL_PER_RUN_MAX_CALLS].
@@ -124,8 +201,8 @@ export function resolveMaxCalls(env: Record<string, string | undefined> = proces
 
 /**
  * Resolves MODEL_LIFETIME_MAX_CALLS from environment.
- * Strictly clamped to <= MODEL_LIFETIME_MAX_CALLS (50). It can only be lowered for tests, never raised above 50.
- * Defaults to MODEL_LIFETIME_MAX_CALLS (50) when unset, empty, non-numeric, 0, or negative.
+ * Strictly clamped to <= MODEL_LIFETIME_MAX_CALLS (200). It can only be lowered, never raised above 200.
+ * Defaults to MODEL_LIFETIME_MAX_CALLS (200) when unset, empty, non-numeric, or negative.
  */
 export function resolveLifetimeMaxCalls(
   env: Record<string, string | undefined> = process.env
@@ -138,21 +215,20 @@ export function resolveLifetimeMaxCalls(
 }
 
 /**
- * Active slice budget ceiling for S5 reasoning and decision commands (TID: INBOX-20261102-91CC2B).
- * Initial ledger had 22 calls used; at most 10 further calls allowed -> total at most 32/50.
- * Enforced across process restarts: once callCount reaches MODEL_REASONING_BUDGET_CEILING (32),
- * reasoning and decision commands fall back to deterministic grammar even if lifetime cap is 50.
+ * Reasoning budget ceiling (S5, now D4): defaults to the operating cap (100). Enforced across
+ * process restarts from the ledger; env MODEL_REASONING_BUDGET_CEILING can only lower it.
  */
-export const MODEL_REASONING_BUDGET_CEILING = 32;
+export const MODEL_REASONING_BUDGET_CEILING = MODEL_OPERATING_CAP_DEFAULT;
 
 export function resolveReasoningBudgetCeiling(
   env: Record<string, string | undefined> = process.env
 ): number {
+  const cap = resolveOperatingCap(env);
   const raw = env['MODEL_REASONING_BUDGET_CEILING'];
-  if (raw === undefined || raw.trim() === '') return MODEL_REASONING_BUDGET_CEILING;
+  if (raw === undefined || raw.trim() === '') return cap;
   const parsed = parseInt(raw, 10);
-  if (isNaN(parsed) || parsed < 0) return MODEL_REASONING_BUDGET_CEILING;
-  return Math.min(parsed, MODEL_REASONING_BUDGET_CEILING);
+  if (isNaN(parsed) || parsed < 0) return cap;
+  return Math.min(parsed, cap);
 }
 
 import {
@@ -416,7 +492,7 @@ export async function reserveLedgerSlot(
       }
     }
 
-    // 1. Check lifetime cap (50 calls total across all runs; strictly <= 50, lowering only)
+    // 1. Check lifetime cap (code ceiling 200, lowering only; callers pass the operating cap)
     const effectiveLifetimeCap = Math.min(
       typeof lifetimeMaxCalls === 'number' && !isNaN(lifetimeMaxCalls) && lifetimeMaxCalls >= 0
         ? lifetimeMaxCalls
@@ -533,9 +609,10 @@ export function resolveModelConfig(
 
   const baseUrl = process.env['MODEL_BASE_URL'] || 'https://api.meta.ai/v1';
   const modelName = process.env['MODEL_NAME'] || 'muse-spark-1.3';
-  const liveEnabled = process.env['MODEL_LIVE_ENABLED'] === '1';
+  const liveEnabled = resolveModelLiveEnabled(process.env);
   const maxCalls = resolveMaxCalls(process.env);
-  const lifetimeMaxCalls = resolveLifetimeMaxCalls(process.env);
+  // D4: the effective hard stop for every live path is min(code ceiling 200, operating cap 100).
+  const lifetimeMaxCalls = Math.min(resolveLifetimeMaxCalls(process.env), resolveOperatingCap(process.env));
   const timeoutMs = resolveTimeoutMs(process.env);
   const maxTokensOverride = resolveMaxTokensOverride(process.env);
   const reasoningEffort = resolveReasoningEffort(process.env);
@@ -776,7 +853,7 @@ export class ModelDevProxy {
       } else if (customConfig.apiKey !== undefined) {
         liveEnabled =
           process.env.MODEL_LIVE_ENABLED !== undefined
-            ? process.env.MODEL_LIVE_ENABLED === '1'
+            ? resolveModelLiveEnabled(process.env)
             : true;
       }
 
@@ -787,7 +864,7 @@ export class ModelDevProxy {
 
       const lifetimeMaxCalls =
         customConfig.lifetimeMaxCalls !== undefined && !isNaN(customConfig.lifetimeMaxCalls) && customConfig.lifetimeMaxCalls >= 0
-          ? Math.min(customConfig.lifetimeMaxCalls, MODEL_LIFETIME_MAX_CALLS)
+          ? Math.min(customConfig.lifetimeMaxCalls, MODEL_LIFETIME_MAX_CALLS, resolveOperatingCap(process.env))
           : resolved.lifetimeMaxCalls;
 
       let timeoutMs = resolved.timeoutMs;
@@ -968,14 +1045,17 @@ export class ModelDevProxy {
       url !== '/api/model/diagnostics' &&
       url !== '/api/model/refine' &&
       url !== '/api/model/reason' &&
-      url !== '/api/model/command'
+      url !== '/api/model/command' &&
+      url !== '/api/model/candidates'
     ) {
       return false;
     }
 
-    // 1. Host header validation
+    // 1. Host header validation (D4): only a loopback Host on an allowlisted port (4173/4174/5173).
+    //    DEV_DEVICE_TESTING never widens this, so no LAN client can spend the model budget; the
+    //    phone uses surface E (ssh -R to localhost:4174), which is loopback.
     const hostHeader = (req.headers?.['host'] || req.headers?.[':authority']) as string | undefined;
-    if (!isLocalHost(hostHeader)) {
+    if (!isLocalHost(hostHeader) || !isAllowlistedLoopbackHost(hostHeader)) {
       res.statusCode = 403;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ error: 'Forbidden: non-local host access is blocked' }));
@@ -1009,13 +1089,8 @@ export class ModelDevProxy {
       return true;
     }
 
-    // 5. Device testing mode isolation
-    if (process.env.DEV_DEVICE_TESTING === 'true') {
-      res.statusCode = 403;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ error: 'Forbidden: model proxy disabled in device-testing mode' }));
-      return true;
-    }
+    // 5. (D4) DEV_DEVICE_TESTING is deliberately ignored here: the Host check above already
+    //    refuses every non-loopback client, with or without device-testing mode.
 
     // Route: GET /api/model/diagnostics
     if (url === '/api/model/diagnostics') {
@@ -1106,6 +1181,80 @@ export class ModelDevProxy {
           }
         });
 
+        req.on('error', () => {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: 'Request read error' }));
+          resolve(true);
+        });
+      });
+    }
+
+    // Route: POST /api/model/candidates (D4: live reasoning over the real nearby candidates)
+    if (url === '/api/model/candidates') {
+      if (req.method !== 'POST') {
+        res.statusCode = 405;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+        return true;
+      }
+      const contentType = ((req.headers?.['content-type'] as string) || '').toLowerCase();
+      if (!contentType.startsWith('application/json')) {
+        res.statusCode = 415;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Unsupported Media Type: application/json required' }));
+        return true;
+      }
+      if (!this.rateLimiter.check()) {
+        res.statusCode = 429;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Retry-After', '60');
+        res.end(JSON.stringify({ error: 'Too Many Requests: rate limit exceeded' }));
+        return true;
+      }
+      return new Promise<boolean>(resolve => {
+        let body = '';
+        let bytes = 0;
+        let oversize = false;
+        req.on('data', (chunk: Buffer | string) => {
+          if (oversize) return;
+          bytes += typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length;
+          if (bytes > 8192) {
+            oversize = true;
+            res.statusCode = 413;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Payload Too Large: maximum body size is 8KB' }));
+            resolve(true);
+            return;
+          }
+          body += chunk.toString();
+        });
+        req.on('end', async () => {
+          if (oversize) return;
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(body);
+          } catch {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'Invalid JSON payload' }));
+            resolve(true);
+            return;
+          }
+          const v = validateCandidateReasoningInput(parsed);
+          if (!v.valid) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: `Invalid candidates input: ${v.error}` }));
+            resolve(true);
+            return;
+          }
+          const result = await this.handleCandidates(v.data);
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify(result));
+          resolve(true);
+        });
         req.on('error', () => {
           res.statusCode = 400;
           res.setHeader('Content-Type', 'application/json');
@@ -1744,6 +1893,99 @@ export class ModelDevProxy {
         fallbackReason: isTimeout ? 'timeout' : 'error',
         engineStatus: 'offline_deterministic',
       };
+    }
+  }
+
+  /**
+   * D4: live Muse Spark reasoning over the real nearby candidates (bounded: reorder + one reason).
+   * Same gates as reasoning: MODEL_LIVE_ENABLED + key, per-run cap, the operating-cap hard stop read
+   * from the ledger (survives restarts), an atomic ledger reservation BEFORE the outbound call, and a
+   * strict post-check; anything else returns the labelled deterministic answer.
+   */
+  public async handleCandidates(
+    input: import('./candidate-reasoning.js').CandidateReasoningInput
+  ): Promise<ModelCandidatesResponse> {
+    this.resetDiagnosticsMetadata();
+    const fallback = deterministicCandidateReasoning(input);
+    const fb = (reason: string, ledger: ModelCandidatesResponse['ledger'] = null): ModelCandidatesResponse => ({
+      result: fallback,
+      usedFallback: true,
+      fallbackReason: reason,
+      engineStatus: 'offline_deterministic',
+      ledger,
+    });
+    if (!this.config.liveEnabled || !this.config.apiKey) return fb('disabled');
+    // Budget first, so exhaustion is labelled as such (diagnostics also report it as "disabled").
+    const cap = Math.min(this.config.lifetimeMaxCalls, this.config.reasoningBudgetCeiling ?? MODEL_REASONING_BUDGET_CEILING);
+    const pre = readLedgerState(this.config.ledgerPath);
+    if (pre.status !== 'ok' && pre.status !== 'missing') return fb('ledger_unreadable');
+    if (pre.status === 'ok' && pre.callCount >= cap) return fb('budget_exhausted', { callCount: pre.callCount, cap });
+    if (this.getDiagnostics().status === 'disabled') return fb('disabled');
+    if (processLiveCallCount >= this.config.maxCalls) return fb('run_cap');
+    if (this.runStartLedgerCount === undefined) this.runStartLedgerCount = pre.status === 'ok' ? pre.callCount : 0;
+
+    const reservation = await reserveLedgerSlot(
+      this.config.ledgerPath,
+      this.config.maxCalls,
+      'candidates',
+      this.logger,
+      cap,
+      this.runStartLedgerCount
+    );
+    if (!reservation.success) return fb('budget_exhausted', { callCount: Math.max(0, reservation.callCount), cap });
+    processLiveCallCount += 1;
+    const ledger = { callCount: reservation.callCount, cap };
+
+    const start = Date.now();
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
+      const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.config.apiKey}` },
+        body: JSON.stringify({
+          model: this.config.modelName,
+          max_tokens: this.config.maxTokensOverride ?? MODEL_APP_MAX_TOKENS,
+          ...(this.config.reasoningEffort ? { reasoning_effort: this.config.reasoningEffort } : {}),
+          messages: [
+            { role: 'system', content: CANDIDATE_SYSTEM_PROMPT },
+            { role: 'user', content: buildCandidateUserMessage(input) },
+          ],
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      const latencyMs = Date.now() - start;
+      if (!response.ok) return { ...fb('error', ledger), latencyMs };
+      const json = (await response.json()) as {
+        choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+      };
+      appendModelUsage(this.config.ledgerPath, {
+        endpoint: 'candidates',
+        promptTokens: json.usage?.prompt_tokens,
+        completionTokens: json.usage?.completion_tokens,
+        latencyMs,
+        callCount: reservation.callCount,
+      });
+      this.lastFinishReason = json.choices?.[0]?.finish_reason;
+      const extraction = parseMessageContent(json.choices?.[0] as any);
+      if (extraction.kind !== 'ok') return { ...fb(extraction.reason, ledger), latencyMs };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(extraction.content);
+      } catch {
+        return { ...fb('schema_invalid', ledger), latencyMs };
+      }
+      const out = validateCandidateReasoningOutput(parsed, input);
+      if (!out.valid) {
+        this.logger(`[ModelProxy] Discarding candidates output (${out.reason})`);
+        return { ...fb(out.reason, ledger), latencyMs };
+      }
+      return { result: out.data, usedFallback: false, engineStatus: 'meta_model_live', latencyMs, ledger };
+    } catch (err: unknown) {
+      const isTimeout = err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
+      return { ...fb(isTimeout ? 'timeout' : 'error', ledger), latencyMs: Date.now() - start };
     }
   }
 

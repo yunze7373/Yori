@@ -169,6 +169,21 @@ export class DefaultActionStateStore implements ActionStateStore {
    */
   private nearbyRequestHandler: ((source: 'ask') => void) | null = null;
 
+  /**
+   * D4 (DEMO_RESCUE): Live registers live reasoning over the real lunch candidates. "Why this?",
+   * "closer" and "quieter" on a Live lunch plan are answered by it (Muse Spark when live and in
+   * budget, otherwise the labelled deterministic answer); the answer lands in the transcript.
+   */
+  private candidateReasoner:
+    | ((request: 'why' | 'closer' | 'quieter') => Promise<{ reason: string; statusLabel: string }>)
+    | null = null;
+
+  public setCandidateReasoner(
+    reasoner: ((request: 'why' | 'closer' | 'quieter') => Promise<{ reason: string; statusLabel: string }>) | null
+  ): void {
+    this.candidateReasoner = reasoner;
+  }
+
   public setNearbyRequestHandler(handler: ((source: 'ask') => void) | null): void {
     this.nearbyRequestHandler = handler;
   }
@@ -682,6 +697,44 @@ export class DefaultActionStateStore implements ActionStateStore {
     ctx?: ActionCommandContext,
     now: string = new Date().toISOString()
   ): { collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan } {
+
+    // D4: live candidate reasoning for Live lunch plans (why / closer / quieter).
+    const lunchFilters = cmd.intent === 'FIND_LUNCH' ? cmd.slots.filters ?? [] : [];
+    const candidateRequest: 'why' | 'closer' | 'quieter' | null =
+      cmd.intent === 'WHY'
+        ? 'why'
+        : lunchFilters.length === 1 && lunchFilters[0] === 'nearer'
+        ? 'closer'
+        : lunchFilters.length === 1 && lunchFilters[0] === 'quieter'
+        ? 'quieter'
+        : null;
+    if (
+      this.candidateReasoner &&
+      candidateRequest &&
+      ctx?.sceneId === 'live' &&
+      ctx.plan?.intentId === 'lunch'
+    ) {
+      const msgId = `msg-${Date.now()}-a`;
+      this.transcriptList.push({
+        id: msgId,
+        sender: 'assistant',
+        text: 'Thinking about these places…',
+        timestamp: new Date().toISOString(),
+        inFlight: true,
+      });
+      this.notify();
+      void this.candidateReasoner(candidateRequest)
+        .then(r => ({ text: `${r.reason} · ${r.statusLabel}` }))
+        .catch(() => ({ text: 'I could not reason about these places right now.' }))
+        .then(({ text }) => {
+          const idx = this.transcriptList.findIndex(m => m.id === msgId);
+          if (idx !== -1) {
+            this.transcriptList[idx] = { ...this.transcriptList[idx]!, text, inFlight: false };
+          }
+          this.notify();
+        });
+      return { collapsed: false, rule: 'long_form_discussion', response: 'Thinking about these places…' };
+    }
 
     if (cmd.situationAttribution) {
       this.currentSituationAttribution = {

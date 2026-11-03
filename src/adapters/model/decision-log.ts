@@ -43,6 +43,8 @@ export interface DecisionLogEntry {
   readonly validationResult: DecisionLogValidationResult;
   readonly engineStatus: EngineStatus;
   readonly latencyMs?: number;
+  /** D4: ledger position after the call, e.g. "23/100" (counts only). */
+  readonly ledgerPosition?: string;
 }
 
 /**
@@ -70,6 +72,10 @@ function sanitizeRedactedEntry(entry: Omit<DecisionLogEntry, 'id'>): Omit<Decisi
     },
     engineStatus: entry.engineStatus,
     latencyMs: typeof entry.latencyMs === 'number' ? entry.latencyMs : undefined,
+    ledgerPosition:
+      typeof entry.ledgerPosition === 'string' && /^\d{1,4}\/\d{1,4}$/.test(entry.ledgerPosition)
+        ? entry.ledgerPosition
+        : undefined,
   };
 }
 

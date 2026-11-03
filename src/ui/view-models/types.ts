@@ -260,6 +260,8 @@ export interface HomeCompositionVM {
     /** D3: designed state shown with the button (cooldown info, empty answer, provider failure). */
     readonly note?: { readonly kind: 'info' | 'empty' | 'error'; readonly title: string; readonly desc: string };
   };
+  /** D4: one reason for the top pick plus ONE honest engine status ("Meta Muse Spark · live" / "Reasoned locally"). */
+  readonly candidateReasonLine?: { readonly text: string; readonly statusLabel: string };
   /** D7: honest discovery line for the lunch card (Google, OSM, or OSM after a Google failover). */
   readonly placesAttributionLine?: string;
   /** D2: exact hosts (and purpose) of the enabled keyless providers, from their /status. */

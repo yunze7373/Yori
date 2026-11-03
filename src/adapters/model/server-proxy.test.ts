@@ -33,8 +33,9 @@ import {
   parseMessageContent,
   resolveReasoningEffort,
   MAX_TOKENS_CEILING,
-  MODEL_LIFETIME_MAX_CALLS,
   resolveLifetimeMaxCalls,
+  resolveOperatingCap,
+  resolveReasoningBudgetCeiling,
   reserveLedgerSlot,
 } from './server-proxy.js';
 import { runLiveVerification } from '../../../scripts/live-verify-spark.js';
@@ -256,16 +257,23 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
     expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: 'invalid' })).toBe(10);
   });
 
-  it('defaults lifetime cap to 50, clamps any higher value to at most 50, and allows lowering', () => {
-    expect(resolveLifetimeMaxCalls({})).toBe(50);
-    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '' })).toBe(50);
+  it('D4: code ceiling 200 (lowering-only) and operating cap 100 (lowering-only, never above 200)', () => {
+    expect(resolveLifetimeMaxCalls({})).toBe(200);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '' })).toBe(200);
     expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '4' })).toBe(4);
-    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '25' })).toBe(25);
     expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '50' })).toBe(50);
-    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '60' })).toBe(50);
-    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '100' })).toBe(50);
-    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '-1' })).toBe(50);
-    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: 'invalid' })).toBe(50);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '200' })).toBe(200);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '250' })).toBe(200);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '-1' })).toBe(200);
+    expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: 'invalid' })).toBe(200);
+    expect(resolveOperatingCap({})).toBe(100);
+    expect(resolveOperatingCap({ MODEL_OPERATING_CAP: '40' })).toBe(40);
+    expect(resolveOperatingCap({ MODEL_OPERATING_CAP: '150' })).toBe(100);
+    expect(resolveOperatingCap({ MODEL_OPERATING_CAP: 'x' })).toBe(100);
+    expect(resolveReasoningBudgetCeiling({})).toBe(100);
+    expect(resolveReasoningBudgetCeiling({ MODEL_REASONING_BUDGET_CEILING: '32' })).toBe(32);
+    expect(resolveReasoningBudgetCeiling({ MODEL_REASONING_BUDGET_CEILING: '180' })).toBe(100);
+    expect(resolveReasoningBudgetCeiling({ MODEL_OPERATING_CAP: '30', MODEL_REASONING_BUDGET_CEILING: '60' })).toBe(30);
   });
 
   it('exhausting call cap causes proxy to fall back to deterministic and reports cap in diagnostics', async () => {
@@ -2208,12 +2216,20 @@ describe('S1-DIAG: output extraction, shape handling, and diagnostic metadata te
 });
 
 describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safeguards', () => {
+  // D4 raised the code ceiling to 200 (operating cap 100); this block keeps proving the S1 mechanics
+  // with an explicitly LOWERED lifetime cap of 50, which the lowering-only rule permits.
+  const S1_LOWERED_CAP = 50;
   const cap50Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-cap50-'));
   const cap50Ledger = path.join(cap50Dir, 'model-live-ledger.json');
 
   beforeEach(() => {
     resetLedger(cap50Ledger);
     resetProcessLiveCallCount();
+    process.env.MODEL_LIFETIME_MAX_CALLS = String(S1_LOWERED_CAP);
+  });
+
+  afterEach(() => {
+    delete process.env.MODEL_LIFETIME_MAX_CALLS;
   });
 
   afterAll(() => {
@@ -2248,13 +2264,13 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
 
     // Make 40 reservations with lifetime cap 50
     for (let i = 11; i <= 50; i++) {
-      const res = await reserveLedgerSlot(cap50Ledger, 50, 'refine', () => {}, MODEL_LIFETIME_MAX_CALLS, 10);
+      const res = await reserveLedgerSlot(cap50Ledger, 50, 'refine', () => {}, S1_LOWERED_CAP, 10);
       expect(res.success).toBe(true);
       expect(res.callCount).toBe(i);
     }
 
     // 51st reservation is blocked by lifetime cap
-    const blockedRes = await reserveLedgerSlot(cap50Ledger, 50, 'refine', () => {}, MODEL_LIFETIME_MAX_CALLS, 10);
+    const blockedRes = await reserveLedgerSlot(cap50Ledger, 50, 'refine', () => {}, S1_LOWERED_CAP, 10);
     expect(blockedRes.success).toBe(false);
     expect(blockedRes.error).toBe('cap_exceeded');
     expect(blockedRes.callCount).toBe(50);
@@ -2343,7 +2359,7 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
 
     // Launch 10 concurrent reservation attempts at the boundary of 50
     const attempts = Array.from({ length: 10 }, () =>
-      reserveLedgerSlot(cap50Ledger, 10, 'refine', () => {}, MODEL_LIFETIME_MAX_CALLS, 49)
+      reserveLedgerSlot(cap50Ledger, 10, 'refine', () => {}, S1_LOWERED_CAP, 49)
     );
     const results = await Promise.all(attempts);
 
@@ -2686,14 +2702,14 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     delete process.env.MODEL_API_KEY;
   });
 
-  it('env MODEL_LIFETIME_MAX_CALLS=60 cannot raise cap above 50 (ledger at 50 blocks fetches, ledger stays 50)', async () => {
+  it('D4: env MODEL_LIFETIME_MAX_CALLS=250 / MODEL_OPERATING_CAP=150 cannot raise the hard stop above 100 (ledger at 100 blocks fetches)', async () => {
     // Seed ledger with 50 calls
     fs.writeFileSync(
       cap50Ledger,
       JSON.stringify({
         version: 1,
-        call_count: 50,
-        reservations: Array.from({ length: 50 }, (_, i) => ({
+        call_count: 100,
+        reservations: Array.from({ length: 100 }, (_, i) => ({
           call_index: i + 1,
           endpoint: 'refine',
           timestamp: new Date().toISOString(),
@@ -2705,7 +2721,8 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     process.env.MODEL_API_KEY = 'sk-test-env-60';
     process.env.MODEL_LIVE_ENABLED = '1';
     process.env.MODEL_LIVE_MAX_CALLS = '10';
-    process.env.MODEL_LIFETIME_MAX_CALLS = '60';
+    process.env.MODEL_LIFETIME_MAX_CALLS = '250';
+    process.env.MODEL_OPERATING_CAP = '150';
 
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
@@ -2726,23 +2743,24 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(res.usedFallback).toBe(true);
       expect(res.fallbackReason).toBe('disabled');
-      expect(readLedgerState(cap50Ledger).callCount).toBe(50);
+      expect(readLedgerState(cap50Ledger).callCount).toBe(100);
     } finally {
       delete process.env.MODEL_API_KEY;
       delete process.env.MODEL_LIVE_ENABLED;
       delete process.env.MODEL_LIVE_MAX_CALLS;
       delete process.env.MODEL_LIFETIME_MAX_CALLS;
+      delete process.env.MODEL_OPERATING_CAP;
     }
   });
 
-  it('customConfig.lifetimeMaxCalls=60 cannot raise cap above 50 (ledger at 50 -> blocked, 0 fetches, ledger stays 50)', async () => {
+  it('D4: customConfig.lifetimeMaxCalls=250 cannot raise the hard stop above the operating cap 100 (ledger at 100 -> blocked, 0 fetches)', async () => {
     // Seed ledger with 50 calls
     fs.writeFileSync(
       cap50Ledger,
       JSON.stringify({
         version: 1,
-        call_count: 50,
-        reservations: Array.from({ length: 50 }, (_, i) => ({
+        call_count: 100,
+        reservations: Array.from({ length: 100 }, (_, i) => ({
           call_index: i + 1,
           endpoint: 'refine',
           timestamp: new Date().toISOString(),
@@ -2765,7 +2783,7 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
       apiKey: 'sk-test-custom-60',
       liveEnabled: true,
       maxCalls: 10,
-      lifetimeMaxCalls: 60,
+      lifetimeMaxCalls: 250,
     });
 
     const res = await proxy.handleRefine({
@@ -2776,7 +2794,7 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(res.usedFallback).toBe(true);
     expect(res.fallbackReason).toBe('disabled');
-    expect(readLedgerState(cap50Ledger).callCount).toBe(50);
+    expect(readLedgerState(cap50Ledger).callCount).toBe(100);
   });
 
   describe('S1-CMD-RC: handleCommand reason code telemetry & LiveVerification runner integration', () => {

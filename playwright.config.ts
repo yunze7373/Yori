@@ -1,11 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
 
-/** D2 (DEMO_RESCUE): keep every e2e preview server offline even though the trio defaults ON. */
+/**
+ * D2/D4 (DEMO_RESCUE): keep every e2e preview server offline and unbilled even though the trio
+ * defaults ON and the demo enables the live model; explicit env always wins over .env.local.
+ */
 const offlineProviderEnv: Record<string, string> = {
   ...(process.env as Record<string, string>),
   PLACES_LIVE_ENABLED: 'false',
   ROUTE_LIVE_ENABLED: 'false',
   WEATHER_LIVE_ENABLED: 'false',
+  MODEL_LIVE_ENABLED: '0',
 };
 
 export default defineConfig({
