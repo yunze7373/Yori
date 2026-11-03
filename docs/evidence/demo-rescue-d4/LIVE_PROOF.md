@@ -139,13 +139,42 @@ BACKLOG.
   it would be a second Ask attempt. The probe fix is to wait for the `candidates` `why` response
   itself and keep the server up until it lands.
 
+## Run 4 (2026-11-03 11:13 JST, Reviewer decision e35c3ad6: "the 1 remaining call (cumulative ≤37) to redo Ask 'why'; one attempt only")
+
+Same build as run 3, from `05840b8` (rebuilt into gitignored `.yori-runtime/d4-live4`). Setup:
+- `MODEL_OPERATING_CAP=37`; public Shinjuku fixture point.
+- **Exactly one billed call:** the probe stopped two requests in the browser so they never reached
+  the server:
+  - the page-load `rank` (already proven live in run 3); the app kept its labelled local answer;
+  - the live command interpreter request.
+- Only the Ask's `candidates` `why` request went through.
+- The probe waited for that `why` response itself, and the server stayed up until the probe finished
+  (the run-3 harness error is fixed).
+
+| | Value |
+|---|---|
+| Ledger before | **36** |
+| Ledger after | **37** (1 billed call; the authorization is now fully used) |
+| Plan-reasoning calls | **0** |
+| Call 37 `candidates` `why` | **Not accepted — model output failed the post-check.** HTTP 200, `fallbackReason: schema_invalid`, `engineStatus: offline_deterministic`. Tokens 337 in / 1,304 out: not truncated, well inside 4096. Latency 16,968 ms, inside the 30 s wait. |
+| What the user saw | The Ask answered with the labelled deterministic reason and `Reasoned locally` (honest; no live claim) |
+| Cause | `schema_invalid` on this route means one of two things: the visible content was not parseable JSON, or the `reason` was outside 8–180 characters. Raw model output is not retained by design, so which one it was cannot be told. **Hypothesis only:** the `why` task ("explain in one sentence why…") invites a longer sentence than the 180-character limit. |
+| Raw evidence | `.yori-runtime/d4-live-proof/live4-why-RAW.png` (gitignored). The committed text names no venue. |
+| Key material | none in page (`Bearer` absent) |
+
+**D4 live acceptance, final:** one accepted live Muse Spark answer over real candidates (run 3,
+call 35, `rank`). The single authorized Ask attempt failed **for a model reason** (post-check
+`schema_invalid`), not a harness error. Per decision e35c3ad6, the proof is therefore **rank-only**.
+No further billed calls were made.
+
 ## Final spend (cumulative, all D4 and earlier calls)
-- **Calls: 36 / 200** (owner limit), operating cap 100.
-- **Estimated USD: ≤ 0.75 cumulative** (`usd_estimate` 0.7489 in the ledger). This is conservative:
+- **Calls: 37 / 200** (owner limit), operating cap 100. The D4 authorization (cumulative ≤37) is
+  fully used, and the server hard stop held at 37.
+- **Estimated USD: ≤ 0.76 cumulative** (`usd_estimate` 0.7522 in the ledger). This is conservative:
   - the 32 calls made before token recording are charged at the per-call worst case (3,000 prompt +
     8,192 completion tokens);
   - call 36 is also charged at the worst case, because its response never came back;
-  - calls 33, 34 and 35 are charged at real usage: ≈ USD 0.0029, 0.0027 and 0.0046 (35 = 2,320 tokens).
+  - calls 33, 34, 35 and 37 are charged at real usage: ≈ USD 0.0029, 0.0027, 0.0046 and 0.0033.
 - **Rate source:** USD 2.00 per 1M tokens, applied to input and output. It is the muse-spark estimate
   documented in `src/adapters/model/server-proxy.ts` (`MAX_TOKENS_CEILING` note) and in the S1
   reports. **UNVERIFIED** (not checked against a published Meta price list). If the true rate were
