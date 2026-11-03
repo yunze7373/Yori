@@ -170,7 +170,8 @@ test.describe('D4-MODEL-REASONING-ON: live reasoning over real candidates (recor
     await expect(reason.locator('.model-reason-status')).toHaveText('Reasoned locally');
     await expect(reason.locator('.model-reason-text')).toHaveText('Near Cafe: open now, 45 m away, rated 4.6.');
     await expect(page.locator('.v2-candidate-card').first().locator('.v2-candidate-name')).toHaveText('Near Cafe');
-    expect(calls.candidates.length).toBe(1);
+    // The local label renders a moment before the rank request is sent, so wait for the request.
+    await expect.poll(() => calls.candidates.length, { timeout: 8000 }).toBe(1);
     // Accepted live answer arrives: it replaces the local one and reorders.
     await expect(reason).toHaveAttribute('data-engine', 'meta_model_live', { timeout: 10000 });
     await expect(reason.locator('.model-reason-status')).toHaveText('Meta Muse Spark · live');
