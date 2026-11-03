@@ -279,7 +279,7 @@ test.describe('S2-CONNECTORS: Settings > Connectors Screen', () => {
     await expect(locRow.locator('#status-pill-location')).toContainText('Allowed · not used');
     const acquireBtn = locRow.locator('#btn-connect-location');
     await expect(acquireBtn).toBeVisible();
-    await expect(acquireBtn).toHaveText('Acquire fix');
+    await expect(acquireBtn).toHaveText('Use my location') /* UI-QUIET-PRECISION human copy */;
 
     // Click Acquire fix -> in-session fix is acquired -> Connected ('Shared this session')
     await acquireBtn.click();

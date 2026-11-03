@@ -536,9 +536,9 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
       expect(weatherVal).not.toContain('Clear');
     });
 
-    it('renders calendar as "Not connected" in Live mode', () => {
+    it('renders calendar as "No calendar linked yet" in Live mode (UI-QUIET-PRECISION copy)', () => {
       const html = renderV2Home(baseCandidateVM);
-      expect(html).toContain('Not connected');
+      expect(html).toContain('No calendar linked yet');
       expect(html).not.toContain('Lunch break · 12:15 PM');
     });
 

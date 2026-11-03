@@ -117,7 +117,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     });
     const page = await context.newPage();
 
-    await page.goto('/?ui=v2&timeline=1');
+    await page.goto('/?ui=v2&timeline=1&controls=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
 
     // Reset timeline to S0 explicitly
@@ -300,7 +300,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
   test('Dynamic Change Moment: Adjust buffer in S2 produces true dynamic prior/new leaveAt (not 2:25/2:30)', async ({
     page,
   }) => {
-    await page.goto('/?ui=v2&timeline=1');
+    await page.goto('/?ui=v2&timeline=1&controls=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
     await page.evaluate(() => (window as any).__YORI_TIMELINE__.reset());
     await page.waitForTimeout(100);
@@ -342,7 +342,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
   test('Acceptance (b): Accept, Adjust, Not now work mid-timeline and budget cap holds', async ({
     page,
   }) => {
-    await page.goto('/?ui=v2&timeline=1');
+    await page.goto('/?ui=v2&timeline=1&controls=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
     await page.evaluate(() => (window as any).__YORI_TIMELINE__.reset());
 
@@ -385,7 +385,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
   test('Acceptance (c): 3-second comprehension — noticed signal above fold and actions (#btn-accept, #btn-adjust, #btn-dismiss) unoccluded by #ask-bar at 390 and 1280 at S1 and S3', async ({
     page,
   }) => {
-    await page.goto('/?ui=v2&timeline=1');
+    await page.goto('/?ui=v2&timeline=1&controls=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
 
     const viewportSize = page.viewportSize();
@@ -435,7 +435,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
   test('Acceptance (d): Accessibility, touch targets >= 44px, Axe 0, CLS <= 0.1, and no overflow', async ({
     page,
   }) => {
-    await page.goto('/?ui=v2&timeline=1');
+    await page.goto('/?ui=v2&timeline=1&controls=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
     await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S3'));
     await page.waitForSelector('.v2-journey-card');
@@ -497,7 +497,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     const viewSuffix = isMobile ? '390' : '1280';
 
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto('/?ui=v2&timeline=1');
+    await page.goto('/?ui=v2&timeline=1&controls=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
 
     // Verify document has zero active running animations under reducedMotion: 'reduce'

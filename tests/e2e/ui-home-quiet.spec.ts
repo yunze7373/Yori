@@ -165,12 +165,14 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await closeBtn.click();
     await expect(whyDialog).toHaveCount(0);
 
-    // In Live mode: subline reflects device clock only (no fabricated calendar or memories)
+    // In Live mode before consent: nothing is shared yet (no fabricated calendar or memories).
+    // UI-QUIET-PRECISION: the pill names user-recognisable sources; the device clock is listed in
+    // the Sources sheet.
     await page.goto('/?mode=live');
     const livePill = page.locator('#pill-context-status');
     await expect(livePill).toBeVisible();
     await expect(livePill).toContainText('Live context');
-    await expect(livePill.locator('.context-pill-subtitle')).toContainText('Device clock');
+    await expect(livePill.locator('.context-pill-subtitle')).toHaveText('Nothing shared yet');
     await expect(livePill.locator('.context-pill-subtitle')).not.toContainText('Calendar');
     await expect(livePill.locator('.context-pill-subtitle')).not.toContainText('Memories');
 

@@ -12,6 +12,20 @@ These surfaces are **not done yet** and are the next commits: the Why sheet, the
 interior, the Ask panel and its replies, the decision log, the restaurant detail, the map panel,
 consent prompts, toasts, and the designed loading / empty / offline / error states.
 
+## Rework for review f4acae78 (CHANGES REQUESTED)
+
+| Finding | Fix |
+|---|---|
+| P1-1 Rain state missing (the old "rain" capture was the clear scene: a recorded live weather reading replaced the demo rain) | Captured the **rain re-plan** at 390 and 1280 in the 04 structure, both on the Demo timeline (S3) and in Live (recorded Open-Meteo forecast plus your 10 min rain buffer): `rain-replan-demo-*.png`, `rain-replan-live-*.png`. The hero shows the serif "Leave by", the rain glyph, an "Updated plan ready" chip, one explanation line ("Rain expected 2:00–3:00 PM · take an umbrella; leaving 10 min earlier (2:35 → 2:25)."), the reason line, the muted schedule sentence and one caption row. |
+| P1-2 Isolation in code | Commit `e689960` (see "Test isolation" below). |
+| P2-3 Hero rhythm and map | One 6–8 px rhythm (card row gap, margins off). The subject is a quiet 15 px line, not a second headline. The map strip is a soft rounded strip **above the actions** (as in 04) with a duration callout ("25 min by car") taken only from the route's own `travelMinutes`; its provenance tag stays. The Live hero shows no empty "map not available" box. Accept / Not now stay hit-testable at 390 and 1280, including the rain re-plan (context-timeline (c), live-forecast). |
+| P2-4 Signal tiles | A compact list ("what I used"): one line per value, no orphan wraps; 2 columns on wide screens. Home ends with bottom padding so nothing rests under the Ask bar. "Not connected" on Home now reads "No calendar linked yet"; the Sources sheet keeps the technical status. |
+| P2-5 Lunch actions | The depart layout: three equal buttons (Accept / Adjust / Why), then Details / Not now as quiet text, at both widths. The 390 fold still holds (Not now at 653–697 px, Ask bar from 712 px). |
+| P2-6 Connectors | One status per card. A detail line that only repeats the chip is visually quiet (still in the DOM). Human actions: "Use my location" (was "Connect" / "Acquire fix"), "Stop sharing" (was "Revoke session fix"). **No chevrons:** these cards open no detail view, so a chevron would promise navigation that does not exist. |
+| P2-7 Header | A softer sage/ivory botanical (opacity 0.62, thin stem) clear of the avatar and the greeting. The Open-Meteo credit moved to a quiet credits line at the end of Home (still where the weather shows). The pill lists user-recognisable sources only ("Location · Calendar · Weather · Places · Memories", or "Nothing shared yet"); the device clock is listed in the Sources sheet. |
+| P2-8 Desktop | Text leads the pick (176 px thumbnail, details right, footer at the bottom). The rail's duplicate distance line is gone. **Kept:** the rail's place tiles, because they are the working "tap a place to route there" control (live-lunch, desktop-parity). Turning the rail into a styled map panel is the next desktop pass. |
+| P2-9 Demo header | The play / step / restart controls appear only with `?controls=1` or in dev mode; a recorded demo header shows the one "Demo · simulated" pill. `npm run demo:record` serves the shipping build, which opens in Live (no demo controls at all). |
+
 ## Tokens
 
 `src/ui/living-context/quiet-precision.css` (custom properties, documented in its header):
@@ -70,11 +84,8 @@ consent prompts, toasts, and the designed loading / empty / offline / error stat
 ## Remaining deviations from 04 (and why)
 
 1. **No user name** in the greeting. The app does not know it, and 04's "Yuna" is fictional.
-2. **The map follows the actions** instead of sitting above them as in 04. With the map above,
-   the rain re-plan (banner plus change moment) pushes Accept / Not now under the Ask bar at 390
-   and at 1280, which breaks the D3 floor; the floor wins. There is no duration callout yet: the
-   demo route strip has no travel-time fact the callout could cite truthfully, so it comes with
-   the map panel pass.
+2. **The Live hero has no map strip** (the home strip has no live map; the empty box is hidden).
+   The demo strip is schematic and says so.
 3. **Signal tiles remain** below the actions (the honest "what I used" row); 04 has no
    equivalent.
 4. **No pager dots.** There is one Now card; no pager is shown for a single item.

@@ -77,14 +77,14 @@ export function renderConnectorsView(
                   </span>
                 </div>
                 <p class="connector-desc">Helps Yori understand where you are, plan ahead, and suggest timely actions.</p>
-                <div class="connector-detail" id="connector-detail-location">${escapeHtml(loc.detail)}</div>
+                <div class="connector-detail${repeatsChip(loc.state, loc.detail) ? ' qp-detail-repeat' : ''}" id="connector-detail-location">${escapeHtml(loc.detail)}</div>
                 ${
                   loc.state === 'permission_needed'
-                    ? `<div class="connector-actions"><button type="button" class="btn btn-primary btn-connector-action" id="btn-connect-location">Connect</button></div>`
+                    ? `<div class="connector-actions"><button type="button" class="btn btn-primary btn-connector-action" id="btn-connect-location">Use my location</button></div>`
                     : loc.state === 'not_connected'
-                    ? `<div class="connector-actions"><button type="button" class="btn btn-primary btn-connector-action" id="btn-connect-location">Acquire fix</button></div>`
+                    ? `<div class="connector-actions"><button type="button" class="btn btn-primary btn-connector-action" id="btn-connect-location">Use my location</button></div>`
                     : loc.state === 'connected'
-                    ? `<div class="connector-actions"><button type="button" class="btn btn-outline btn-connector-action" id="btn-revoke-location">Revoke session fix</button></div>`
+                    ? `<div class="connector-actions"><button type="button" class="btn btn-outline btn-connector-action" id="btn-revoke-location">Stop sharing</button></div>`
                     : loc.state === 'denied'
                     ? `<div class="connector-actions"><button type="button" class="btn btn-outline btn-connector-action" id="btn-check-location">Check again</button></div>`
                     : ''
@@ -113,7 +113,7 @@ export function renderConnectorsView(
                   </span>
                 </div>
                 <p class="connector-desc">Reads your events to prepare for what's next.</p>
-                <div class="connector-detail" id="connector-detail-calendar">${escapeHtml(cal.detail)}</div>
+                <div class="connector-detail${repeatsChip(cal.state, cal.detail) ? ' qp-detail-repeat' : ''}" id="connector-detail-calendar">${escapeHtml(cal.detail)}</div>
                 ${renderGoogleCalendarRow(cal.google)}
               </div>
             </div>
@@ -144,7 +144,7 @@ export function renderConnectorsView(
                   </span>
                 </div>
                 <p class="connector-desc">Lets Yori factor in real-time weather for smarter suggestions.</p>
-                <div class="connector-detail" id="connector-detail-weather">${escapeHtml(weather.detail)}</div>
+                <div class="connector-detail${repeatsChip(weather.state, weather.detail) ? ' qp-detail-repeat' : ''}" id="connector-detail-weather">${escapeHtml(weather.detail)}</div>
               </div>
             </div>
           </li>
@@ -171,7 +171,7 @@ ${isXmemoHidden() ? '' : `
                   </span>
                 </div>
                 <p class="connector-desc">Accesses your notes and memories to personalize suggestions.</p>
-                <div class="connector-detail" id="connector-detail-xmemo">${escapeHtml(xmemo.detail)}</div>
+                <div class="connector-detail${repeatsChip(xmemo.state, xmemo.detail) ? ' qp-detail-repeat' : ''}" id="connector-detail-xmemo">${escapeHtml(xmemo.detail)}</div>
                 ${
                   xmemo.state === 'not_connected'
                     ? `<div class="connector-actions"><button type="button" class="btn btn-primary btn-connector-action" id="btn-connect-xmemo">Connect</button></div>`
@@ -202,7 +202,7 @@ ${isXmemoHidden() ? '' : `
                   </span>
                 </div>
                 <p class="connector-desc">Lets Yori send you important proactive updates · web browsers have no background execution.</p>
-                <div class="connector-detail" id="connector-detail-notifications">${escapeHtml(notif.detail)}</div>
+                <div class="connector-detail${repeatsChip(notif.state, notif.detail) ? ' qp-detail-repeat' : ''}" id="connector-detail-notifications">${escapeHtml(notif.detail)}</div>
                 ${
                   notif.state === 'permission_needed'
                     ? `<div class="connector-actions"><button type="button" class="btn btn-primary btn-connector-action" id="btn-connect-notifications">Connect</button></div>`
@@ -232,6 +232,16 @@ ${isXmemoHidden() ? '' : `
       </div>
     </main>
   `;
+}
+
+/**
+ * UI-QUIET-PRECISION (review f4acae78 P2-6): a detail line that only repeats the status chip is
+ * visually quiet (it stays in the DOM for assistive tech), so each card shows one status.
+ */
+function repeatsChip(state: string, detail: string): boolean {
+  const chip = formatPillLabel(state, detail).toLowerCase().replace(/[^a-z ]/g, '').trim();
+  const line = detail.toLowerCase().replace(/[^a-z ]/g, '').trim();
+  return chip.length > 0 && (line === chip || line.startsWith(chip));
 }
 
 function formatPillLabel(state: string, detail: string): string {

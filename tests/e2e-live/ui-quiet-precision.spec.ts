@@ -316,6 +316,27 @@ test.describe('UI-QUIET-PRECISION: Home header band, Now card and Lunch', () => 
     });
   }
 
+  for (const vp of VIEWPORTS) {
+    test(`rain re-plan in the 04 hero (demo timeline S3) @${vp.name}`, async ({ browser }) => {
+      const { context, page } = await device(browser, vp);
+      // Weather off: a recorded live reading would replace the demo scene's simulated rain.
+      await setup(page, { weather: 'off' });
+      await page.goto('/?ui=v2&timeline=1');
+      await page.waitForSelector('.app-layout');
+      await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S3'));
+      await page.waitForTimeout(400);
+      await settle(page);
+      const card = page.locator('.now-card.v2-journey-card');
+      await expect(card).toBeVisible();
+      await expect(card.locator('.qp-hero-glyph')).toBeVisible();
+      await expect(card.locator('.qp-hero-title')).toContainText('Leave by');
+      expect(await hitTestable(page, '#btn-accept')).toBe(true);
+      expect(await hitTestable(page, '#btn-dismiss')).toBe(true);
+      await page.screenshot({ path: path.join(EVIDENCE_DIR, `rain-replan-demo-${vp.name}.png`) });
+      await context.close();
+    });
+  }
+
   test('2x component crops for the review pack (header, hero, lunch row, Ask bar, connector card)', async ({ browser }) => {
     const context = await browser.newContext({
       viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, timezoneId: 'Asia/Tokyo',

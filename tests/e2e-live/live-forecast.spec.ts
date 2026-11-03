@@ -219,6 +219,8 @@ test.describe('D5-LIVE-FORECAST: target-time forecast for the trip window (recor
       await expectActionsUnoccluded(page);
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: path.join(EVIDENCE_DIR, `d5-rain-with-buffer-${vp.name}.png`) });
+      // UI-QUIET-PRECISION review pack: the Live rain re-plan in the 04 hero.
+      await page.screenshot({ path: path.join(getEvidenceDir('ui-quiet-precision'), `rain-replan-live-${vp.name}.png`) });
     });
   }
 

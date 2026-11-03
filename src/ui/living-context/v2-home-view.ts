@@ -235,9 +235,21 @@ export function renderCompactMapStrip(map: MapVM, isLive?: boolean): string {
       </div>
       <div class="v2-map-canvas compact-canvas" role="img" aria-label="${escapeHtml(map.ariaDescription)}">
         ${renderCompactMapSvg(map)}
+        ${renderMapDurationCallout(map)}
       </div>
     </section>
   `;
+}
+
+/**
+ * UI-QUIET-PRECISION (reference 04): a duration callout on the route strip, only from the route's
+ * own travelMinutes (the strip's provenance badge already says whether the route is simulated).
+ */
+function renderMapDurationCallout(map: MapVM): string {
+  const route = map.polylines.find(p => typeof p.travelMinutes === 'number' && p.travelMinutes > 0);
+  if (!route || typeof route.travelMinutes !== 'number') return '';
+  const mode = route.mode === 'bus' ? 'by bus' : route.mode === 'walk' ? 'on foot' : 'by car';
+  return `<span class="qp-map-callout" data-slot="chrome" data-slot-reason="Route duration callout"><strong>${escapeHtml(String(Math.round(route.travelMinutes)))} min</strong><span>${escapeHtml(mode)}</span></span>`;
 }
 
 export function renderMapCard(map: MapVM, options?: RealMapRenderOptions): string {
@@ -537,7 +549,7 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
         calendarValue = 'Connected · no upcoming events';
       }
     } else {
-      calendarValue = 'Not connected';
+      calendarValue = 'No calendar linked yet';
     }
   } else if (vm.layoutKind === 'journey') {
     calendarValue = vm.apptTimeStr

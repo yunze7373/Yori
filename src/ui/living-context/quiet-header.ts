@@ -98,9 +98,9 @@ export const BOTANICAL_LEAF = `<svg class="qp-leaf" viewBox="0 0 280 320" aria-h
       <stop offset="1" stop-color="#C3D3BD"/>
     </linearGradient>
     <linearGradient id="qpLeafDeep" x1="0.2" y1="0" x2="0.8" y2="1">
-      <stop offset="0" stop-color="#7FA27F"/>
-      <stop offset="0.55" stop-color="#4E7A58"/>
-      <stop offset="1" stop-color="#2F5A3E"/>
+      <stop offset="0" stop-color="#C6D6C0"/>
+      <stop offset="0.55" stop-color="#A3BD9F"/>
+      <stop offset="1" stop-color="#86A483"/>
     </linearGradient>
   </defs>
   <path d="M300 -20 C 210 0, 140 60, 128 150 C 190 150, 262 112, 300 40 Z" fill="url(#qpLeafPale)"/>
@@ -112,5 +112,5 @@ export const BOTANICAL_LEAF = `<svg class="qp-leaf" viewBox="0 0 280 320" aria-h
   <path d="M268 148 C 214 168, 186 222, 196 292 C 246 262, 276 214, 268 148 Z" fill="url(#qpLeafDeep)"/>
   <path d="M264 160 C 232 196, 212 240, 200 284" fill="none" stroke="#E9F1E4" stroke-opacity="0.75" stroke-width="1.4" stroke-linecap="round"/>
   <path d="M240 196 l -18 -6 M232 216 l -20 -4 M224 238 l -18 -2 M246 206 l 12 -14 M236 230 l 14 -12" fill="none" stroke="#E9F1E4" stroke-opacity="0.45" stroke-width="1" stroke-linecap="round"/>
-  <path d="M196 292 C 200 304, 206 312, 214 320" fill="none" stroke="#3F6B4D" stroke-width="2" stroke-linecap="round"/>
+  <path d="M196 292 C 200 304, 206 312, 214 320" fill="none" stroke="#8AA887" stroke-width="1.2" stroke-linecap="round"/>
 </svg>`;

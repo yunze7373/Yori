@@ -1813,6 +1813,17 @@ export function renderApp(
   const previousLivePlanByIntent = new Map<string, PreparedPlan>();
   let activeLiveChangeMoment: LiveChangeMomentState | null = null;
 
+  // UI-QUIET-PRECISION (review f4acae78 P2-9): the demo timeline's play / step / restart controls
+  // appear only on request (?controls=1) or in dev mode, so a recorded demo header shows the one
+  // 'Demo · simulated' pill as in reference 04.
+  let showTimelineControls = false;
+  if (typeof window !== 'undefined') {
+    try {
+      showTimelineControls = new URLSearchParams(window.location.search).get('controls') === '1';
+    } catch {
+      // ignore
+    }
+  }
   if (typeof window !== 'undefined') {
     try {
       const p = new URLSearchParams(window.location.search);
@@ -3237,21 +3248,26 @@ export function renderApp(
         : (() => {
             // D3 (DEMO_RESCUE): list only sources delivering data right now, not merely enabled
             // connectors (a denied fix or a weather provider with no reading is not a source).
-            const parts = ['Device clock'];
+            // UI-QUIET-PRECISION (review f4acae78 P2-7): name what the user recognises (the device
+            // clock is listed in the Sources sheet, not here).
+            const parts: string[] = [];
             if (liveLocationStatus.status === 'available' && liveLocationStatus.coords) {
               parts.push('Location');
+            }
+            if (liveCalendarSignal) {
+              parts.push('Calendar');
             }
             if (weatherStatus.enabled && liveWeatherSignal && !isWeatherStale(liveWeatherSignal)) {
               parts.push('Weather');
             }
             if (livePlacesList.length > 0) {
-              parts.push('Nearby places');
+              parts.push('Places');
             }
             const xmemoConn = latestConnectorStatuses?.xmemo;
             if (xmemoConn?.state === 'connected' || (xmemoStatus.enabled && xmemoStatus.connected)) {
               parts.push('Memories');
             }
-            return parts.join(' · ');
+            return parts.length > 0 ? parts.join(' · ') : 'Nothing shared yet';
           })();
 
     actionStore.setCommandContext({
@@ -4479,6 +4495,9 @@ export function renderApp(
                         </div>
                       </button>
 
+                      ${
+                        showTimelineControls || isDevMode
+                          ? `
                       <div class="timeline-action-buttons">
                         <button
                           type="button"
@@ -4508,6 +4527,9 @@ export function renderApp(
                           ↺
                         </button>
                       </div>
+                      `
+                          : ''
+                      }
                     </div>
                     `
                       : `
@@ -4531,11 +4553,7 @@ export function renderApp(
                   </button>
                   `
                   }
-                  ${
-                    weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || (!isWeatherStale(liveWeatherSignal) && !isWeatherSigStaleOrUnavail))
-                      ? `<span class="weather-attribution qp-attribution" id="weather-attribution" data-provenance="${contextMode === 'live' ? 'live' : 'fixture'}" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal.issuedAt || (liveWeatherSignal.value as any)?.fetchedAt || new Date().toISOString())}"><a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer"><span class="qp-attr-long">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</span><span class="qp-attr-short" aria-hidden="true">Open-Meteo</span></a></span>`
-                      : ''
-                  }
+
                 </div>
                 <!-- The honest living-header line (time, weather, place) stays for assistive tech and the
                      Sources sheet; the surface shows the one Live context pill (owner reference 04). -->
@@ -4641,6 +4659,17 @@ export function renderApp(
 
         <main class="main-container" role="main">
           ${mainContentHtml}
+          ${
+            uiVersion === 'v2' && (activeTab === 'today' || activeTab === 'home') && !activeDetail
+              ? `<footer class="qp-home-credits" aria-label="Data credits">
+                  ${
+                    weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || (!isWeatherStale(liveWeatherSignal) && !isWeatherSigStaleOrUnavail))
+                      ? `<span class="weather-attribution qp-attribution" id="weather-attribution" data-provenance="${contextMode === 'live' ? 'live' : 'fixture'}" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal.issuedAt || (liveWeatherSignal.value as any)?.fetchedAt || new Date().toISOString())}"><a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer"><span class="qp-attr-long">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</span><span class="qp-attr-short" aria-hidden="true">Open-Meteo</span></a></span>`
+                      : ''
+                  }
+          </footer>`
+              : ''
+          }
           ${uiVersion === 'v2' && (activeTab === 'today' || activeTab === 'home') && !activeDetail ? renderAskBar() : ''}
         </main>
       </div>

@@ -15,7 +15,8 @@ const EV = path.resolve('docs/evidence/ui-quiet-precision');
 
 /** [name, reference file, crop x, y, w, h, app capture, caption]. */
 const PAIRS = [
-  ['home-04-390', '04_owner_polish_target_home_connectors.jpg', 190, 30, 410, 910, 'fold-depart-390x844.png', 'Home (owner polish target 04, left screen) vs app at 390x844 (Demo rain scene)'],
+  ['home-04-390', '04_owner_polish_target_home_connectors.jpg', 190, 30, 410, 910, 'rain-replan-demo-390x844.png', 'Home rain re-plan (04 left screen) vs app at 390x844 (Demo timeline S3: rain forecast issued, plan updated)'],
+  ['home-04-live-rain-390', '04_owner_polish_target_home_connectors.jpg', 190, 30, 410, 910, 'rain-replan-live-390x844.png', 'Home rain re-plan (04 left screen) vs app at 390x844 (Live, recorded Open-Meteo forecast + your 10 min rain buffer)'],
   ['lunch-04-390', '04_owner_polish_target_home_connectors.jpg', 190, 30, 410, 910, 'fold-lunch-390x844.png', 'Home with lunch (04 left screen) vs app at 390x844 (Live lunch, recorded places)'],
   ['connectors-04-390', '04_owner_polish_target_home_connectors.jpg', 683, 30, 420, 910, 'connectors-390x844.png', 'Settings > Connectors (04 right screen) vs app at 390x844'],
   ['home-rain-390', '03_mobile_experience_v1_approved.png', 418, 72, 214, 426, 'fold-depart-390x844.png', 'Home · weather-aware plan (reference 03 screen 1 vs app, Demo rain scene)'],

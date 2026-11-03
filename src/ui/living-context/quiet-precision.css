@@ -1707,3 +1707,456 @@ body {
 .v2-journey-card > .now-map-strip { order: 7; }
 .v2-journey-card > .v2-card-header > .hero-signals-grid { order: 8; }
 .v2-journey-card > .now-basis { order: 9; }
+
+/* ---------- Rework (review f4acae78): hero rhythm, change cue, map callout, tiles ---------- */
+
+/* One 8-pt rhythm inside the depart hero: margins off, the card's row gap sets the spacing. */
+.app-layout[data-ui-version='v2'] .now-card.v2-journey-card {
+  row-gap: 6px;
+}
+
+.v2-journey-card > .v2-card-header > *,
+.v2-journey-card > .now-map-strip,
+.v2-journey-card > .now-basis {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.v2-journey-card > .v2-card-header > .qp-hero-title {
+  margin-top: 6px !important;
+}
+
+.v2-journey-card > .v2-card-header > .now-actions-container {
+  margin-top: 8px !important;
+}
+
+/* The reason line: one quiet sans line under the serif title (not a second headline). */
+.app-layout[data-ui-version='v2'] .v2-journey-card .now-subject,
+.app-layout[data-ui-version='v2'] .v2-journey-card .now-subject * {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--qp-ink);
+}
+
+/* Change moment: a small "Updated plan ready" chip and the muted explanation. */
+.v2-journey-card #change-moment-container {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.v2-journey-card #plan-status-transition {
+  display: inline-flex;
+  margin: 0;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--qp-sage-wash);
+  color: var(--qp-forest);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.v2-journey-card #what-changed-marker {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+}
+
+.v2-journey-card #hero-cause-effect {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--qp-ink-soft);
+  text-wrap: pretty;
+}
+
+.v2-journey-card #time-diff-display {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--qp-ink-quiet);
+}
+
+.v2-journey-card #time-diff-display .new-time-highlight {
+  font-weight: 650;
+  color: var(--qp-forest);
+}
+
+.v2-journey-card #now-title {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.v2-journey-card .now-rationale-line,
+.v2-journey-card .now-forecast-status {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+/* Map strip (demo schematic): a soft rounded strip with its provenance tag and a duration
+   callout; the Live hero shows no empty "map not available" box. */
+.now-card .now-map-strip .v2-map-card {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--qp-r-tile);
+  background: #EEF1EA;
+  box-shadow: none;
+}
+
+.now-card .now-map-strip .map-strip-header {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  margin: 0;
+  padding: 0;
+}
+
+.now-card .now-map-strip .map-strip-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.now-card .now-map-strip .map-strip-header .card-badge {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  font-size: 0.625rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--qp-ink-soft);
+}
+
+.now-card .now-map-strip .v2-map-canvas {
+  position: relative;
+  height: 104px;
+  min-height: 0;
+  border-radius: var(--qp-r-tile);
+  overflow: hidden;
+}
+
+.now-card .now-map-strip .v2-map-canvas svg {
+  width: 100%;
+  height: 100%;
+}
+
+.qp-map-callout {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 2;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  box-shadow: 0 4px 12px -6px rgba(31, 41, 33, 0.35);
+  transform: translateX(-50%);
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  color: var(--qp-ink-quiet);
+}
+
+.qp-map-callout strong {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--qp-ink);
+}
+
+.v2-journey-card > .now-map-strip:has(.map-unavailable-canvas) {
+  display: none;
+}
+
+/* Signal tiles: one compact list ("what I used"), each value on one line, no orphans. */
+.now-card .hero-signals-grid {
+  grid-template-columns: 1fr !important;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--qp-line);
+  border-radius: var(--qp-r-tile);
+  background: #FBFAF6;
+}
+
+.now-card .hero-signals-grid .signal-tile {
+  display: flex;
+  align-items: center;
+  gap: var(--qp-s3);
+  min-height: 40px;
+  padding: 8px var(--qp-s3);
+  border: 0;
+  border-bottom: 1px solid var(--qp-line);
+  border-radius: 0;
+  background: none;
+}
+
+.now-card .hero-signals-grid .signal-tile:last-child {
+  border-bottom: 0;
+}
+
+.now-card .hero-signals-grid .signal-tile-top {
+  display: flex;
+  flex: 0 0 104px;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.now-card .hero-signals-grid .signal-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  -webkit-line-clamp: unset;
+  display: block;
+  text-align: right;
+}
+
+.now-card .hero-signals-grid .signal-meta {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .now-card .hero-signals-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .now-card .hero-signals-grid .signal-tile:nth-child(odd) {
+    border-right: 1px solid var(--qp-line);
+  }
+
+  .now-card .hero-signals-grid .signal-tile:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+}
+
+/* Nothing rests under the floating Ask bar at the end of the page. */
+@media (max-width: 1023px) {
+  .app-layout[data-ui-version='v2'] main.main-container {
+    padding-bottom: 168px;
+  }
+}
+
+/* Reference 04 order, now that the hero is compact: the map strip sits above the actions. */
+.v2-journey-card > .now-map-strip { order: 5; }
+
+/* Lunch actions = depart actions: three equal buttons, then Details / Not now as quiet text. */
+.v2-candidates-hero .now-actions-container {
+  flex-wrap: wrap;
+}
+
+.v2-candidates-hero .now-actions-primary {
+  flex: 1 1 100%;
+}
+
+.v2-candidates-hero .now-actions-primary .btn-now-action,
+.v2-candidates-hero .now-actions-primary .btn-now-action.btn-primary,
+.v2-candidates-hero .now-actions-primary .btn-now-action.btn-outline {
+  flex: 1 1 0;
+  padding: 0 var(--qp-s3);
+  font-size: 0.9375rem;
+}
+
+.v2-candidates-hero .now-actions-secondary {
+  flex: 1 1 100%;
+  justify-content: space-between;
+}
+
+.v2-candidates-hero .now-actions-secondary .btn-secondary-link,
+.v2-candidates-hero .now-actions-secondary .v2-trip-details-btn {
+  display: inline-flex;
+  padding: 0 var(--qp-s1);
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 767px) {
+  .now-card .v2-candidate-list .v2-candidate-card.compact-hero-card {
+    width: calc(100% - 40px);
+  }
+
+  .now-card .v2-candidate-list .compact-hero-card .v2-candidate-art {
+    aspect-ratio: 4 / 1;
+  }
+
+  .now-card .v2-candidate-list .compact-hero-card .v2-candidate-info {
+    gap: 3px;
+    padding: 8px var(--qp-s3) 10px;
+  }
+
+  .now-card .v2-candidate-list .compact-hero-card .v2-candidate-tags > span {
+    font-size: 0.78125rem;
+  }
+
+  .now-card .v2-candidate-list .compact-hero-card .v2-candidate-footer {
+    margin-top: 4px;
+  }
+
+  .v2-candidates-hero .now-actions-container {
+    margin-top: var(--qp-s2);
+  }
+}
+
+/* Header botanical: soft and low-contrast, clear of the avatar and the greeting. */
+.qp-header-leaf {
+  top: 34px;
+  right: -58px;
+  width: 168px;
+  opacity: 0.62;
+}
+
+@media (min-width: 1024px) {
+  .qp-header-leaf {
+    top: -30px;
+    right: 40px;
+    width: 250px;
+  }
+}
+
+/* The pill's source list is short now; let it show in full. */
+.qp-live-pill .context-pill-subtitle {
+  max-width: none;
+  white-space: normal;
+}
+
+/* Home credits: the weather data credit sits once, quietly, at the end of Home. */
+.qp-home-credits {
+  display: flex;
+  justify-content: center;
+  margin: var(--qp-s5) 0 0;
+  font-size: 0.6875rem;
+  color: var(--qp-ink-quiet);
+}
+
+.qp-home-credits .qp-attr-long {
+  display: inline;
+}
+
+.qp-home-credits .qp-attr-short {
+  display: none;
+}
+
+/* Connectors: one status per card. */
+.connectors-container .connector-detail.qp-detail-repeat {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+}
+
+@media (min-width: 1024px) {
+  /* Text leads the desktop pick; the photo is a supporting thumbnail. */
+  .now-card .v2-candidate-list .v2-candidate-card.compact-hero-card {
+    width: 520px;
+  }
+
+  .now-card .v2-candidate-list .compact-hero-card .v2-candidate-art {
+    flex: 0 0 176px;
+    width: 176px;
+  }
+
+  /* The rail tile already shows its distance; the basis line only repeated it. */
+  .desktop-right-panel .desktop-candidate-basis {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .now-card .v2-candidate-list .v2-candidate-card.compact-hero-card {
+    min-height: 232px;
+  }
+
+  .now-card .v2-candidate-list .compact-hero-card .v2-candidate-footer {
+    margin-top: auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .now-card .v2-candidate-list .v2-candidate-card.compact-hero-card {
+    align-items: stretch;
+  }
+
+  .now-card .v2-candidate-list .compact-hero-card .v2-candidate-info {
+    align-self: stretch;
+  }
+}
+
+/* Provider phrasing ("Open now · from Google opening hours") is quiet at every width; it stays in
+   the DOM and in details. */
+.now-card .v2-candidate-list .compact-hero-card .v2-candidate-basis {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+}
+
+/* Signal list rows: label column left, value right (base styles stack tiles as columns). */
+.now-card .hero-signals-grid .signal-tile {
+  flex-direction: row;
+}
+
+/* The map strip keeps its readable heading as a small tag next to the provenance tag. */
+.now-card .now-map-strip .map-strip-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.now-card .now-map-strip .map-strip-label {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  color: var(--qp-ink-soft);
+}
+
+.now-card .now-map-strip .map-strip-label svg {
+  display: none !important;
+}
+
+/* Desktop rail: keep the ranking line (with its sparkle); the duplicate distance chip goes. */
+@media (min-width: 1024px) {
+  .desktop-right-panel .desktop-candidate-basis {
+    display: block;
+  }
+
+  .desktop-right-panel .desktop-candidate-meta .v2-distance-chip {
+    display: none;
+  }
+}
+
+/* Touch targets keep 44 px even while a card's entrance transform runs. */
+.app-layout .now-card .v2-candidate-list .v2-candidate-footer .v2-directions-btn,
+.app-layout .now-card .v2-candidate-list .v2-candidate-footer .v2-view-detail-link {
+  height: 46px;
+  min-height: 46px;
+}

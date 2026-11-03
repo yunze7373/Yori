@@ -591,7 +591,7 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     expect(weatherTileVal).toBe('Off (owner setting)');
 
     const calendarTileVal = await page.locator('#signal-tile-calendar .signal-value').innerText();
-    expect(calendarTileVal).toBe('Not connected');
+    expect(calendarTileVal).toBe('No calendar linked yet'); // UI-QUIET-PRECISION: human phrasing on Home
 
     const memoryTile = page.locator('#signal-tile-memory');
     await expect(memoryTile).toBeVisible();
