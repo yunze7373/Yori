@@ -10,6 +10,7 @@
  * - Size hint: prominent (large, for transit/rain) or compact (for lunch/places).
  */
 
+import { appliedRainBufferMinutes } from './rain-buffer.js';
 import type { PreparedPlan, PlanOption, SpatialMapEvidence } from '../../core/contracts/index.js';
 import { formatTime } from '../living-context/presentation.js';
 import type { MapVM, MapMarkerVM, MapPolylineVM, MapWeatherCalloutVM } from './types.js';
@@ -123,7 +124,7 @@ export function deriveMapVM(
       // Single-mode plan (e.g. D1): derive travel duration mathematically from timing
       let travelMinutes: number | undefined;
       const bufferFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_buffer_minutes');
-      const bufferMinutes = typeof bufferFact?.value === 'number' ? bufferFact.value : 0;
+      const bufferMinutes = (typeof bufferFact?.value === 'number' ? bufferFact.value : 0) + appliedRainBufferMinutes(plan);
       if (plan.apptAt && plan.leaveAt) {
         const apptMs = Date.parse(plan.apptAt);
         const leaveMs = Date.parse(plan.leaveAt);

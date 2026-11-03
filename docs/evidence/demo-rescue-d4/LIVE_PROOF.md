@@ -174,7 +174,7 @@ No further billed calls were made.
   - the 32 calls made before token recording are charged at the per-call worst case (3,000 prompt +
     8,192 completion tokens);
   - call 36 is also charged at the worst case, because its response never came back;
-  - calls 33, 34, 35 and 37 are charged at real usage: ≈ USD 0.0029, 0.0027, 0.0046 and 0.0033.
+  - calls 33, 34, 35 and 37 are charged at real usage: ≈ USD 0.0029 / 0.0027 / 0.0046 / 0.0033.
 - **Rate source:** USD 2.00 per 1M tokens, applied to input and output. It is the muse-spark estimate
   documented in `src/adapters/model/server-proxy.ts` (`MAX_TOKENS_CEILING` note) and in the S1
   reports. **UNVERIFIED** (not checked against a published Meta price list). If the true rate were

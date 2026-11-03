@@ -145,8 +145,11 @@ export class DepartPreparer implements Preparer {
       return null; // Fail closed on missing/invalid travel duration numbers
     }
 
-    // 3. Locate weather signal and check expiration (INV-106)
-    const weatherSignal = snapshot.signals.find(s => s.kind === 'weather');
+    // 3. Locate weather signal and check expiration (INV-106). D5: a target-time forecast for the
+    //    trip window (value.forecast) takes precedence over current conditions.
+    const weatherSignal =
+      snapshot.signals.find(s => s.kind === 'weather' && isForecastValue(s.value)) ??
+      snapshot.signals.find(s => s.kind === 'weather');
     let validWeatherSignal: ContextSignal | null = null;
     if (weatherSignal && typeof weatherSignal.validFor === 'number' && typeof weatherSignal.issuedAt === 'string') {
       const weatherIssuedMs = Date.parse(weatherSignal.issuedAt);
@@ -206,11 +209,25 @@ export class DepartPreparer implements Preparer {
 
     // 5. Evaluate precipitation risk from valid weather signal
     const weatherVal = validWeatherSignal?.value as Record<string, unknown> | undefined;
-    const hasPrecipitationRisk =
-      weatherVal !== undefined &&
-      (weatherVal.condition === 'rain' ||
-        (typeof weatherVal.precipProbability === 'number' && weatherVal.precipProbability >= 0.5) ||
-        weatherVal.rainfall !== undefined);
+    const forecast = isForecastValue(weatherVal) ? (weatherVal!.forecast as ForecastValue) : null;
+    const hasPrecipitationRisk = forecast
+      ? forecast.rainExpected === true
+      : weatherVal !== undefined &&
+        (weatherVal.condition === 'rain' ||
+          (typeof weatherVal.precipProbability === 'number' && weatherVal.precipProbability >= 0.5) ||
+          weatherVal.rainfall !== undefined);
+
+    // D5 / S4c: leave earlier for rain ONLY by the user's own confirmed minutes (provenance user).
+    const rainBufferFact = memory.find(
+      f =>
+        f.key === 'rain_buffer_minutes' &&
+        f.status === 'confirmed' &&
+        (f.provenance as { source?: string } | undefined)?.source === 'user_confirmed' &&
+        typeof f.value === 'number' &&
+        Number.isInteger(f.value) &&
+        f.value >= 1 &&
+        f.value <= 60
+    );
 
     const title = typeof calVal.title === 'string' ? calVal.title : 'Appointment';
 
@@ -230,7 +247,29 @@ export class DepartPreparer implements Preparer {
       },
     ];
 
-    if (validWeatherSignal) {
+    if (validWeatherSignal && forecast) {
+      const span =
+        forecast.rainFrom && forecast.rainTo
+          ? compactTimeSpan(formatTime12(Date.parse(forecast.rainFrom), timeZone), formatTime12(Date.parse(forecast.rainTo), timeZone))
+          : null;
+      evidenceSignals.push({
+        kind: 'weather',
+        source: validWeatherSignal.source,
+        issuedAt: validWeatherSignal.issuedAt,
+        description: hasPrecipitationRisk
+          ? `Rain expected${span ? ` ${span}` : ''} during your trip · Open-Meteo hourly forecast`
+          : 'Dry forecast for your trip · Open-Meteo hourly forecast',
+        value: {
+          forecast: true,
+          rainExpected: hasPrecipitationRisk,
+          rainFrom: forecast.rainFrom,
+          rainTo: forecast.rainTo,
+          rainSpan: span,
+          validAt: forecast.validAt,
+          confidence: forecast.confidence,
+        },
+      } as any);
+    } else if (validWeatherSignal) {
       evidenceSignals.push({
         kind: 'weather',
         source: validWeatherSignal.source,
@@ -414,10 +453,24 @@ export class DepartPreparer implements Preparer {
         ? (travelVal.travelMinutes as number)
         : (travelVal.driveMinutes as number);
 
+      // D5: the confirmed rain buffer moves leave-by by exactly the user's minutes, only when the
+      // target-time FORECAST expects rain in the trip window (current-conditions rain keeps the
+      // leave-by as before). It is cited (provenance user) so every leave-time derivation counts it.
+      // D6 hook: a real mode switch would branch here instead of (or before) the buffer.
+      const rainBufferMinutes = forecast && hasPrecipitationRisk && rainBufferFact ? (rainBufferFact.value as number) : 0;
+      if (rainBufferMinutes > 0) {
+        memoryFactsUsed.push({
+          key: 'rain_buffer_minutes',
+          value: rainBufferMinutes,
+          status: rainBufferFact!.status,
+          provenance: rainBufferFact!.provenance,
+        });
+      }
+
       const timing = computeDepartTiming({
         apptTime: startTimeStr,
         travelMinutes,
-        bufferMinutes,
+        bufferMinutes: bufferMinutes + rainBufferMinutes,
         prepMinutes,
         timeZone,
         nowTime: snapshot.asOf,
@@ -430,7 +483,7 @@ export class DepartPreparer implements Preparer {
         ? adjustTimingWithDelta(timing, travelMinutes, deltaMinutes, timeZone)
         : {
             ...timing,
-            arrivalMarginMinutes: bufferMinutes,
+            arrivalMarginMinutes: bufferMinutes + rainBufferMinutes,
             arrivesLate: false,
           };
 
@@ -454,8 +507,14 @@ export class DepartPreparer implements Preparer {
         },
       ]);
 
+      const rainNote =
+        rainBufferMinutes > 0
+          ? ` (${bufferMinutes}m buffer + your ${rainBufferMinutes}m rain buffer)`
+          : forecast && hasPrecipitationRisk
+            ? ' (leave-by unchanged: no rain buffer set)'
+            : '';
       const baseDerivation = hasPrecipitationRisk
-        ? `Rain departure: ${effectiveTiming.derivation}`
+        ? `${forecast ? 'Rain expected (forecast)' : 'Rain departure'}: ${effectiveTiming.derivation}${rainNote}`
         : effectiveTiming.derivation;
 
       if (isLeaveLater) {
@@ -489,3 +548,25 @@ export class DepartPreparer implements Preparer {
 }
 
 export const departPreparer = new DepartPreparer();
+
+/** D5: the forecast part of a weather signal value (built by the app from /api/weather/forecast). */
+interface ForecastValue {
+  readonly rainExpected: boolean;
+  readonly rainFrom?: string;
+  readonly rainTo?: string;
+  readonly validAt?: { readonly from: string; readonly to: string };
+  readonly confidence?: number;
+}
+
+function isForecastValue(value: unknown): boolean {
+  const f = (value as { forecast?: unknown } | undefined)?.forecast as Record<string, unknown> | undefined;
+  return Boolean(f && typeof f === 'object' && typeof f.rainExpected === 'boolean');
+}
+
+/** "2:00 PM" + "3:00 PM" -> "2:00–3:00 PM"; mixed meridiems keep both ("11:00 AM–12:00 PM"). */
+function compactTimeSpan(from12: string, to12: string): string {
+  const a = /^(.*)\s(AM|PM)$/.exec(from12);
+  const b = /^(.*)\s(AM|PM)$/.exec(to12);
+  return a && b && a[2] === b[2] ? `${a[1]}–${to12}` : `${from12}–${to12}`;
+}
+

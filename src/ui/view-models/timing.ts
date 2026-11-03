@@ -11,6 +11,7 @@
  * - Late risk when margin < 0.
  */
 
+import { appliedRainBufferMinutes } from './rain-buffer.js';
 import type { PreparedPlan, PlanOption } from '../../core/contracts/index.js';
 
 export interface PlanTimingFacts {
@@ -52,10 +53,10 @@ export function derivePlanTimingFacts(
   // Extract memory facts used (buffer and prep duration)
   const bufferFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_buffer_minutes');
   const prepFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_duration_minutes');
+  // D5: an applied rain buffer is part of the buffer between leaving and the appointment.
   const bufferMinutes =
-    typeof bufferFact?.value === 'number' && Number.isFinite(bufferFact.value)
-      ? bufferFact.value
-      : 0;
+    (typeof bufferFact?.value === 'number' && Number.isFinite(bufferFact.value) ? bufferFact.value : 0) +
+    appliedRainBufferMinutes(plan);
   const prepMinutes =
     typeof prepFact?.value === 'number' && Number.isFinite(prepFact.value)
       ? prepFact.value

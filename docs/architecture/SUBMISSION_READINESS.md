@@ -17,8 +17,8 @@
 | **S1-LIVE-PIPELINE-CORE** | **ACCEPTED** | `874cc7c1` @ `c2ed098` | Loopback server proxy architecture (`/api/model`, `/api/places`, `/api/route`, `/api/weather`, `/api/calendar`, `/api/xmemo`). Zero browser-side outbound calls. Host allowlist & fail-closed error handling. |
 | **S2-LIVE-DEFAULT** | **ACCEPTED** | `1cc34ee7` @ `000ef33` | Live mode set as default first open (`contextMode = 'live'`). Truthful consent gate (`Location Needed` / `Use My Location`), honest zero-fixture baseline, dual-viewport verification at 390×844 and 1280×800. |
 | **S3-LIVE-LUNCH** | **ACCEPTED** (Implementation)<br>**BLOCKED-accepted** (Live proof) | `0579ea09` @ `01abccb` | Nearby lunch candidate pipeline with distance math, verified open-now and cuisine tagging from recorded Overpass OSM fixtures. Live proof gated behind owner decision (b) (`PLACES_LIVE_ENABLED=1`). Honest empty/denied/gated fallback states. |
-| **S4-LIVE-DEPART** | **ACCEPTED-NARROWED** (Implementation)<br>**BLOCKED-accepted** (Live proof) | `5adb5ea1` @ `d3647b5` | Live departure planning adapter with honest single-mode rain differential (`Rain now · take an umbrella`, leave-by time unchanged), verified on recorded Open-Meteo and OSRM fixtures. **Narrowed**: Current-conditions weather only (target-time forecast, multimodal transit, and rain-driven earlier departure are deferred). Live proof gated behind `WEATHER_LIVE_ENABLED=1`, `ROUTE_LIVE_ENABLED=1`, and `CALENDAR_ICS_URL`. |
-| **S4c-RAIN-BUFFER-OPT** | **NOT-APPLICABLE** | Plan rev 4 conditional | User-confirmed conditional rain buffer rule. Non-gating; conditional only if explicitly requested by owner; closes NOT-APPLICABLE for chapter closeout. |
+| **S4-LIVE-DEPART** | **ACCEPTED-NARROWED** (Implementation)<br>**BLOCKED-accepted** (Live proof) | `5adb5ea1` @ `d3647b5` | Live departure planning adapter with honest single-mode rain differential (`Rain now · take an umbrella`, leave-by time unchanged), verified on recorded Open-Meteo and OSRM fixtures. **Narrowed**: multimodal transit is deferred (D6). Target-time forecast and the user-confirmed rain buffer were delivered later in **D5-LIVE-FORECAST** (see §3, items 1–2). Live proof gated behind `WEATHER_LIVE_ENABLED=1`, `ROUTE_LIVE_ENABLED=1`, and `CALENDAR_ICS_URL`. |
+| **S4c-RAIN-BUFFER-OPT** | **DELIVERED in D5** (rule) | D5-LIVE-FORECAST (DEMO_RESCUE rev12) | A user-confirmed `rain_buffer_minutes` fact (`user_confirmed` provenance, integer 1–60) moves leave-by earlier by exactly those minutes, and only when the trip-window forecast expects rain. There is **no in-app control to set the rain buffer yet** (BACKLOG). In this build the rule reads only an existing confirmed memory fact; it never creates one. |
 | **S5-LIVE-REASON** | **ACCEPTED** (Implementation)<br>**BLOCKED-accepted** (Live proof) | `bfb39ded` @ `b956132` | Model interpreter live path with runtime fact check, session budget enforcement (hard ceiling 32 lowering-only, persistent call ledger at 22/32), honest engine status pill across viewports, responsive header wrap at 390×844. Live proof gated on explicit owner budget approval ($\le 10$ calls, ledger $\le 32/50$). |
 | **S6-OWNER-SMOKE (agent-prep)** | **READY-FOR-SMOKE** | Bound to HEAD | Release blocker resolved: zero dead Settings controls (`#desktop-nav-settings` and mobile avatar `#btn-header-avatar` route cleanly to Settings > Connectors). Honest evidence index, deferred gap disclosures, and owner smoke checklist prepared. |
 
@@ -46,14 +46,26 @@ Every live capability in Yori is classified under the **BLOCKED-terminal rule**:
 In adherence to Yori's core principle of **ruthless engineering truthfulness**, the following capabilities are explicitly disclosed as **NOT delivered** in this submission (governed by `BACKLOG S4DEPART-P3(e)` and Architect Feasibility Note `docs/architecture/TARGET_TIME_FORECAST_NOTE.md`):
 
 1. **Target-Time Weather Forecast for Departure Window**:
-   - **Status**: **NOT DELIVERED** (Architect feasibility note delivered; implementation deferred).
-   - **Current Implementation**: The departure plan displays *current-conditions weather* (`Rain now` when raining; leave time unchanged).
-   - **No Claim**: We make **no claim** that the system queries or acts upon hourly forecast bins for future departure/arrival times.
+   - **Status**: **DELIVERED in D5-LIVE-FORECAST** (No-Claim retired).
+   - **What happens:**
+     - **Request:** for the next real Live depart plan, the app requests Open-Meteo hourly bins (`/api/weather/forecast`) for the `[leave-by, appointment]` window. It uses only the consented, 3-decimal fix; without consent there is no request.
+     - **Signal:** a forecast signal carries `issuedAt`, `validFor`, a `validAt` window, confidence 0.8 (below 1.0) and `provenance: open_meteo_forecast`.
+     - **Rain:** rain in the window adds the umbrella and a forward-looking rationale (`Rain expected 2:00–3:00 PM`).
+     - **Fallback:** missing or stale bins fall back to current conditions, labelled *Forecast unavailable · using current conditions*.
+   - **Evidence:**
+     - `tests/proxy-boundary/weather-forecast-proxy.test.ts`: validation without echo, fields mask, timeout, fail-closed.
+     - `src/plugins/depart/forecast.test.ts`.
+     - `tests/e2e-live/live-forecast.spec.ts`: recorded bins at 390×844 and 1280×800; no request before consent.
+     - `docs/evidence/demo-rescue-d5/`.
+   - **Remaining limits:** the forecast is for the device fix's area, not a geocoded destination. No background tracking.
 
 2. **Rain-Driven Earlier Departure Calculation**:
-   - **Status**: **NOT DELIVERED**.
-   - **Current Implementation**: Departure calculation uses fixed single-mode driving duration math from OSRM. Core duration logic is unmodified (`AC-EXT-1` core diff remains 0 lines).
-   - **No Claim**: We make **no claim** that rainy conditions automatically move departure time earlier without confirmed user buffer rules (S4c).
+   - **Status**: **DELIVERED in D5, via the user-confirmed buffer only** (No-Claim retired).
+   - **What happens:**
+     - **Rain expected:** leave-by moves earlier by exactly the user's confirmed `rain_buffer_minutes`. The fact must have `user_confirmed` provenance; it is cited in the plan's Why. A sample, pending or out-of-range value is never applied.
+     - **No buffer set:** the leave-by stays unchanged, and the Now card says *Forecast · leave-by unchanged, no rain buffer set*.
+     - **Travel time:** no travel durations are invented. Core duration logic is unmodified (`AC-EXT-1` core diff 0 lines).
+   - **Still no claim:** rain never changes the mode or the travel time by itself (mode switch = D6).
 
 3. **Multimodal Transit Re-ranking**:
    - **Status**: **NOT DELIVERED**.
@@ -63,7 +75,7 @@ In adherence to Yori's core principle of **ruthless engineering truthfulness**, 
 4. **Device-Location Dynamic Weather**:
    - **Status**: **DELIVERED in D1** (`87c917a`): current conditions at the consented fix.
    - **Current Implementation**: `/api/weather/current?coords=lat,lng` (validated, re-rounded to 3 decimals, never logged) queries Open-Meteo at the device fix. Without consent Live sends no weather request at all. `DEMO_CITY_*` applies only to the dev demo (`?dev=1`) and recorded tests.
-   - **No Claim**: current conditions only. No target-time forecast, no background tracking (the fix is per session and refreshed only while the app is open).
+   - **No Claim**: no background tracking (the fix is per session and refreshed only while the app is open). The target-time forecast for a depart plan is delivered in D5 (item 1).
 
 ---
 

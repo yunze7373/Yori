@@ -32,5 +32,7 @@ export const departPlugin: Plugin<SimulatedProviderAdapter> & {
     'prep_duration_minutes',
     'prep_buffer_preference',
     'rain_transport_preference',
+    // D5: the user's confirmed extra minutes to leave earlier when rain is expected (S4c).
+    'rain_buffer_minutes',
   ]),
 });

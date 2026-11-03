@@ -227,3 +227,137 @@ export class OpenMeteoWeatherAdapter implements RealProviderAdapter<WeatherData>
     }
   }
 }
+
+/**
+ * D5-LIVE-FORECAST (DEMO_RESCUE rev12): Open-Meteo HOURLY bins for a target window
+ * [from, to] (the next real plan's depart -> arrive). Same keyless endpoint, ToS and attribution.
+ * - Fields mask: hourly precipitation_probability, precipitation, weather_code only; times in UTC.
+ * - A forecast is never certain: confidence is below 1.0 and it carries issuedAt, validFor and the
+ *   validAt window it describes.
+ * - Fail closed: an HTTP error, timeout, malformed payload, or bins that do not cover the window
+ *   return { ok: false, reason } so the caller falls back to CURRENT conditions, labelled as such.
+ */
+export const FORECAST_CONFIDENCE = 0.8;
+export const FORECAST_VALID_FOR_MS = 3600_000;
+/** Rain in a bin: probability >= 50 %, or >= 0.3 mm forecast, or a rain/shower WMO code. */
+export const FORECAST_RAIN_PROBABILITY = 0.5;
+export const FORECAST_RAIN_MM = 0.3;
+export const FORECAST_HOURLY_FIELDS = 'precipitation_probability,precipitation,weather_code';
+
+export interface ForecastBin {
+  /** Start of the hour, UTC ISO. */
+  readonly time: string;
+  readonly precipProbability: number;
+  readonly precipitationMm: number;
+  readonly condition: WeatherCondition;
+  readonly rain: boolean;
+}
+
+export interface ForecastWindowSignal {
+  readonly kind: 'weather_forecast';
+  readonly provenance: 'open_meteo_forecast';
+  readonly issuedAt: string;
+  readonly validFor: number;
+  readonly validAt: { readonly from: string; readonly to: string };
+  readonly confidence: number;
+  readonly bins: readonly ForecastBin[];
+  /** Rain anywhere in the window, and the first-to-last rainy hour span (UTC ISO). */
+  readonly rainExpected: boolean;
+  readonly rainFrom?: string;
+  readonly rainTo?: string;
+  readonly maxPrecipProbability: number;
+}
+
+export type ForecastResult =
+  | { readonly ok: true; readonly forecast: ForecastWindowSignal }
+  | { readonly ok: false; readonly reason: 'bins_missing' | 'provider_error' };
+
+const hourFloorMs = (ms: number) => ms - (ms % 3600_000);
+const toOpenMeteoHour = (ms: number) => new Date(ms).toISOString().slice(0, 13) + ':00';
+
+export function buildOpenMeteoForecastUrl(coordinate: { latitude: number; longitude: number }, fromMs: number, toMs: number): string {
+  const url = new URL('https://api.open-meteo.com/v1/forecast');
+  url.searchParams.set('latitude', String(coordinate.latitude));
+  url.searchParams.set('longitude', String(coordinate.longitude));
+  url.searchParams.set('hourly', FORECAST_HOURLY_FIELDS);
+  url.searchParams.set('timezone', 'GMT');
+  url.searchParams.set('start_hour', toOpenMeteoHour(hourFloorMs(fromMs)));
+  url.searchParams.set('end_hour', toOpenMeteoHour(hourFloorMs(toMs)));
+  return url.toString();
+}
+
+/** Maps an Open-Meteo hourly payload to bins covering [from, to]; null when coverage is incomplete. */
+export function mapOpenMeteoHourly(data: unknown, fromMs: number, toMs: number): ForecastBin[] | null {
+  const d = (data ?? {}) as Record<string, any>;
+  const h = d.hourly;
+  if (!h || !Array.isArray(h.time) || !Array.isArray(h.precipitation_probability)) return null;
+  const offset = typeof d.utc_offset_seconds === 'number' ? d.utc_offset_seconds : null;
+  const bins: ForecastBin[] = [];
+  for (let i = 0; i < h.time.length; i++) {
+    const iso = resolveOpenMeteoIsoTimestamp(h.time[i], offset);
+    const prob = h.precipitation_probability[i];
+    if (!iso || typeof prob !== 'number' || !Number.isFinite(prob)) continue;
+    const ms = Date.parse(iso);
+    if (ms + 3600_000 <= fromMs || ms > toMs) continue;
+    const mm = Array.isArray(h.precipitation) && typeof h.precipitation[i] === 'number' ? h.precipitation[i] : 0;
+    const code = Array.isArray(h.weather_code) && typeof h.weather_code[i] === 'number' ? h.weather_code[i] : null;
+    const condition = code === null ? 'cloudy' : mapWmoCodeToCondition(code);
+    const precipProbability = Math.min(1, Math.max(0, prob / 100));
+    bins.push({
+      time: iso,
+      precipProbability,
+      precipitationMm: Math.max(0, mm),
+      condition,
+      rain: precipProbability >= FORECAST_RAIN_PROBABILITY || mm >= FORECAST_RAIN_MM || condition === 'rain',
+    });
+  }
+  bins.sort((a, b) => a.time.localeCompare(b.time));
+  // Every hour touched by the window must be present, or the forecast is not trusted.
+  for (let t = hourFloorMs(fromMs); t <= hourFloorMs(toMs); t += 3600_000) {
+    if (!bins.some(b => Date.parse(b.time) === t)) return null;
+  }
+  return bins;
+}
+
+export async function fetchOpenMeteoHourlyForecast(params: {
+  readonly coordinate: { latitude: number; longitude: number };
+  readonly fromMs: number;
+  readonly toMs: number;
+  readonly fetchFn?: typeof fetch;
+  readonly timeoutMs?: number;
+  readonly nowMs?: number;
+}): Promise<ForecastResult> {
+  const fetchFn = params.fetchFn ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), params.timeoutMs ?? 5000) : null;
+  try {
+    const resp = await fetchFn(buildOpenMeteoForecastUrl(params.coordinate, params.fromMs, params.toMs), {
+      headers: { Accept: 'application/json' },
+      signal: controller?.signal,
+    });
+    if (!resp.ok) return { ok: false, reason: 'provider_error' };
+    const bins = mapOpenMeteoHourly(await resp.json(), params.fromMs, params.toMs);
+    if (!bins || bins.length === 0) return { ok: false, reason: 'bins_missing' };
+    const rainy = bins.filter(b => b.rain);
+    return {
+      ok: true,
+      forecast: {
+        kind: 'weather_forecast',
+        provenance: 'open_meteo_forecast',
+        issuedAt: new Date(params.nowMs ?? Date.now()).toISOString(),
+        validFor: FORECAST_VALID_FOR_MS,
+        validAt: { from: new Date(params.fromMs).toISOString(), to: new Date(params.toMs).toISOString() },
+        confidence: FORECAST_CONFIDENCE,
+        bins,
+        rainExpected: rainy.length > 0,
+        rainFrom: rainy[0]?.time,
+        rainTo: rainy.length ? new Date(Date.parse(rainy[rainy.length - 1]!.time) + 3600_000).toISOString() : undefined,
+        maxPrecipProbability: Math.max(...bins.map(b => b.precipProbability)),
+      },
+    };
+  } catch {
+    return { ok: false, reason: 'provider_error' };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}

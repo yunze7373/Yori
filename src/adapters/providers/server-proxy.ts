@@ -19,7 +19,7 @@ import {
   OPEN_METEO_ATTRIBUTION,
   type DemoCityCoordinate,
 } from './weather-types.js';
-import { OpenMeteoWeatherAdapter } from './open-meteo-adapter.js';
+import { OpenMeteoWeatherAdapter, fetchOpenMeteoHourlyForecast } from './open-meteo-adapter.js';
 import { isAllowlistedLoopbackHost, isLoopbackPeer } from '../xmemo/loopback-allowlist.js';
 import {
   OSRM_ATTRIBUTION,
@@ -176,6 +176,30 @@ export function parseWeatherCoordsParam(raw: string | null): WeatherCoordsParseR
   };
 }
 
+/** D5: forecast window bounds (the next plan's depart -> arrive, never an open-ended range). */
+export const FORECAST_MAX_WINDOW_MS = 12 * 3600_000;
+export const FORECAST_MAX_AHEAD_MS = 48 * 3600_000;
+export const FORECAST_MAX_PAST_MS = 3600_000;
+const FORECAST_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?Z$/;
+
+export type ForecastWindowParseResult =
+  | { readonly ok: true; readonly fromMs: number; readonly toMs: number }
+  | { readonly ok: false };
+
+/**
+ * Strictly parses from/to for /api/weather/forecast: UTC ISO only, from < to, window <= 12 h,
+ * from no more than 1 h in the past and to no more than 48 h ahead. Anything else -> { ok: false }.
+ */
+export function parseForecastWindowParams(from: string | null, to: string | null, nowMs: number): ForecastWindowParseResult {
+  if (!from || !to || !FORECAST_TIME_PATTERN.test(from) || !FORECAST_TIME_PATTERN.test(to)) return { ok: false };
+  const fromMs = Date.parse(from);
+  const toMs = Date.parse(to);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) return { ok: false };
+  if (toMs - fromMs > FORECAST_MAX_WINDOW_MS) return { ok: false };
+  if (fromMs < nowMs - FORECAST_MAX_PAST_MS || toMs > nowMs + FORECAST_MAX_AHEAD_MS) return { ok: false };
+  return { ok: true, fromMs, toMs };
+}
+
 export function isLocalHost(hostHeader: string | undefined): boolean {
   if (!hostHeader) return false;
   const cleanHost = (hostHeader.split(':')[0] || '').toLowerCase();
@@ -195,7 +219,8 @@ export function isLocalOriginOrReferer(headerVal: string | undefined): boolean {
 
 export function createWeatherProxyMiddleware(
   configOverride?: Partial<WeatherProxyConfig>,
-  adapterOverride?: OpenMeteoWeatherAdapter
+  adapterOverride?: OpenMeteoWeatherAdapter,
+  forecastFetchOverride?: typeof fetch
 ) {
   const baseConfig = resolveWeatherConfig();
   const config: WeatherProxyConfig = {
@@ -429,6 +454,62 @@ export function createWeatherProxyMiddleware(
         });
         res.end(JSON.stringify({ error: 'Failed to fetch weather' }));
       }
+      return;
+    }
+
+    // Route 3 (D5): GET /api/weather/forecast?coords=lat,lng&from=ISO&to=ISO
+    if (pathname === '/api/weather/forecast' && req.method === 'GET') {
+      const noStore = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
+      if (!config.enabled) {
+        res.writeHead(403, noStore);
+        res.end(JSON.stringify({ enabled: false, error: 'Live weather is disabled (set WEATHER_LIVE_ENABLED=true)' }));
+        return;
+      }
+      const coordsResult = parseWeatherCoordsParam(parsedUrl.searchParams.get('coords'));
+      if (!coordsResult.ok) {
+        res.writeHead(400, noStore);
+        res.end(
+          JSON.stringify({
+            error: 'Invalid coords. Expected coords=lat,lng with lat in [-90,90] and lng in [-180,180]',
+            code: 'invalid_coords',
+          })
+        );
+        return;
+      }
+      const windowResult = parseForecastWindowParams(parsedUrl.searchParams.get('from'), parsedUrl.searchParams.get('to'), Date.now());
+      if (!windowResult.ok) {
+        // Fixed message; the rejected values are never echoed.
+        res.writeHead(400, noStore);
+        res.end(
+          JSON.stringify({
+            error: 'Invalid window. Expected from/to as UTC ISO times, from < to, at most 12 h, within the next 48 h',
+            code: 'invalid_window',
+          })
+        );
+        return;
+      }
+      const coordinate = coordsResult.coords ?? { latitude: config.demoCity.latitude, longitude: config.demoCity.longitude };
+      const result = await fetchOpenMeteoHourlyForecast({
+        coordinate,
+        fromMs: windowResult.fromMs,
+        toMs: windowResult.toMs,
+        fetchFn: forecastFetchOverride,
+      });
+      res.writeHead(200, noStore);
+      res.end(
+        JSON.stringify({
+          enabled: true,
+          forecast: result.ok ? result.forecast : null,
+          // Fail closed: the client shows current conditions, labelled, when this is set.
+          unavailableReason: result.ok ? undefined : result.reason,
+          attribution: OPEN_METEO_ATTRIBUTION,
+          source: 'Open-Meteo',
+          fetchedAt: new Date().toISOString(),
+          coordinate: coordsResult.coords
+            ? { kind: 'device_fix', decimals: WEATHER_COORD_DECIMALS }
+            : { kind: 'demo_city', name: config.demoCity.name },
+        })
+      );
       return;
     }
 

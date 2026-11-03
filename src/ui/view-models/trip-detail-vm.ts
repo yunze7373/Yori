@@ -10,6 +10,7 @@
  * - Data honesty: fixture values only (no ratings, review counts, or road forgeries).
  */
 
+import { appliedRainBufferMinutes } from './rain-buffer.js';
 import type {
   PreparedPlan,
   PlanOption,
@@ -93,9 +94,10 @@ export function deriveTripDetailVM(options: DeriveTripDetailOptions): TripDetail
   // Extract memory facts for buffer and prep (no hardcoded literal fallbacks)
   const bufferFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_buffer_minutes');
   const prepFact = plan.why?.memoryFactsUsed?.find(f => f.key === 'prep_duration_minutes');
+  // D5: an applied rain buffer is part of the buffer between leaving and the appointment.
   let bufferMinutes =
     typeof bufferFact?.value === 'number' && Number.isFinite(bufferFact.value)
-      ? bufferFact.value
+      ? bufferFact.value + appliedRainBufferMinutes(plan)
       : undefined;
   let prepMinutes =
     typeof prepFact?.value === 'number' && Number.isFinite(prepFact.value)

@@ -932,7 +932,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     </svg>
                     Umbrella
                   </span>
-                  <span class="now-rationale-forecast">${vm.isLive ? 'Rain now' : 'Rain forecast'}</span>
+                  <span class="now-rationale-forecast">${escapeHtml(vm.rainLabel ?? (vm.isLive ? 'Rain now' : 'Rain forecast'))}</span>
                 `
                     : `
                   <span>Typical traffic · 5m margin</span>
@@ -949,6 +949,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     : ''
                 }
               </div>
+              ${vm.forecastStatus ? `<div class="now-forecast-status" id="forecast-status" role="status">${escapeHtml(vm.forecastStatus)}</div>` : ''}
 
               ${renderActionRow(vm)}
 

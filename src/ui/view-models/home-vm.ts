@@ -12,6 +12,7 @@
  * - Honest provenance: sample demo profile facts must NEVER be labelled "Confirmed".
  */
 
+import { forecastCitation, forecastStatusLine } from './rain-buffer.js';
 import type {
   PreparedPlan,
   PlanOption,
@@ -70,6 +71,8 @@ export interface BuildHomeCompositionOptions {
   weatherEnabled?: boolean;
   /** D1: provenance of the Live weather response (device fix vs demo city, source, fetch time). */
   weatherProvenance?: { source: string; fetchedAt?: string; atDeviceFix: boolean } | null;
+  /** D5: state of the Live trip-window forecast request (undefined = none was requested). */
+  forecastState?: 'ok' | 'unavailable' | 'pending';
   /** D2: on-demand "Nearby now" affordance state (Live with a shared fix only). */
   nearbyNow?: HomeCompositionVM['nearbyNow'];
   /** D2: exact hosts of the ENABLED keyless providers, for the location consent copy. */
@@ -436,8 +439,12 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
       'weather-rain';
     const weatherIssuedTime = weatherSignal?.issuedAt ? formatTime(weatherSignal.issuedAt, tz) : undefined;
 
+    // D5: a forecast-driven plan speaks about the trip window, not "now".
+    const forecastInfo = forecastCitation(plan);
     if (isRain) {
-      if (options.isLive) {
+      if (options.isLive && forecastInfo?.rainExpected) {
+        rainInsightDesc = `Rain expected${forecastInfo.rainSpan ? ` ${forecastInfo.rainSpan}` : ''} during your trip · umbrella recommended.`;
+      } else if (options.isLive) {
         rainInsightDesc = "Rain now · umbrella recommended. I've prepared an updated departure schedule.";
       } else {
         rainInsightDesc = weatherIssuedTime
@@ -469,7 +476,9 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
     let displayHeadline = headline;
     let rainBanner: string | undefined = isRain
       ? options.isLive
-        ? 'What changed: Rain now'
+        ? forecastInfo?.rainExpected
+          ? 'What changed: Rain expected during your trip'
+          : 'What changed: Rain now'
         : STRINGS.rain.whatChanged
       : undefined;
 
@@ -550,6 +559,12 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
       rainBanner,
       rainInsightDesc,
       umbrellaChip: hasRainChecklist ? STRINGS.rain.umbrellaChip : undefined,
+      rainLabel: options.isLive
+        ? forecastInfo?.rainExpected
+          ? `Rain expected${forecastInfo.rainSpan ? ` ${forecastInfo.rainSpan}` : ''}`
+          : 'Rain now'
+        : 'Rain forecast',
+      forecastStatus: options.isLive ? forecastStatusLine(plan, options.forecastState) : undefined,
       habitNote,
       map,
       timeline,

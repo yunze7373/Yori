@@ -14,6 +14,7 @@
  * - Storage persistence via WebStorageDriver (AC-105-4)
  */
 
+import { appliedRainBufferMinutes, forecastCitation } from '../view-models/rain-buffer.js';
 import { STRINGS } from './strings.js';
 import { runPipeline, type PipelineResult } from '../../core/pipeline/index.js';
 import { staticPluginRegistry } from '../../plugins/registry.js';
@@ -162,7 +163,7 @@ import {
   type CardSelectionState,
 } from './desktop-ia.js';
 import { renderDesktopLeftNav } from './desktop-nav.js';
-import { resolveWeatherCurrentUrl, roundFixCoordinate } from './weather-request.js';
+import { resolveWeatherCurrentUrl, resolveWeatherForecastUrl, roundFixCoordinate } from './weather-request.js';
 import { renderDesktopRightPanel } from './desktop-panel.js';
 import type { HomeCompositionVM } from '../view-models/index.js';
 
@@ -1936,6 +1937,51 @@ export function renderApp(
   };
   let liveWeatherSignal: RealSignal<WeatherData> | null = null;
   let liveWeatherProvenance: { source: string; fetchedAt?: string; atDeviceFix: boolean } | null = null;
+  // D5: the Live trip-window forecast, keyed on the calendar event (one request per event), and
+  // fed to the depart preparer as a forecast weather signal. 'unavailable' = fall back to current
+  // conditions, labelled on the Now card.
+  let liveForecast: { key: string; status: 'pending' | 'ok' | 'unavailable'; signal?: LiveSignal } | null = null;
+
+  async function requestLiveForecast(url: string, key: string) {
+    try {
+      const resp = await fetch(url, { cache: 'no-store' });
+      const data = (await resp.json().catch(() => null)) as { forecast?: any } | null;
+      const f = resp.ok ? data?.forecast : null;
+      if (liveForecast?.key !== key) return;
+      if (f && typeof f.rainExpected === 'boolean' && typeof f.issuedAt === 'string' && typeof f.validFor === 'number') {
+        liveForecast = {
+          key,
+          status: 'ok',
+          signal: createLiveSignal({
+            kind: 'weather',
+            value: {
+              condition: f.rainExpected ? 'rain' : 'cloudy',
+              precipProbability: typeof f.maxPrecipProbability === 'number' ? f.maxPrecipProbability : 0,
+              forecast: {
+                rainExpected: f.rainExpected,
+                rainFrom: f.rainFrom,
+                rainTo: f.rainTo,
+                validAt: f.validAt,
+                confidence: f.confidence,
+              },
+            },
+            provider: 'open_meteo_forecast',
+            asOf: f.issuedAt,
+            validFor: f.validFor,
+            confidence: typeof f.confidence === 'number' ? Math.min(f.confidence, 0.99) : 0.8,
+            provenance: 'live',
+            consentScope: 'device_only',
+            status: 'available',
+          }),
+        };
+      } else {
+        liveForecast = { key, status: 'unavailable' };
+      }
+    } catch {
+      if (liveForecast?.key === key) liveForecast = { key, status: 'unavailable' };
+    }
+    update();
+  }
   // D2: exact provider hosts for the location consent copy, as reported by each /status.
   type OutboundHost = { purpose: string; host: string };
   let weatherOutboundHosts: OutboundHost[] = [];
@@ -2790,9 +2836,11 @@ export function renderApp(
             liveDestination,
             {
               calendarSignal: liveCalendarSignal,
-              customSignals: [liveTravelSignal, liveNearbyRequestSignal].filter(
-                (sig): sig is LiveSignal => sig != null
-              ),
+              customSignals: [
+                liveTravelSignal,
+                liveNearbyRequestSignal,
+                liveForecast?.status === 'ok' ? liveForecast.signal ?? null : null,
+              ].filter((sig): sig is LiveSignal => sig != null),
             }
           )
         : computeSceneState(
@@ -3337,7 +3385,19 @@ export function renderApp(
                 const priorLeaveClean = (priorLeaveTimeStr || '').replace(/\s*[AaPp][Mm]$/, '').trim();
                 const didLeaveTimeMove = Boolean(priorLeaveClean && newLeaveClean && priorLeaveClean !== newLeaveClean);
 
-                if (nowPlan.intentId === 'depart') {
+                const forecastNote = forecastCitation(nowPlan);
+                const rainBufferMoved = appliedRainBufferMinutes(nowPlan);
+                if (nowPlan.intentId === 'depart' && forecastNote?.rainExpected) {
+                  // D5: forward-looking; leave-by moves only by the user's confirmed rain buffer.
+                  const span = forecastNote.rainSpan ? ` ${forecastNote.rainSpan}` : '';
+                  cause = 'Rain expected during your trip';
+                  causeMarker = 'What changed: Rain expected during your trip';
+                  // The why (your rain buffer / none set) is on the forecast status line, not repeated here.
+                  heroCauseEffect =
+                    rainBufferMoved > 0
+                      ? `Rain expected${span} · take an umbrella; leaving ${rainBufferMoved} min earlier (${newLeaveClean}).`
+                      : `Rain expected${span} · take an umbrella; leave time unchanged (${newLeaveClean}).`;
+                } else if (nowPlan.intentId === 'depart') {
                   if (isRain) {
                     cause = 'Rain now';
                     causeMarker = 'What changed: Rain now';
@@ -3474,6 +3534,24 @@ export function renderApp(
         const isLunchSuppressed =
           storedSuppressions.some((s: any) => s.targetIntent === 'lunch' || (s as any).intentId === 'lunch');
 
+        // D5: one trip-window forecast request per Live depart event (consented, rounded fix only).
+        if (contextMode === 'live' && weatherStatus.enabled && nowPlan?.intentId === 'depart' && nowPlan.apptAt && nowPlan.leaveAt) {
+          const forecastKey = `${nowPlan.subjectTitle ?? ''}|${nowPlan.apptAt}`;
+          if (liveForecast?.key !== forecastKey) {
+            const forecastUrl = resolveWeatherForecastUrl(
+              contextMode,
+              defaultLocationPort.getLocation(),
+              defaultLocationPort.getConsentStatus?.(),
+              { leaveAt: nowPlan.leaveAt, apptAt: nowPlan.apptAt },
+              Date.now()
+            );
+            if (forecastUrl) {
+              liveForecast = { key: forecastKey, status: 'pending' };
+              setTimeout(() => void requestLiveForecast(forecastUrl, forecastKey), 0);
+            }
+          }
+        }
+
         // D4: one live reasoning call per new Live lunch candidate set.
         let candidateReasoningForVm: { order: string[]; reason: string; statusLabel: string } | undefined;
         if (contextMode === 'live' && nowPlan?.intentId === 'lunch') {
@@ -3505,6 +3583,10 @@ export function renderApp(
           isLive: contextMode === 'live',
           weatherEnabled: weatherStatus.enabled,
           weatherProvenance: liveWeatherProvenance,
+          forecastState:
+            contextMode === 'live' && liveForecast && nowPlan?.intentId === 'depart' && liveForecast.key === `${nowPlan.subjectTitle ?? ''}|${nowPlan.apptAt}`
+              ? liveForecast.status
+              : undefined,
           placesAttributionLine:
             livePlacesDiscovery?.discovery === 'google'
               ? 'Powered by Google · nearby places'

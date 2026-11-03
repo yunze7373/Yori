@@ -4144,6 +4144,14 @@ button.v2-view-detail-link:focus-visible {
   flex-shrink: 0;
 }
 
+/* D5: the one weather-basis status (forecast, rain buffer, or current-conditions fallback). */
+.now-forecast-status {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--color-ink, #162824);
+  margin: 0 0 8px;
+}
+
 .now-rationale-line .v2-active-mode-badge {
   white-space: nowrap;
   font-weight: 600;

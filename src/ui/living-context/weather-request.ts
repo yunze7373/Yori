@@ -35,3 +35,31 @@ export function resolveWeatherCurrentUrl(
   const value = `${roundFixCoordinate(coords.lat)},${roundFixCoordinate(coords.lng)}`;
   return `/api/weather/current?coords=${encodeURIComponent(value)}`;
 }
+
+/**
+ * D5-LIVE-FORECAST: the /api/weather/forecast request for a trip window, or null when the client may
+ * not send one. Live only, with the same consent and 3-decimal rounding as current conditions.
+ * The window is [leave-by, appointment], clamped to the proxy's bounds (from >= now - 1 h, at most
+ * 12 h long); a window that has already ended returns null.
+ */
+export function resolveWeatherForecastUrl(
+  contextMode: string,
+  location: LocationStatus,
+  consent: string | undefined,
+  window: { readonly leaveAt: string; readonly apptAt: string },
+  nowMs: number
+): string | null {
+  if (contextMode !== 'live') return null;
+  const current = resolveWeatherCurrentUrl(contextMode, location, consent);
+  if (!current) return null;
+  const coords = new URL(current, 'http://local').searchParams.get('coords');
+  const leaveMs = Date.parse(window.leaveAt);
+  const apptMs = Date.parse(window.apptAt);
+  if (!coords || !Number.isFinite(leaveMs) || !Number.isFinite(apptMs)) return null;
+  const toMs = apptMs;
+  let fromMs = Math.max(leaveMs, nowMs - 30 * 60_000);
+  if (toMs - fromMs > 12 * 3600_000) fromMs = toMs - 12 * 3600_000;
+  if (toMs <= fromMs || toMs <= nowMs) return null;
+  const iso = (ms: number) => new Date(Math.floor(ms / 60_000) * 60_000).toISOString();
+  return `/api/weather/forecast?coords=${encodeURIComponent(coords)}&from=${iso(fromMs)}&to=${iso(toMs)}`;
+}

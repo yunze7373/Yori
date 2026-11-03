@@ -13,6 +13,7 @@
  * - Zero core diff invariant: all grounding types and logic live under src/ui.
  */
 
+import { appliedRainBufferMinutes } from './rain-buffer.js';
 import { formatTime } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
@@ -665,9 +666,10 @@ export function createRainEvidenceBundle(options?: {
   const travelFetchedAt = travelSig?.issuedAt ?? '2026-10-28T20:35:00.000Z';
 
   const memFacts = options?.memoryFacts;
-  const bufferMinutes = typeof memFacts?.find(f => f.key === 'prep_buffer_minutes')?.value === 'number'
+  // D5: the leave-by record includes the user's rain buffer when the plan applied it.
+  const bufferMinutes = (typeof memFacts?.find(f => f.key === 'prep_buffer_minutes')?.value === 'number'
     ? (memFacts.find(f => f.key === 'prep_buffer_minutes')!.value as number)
-    : 5;
+    : 5) + appliedRainBufferMinutes(options?.plan as any);
   const prepMinutes = typeof memFacts?.find(f => f.key === 'prep_duration_minutes')?.value === 'number'
     ? (memFacts.find(f => f.key === 'prep_duration_minutes')!.value as number)
     : 20;

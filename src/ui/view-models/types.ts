@@ -167,6 +167,10 @@ export interface HomeCompositionVM {
   readonly rainBanner?: string;
   readonly rainInsightDesc?: string;
   readonly umbrellaChip?: string;
+  /** D5 (Live depart): forward-looking rain label, e.g. 'Rain expected 2:00 PM–3:00 PM'. */
+  readonly rainLabel?: string;
+  /** D5 (Live depart): the ONE weather-basis status line (forecast / buffer / fallback + source). */
+  readonly forecastStatus?: string;
   readonly habitNote?: string;
 
   // Structured field substrings for slot-aware grounding
