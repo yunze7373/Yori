@@ -28,6 +28,7 @@ import {
   validateCandidateReasoningInput,
   validateCandidateReasoningOutput,
   deterministicCandidateReasoning,
+  parseCandidateJson,
   buildCandidateUserMessage,
   CANDIDATE_SYSTEM_PROMPT,
   type CandidateReasoningOutput,
@@ -52,7 +53,18 @@ export interface ModelCandidatesResponse {
 /** D4: per-call token usage for spend reporting (counts only; never prompts, keys or places). */
 export function appendModelUsage(
   ledgerPath: string,
-  entry: { endpoint: string; promptTokens?: number; completionTokens?: number; latencyMs: number; callCount: number }
+  entry: {
+    endpoint: string;
+    promptTokens?: number;
+    completionTokens?: number;
+    latencyMs: number;
+    callCount: number;
+    /** UI-QUIET-PRECISION (a): why a billed answer was not shown (codes only, never content). */
+    outcome?: 'accepted' | 'rejected';
+    rejectReason?: string;
+    rejectDetail?: string;
+    finishReason?: string;
+  }
 ): void {
   try {
     const file = path.join(path.dirname(ledgerPath), 'model-usage-log.jsonl');
@@ -2152,27 +2164,41 @@ export class ModelDevProxy {
       };
       // D4: record real tokens and correct the USD pre-charge (owner limit USD 20 cumulative).
       await recordLedgerUsage(this.config.ledgerPath, reservation.callCount, (json as any).usage);
-      appendModelUsage(this.config.ledgerPath, {
-        endpoint: 'candidates',
-        promptTokens: json.usage?.prompt_tokens,
-        completionTokens: json.usage?.completion_tokens,
-        latencyMs,
-        callCount: reservation.callCount,
-      });
-      this.lastFinishReason = json.choices?.[0]?.finish_reason;
+      const finishReason = json.choices?.[0]?.finish_reason;
+      this.lastFinishReason = finishReason;
+      // UI-QUIET-PRECISION (a): every billed answer leaves one usage line with its outcome, so a
+      // rejected answer is never silent (codes only: no prompt, reply, place or coordinate).
+      const usage = (outcome: 'accepted' | 'rejected', rejectReason?: string, rejectDetail?: string) =>
+        appendModelUsage(this.config.ledgerPath, {
+          endpoint: 'candidates',
+          promptTokens: json.usage?.prompt_tokens,
+          completionTokens: json.usage?.completion_tokens,
+          latencyMs,
+          callCount: reservation.callCount,
+          outcome,
+          rejectReason,
+          rejectDetail,
+          finishReason,
+        });
       const extraction = parseMessageContent(json.choices?.[0] as any);
-      if (extraction.kind !== 'ok') return { ...fb(extraction.reason, ledger), latencyMs };
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(extraction.content);
-      } catch {
+      if (extraction.kind !== 'ok') {
+        usage('rejected', extraction.reason, 'extraction');
+        this.logger(`[ModelProxy] Discarding candidates output (${extraction.reason})`);
+        return { ...fb(extraction.reason, ledger), latencyMs };
+      }
+      const parsed = parseCandidateJson(extraction.content);
+      if (parsed === undefined) {
+        usage('rejected', 'schema_invalid', 'not_json');
+        this.logger('[ModelProxy] Discarding candidates output (schema_invalid/not_json)');
         return { ...fb('schema_invalid', ledger), latencyMs };
       }
       const out = validateCandidateReasoningOutput(parsed, input);
       if (!out.valid) {
-        this.logger(`[ModelProxy] Discarding candidates output (${out.reason})`);
+        usage('rejected', out.reason, out.detail);
+        this.logger(`[ModelProxy] Discarding candidates output (${out.reason}/${out.detail})`);
         return { ...fb(out.reason, ledger), latencyMs };
       }
+      usage('accepted');
       return { result: out.data, usedFallback: false, engineStatus: 'meta_model_live', latencyMs, ledger };
     } catch {
       clearTimeout(timer);

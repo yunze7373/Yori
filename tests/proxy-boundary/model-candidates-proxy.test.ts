@@ -115,12 +115,12 @@ describe('D4 candidate reasoning: input/output post-check', () => {
     [{ reason: 'No order supplied here at all.' }, 'schema_invalid'],
   ])('rejects %j (%s)', (raw, reason) => {
     const out = validateCandidateReasoningOutput(raw, INPUT);
-    expect(out).toEqual({ valid: false, reason });
+    expect(out).toMatchObject({ valid: false, reason });
   });
 
   it("'closer' must put the nearest first", () => {
     const closer = { ...INPUT, request: 'closer' as const };
-    expect(validateCandidateReasoningOutput({ order: ['google-B'], reason: 'Mid Ramen is close to you.', citedFactKeys: [] }, closer)).toEqual({ valid: false, reason: 'request_mismatch' });
+    expect(validateCandidateReasoningOutput({ order: ['google-B'], reason: 'Mid Ramen is close to you.', citedFactKeys: [] }, closer)).toMatchObject({ valid: false, reason: 'request_mismatch', detail: 'closer_not_nearest' });
     expect(validateCandidateReasoningOutput({ order: ['google-A'], reason: 'Near Cafe is the closest at 45 m.', citedFactKeys: [] }, closer).valid).toBe(true);
   });
 
