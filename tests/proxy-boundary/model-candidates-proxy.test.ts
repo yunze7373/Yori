@@ -3,7 +3,9 @@
  * Zero billed calls: every "live" response here is a mocked fetch.
  * - Budget: code ceiling 200 (lowering-only), operating cap 100 (lowering-only), hard stop from the
  *   ledger with a labelled deterministic answer, zero outbound calls when MODEL_LIVE_ENABLED is off.
- * - Security: /api/model/* refuses LAN hosts even with DEV_DEVICE_TESTING=true.
+ * - Security: /api/model/* refuses LAN hosts and non-loopback socket peers (even with a forged
+ *   loopback Host) with or without DEV_DEVICE_TESTING=true; a missing peer fails closed.
+ * - Completion budget: 1024 on the D4 live paths; MODEL_MAX_TOKENS can only lower it.
  * - /api/model/candidates: live answer only after the post-check; the key never appears in the
  *   response or the usage log; tokens are logged per call; usage math inside USD 20.
  */
@@ -20,6 +22,9 @@ import {
   MODEL_LIFETIME_MAX_CALLS,
   MODEL_OPERATING_CAP_DEFAULT,
   MODEL_USD_GUARDRAIL,
+  MODEL_APP_MAX_TOKENS,
+  resolveD4MaxTokens,
+  isLoopbackPeer,
   estimateModelSpendUsd,
   resolveOperatingCap,
   resolveModelLiveEnabled,
@@ -53,12 +58,13 @@ function modelReply(content: unknown, usage = { prompt_tokens: 410, completion_t
   }));
 }
 
-function reqRes(url: string, host: string, bodyObj?: unknown, method = 'POST') {
+function reqRes(url: string, host: string, bodyObj?: unknown, method = 'POST', remoteAddress: string | null = '127.0.0.1') {
   const bodyStr = bodyObj !== undefined ? JSON.stringify(bodyObj) : '';
   const req: any = {
     url,
     method,
     headers: { host, 'content-type': 'application/json' },
+    socket: remoteAddress === null ? {} : { remoteAddress },
     on: (event: string, handler: (...a: any[]) => void) => {
       if (event === 'data' && bodyStr) handler(Buffer.from(bodyStr));
       if (event === 'end') handler();
@@ -173,7 +179,7 @@ describe('D4 budget, hard stop, security and spend math', () => {
     expect(res.result.order[0]).toBe('google-B');
     expect(res.ledger).toEqual({ callCount: 23, cap: 100 });
     const body = JSON.parse(String((fetchSpy.mock.calls[0] as any)[1].body));
-    expect(body.max_tokens).toBe(300);
+    expect(body.max_tokens).toBe(1024);
     expect(JSON.stringify(res)).not.toContain(FAKE_KEY);
     const usage = fs.readFileSync(path.join(tempDir, 'model-usage-log.jsonl'), 'utf-8');
     expect(JSON.parse(usage.trim())).toMatchObject({ endpoint: 'candidates', promptTokens: 410, completionTokens: 62, callCount: 23 });
@@ -231,6 +237,76 @@ describe('D4 budget, hard stop, security and spend math', () => {
     const ok = reqRes('/api/model/candidates', 'localhost:4174', INPUT);
     await mw(ok.req, ok.res, ok.next);
     expect(ok.response.statusCode).toBe(200);
+  });
+
+  it('SECURITY: a LAN socket peer with a forged loopback Host gets 403 on all five /api/model routes', async () => {
+    process.env.DEV_DEVICE_TESTING = 'true';
+    const fetchSpy = modelReply({ order: ['google-A'], reason: 'Near Cafe is open now and 45 m away.', citedFactKeys: [] });
+    globalThis.fetch = fetchSpy as any;
+    const proxy = new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath });
+    const mw = createModelProxyMiddleware(proxy);
+    const routes: [string, string, unknown][] = [
+      ['/api/model/diagnostics', 'GET', undefined],
+      ['/api/model/refine', 'POST', { templateId: 'depart', facts: { headline: 'x' } }],
+      ['/api/model/reason', 'POST', { plans: [] }],
+      ['/api/model/command', 'POST', { utterance: 'leave later' }],
+      ['/api/model/candidates', 'POST', INPUT],
+    ];
+    for (const peer of ['192.168.31.45', '::ffff:192.168.31.45', '100.123.60.65', 'fe80::1']) {
+      for (const [url, method, body] of routes) {
+        const { req, res, next, response } = reqRes(url, 'localhost:4174', body, method, peer);
+        await mw(req, res, next);
+        expect(response.statusCode, `${peer} ${url}`).toBe(403);
+        expect(next).not.toHaveBeenCalled();
+      }
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(readLedgerState(ledgerPath).callCount).toBe(22);
+  });
+
+  it('SECURITY: a missing socket peer fails closed (403, zero fetch, ledger unchanged)', async () => {
+    const fetchSpy = modelReply({});
+    globalThis.fetch = fetchSpy as any;
+    const mw = createModelProxyMiddleware(new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath }));
+    for (const [url, method] of [['/api/model/diagnostics', 'GET'], ['/api/model/candidates', 'POST']]) {
+      const { req, res, next, response } = reqRes(url!, 'localhost:4173', INPUT, method, null);
+      await mw(req, res, next);
+      expect(response.statusCode, url).toBe(403);
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(readLedgerState(ledgerPath).callCount).toBe(22);
+    expect(isLoopbackPeer(undefined)).toBe(false);
+    expect(isLoopbackPeer('')).toBe(false);
+    expect(isLoopbackPeer('127.0.0.2')).toBe(false);
+    expect(isLoopbackPeer('::ffff:192.168.1.2')).toBe(false);
+  });
+
+  it('SECURITY: loopback peers (127.0.0.1, ::1, ::ffff:127.0.0.1) with a loopback Host are served', async () => {
+    process.env.DEV_DEVICE_TESTING = 'true';
+    globalThis.fetch = modelReply({ order: ['google-A'], reason: 'Near Cafe is open now and 45 m away.', citedFactKeys: [] }) as any;
+    const mw = createModelProxyMiddleware(new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath }));
+    for (const peer of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+      const { req, res, next, response } = reqRes('/api/model/candidates', 'localhost:4174', INPUT, 'POST', peer);
+      await mw(req, res, next);
+      expect(response.statusCode, peer).toBe(200);
+    }
+  });
+
+  it('completion budget: 1024 by default on candidates and reason; MODEL_MAX_TOKENS can only lower it', async () => {
+    expect(MODEL_APP_MAX_TOKENS).toBe(1024);
+    expect(resolveD4MaxTokens(undefined)).toBe(1024);
+    expect(resolveD4MaxTokens(512)).toBe(512);
+    expect(resolveD4MaxTokens(8192)).toBe(1024);
+    const bodies: any[] = [];
+    globalThis.fetch = vi.fn(async (_u: string, init: any) => {
+      bodies.push(JSON.parse(init.body));
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ order: ['google-A'], reason: 'Near Cafe is open now and 45 m away.', citedFactKeys: [] }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } }) };
+    }) as any;
+    for (const [override, expected] of [[undefined, 1024], [4096, 1024], [600, 600]] as const) {
+      const proxy = new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath, maxTokensOverride: override });
+      await proxy.handleCandidates(INPUT);
+      expect(bodies.at(-1).max_tokens, String(override)).toBe(expected);
+    }
   });
 
   it('USD: tokens recorded per call; the worst-case pre-charge is corrected to actual', async () => {

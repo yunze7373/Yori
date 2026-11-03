@@ -263,6 +263,7 @@ describe('ModelDevProxy HTTP Security Guards & Middleware (P1 Fix & Anti-Relay A
     req.url = options.url;
     req.method = options.method;
     req.headers = { host: '127.0.0.1:5173', ...options.headers };
+    req.socket = { remoteAddress: '127.0.0.1' };
 
     process.nextTick(() => {
       if (options.chunks) {
@@ -492,6 +493,7 @@ describe('Slice A1: Server-Side Template Registry & Strict Fact Schemas (AC-201-
     req.url = options.url;
     req.method = options.method;
     req.headers = { host: '127.0.0.1:5173', ...options.headers };
+    req.socket = { remoteAddress: '127.0.0.1' };
 
     process.nextTick(() => {
       if (options.body !== undefined) {
@@ -797,6 +799,7 @@ describe('Slice A2: Proxy Guard Regression Suite & Prompt-Injection Fixtures (AC
     req.url = options.url;
     req.method = options.method;
     req.headers = { host: '127.0.0.1:5173', ...options.headers };
+    req.socket = { remoteAddress: '127.0.0.1' };
 
     process.nextTick(() => {
       if (options.chunks) {
@@ -1839,6 +1842,7 @@ describe('Slice B1: Constrained Muse Spark Reasoning Port (AC-202-1, AC-202-3)',
     req.url = options.url;
     req.method = options.method;
     req.headers = { host: '127.0.0.1:5173', ...options.headers };
+    req.socket = { remoteAddress: '127.0.0.1' };
 
     process.nextTick(() => {
       if (options.chunks) {
@@ -2768,6 +2772,7 @@ describe('G3-PARITY: Fact-Key Parity Between Server Validator and Client Interpr
         req.url = options.url;
         req.method = options.method;
         req.headers = { host: '127.0.0.1:5173', ...options.headers };
+        req.socket = { remoteAddress: '127.0.0.1' };
 
         process.nextTick(() => {
           if (options.body !== undefined) {

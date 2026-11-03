@@ -51,6 +51,7 @@ function createMockReq(options: {
   emitter.url = options.url;
   emitter.method = options.method;
   emitter.headers = options.headers || {};
+  emitter.socket = { remoteAddress: '127.0.0.1' };
   process.nextTick(() => {
     if (options.body) {
       emitter.emit('data', Buffer.from(options.body, 'utf-8'));
@@ -318,7 +319,9 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
     }
   });
 
-  it('verifies max_tokens <= 300 in request body across refine, reason, and command endpoints', async () => {
+  // D4 rework (Reviewer 9505c59f): the plan-reasoning path now defaults to 1024 (env can only lower it);
+  // refine and command keep their S1 budgets.
+  it('verifies max_tokens per endpoint: refine 150, reason 1024 (D4), command 300', async () => {
     process.env.MODEL_API_KEY = 'sk-test-token-cap-key';
     process.env.MODEL_LIVE_ENABLED = '1';
 
@@ -391,11 +394,8 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
       });
 
       expect(capturedBodies).toHaveLength(3);
-      for (const body of capturedBodies) {
-        expect(body.max_tokens).toBeLessThanOrEqual(300);
-      }
       expect(capturedBodies[0].max_tokens).toBe(150);
-      expect(capturedBodies[1].max_tokens).toBe(250);
+      expect(capturedBodies[1].max_tokens).toBe(1024);
       expect(capturedBodies[2].max_tokens).toBe(300);
     } finally {
       globalThis.fetch = originalFetch;

@@ -63,6 +63,7 @@ function createMockReqRes(url: string, method: string = 'GET', bodyObj?: any) {
       origin: 'http://127.0.0.1:5173',
       referer: 'http://127.0.0.1:5173/',
     },
+    socket: { remoteAddress: '127.0.0.1' },
     on: (event: string, handler: (...args: any[]) => void) => {
       if (event === 'data' && bodyStr) {
         handler(Buffer.from(bodyStr));

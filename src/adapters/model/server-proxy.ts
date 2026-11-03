@@ -145,8 +145,15 @@ export function resetProcessLiveCallCount(): void {
 export const MODEL_LIFETIME_MAX_CALLS = 200;
 export const MODEL_OPERATING_CAP_DEFAULT = 100;
 export const MODEL_PER_RUN_MAX_CALLS = 10;
-/** D4: completion budget for app reasoning calls (owner-overridable via MODEL_MAX_TOKENS). */
-export const MODEL_APP_MAX_TOKENS = 300;
+/**
+ * D4: completion budget for the live candidate and plan-reasoning calls. 300 truncated the first
+ * live candidates answer (finish_reason=length), so the Reviewer (decision 9505c59f) set 1024 as the
+ * code default; MODEL_MAX_TOKENS can only LOWER it on these paths.
+ */
+export const MODEL_APP_MAX_TOKENS = 1024;
+export function resolveD4MaxTokens(override?: number): number {
+  return override !== undefined ? Math.min(override, MODEL_APP_MAX_TOKENS) : MODEL_APP_MAX_TOKENS;
+}
 
 /**
  * D4 usage math (plan: "dev ~40 plus smoke ~10 plus margin, about $0.50 expected, USD 20 ceiling").
@@ -769,6 +776,11 @@ export class RateLimiter {
   }
 }
 
+/** D4: true only for a loopback socket peer (IPv4, IPv6, or IPv4-mapped IPv6). */
+export function isLoopbackPeer(remoteAddress?: string): boolean {
+  return remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1';
+}
+
 export function isLocalHost(hostHeader?: string): boolean {
   if (!hostHeader) return false;
   const host = hostHeader.trim().toLowerCase();
@@ -1145,6 +1157,7 @@ export class ModelDevProxy {
   /**
    * Handles incoming HTTP requests for model proxy routes with strict security guards.
    * Enforces:
+   * 0. Loopback socket peer only (403 otherwise, including a missing peer).
    * 1. Local loopback Host header only (403 for LAN/Tailscale).
    * 2. Local loopback Origin/Referer only (403 for cross-site / external origins).
    * 3. Blocks cross-site Sec-Fetch-Site (403).
@@ -1162,6 +1175,16 @@ export class ModelDevProxy {
       url !== '/api/model/candidates'
     ) {
       return false;
+    }
+
+    // 0. Socket peer (D4 rework): the Host header is client-supplied, so a LAN client could forge
+    //    'Host: localhost:4173'. Every /api/model/* request must also come from a loopback socket;
+    //    a missing peer fails closed. Surface E (ssh -R to localhost:4174) arrives as loopback.
+    if (!isLoopbackPeer(req.socket?.remoteAddress)) {
+      res.statusCode = 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Forbidden: non-loopback client is blocked' }));
+      return true;
     }
 
     // 1. Host header validation (D4): only a loopback Host on an allowlisted port (4173/4174/5173).
@@ -1202,8 +1225,8 @@ export class ModelDevProxy {
       return true;
     }
 
-    // 5. (D4) DEV_DEVICE_TESTING is deliberately ignored here: the Host check above already
-    //    refuses every non-loopback client, with or without device-testing mode.
+    // 5. (D4) DEV_DEVICE_TESTING is deliberately ignored here: the peer and Host checks above
+    //    refuse every non-loopback client, with or without device-testing mode.
 
     // Route: GET /api/model/diagnostics
     if (url === '/api/model/diagnostics') {
@@ -1905,7 +1928,7 @@ export class ModelDevProxy {
         },
         body: JSON.stringify({
           model: this.config.modelName,
-          max_tokens: this.config.maxTokensOverride ?? 250,
+          max_tokens: resolveD4MaxTokens(this.config.maxTokensOverride),
           ...(this.config.reasoningEffort ? { reasoning_effort: this.config.reasoningEffort } : {}),
           messages: [
             {
@@ -2062,7 +2085,7 @@ export class ModelDevProxy {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.config.apiKey}` },
         body: JSON.stringify({
           model: this.config.modelName,
-          max_tokens: this.config.maxTokensOverride ?? MODEL_APP_MAX_TOKENS,
+          max_tokens: resolveD4MaxTokens(this.config.maxTokensOverride),
           ...(this.config.reasoningEffort ? { reasoning_effort: this.config.reasoningEffort } : {}),
           messages: [
             { role: 'system', content: CANDIDATE_SYSTEM_PROMPT },
