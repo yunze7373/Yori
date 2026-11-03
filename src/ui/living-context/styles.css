@@ -4669,6 +4669,46 @@ button.v2-view-detail-link:focus-visible {
   gap: 10px;
 }
 
+/* D11: Google Calendar sub-row inside the Calendar card (separated by a hairline, same rhythm). */
+.connector-subrow {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(22, 40, 36, 0.08);
+}
+
+.connector-subrow-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.connector-subrow-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink, #162824);
+}
+
+.connector-subrow-detail {
+  font-size: 0.8125rem;
+  color: #3D5046;
+}
+
+.connector-subrow[data-google-state='expired'] .connector-subrow-detail {
+  color: #7A3E12;
+}
+
+.connector-disclosure {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #3D5046;
+}
+
+.connector-subrow .connector-actions {
+  margin-top: 10px;
+}
+
 .btn-connector-action {
   min-height: 44px;
   min-width: 44px;

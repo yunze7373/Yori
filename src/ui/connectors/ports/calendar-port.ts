@@ -8,9 +8,11 @@
  * - configured=true && enabled=false -> 'owner_gated' ('Live calendar is off (owner setting)')
  * - configured=false -> 'unavailable' ('Not available yet' with actionRequired instruction)
  * - Fetch error / non-200 -> 'unavailable' ('Not available yet')
+ * D11: provider 'google_calendar' -> 'connected' ('Google Calendar connected (read-only)'); the
+ * Google sub-state (connect / disconnect / expired, or not set up) comes from /api/google/status.
  */
 
-import type { ConnectorPort, ConnectorStatus } from '../types.js';
+import type { ConnectorPort, ConnectorStatus, GoogleCalendarConnectorInfo } from '../types.js';
 
 export interface CalendarStatusResponse {
   readonly enabled?: boolean;
@@ -18,6 +20,24 @@ export interface CalendarStatusResponse {
   readonly provider?: string;
   readonly attribution?: string;
   readonly actionRequired?: string;
+  readonly google?: { readonly configured: boolean; readonly calendar: GoogleCalendarConnectorInfo['state'] };
+}
+
+interface GoogleStatusResponse {
+  readonly configured?: boolean;
+  readonly disabledReason?: GoogleCalendarConnectorInfo['disabledReason'];
+  readonly calendar?: GoogleCalendarConnectorInfo['state'];
+}
+
+async function readGoogleStatus(): Promise<GoogleStatusResponse | null> {
+  try {
+    const res = await fetch('/api/google/status', { cache: 'no-store' });
+    // Always drain the body: an unread error body keeps the request open in the browser.
+    const body = (await res.json().catch(() => null)) as GoogleStatusResponse | null;
+    return res.ok ? body : null;
+  } catch {
+    return null;
+  }
 }
 
 export class CalendarConnectorPort implements ConnectorPort {
@@ -49,35 +69,55 @@ export class CalendarConnectorPort implements ConnectorPort {
       }
 
       const data = (await res.json()) as CalendarStatusResponse;
+      const g = await readGoogleStatus();
+      const google: GoogleCalendarConnectorInfo | undefined = g
+        ? {
+            configured: g.configured === true,
+            state: g.configured === true && (g.calendar === 'connected' || g.calendar === 'expired') ? g.calendar : 'disconnected',
+            disabledReason: g.configured === true ? undefined : g.disabledReason,
+            icsFallback: data.provider !== 'google_calendar' && data.configured === true && data.enabled === true,
+          }
+        : undefined;
+      const withGoogle = (s: ConnectorStatus): ConnectorStatus => (google ? { ...s, google } : s);
+
+      if (data.provider === 'google_calendar' && data.configured === true && data.enabled === true) {
+        return withGoogle({
+          id: this.id,
+          state: 'connected',
+          detail: 'Google Calendar connected (read-only)',
+          source: '/api/calendar/status',
+          updatedAt,
+        });
+      }
 
       if (data.configured === true && data.enabled === true) {
-        return {
+        return withGoogle({
           id: this.id,
           state: 'connected',
           detail: 'iCalendar feed connected (read-only)',
           source: '/api/calendar/status',
           updatedAt,
-        };
+        });
       }
 
       if (data.configured === true && data.enabled === false) {
-        return {
+        return withGoogle({
           id: this.id,
           state: 'owner_gated',
           detail: 'Live calendar is off (owner setting)',
           source: '/api/calendar/status',
           updatedAt,
-        };
+        });
       }
 
       // configured === false: honest connection-block state
-      return {
+      return withGoogle({
         id: this.id,
         state: 'unavailable',
         detail: 'Not available yet',
         source: '/api/calendar/status',
         updatedAt,
-      };
+      });
     } catch {
       return {
         id: this.id,
@@ -87,6 +127,32 @@ export class CalendarConnectorPort implements ConnectorPort {
         updatedAt,
       };
     }
+  }
+
+  /** D11: start Google consent (server builds the PKCE URL and sets the session cookie). */
+  public async connectGoogle(): Promise<ConnectorStatus> {
+    try {
+      const res = await fetch('/api/google/oauth/start', { method: 'POST' });
+      if (res.ok) {
+        const data = (await res.json()) as { authUrl?: string };
+        if (data.authUrl && typeof window !== 'undefined') {
+          window.location.href = data.authUrl;
+        }
+      }
+    } catch {
+      // Fall through to status re-read
+    }
+    return this.status();
+  }
+
+  /** D11: revoke at Google and delete the server-side tokens, then re-read the real status. */
+  public async disconnectGoogle(): Promise<ConnectorStatus> {
+    try {
+      await fetch('/api/google/disconnect', { method: 'POST' });
+    } catch {
+      // Fall through to status re-read
+    }
+    return this.status();
   }
 
   public async getStatusPayload(): Promise<CalendarStatusResponse> {

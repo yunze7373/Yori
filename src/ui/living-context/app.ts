@@ -135,6 +135,7 @@ import {
   locationConnectorPort,
   xmemoConnectorPort,
   notificationsConnectorPort,
+  calendarConnectorPort,
   type ConnectorId,
   type ConnectorStatus,
 } from '../connectors/index.js';
@@ -1956,6 +1957,10 @@ export function renderApp(
     actionFeedbackMessage = 'XMemo account connected successfully';
     activeTab = 'me';
   }
+  // D11: back from Google consent (the server already exchanged the code; status is re-read).
+  if (typeof window !== 'undefined' && window.location?.search?.includes('google=connected')) {
+    actionFeedbackMessage = 'Google Calendar connected (read-only)';
+  }
 
   async function checkXMemoStatus() {
     try {
@@ -2545,7 +2550,7 @@ export function renderApp(
                   location,
                   timezone: deviceTimezone,
                 },
-                provider: 'ics',
+                provider: data.provider === 'google_calendar' ? 'google_calendar' : 'ics',
                 asOf: new Date().toISOString(),
                 validFor: 3600000,
                 confidence: 1.0,
@@ -2710,7 +2715,9 @@ export function renderApp(
   void checkRouteStatus();
   void checkPlacesStatus();
   void checkCalendarStatus();
-  void refreshConnectorStatuses();
+  // D11: render once the real statuses arrive; a direct /?tab=connectors load (the Google consent
+  // return lands there) otherwise kept showing the placeholder statuses.
+  void refreshConnectorStatuses().then(() => update());
 
   let liveRefreshInFlight = false;
 
@@ -4045,6 +4052,28 @@ export function renderApp(
           connectXmemoBtn.setAttribute('disabled', 'true');
           await xmemoConnectorPort.connect();
           await refreshConnectorStatuses();
+          update();
+        });
+      }
+
+      // D11: Google Calendar connect / disconnect (server-side OAuth; the page never sees a token).
+      const connectGoogleCalBtn = root.querySelector('#btn-connect-google-calendar');
+      if (connectGoogleCalBtn) {
+        connectGoogleCalBtn.addEventListener('click', async () => {
+          connectGoogleCalBtn.setAttribute('disabled', 'true');
+          await calendarConnectorPort.connectGoogle();
+          await refreshConnectorStatuses();
+          update();
+        });
+      }
+
+      const disconnectGoogleCalBtn = root.querySelector('#btn-disconnect-google-calendar');
+      if (disconnectGoogleCalBtn) {
+        disconnectGoogleCalBtn.addEventListener('click', async () => {
+          disconnectGoogleCalBtn.setAttribute('disabled', 'true');
+          await calendarConnectorPort.disconnectGoogle();
+          await refreshConnectorStatuses();
+          await checkCalendarStatus();
           update();
         });
       }

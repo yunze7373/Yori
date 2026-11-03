@@ -7,7 +7,7 @@
  */
 
 import { escapeHtml } from '../living-context/presentation.js';
-import type { ConnectorId, ConnectorStatus } from './types.js';
+import type { ConnectorId, ConnectorStatus, GoogleCalendarConnectorInfo } from './types.js';
 
 export function renderConnectorsView(
   statuses: Record<ConnectorId, ConnectorStatus>
@@ -113,6 +113,7 @@ export function renderConnectorsView(
                 </div>
                 <p class="connector-desc">Reads your events to prepare for what's next.</p>
                 <div class="connector-detail" id="connector-detail-calendar">${escapeHtml(cal.detail)}</div>
+                ${renderGoogleCalendarRow(cal.google)}
               </div>
             </div>
           </li>
@@ -248,3 +249,41 @@ function formatPillLabel(state: string, detail: string): string {
       return 'Not connected';
   }
 }
+
+/**
+ * D11: the Google Calendar sub-row inside the Calendar card. States are read from the server and
+ * never assumed: not set up (no OAuth client), connected (read-only), expired or revoked (with the
+ * iCal fallback named when it is live), or not connected. No email or token is ever shown.
+ */
+function renderGoogleCalendarRow(google: GoogleCalendarConnectorInfo | undefined): string {
+  if (!google) return '';
+  const notSetUp: Record<string, string> = {
+    no_client_id: 'Not set up yet: the owner adds a Google OAuth client to enable this',
+    owner_off: 'Off (owner setting)',
+    endpoint_override_rejected: 'Not available (server configuration was rejected)',
+  };
+  const detail = !google.configured
+    ? notSetUp[google.disabledReason ?? 'no_client_id'] ?? notSetUp['no_client_id']!
+    : google.state === 'connected'
+      ? 'Connected · read-only'
+      : google.state === 'expired'
+        ? google.icsFallback
+          ? 'Access expired · using your iCalendar feed instead'
+          : 'Access expired · no calendar connected'
+        : 'Not connected';
+  const action = !google.configured
+    ? ''
+    : google.state === 'connected'
+      ? `<button type="button" class="btn btn-outline btn-connector-action" id="btn-disconnect-google-calendar">Disconnect Google Calendar</button>`
+      : `<button type="button" class="btn btn-primary btn-connector-action" id="btn-connect-google-calendar">${google.state === 'expired' ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}</button>`;
+  return `
+                <div class="connector-subrow" id="connector-google-calendar" data-google-state="${escapeHtml(google.configured ? google.state : 'not_set_up')}">
+                  <div class="connector-subrow-head">
+                    <span class="connector-subrow-title">Google Calendar</span>
+                    <span class="connector-subrow-detail" id="google-calendar-detail">${escapeHtml(detail)}</span>
+                  </div>
+                  ${google.configured ? `<p class="connector-disclosure" id="google-calendar-disclosure">Calendar events are read from Google, read-only. Yori never changes your calendar.</p>` : ''}
+                  ${action ? `<div class="connector-actions">${action}</div>` : ''}
+                </div>`;
+}
+

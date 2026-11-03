@@ -59,6 +59,7 @@ node_modules/
 *.tsbuildinfo
 dist/
 dist-test/
+dist-test-google/
 build/
 out/
 .next/

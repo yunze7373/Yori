@@ -105,3 +105,13 @@ export function getAllowedLoopbackRedirectUris(explicitRedirectUri?: string): st
   }
   return uris;
 }
+
+/**
+ * True only for a loopback socket peer: 127.0.0.1, ::1, or IPv4-mapped ::ffff:127.0.0.1.
+ * The Host header is client-supplied, so proxies that can spend owner budget or hold owner tokens
+ * (/api/model, /api/google) also require this; a missing peer fails closed.
+ */
+export function isLoopbackPeer(remoteAddress?: string): boolean {
+  return remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1';
+}
+

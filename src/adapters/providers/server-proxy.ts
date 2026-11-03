@@ -43,6 +43,8 @@ import {
   IcsCalendarAdapter,
   resolveIanaTimezone,
 } from './ics-calendar-adapter.js';
+import { GoogleOAuthCore, GOOGLE_SCOPES, getSharedGoogleOAuthCore } from '../google/oauth-core.js';
+import { fetchGoogleCalendarEvents } from '../google/calendar-events.js';
 import {
   NominatimGeocoder,
   NOMINATIM_ATTRIBUTION,
@@ -1164,9 +1166,19 @@ export function resolveCalendarConfig(
   };
 }
 
+/** D11: Google Calendar source behind /api/calendar (preferred when connected; iCal underneath). */
+export interface GoogleCalendarSource {
+  readonly core: GoogleOAuthCore;
+  readonly fetchEvents?: typeof fetchGoogleCalendarEvents;
+  readonly fetchFn?: typeof fetch;
+}
+
+export const GOOGLE_CALENDAR_ATTRIBUTION = 'Google Calendar (read-only)';
+
 export function createCalendarProxyMiddleware(
   configOverride?: Partial<CalendarProxyConfig>,
-  adapterOverride?: IcsCalendarAdapter
+  adapterOverride?: IcsCalendarAdapter,
+  googleOverride?: GoogleCalendarSource
 ) {
   const baseConfig = resolveCalendarConfig();
   const config: CalendarProxyConfig = {
@@ -1288,6 +1300,64 @@ export function createCalendarProxyMiddleware(
     const parsedUrl = new URL(urlStr, baseUrl);
     const pathname = parsedUrl.pathname;
 
+    // D11: with no Google client configured nothing below changes (byte-identical iCal-only
+    // behaviour). When configured, a connected grant is the preferred source unless the owner
+    // switched live calendar off explicitly; an expired/revoked grant falls back to iCal, else none.
+    const google = googleOverride ?? { core: getSharedGoogleOAuthCore() };
+    const gStatus = google.core.status();
+    const calendarOwnerOff = /^(false|0)$/i.test(process.env['CALENDAR_LIVE_ENABLED']?.trim() ?? '');
+    const googleFlag = gStatus.configured ? { google: { configured: true, calendar: gStatus.calendar } } : {};
+
+    if (gStatus.configured && gStatus.calendar === 'connected' && !calendarOwnerOff) {
+      if (pathname === '/api/calendar/status' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+        res.end(
+          JSON.stringify({
+            enabled: true,
+            configured: true,
+            provider: 'google_calendar',
+            attribution: GOOGLE_CALENDAR_ATTRIBUTION,
+            google: { configured: true, calendar: 'connected' },
+          })
+        );
+        return;
+      }
+      if ((pathname === '/api/calendar' || pathname === '/api/calendar/' || pathname === '/api/calendar/events') && req.method === 'GET') {
+        const fetchEvents = google.fetchEvents ?? fetchGoogleCalendarEvents;
+        const opts = { apiBase: google.core.config.calendarApiBase, fetchFn: google.fetchFn };
+        let token = await google.core.getAccessToken(GOOGLE_SCOPES.calendar);
+        let result = token ? await fetchEvents(token, opts) : null;
+        if (result && !result.ok && result.reason === 'unauthorized') {
+          token = await google.core.forceRefresh();
+          result = token ? await fetchEvents(token, opts) : null;
+          if (result && !result.ok && result.reason === 'unauthorized') {
+            google.core.rejectGrant();
+            result = null;
+          }
+        }
+        if (result && result.ok) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          res.end(
+            JSON.stringify({
+              enabled: true,
+              configured: true,
+              provider: 'google_calendar',
+              events: result.events,
+              attribution: GOOGLE_CALENDAR_ATTRIBUTION,
+            })
+          );
+          return;
+        }
+        if (result && !result.ok) {
+          res.writeHead(502, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+          res.end(JSON.stringify({ error: 'Failed to fetch Google Calendar events', code: 'provider_error', provider: 'google_calendar' }));
+          return;
+        }
+        // No usable grant any more: fall through to the iCal path (or the honest "no calendar").
+      }
+    }
+    const googleNow = gStatus.configured ? { google: { configured: true, calendar: google.core.status().calendar } } : googleFlag;
+
     // Route 1: GET /api/calendar/status
     if (pathname === '/api/calendar/status' && req.method === 'GET') {
       res.writeHead(200, {
@@ -1303,6 +1373,7 @@ export function createCalendarProxyMiddleware(
           actionRequired: config.configured
             ? undefined
             : 'paste the secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat',
+          ...googleNow,
         })
       );
       return;
@@ -1322,6 +1393,7 @@ export function createCalendarProxyMiddleware(
             events: [],
             attribution: config.attribution,
             actionRequired: 'paste the secret iCal URL into .env.local as CALENDAR_ICS_URL yourself; never in chat',
+            ...googleNow,
           })
         );
         return;
@@ -1338,6 +1410,7 @@ export function createCalendarProxyMiddleware(
             configured: true,
             events: [],
             error: 'Live calendar is disabled (set CALENDAR_LIVE_ENABLED=true)',
+            ...googleNow,
           })
         );
         return;
@@ -1358,6 +1431,7 @@ export function createCalendarProxyMiddleware(
             configured: true,
             events,
             attribution: config.attribution,
+            ...googleNow,
           })
         );
       } catch (err: any) {

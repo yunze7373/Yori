@@ -10,6 +10,22 @@ const offlineProviderEnv: Record<string, string> = {
   ROUTE_LIVE_ENABLED: 'false',
   WEATHER_LIVE_ENABLED: 'false',
   MODEL_LIVE_ENABLED: '0',
+  // D11: no e2e server may use the owner's Google client or token file (recorded mock only).
+  GOOGLE_OAUTH_ENABLED: 'false',
+};
+
+/** D11: the Google-mock server's env (test client only; every endpoint is the loopback mock). */
+const googleMockEnv: Record<string, string> = {
+  GOOGLE_OAUTH_ENABLED: 'true',
+  GOOGLE_OAUTH_CLIENT_ID: 'test-client-d11.apps.example',
+  GOOGLE_OAUTH_CLIENT_SECRET: 'test-secret-d11-SHOULD-NEVER-LEAK',
+  GOOGLE_OAUTH_AUTH_URL: 'http://127.0.0.1:4291/o/oauth2/v2/auth',
+  GOOGLE_OAUTH_TOKEN_URL: 'http://127.0.0.1:4291/token',
+  GOOGLE_OAUTH_REVOKE_URL: 'http://127.0.0.1:4291/revoke',
+  GOOGLE_CALENDAR_API_BASE: 'http://127.0.0.1:4291',
+  GOOGLE_OAUTH_TOKEN_PATH: 'test-results/d11-google-oauth-tokens.json',
+  CALENDAR_LIVE_ENABLED: 'true',
+  CALENDAR_ICS_URL: 'http://127.0.0.1:4291/feed.ics',
 };
 
 export default defineConfig({
@@ -56,6 +72,22 @@ export default defineConfig({
       port: 4174,
       reuseExistingServer: !process.env.CI,
       timeout: 60000,
+    },
+    // D11: recorded Google mock (loopback only) and the ONE server that talks to it, on an
+    // allowlisted, Google-registrable port. Never reused, so it can never be a real dev server.
+    {
+      command: 'node tests/fixtures/google-mock/server.mjs',
+      port: 4291,
+      reuseExistingServer: false,
+      timeout: 20000,
+    },
+    {
+      env: { ...offlineProviderEnv, ...googleMockEnv },
+      command:
+        "node -e \"require('fs').rmSync('test-results/d11-google-oauth-tokens.json',{force:true})\" && npx tsc --noEmit && VITE_MAP_TILES=off npx vite build --mode test --outDir dist-test-google && npx vite preview --outDir dist-test-google --port 5173 --strictPort",
+      port: 5173,
+      reuseExistingServer: false,
+      timeout: 120000,
     },
   ],
 });

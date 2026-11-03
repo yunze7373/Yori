@@ -22,7 +22,7 @@ import type {
   RejectedReasonCodeTelemetry,
 } from './types.js';
 import { validateFactsInWording } from './fact-checker.js';
-import { isAllowlistedLoopbackHost } from '../xmemo/loopback-allowlist.js';
+import { isAllowlistedLoopbackHost, isLoopbackPeer } from '../xmemo/loopback-allowlist.js';
 import {
   validateCandidateReasoningInput,
   validateCandidateReasoningOutput,
@@ -796,10 +796,8 @@ export function parseClientWaitHeader(headers: Record<string, unknown> | undefin
   return parseInt(raw.trim(), 10);
 }
 
-/** D4: true only for a loopback socket peer (IPv4, IPv6, or IPv4-mapped IPv6). */
-export function isLoopbackPeer(remoteAddress?: string): boolean {
-  return remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1';
-}
+/** D4: true only for a loopback socket peer (shared with the D11 Google proxy). */
+export { isLoopbackPeer };
 
 export function isLocalHost(hostHeader?: string): boolean {
   if (!hostHeader) return false;

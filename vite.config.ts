@@ -5,6 +5,7 @@ import {
   resolveBindHost,
 } from './src/adapters/model/server-proxy.js';
 import { createXMemoProxyMiddleware } from './src/adapters/xmemo/server-proxy.js';
+import { createGoogleProxyMiddleware } from './src/adapters/google/server-proxy.js';
 import {
   createWeatherProxyMiddleware,
   createRouteProxyMiddleware,
@@ -74,6 +75,21 @@ function placesProxyPlugin(): Plugin {
 
   return {
     name: 'places-dev-proxy',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
+
+// D11: server-side Google OAuth (Calendar); shares its core with the /api/calendar source selection.
+function googleProxyPlugin(): Plugin {
+  const middleware = createGoogleProxyMiddleware();
+
+  return {
+    name: 'google-dev-proxy',
     configureServer(server) {
       server.middlewares.use(middleware);
     },
@@ -154,6 +170,7 @@ export default defineConfig(({ mode }) => {
       weatherProxyPlugin(),
       routeProxyPlugin(),
       placesProxyPlugin(),
+      googleProxyPlugin(),
       calendarProxyPlugin(),
       geocodeProxyPlugin(),
     ],
