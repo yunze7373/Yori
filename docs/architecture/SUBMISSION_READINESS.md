@@ -71,6 +71,12 @@ In adherence to Yori's core principle of **ruthless engineering truthfulness**, 
    - **Status**: **NOT DELIVERED**.
    - **Current Implementation**: The application supports single-mode road routing. Transit options (train, subway, bus) are not connected to live public transit GTFS/APIs.
    - **No Claim**: We make **no claim** of full multimodal travel re-planning.
+   - **D6-MULTIMODAL-TRANSIT: CUT** (2026-11-03).
+     - **Spike:** Google Routes `TRANSIT` returned **no routes** for two public Tokyo pairs (HTTP 200,
+       2 billed calls, ledgered). Evidence: `docs/evidence/demo-rescue-d6/SPIKE.md`.
+     - **What remains:** no transit, walk or mode-switch options are offered. Rain re-ranking by real
+       durations is not claimed. Leave-by moves earlier only through the user-confirmed rain buffer
+       (D5 / S4c).
 
 4. **Device-Location Dynamic Weather**:
    - **Status**: **DELIVERED in D1** (`87c917a`): current conditions at the consented fix.
