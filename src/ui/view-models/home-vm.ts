@@ -72,7 +72,7 @@ export interface BuildHomeCompositionOptions {
   /** D1: provenance of the Live weather response (device fix vs demo city, source, fetch time). */
   weatherProvenance?: { source: string; fetchedAt?: string; atDeviceFix: boolean } | null;
   /** D5: state of the Live trip-window forecast request (undefined = none was requested). */
-  forecastState?: 'ok' | 'unavailable' | 'pending';
+  forecastState?: 'ok' | 'unavailable' | 'expired' | 'pending';
   /** D2: on-demand "Nearby now" affordance state (Live with a shared fix only). */
   nearbyNow?: HomeCompositionVM['nearbyNow'];
   /** D2: exact hosts of the ENABLED keyless providers, for the location consent copy. */
@@ -477,7 +477,7 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
     let rainBanner: string | undefined = isRain
       ? options.isLive
         ? forecastInfo?.rainExpected
-          ? 'What changed: Rain expected during your trip'
+          ? 'What changed: Rain expected'
           : 'What changed: Rain now'
         : STRINGS.rain.whatChanged
       : undefined;

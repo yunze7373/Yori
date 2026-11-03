@@ -132,6 +132,35 @@ describe('D5 depart preparer with a trip-window forecast', () => {
     expect(forecastStatusLine(p, 'ok')).toBe('Forecast · dry for your trip');
   });
 
+  it('a STALE forecast never shadows current conditions: current rain still gives the umbrella + current evidence', () => {
+    // Reviewer 48aae24c negative case: dry forecast issued 90 min before asOf, validFor 60 min.
+    const staleDry = createSimulatedSignal({
+      kind: 'weather',
+      value: { condition: 'cloudy', precipProbability: 0.1, forecast: { rainExpected: false, confidence: 0.8 } },
+      issuedAt: '2026-11-03T01:30:00.000Z',
+      validFor: 3600_000,
+      confidence: 0.8,
+      consentScope: 'device_only',
+    });
+    const currentRain = createSimulatedSignal({
+      kind: 'weather',
+      value: { condition: 'rain', precipProbability: 0.8 },
+      issuedAt: ASOF,
+      validFor: 3600_000,
+      confidence: 1,
+      consentScope: 'device_only',
+    });
+    for (const order of [[staleDry, currentRain], [currentRain, staleDry]]) {
+      const p = plan(order, [...base, rainBuffer(10)]);
+      expect(p.checklist).toEqual(['umbrella']);
+      const cite = p.why.evidenceSignals.find(s => s.kind === 'weather') as any;
+      expect(cite?.description).toBe('Rain forecast'); // the existing current-conditions citation
+      expect(forecastCitation(p)).toBeNull();
+      expect(p.leaveAt).toBe('2026-11-03T05:25:00.000Z'); // no buffer without a fresh forecast
+      expect(forecastStatusLine(p, 'expired')).toBe('Forecast expired · using current conditions');
+    }
+  });
+
   it('current-conditions rain never applies the rain buffer (forecast-only rule)', () => {
     const currentRain = createSimulatedSignal({
       kind: 'weather',
@@ -154,6 +183,10 @@ describe('D5 depart preparer with a trip-window forecast', () => {
     expect(p.leaveAt).toBe('2026-11-03T05:25:00.000Z');
     expect(forecastStatusLine(p, 'unavailable')).toBe('Forecast unavailable · using current conditions');
     expect(forecastStatusLine(p, undefined)).toBeUndefined();
+    // With no current conditions either, the label never claims to use them.
+    const none = plan([], base);
+    expect(forecastStatusLine(none, 'expired')).toBe('Forecast expired · no current conditions either');
+    expect(forecastStatusLine(none, 'unavailable')).toBe('Forecast unavailable · no current conditions either');
   });
 });
 

@@ -7,6 +7,8 @@
  *   UNCHANGED (2:35), and one status line saying so, with the Open-Meteo source.
  * - With a user-confirmed 10 min rain buffer: leave-by moves by exactly 10 min (2:25).
  * - Forecast bins missing: current conditions are used and the status line says so.
+ * - A forecast past validFor: dropped, current conditions labelled 'expired', one bounded re-request.
+ * - D3 floor: Accept and Not now are hit-tested at scroll top (true first paint) in every state.
  * - Live without location consent: no forecast request at all.
  */
 
@@ -32,7 +34,7 @@ test.use({ timezoneId: 'UTC', permissions: ['geolocation'], geolocation: { latit
 function setupClock(page: Page, facts: unknown[]) {
   return page.addInitScript(
     ({ timeStr, facts }) => {
-      const fixed = new Date(timeStr).getTime();
+      let fixed = new Date(timeStr).getTime();
       const OrigDate = window.Date;
       class PatchedDate extends OrigDate {
         constructor(...args: any[]) {
@@ -41,6 +43,9 @@ function setupClock(page: Page, facts: unknown[]) {
         }
       }
       PatchedDate.now = () => fixed;
+      (window as any).__advanceClockMs = (ms: number) => {
+        fixed += ms;
+      };
       PatchedDate.parse = OrigDate.parse;
       PatchedDate.UTC = OrigDate.UTC;
       window.Date = PatchedDate as any;
@@ -60,12 +65,13 @@ function setupClock(page: Page, facts: unknown[]) {
   );
 }
 
-type ForecastMode = 'rain' | 'missing';
+type ForecastMode = 'rain' | 'dry' | 'missing';
 
 function recordedForecast(mode: ForecastMode) {
   if (mode === 'missing') {
     return { enabled: true, forecast: null, unavailableReason: 'bins_missing', attribution: { text: 'Weather data by Open-Meteo.com' }, source: 'Open-Meteo', fetchedAt: CLOCK, coordinate: { kind: 'device_fix', decimals: 3 } };
   }
+  const dry = mode === 'dry';
   return {
     enabled: true,
     forecast: {
@@ -75,11 +81,11 @@ function recordedForecast(mode: ForecastMode) {
       validFor: 3600000,
       validAt: { from: '2026-11-02T14:35:00.000Z', to: '2026-11-02T15:00:00.000Z' },
       confidence: 0.8,
-      bins: [{ time: '2026-11-02T14:00:00.000Z', precipProbability: 0.7, precipitationMm: 1.1, condition: 'rain', rain: true }],
-      rainExpected: true,
-      rainFrom: '2026-11-02T14:00:00.000Z',
-      rainTo: '2026-11-02T15:00:00.000Z',
-      maxPrecipProbability: 0.7,
+      bins: [{ time: '2026-11-02T14:00:00.000Z', precipProbability: dry ? 0.1 : 0.7, precipitationMm: dry ? 0 : 1.1, condition: dry ? 'cloudy' : 'rain', rain: !dry }],
+      rainExpected: !dry,
+      rainFrom: dry ? undefined : '2026-11-02T14:00:00.000Z',
+      rainTo: dry ? undefined : '2026-11-02T15:00:00.000Z',
+      maxPrecipProbability: dry ? 0.1 : 0.7,
     },
     attribution: { text: 'Weather data by Open-Meteo.com' },
     source: 'Open-Meteo',
@@ -88,14 +94,14 @@ function recordedForecast(mode: ForecastMode) {
   };
 }
 
-async function setup(page: Page, opts: { forecast: ForecastMode; currentRain?: boolean }) {
-  const forecastUrls: string[] = [];
+async function setup(page: Page, opts: { forecast: ForecastMode; currentRain?: boolean; eventStart?: string }) {
+  const forecastUrls: string[] & { currentIssuedAt?: string } = [];
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   await page.route('**/api/xmemo/**', r => r.fulfill(json({ enabled: false, connected: false })));
   await page.route('**/api/places**', r => r.fulfill(json({ enabled: false })));
   await page.route('**/api/calendar/status', r => r.fulfill(json({ enabled: true, configured: true, provider: 'ics', attribution: 'iCalendar' })));
   await page.route('**/api/calendar', r =>
-    r.fulfill(json({ enabled: true, configured: true, attribution: 'iCalendar', events: [{ id: 'evt-review', title: 'Product Review', startTime: '2026-11-02T15:00:00.000Z', location: '100 Van Ness Ave, San Francisco' }] }))
+    r.fulfill(json({ enabled: true, configured: true, attribution: 'iCalendar', events: [{ id: 'evt-review', title: 'Product Review', startTime: opts.eventStart ?? '2026-11-02T15:00:00.000Z', location: '100 Van Ness Ave, San Francisco' }] }))
   );
   await page.route('**/api/geocode?*', r => r.fulfill(json({ enabled: true, success: true, result: { coordinate: [37.776, -122.418] }, attribution: 'Nominatim' })));
   await page.route('**/api/route?*', r =>
@@ -115,8 +121,8 @@ async function setup(page: Page, opts: { forecast: ForecastMode; currentRain?: b
             kind: 'weather',
             value: opts.currentRain ? { condition: 'rain', temperatureC: 16, precipProbability: 0.8 } : { condition: 'cloudy', temperatureC: 18, precipProbability: 0.1 },
             provider: 'open-meteo',
-            asOf: CLOCK,
-            issuedAt: CLOCK,
+            asOf: forecastUrls.currentIssuedAt ?? CLOCK,
+            issuedAt: forecastUrls.currentIssuedAt ?? CLOCK,
             validFor: 3600000,
             confidence: 1,
             provenance: 'live',
@@ -146,6 +152,9 @@ async function openLive(page: Page, grant = true) {
 
 /** D3 floor: the plan's Accept and Not now stay clear of the docked ask bar on first paint. */
 async function expectActionsUnoccluded(page: Page) {
+  // First paint: scroll to the top and let layout settle before hit-testing (Reviewer 48aae24c).
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))));
   const hits = await page.evaluate(() => {
     const hit = (sel: string) => {
       const el = document.querySelector<HTMLElement>(sel);
@@ -202,7 +211,8 @@ test.describe('D5-LIVE-FORECAST: target-time forecast for the trip window (recor
       await setup(page, { forecast: 'rain' });
       await openLive(page);
       await expect(page.locator('#forecast-status')).toHaveText('Forecast · leaving 10 min earlier (your rain buffer)', { timeout: 10000 });
-      await expect(page.locator('#hero-cause-effect')).toHaveText('Rain expected 2:00–3:00 PM · take an umbrella; leaving 10 min earlier (2:25).');
+      await expect(page.locator('#hero-cause-effect')).toHaveText('Rain expected 2:00–3:00 PM · take an umbrella; leaving 10 min earlier (2:35 → 2:25).');
+      await expect(page.locator('#time-diff-display')).toHaveCount(0);
       const card = (await page.locator('.now-card, #now-card').first().textContent()) ?? '';
       expect(card).toMatch(/leave by 2:25\s*pm/i);
       await expect(page.locator('#chip-umbrella')).toBeVisible();
@@ -212,18 +222,52 @@ test.describe('D5-LIVE-FORECAST: target-time forecast for the trip window (recor
     });
   }
 
-  test('forecast bins missing: current conditions are used, and the status line says so', async ({ page }) => {
+  for (const vp of VIEWPORTS) {
+    test(`forecast bins missing: current conditions are used, and the status line says so @${vp.name}`, async ({ page }) => {
+      await page.setViewportSize(vp);
+      await setupClock(page, [...BASE_FACTS, fact('rain_buffer_minutes', 10)]);
+      await setup(page, { forecast: 'missing', currentRain: true });
+      await openLive(page);
+      await expect(page.locator('#forecast-status')).toHaveText('Forecast unavailable · using current conditions', { timeout: 10000 });
+      await expect(page.locator('.now-rationale-forecast')).toHaveText('Rain now');
+      const card = (await page.locator('.now-card, #now-card').first().textContent()) ?? '';
+      // Current-conditions rain never applies the rain buffer (forecast-only rule): leave-by unchanged.
+      expect(card).toMatch(/leave by 2:35\s*pm/i);
+      await expectActionsUnoccluded(page);
+      await page.screenshot({ path: path.join(EVIDENCE_DIR, `d5-forecast-unavailable-${vp.name}.png`) });
+    });
+  }
+
+  test('a forecast past validFor is never used: current conditions take over, labelled, with ONE bounded re-request', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await setupClock(page, [...BASE_FACTS, fact('rain_buffer_minutes', 10)]);
-    await setup(page, { forecast: 'missing', currentRain: true });
+    // 4:30 PM event: the trip window is still ahead after the clock moves 61 min.
+    const forecastUrls = await setup(page, { forecast: 'dry', currentRain: true, eventStart: '2026-11-02T16:30:00.000Z' });
     await openLive(page);
-    await expect(page.locator('#forecast-status')).toHaveText('Forecast unavailable · using current conditions', { timeout: 10000 });
+    // Fresh dry forecast for the trip window (it takes precedence over the current shower).
+    await expect(page.locator('#forecast-status')).toHaveText('Forecast · dry for your trip', { timeout: 10000 });
+    await expect(page.locator('#chip-umbrella')).toHaveCount(0);
+    expect(forecastUrls).toHaveLength(1);
+    // 61 min later the forecast (issued 2:15 PM, valid 1 h) is stale: dropped, current rain used.
+    await page.evaluate(() => (window as any).__advanceClockMs(61 * 60_000));
+    // Current conditions are re-fetched on the Live refresh (observation time follows the clock).
+    forecastUrls.currentIssuedAt = '2026-11-02T15:16:00.000Z';
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await expect(page.locator('#forecast-status')).toHaveText('Forecast expired · using current conditions', { timeout: 10000 });
+    await expect(page.locator('#chip-umbrella')).toBeVisible();
     await expect(page.locator('.now-rationale-forecast')).toHaveText('Rain now');
+    // Exactly one re-request for this event in this validFor window, however often it re-renders.
+    await expect.poll(() => forecastUrls.length).toBe(2);
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await page.waitForTimeout(150);
+    }
+    expect(forecastUrls).toHaveLength(2);
+    await expect(page.locator('#forecast-status')).toHaveText('Forecast expired · using current conditions');
     const card = (await page.locator('.now-card, #now-card').first().textContent()) ?? '';
-    // Current-conditions rain never applies the rain buffer (forecast-only rule): leave-by unchanged.
-    expect(card).toMatch(/leave by 2:35\s*pm/i);
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await page.screenshot({ path: path.join(EVIDENCE_DIR, 'd5-forecast-unavailable-390x844.png') });
+    expect(card).toMatch(/leave by 4:05\s*pm/i); // 4:30 - 15 drive - 10 buffer; no rain buffer without a fresh forecast
+    await expectActionsUnoccluded(page);
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, 'd5-forecast-expired-390x844.png') });
   });
 
   test('Live without location consent: zero forecast requests', async ({ browser }) => {

@@ -1937,10 +1937,21 @@ export function renderApp(
   };
   let liveWeatherSignal: RealSignal<WeatherData> | null = null;
   let liveWeatherProvenance: { source: string; fetchedAt?: string; atDeviceFix: boolean } | null = null;
-  // D5: the Live trip-window forecast, keyed on the calendar event (one request per event), and
-  // fed to the depart preparer as a forecast weather signal. 'unavailable' = fall back to current
-  // conditions, labelled on the Now card.
-  let liveForecast: { key: string; status: 'pending' | 'ok' | 'unavailable'; signal?: LiveSignal } | null = null;
+  // D5: the Live trip-window forecast, keyed on the calendar event, and fed to the depart preparer
+  // as a forecast weather signal. 'unavailable' (missing) and 'expired' (past issuedAt + validFor)
+  // both fall back to current conditions, labelled on the Now card. A stale or missing forecast is
+  // re-requested at most once per validFor window per event (bounded; never on every render).
+  type LiveForecastState = {
+    key: string;
+    status: 'pending' | 'ok' | 'unavailable' | 'expired';
+    signal?: LiveSignal;
+    requestedAtMs: number;
+    inFlight: boolean;
+    validUntilMs?: number;
+    validForMs: number;
+  };
+  let liveForecast: LiveForecastState | null = null;
+  const FORECAST_DEFAULT_VALID_FOR_MS = 3600000;
 
   async function requestLiveForecast(url: string, key: string) {
     try {
@@ -1948,10 +1959,13 @@ export function renderApp(
       const data = (await resp.json().catch(() => null)) as { forecast?: any } | null;
       const f = resp.ok ? data?.forecast : null;
       if (liveForecast?.key !== key) return;
-      if (f && typeof f.rainExpected === 'boolean' && typeof f.issuedAt === 'string' && typeof f.validFor === 'number') {
+      const base = { key, requestedAtMs: liveForecast.requestedAtMs, inFlight: false };
+      if (f && typeof f.rainExpected === 'boolean' && typeof f.issuedAt === 'string' && typeof f.validFor === 'number' && Number.isFinite(Date.parse(f.issuedAt))) {
         liveForecast = {
-          key,
+          ...base,
           status: 'ok',
+          validUntilMs: Date.parse(f.issuedAt) + f.validFor,
+          validForMs: f.validFor,
           signal: createLiveSignal({
             kind: 'weather',
             value: {
@@ -1975,10 +1989,10 @@ export function renderApp(
           }),
         };
       } else {
-        liveForecast = { key, status: 'unavailable' };
+        liveForecast = { ...base, status: 'unavailable', validForMs: liveForecast.validForMs };
       }
     } catch {
-      if (liveForecast?.key === key) liveForecast = { key, status: 'unavailable' };
+      if (liveForecast?.key === key) liveForecast = { ...liveForecast, status: 'unavailable', inFlight: false, signal: undefined };
     }
     update();
   }
@@ -3390,12 +3404,14 @@ export function renderApp(
                 if (nowPlan.intentId === 'depart' && forecastNote?.rainExpected) {
                   // D5: forward-looking; leave-by moves only by the user's confirmed rain buffer.
                   const span = forecastNote.rainSpan ? ` ${forecastNote.rainSpan}` : '';
-                  cause = 'Rain expected during your trip';
-                  causeMarker = 'What changed: Rain expected during your trip';
-                  // The why (your rain buffer / none set) is on the forecast status line, not repeated here.
+                  cause = 'Rain expected';
+                  causeMarker = 'What changed: Rain expected';
+                  // The why (your rain buffer / none set) is on the forecast status line, not repeated
+                  // here; the moved time is folded into this line (no separate strike-through row),
+                  // so the card keeps Accept and Not now above the docked ask bar at 390.
                   heroCauseEffect =
                     rainBufferMoved > 0
-                      ? `Rain expected${span} · take an umbrella; leaving ${rainBufferMoved} min earlier (${newLeaveClean}).`
+                      ? `Rain expected${span} · take an umbrella; leaving ${rainBufferMoved} min earlier (${priorLeaveClean || newLeaveClean} → ${newLeaveClean}).`
                       : `Rain expected${span} · take an umbrella; leave time unchanged (${newLeaveClean}).`;
                 } else if (nowPlan.intentId === 'depart') {
                   if (isRain) {
@@ -3436,8 +3452,9 @@ export function renderApp(
                   cause,
                   causeMarker,
                   heroCauseEffect,
-                  priorLeaveTime: didLeaveTimeMove ? priorLeaveTimeStr : undefined,
-                  newLeaveTime: didLeaveTimeMove ? newLeaveTimeStr : undefined,
+                  // D5: the forecast rain-buffer move is already stated in heroCauseEffect.
+                  priorLeaveTime: didLeaveTimeMove && !(forecastNote?.rainExpected && rainBufferMoved > 0) ? priorLeaveTimeStr : undefined,
+                  newLeaveTime: didLeaveTimeMove && !(forecastNote?.rainExpected && rainBufferMoved > 0) ? newLeaveTimeStr : undefined,
                   statusTransition: 'Updated plan ready',
                   acknowledged: false,
                 };
@@ -3537,16 +3554,29 @@ export function renderApp(
         // D5: one trip-window forecast request per Live depart event (consented, rounded fix only).
         if (contextMode === 'live' && weatherStatus.enabled && nowPlan?.intentId === 'depart' && nowPlan.apptAt && nowPlan.leaveAt) {
           const forecastKey = `${nowPlan.subjectTitle ?? ''}|${nowPlan.apptAt}`;
-          if (liveForecast?.key !== forecastKey) {
+          const nowMs = Date.now();
+          const sameEvent = liveForecast?.key === forecastKey;
+          // Stale: drop it now (the preparer then uses current conditions) and label it 'expired'.
+          if (sameEvent && liveForecast!.status === 'ok' && liveForecast!.validUntilMs !== undefined && nowMs > liveForecast!.validUntilMs) {
+            liveForecast = { ...liveForecast!, status: 'expired', signal: undefined };
+          }
+          const due =
+            !sameEvent ||
+            (!liveForecast!.inFlight &&
+              (liveForecast!.status === 'expired' || liveForecast!.status === 'unavailable') &&
+              nowMs - liveForecast!.requestedAtMs >= liveForecast!.validForMs);
+          if (due) {
             const forecastUrl = resolveWeatherForecastUrl(
               contextMode,
               defaultLocationPort.getLocation(),
               defaultLocationPort.getConsentStatus?.(),
               { leaveAt: nowPlan.leaveAt, apptAt: nowPlan.apptAt },
-              Date.now()
+              nowMs
             );
             if (forecastUrl) {
-              liveForecast = { key: forecastKey, status: 'pending' };
+              liveForecast = sameEvent
+                ? { ...liveForecast!, requestedAtMs: nowMs, inFlight: true }
+                : { key: forecastKey, status: 'pending', requestedAtMs: nowMs, inFlight: true, validForMs: FORECAST_DEFAULT_VALID_FOR_MS };
               setTimeout(() => void requestLiveForecast(forecastUrl, forecastKey), 0);
             }
           }

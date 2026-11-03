@@ -51,7 +51,7 @@ In adherence to Yori's core principle of **ruthless engineering truthfulness**, 
      - **Request:** for the next real Live depart plan, the app requests Open-Meteo hourly bins (`/api/weather/forecast`) for the `[leave-by, appointment]` window. It uses only the consented, 3-decimal fix; without consent there is no request.
      - **Signal:** a forecast signal carries `issuedAt`, `validFor`, a `validAt` window, confidence 0.8 (below 1.0) and `provenance: open_meteo_forecast`.
      - **Rain:** rain in the window adds the umbrella and a forward-looking rationale (`Rain expected 2:00–3:00 PM`).
-     - **Fallback:** missing or stale bins fall back to current conditions, labelled *Forecast unavailable · using current conditions*.
+     - **Fallback:** missing bins fall back to current conditions, labelled *Forecast unavailable · using current conditions*. A forecast older than its `validFor` is never used: current conditions take over, labelled *Forecast expired · using current conditions*, and the forecast is re-requested at most once per `validFor` window per event. If current conditions are missing as well, the label says so (*… no current conditions either*).
    - **Evidence:**
      - `tests/proxy-boundary/weather-forecast-proxy.test.ts`: validation without echo, fields mask, timeout, fail-closed.
      - `src/plugins/depart/forecast.test.ts`.

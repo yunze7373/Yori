@@ -145,24 +145,20 @@ export class DepartPreparer implements Preparer {
       return null; // Fail closed on missing/invalid travel duration numbers
     }
 
-    // 3. Locate weather signal and check expiration (INV-106). D5: a target-time forecast for the
-    //    trip window (value.forecast) takes precedence over current conditions.
-    const weatherSignal =
-      snapshot.signals.find(s => s.kind === 'weather' && isForecastValue(s.value)) ??
-      snapshot.signals.find(s => s.kind === 'weather');
-    let validWeatherSignal: ContextSignal | null = null;
-    if (weatherSignal && typeof weatherSignal.validFor === 'number' && typeof weatherSignal.issuedAt === 'string') {
-      const weatherIssuedMs = Date.parse(weatherSignal.issuedAt);
-      const snapshotAsOfMs = Date.parse(snapshot.asOf);
-      if (Number.isFinite(weatherIssuedMs) && Number.isFinite(snapshotAsOfMs)) {
-        const isExpired = snapshotAsOfMs - weatherIssuedMs > weatherSignal.validFor;
-        if (!isExpired) {
-          validWeatherSignal = weatherSignal;
-        }
-      }
-    } else if (weatherSignal) {
-      validWeatherSignal = weatherSignal;
-    }
+    // 3. Locate weather signal and check expiration (INV-106). D5: a FRESH target-time forecast for
+    //    the trip window (value.forecast) takes precedence; an expired one never shadows current
+    //    conditions, which are then used through the existing path.
+    const isFresh = (sig: ContextSignal | undefined): boolean => {
+      if (!sig) return false;
+      if (typeof sig.validFor !== 'number' || typeof sig.issuedAt !== 'string') return true;
+      const issuedMs = Date.parse(sig.issuedAt);
+      const asOfMs = Date.parse(snapshot.asOf);
+      if (!Number.isFinite(issuedMs) || !Number.isFinite(asOfMs)) return false;
+      return asOfMs - issuedMs <= sig.validFor;
+    };
+    const freshForecast = snapshot.signals.find(s => s.kind === 'weather' && isForecastValue(s.value) && isFresh(s));
+    const currentWeather = snapshot.signals.find(s => s.kind === 'weather' && !isForecastValue(s.value));
+    const validWeatherSignal: ContextSignal | null = freshForecast ?? (isFresh(currentWeather) ? currentWeather! : null);
 
     // 4. Memory facts (Finding 2: strictly require confirmed facts. Zero fabricated defaults!)
     const bufferFact = memory.find(

@@ -29,12 +29,13 @@ export function forecastCitation(plan: { why?: { evidenceSignals?: readonly unkn
 
 /**
  * D5: the ONE status line for a Live depart plan's weather basis (fits one line at 390 px; the
- * Open-Meteo attribution link stays visible in the header). 'unavailable' = the forecast was
- * requested but missing/stale, so current conditions are used.
+ * Open-Meteo attribution link stays visible in the header). 'unavailable' = requested but missing;
+ * 'expired' = older than its validFor (a bounded re-request is pending or failed); both use current
+ * conditions.
  */
 export function forecastStatusLine(
   plan: Parameters<typeof forecastCitation>[0] & Parameters<typeof appliedRainBufferMinutes>[0],
-  forecastState: 'ok' | 'unavailable' | 'pending' | undefined
+  forecastState: 'ok' | 'unavailable' | 'expired' | 'pending' | undefined
 ): string | undefined {
   const f = forecastCitation(plan);
   if (f) {
@@ -42,6 +43,10 @@ export function forecastStatusLine(
     const moved = appliedRainBufferMinutes(plan);
     return moved > 0 ? `Forecast · leaving ${moved} min earlier (your rain buffer)` : 'Forecast · leave-by unchanged, no rain buffer set';
   }
-  if (forecastState === 'unavailable') return 'Forecast unavailable · using current conditions';
+  if (forecastState === 'unavailable' || forecastState === 'expired') {
+    const head = forecastState === 'expired' ? 'Forecast expired' : 'Forecast unavailable';
+    const hasCurrent = Boolean(plan?.why?.evidenceSignals?.some(s => (s as { kind?: string }).kind === 'weather'));
+    return hasCurrent ? `${head} · using current conditions` : `${head} · no current conditions either`;
+  }
   return undefined;
 }
