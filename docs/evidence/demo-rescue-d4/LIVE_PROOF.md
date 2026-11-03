@@ -99,15 +99,55 @@ Ask costs 2 calls (the live command interpreter, then candidates).
 
    Either way, a later proof would cost 1 call less, or 1 call more usefully.
 
+## Run 3 (2026-11-03 11:06 JST, Reviewer decision ae9b0e30: "at most 3 billed calls, cumulative at most 37")
+
+Preconditions, all committed first in `05840b8`:
+- **Completion budget:** 4096 tokens as the code default for the candidates and plan-reasoning paths,
+  lowering-only. This is a plan-parameter deviation from the pinned 300; the Reviewer authorized it.
+- **Wait times:** `/api/model/candidates` waits up to 30 s on the server. The app waits 31 s and
+  declares that wait in `x-yori-client-wait-ms`. The server refuses to bill a call whose declared wait
+  is shorter than its own timeout.
+- **No plan reasoning for Live lunch:** a Live lunch plan set sends no `/api/model/reason` call.
+
+Setup:
+- Separate shipping build in gitignored `.yori-runtime/d4-live3`, on Mac port 4173.
+- `MODEL_LIVE` at its default (on), `MODEL_OPERATING_CAP=37`, `MODEL_TIMEOUT_MS` unset (so the
+  candidates timeout is 30 s).
+- Headless Chromium at the public Shinjuku fixture point. `reasoning_effort` not set.
+
+| | Value |
+|---|---|
+| Ledger before | **34** |
+| Ledger after | **36** (2 billed calls; 1 of the 3 authorized calls is unused) |
+| Plan-reasoning calls (`/api/model/reason`) | **0** (Live lunch set; as required) |
+| Call 35 `candidates` `rank` | **ACCEPTED live**: `engineStatus meta_model_live`; tokens 336 in / 1,984 out (`finish_reason` stop; the post-check passed); latency 23,054 ms, inside the 30 s wait. The card showed `Meta Muse Spark · live` with the model's one-sentence reason citing only in-data facts (open now, straight-line metres, rating). The visible text is clamped to 2 lines at 390; the full text is in the title. |
+| Ask "why this restaurant?" | `/api/model/command` returned **400** (not billed; see below). The app fell back to the deterministic grammar, which routed `WHY` to the candidate reasoner: **call 36 `candidates` `why`**. |
+| Call 36 result | **Not captured (executor error).** The probe judged "done" too early: it waited for the wrong "thinking" text. The server was then stopped 3 s later, while call 36 was still in flight upstream. Call 36 is therefore counted as billed, at the worst-case pre-charge (USD 0.0224), because no usage came back. |
+| Raw evidence | `.yori-runtime/d4-live-proof/live3-rank-RAW.png`, `live3-why-RAW.png` (gitignored). The committed text names no venue. |
+| Key material | none in page or bundle (the `sk-` hits are the `ask-bar` class names; no `Bearer`) |
+
+The `/api/model/command` 400 was reproduced afterwards with live off and zero billed calls. The live
+command interpreter sends more than 20 `availableSignalIds` (duplicates plus `mock-place-*` ids), so
+the proxy rejects the payload before any upstream call (`Invalid facts: property
+'availableSignalIds' exceeds maximum of 20 items`). This predates D4 and is unbilled; it is filed in
+BACKLOG.
+
+**Status of the D4 live acceptance:**
+- **Live `rank`: met** (1 accepted live answer over real candidates).
+- **Live Ask answer: not met**, because call 36's result was lost to the executor's own teardown error.
+- One authorized call remains within cumulative ≤37. Re-running the Ask needs the Reviewer's decision:
+  it would be a second Ask attempt. The probe fix is to wait for the `candidates` `why` response
+  itself and keep the server up until it lands.
+
 ## Final spend (cumulative, all D4 and earlier calls)
-- **Calls: 34 / 200** (owner limit), operating cap 100.
-- **Estimated USD: ≤ 0.72 cumulative** (`usd_estimate` 0.7219 in the ledger). The 32 calls made
-  before token recording are charged at the per-call worst case (3,000 prompt + 8,192 completion
-  tokens). Calls 33 and 34 are charged at their real usage: 1,451 tokens, ≈ USD 0.0029, and 1,356
-  tokens, ≈ USD 0.0027.
+- **Calls: 36 / 200** (owner limit), operating cap 100.
+- **Estimated USD: ≤ 0.75 cumulative** (`usd_estimate` 0.7489 in the ledger). This is conservative:
+  - the 32 calls made before token recording are charged at the per-call worst case (3,000 prompt +
+    8,192 completion tokens);
+  - call 36 is also charged at the worst case, because its response never came back;
+  - calls 33, 34 and 35 are charged at real usage: ≈ USD 0.0029, 0.0027 and 0.0046 (35 = 2,320 tokens).
 - **Rate source:** USD 2.00 per 1M tokens, applied to input and output. It is the muse-spark estimate
   documented in `src/adapters/model/server-proxy.ts` (`MAX_TOKENS_CEILING` note) and in the S1
   reports. **UNVERIFIED** (not checked against a published Meta price list). If the true rate were
   higher, the estimate would scale linearly. The operating cap keeps total spend far below USD 20
   unless the rate exceeds about USD 18 per 1M tokens.
-
