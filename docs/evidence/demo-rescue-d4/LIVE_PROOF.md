@@ -27,3 +27,12 @@ gitignored `.yori-runtime/d4-live-proof/`; nothing with venue names is committed
    proof.
 
 The caps and the hard stop worked as designed: the 11th call never left the server.
+
+## Spend accounting (owner limits: ≤ 200 calls and ≤ USD 20 cumulative, including the first 22)
+- Every reservation now pre-charges a worst-case USD estimate (3k prompt + 8,192 completion tokens at
+  the documented muse-spark estimate of USD 2.00 per 1M tokens, applied to input and output). The
+  real `usage` replaces it when the response arrives. Entries carry `tokens_in`, `tokens_out` and `usd`;
+  the ledger carries cumulative `tokens_in`, `tokens_out` and `usd_estimate`. A reservation that could
+  reach USD 20 is refused before any fetch (`usd_guard`, labelled `Reasoned locally`).
+- The 32 calls made before token recording are backfilled at the worst case: **32/200 calls, ≤ USD 0.72
+  estimated cumulative spend** (the true figure is far lower; the one recorded call used 632 tokens).

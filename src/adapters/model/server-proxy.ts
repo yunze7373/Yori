@@ -339,6 +339,11 @@ export interface LedgerReservationEntry {
   readonly timestamp: string;
   readonly endpoint: string;
   readonly callIndex: number;
+  /** D4: worst-case USD pre-charged at reservation (0 once the real usage is recorded). */
+  usd_precharge?: number;
+  tokens_in?: number;
+  tokens_out?: number;
+  usd?: number;
 }
 
 export interface ModelLedgerData {
@@ -351,7 +356,100 @@ export interface LedgerReservationResult {
   readonly success: boolean;
   readonly callCount: number;
   readonly maxCalls: number;
-  readonly error?: 'cap_exceeded' | 'corrupt_ledger' | 'unwritable_ledger' | 'lock_timeout';
+  readonly error?: 'cap_exceeded' | 'corrupt_ledger' | 'unwritable_ledger' | 'lock_timeout' | 'usd_guard';
+}
+
+/**
+ * D4 owner limits (binding, msg_f188b9a0): at most 200 calls and USD 20 cumulative, INCLUDING the
+ * calls already in the ledger. USD is estimated from tokens at the documented muse-spark rate
+ * (docs/evidence/s1-live/S1_TRUNCATION_DIAGNOSIS.md: ~USD 2.00 per 1M tokens, UNVERIFIED), applied
+ * to prompt AND completion tokens as an upper bound; MODEL_USD_PER_1M_TOKENS can only raise it.
+ * Guard: every reservation pre-charges the worst case (3k prompt + MAX_TOKENS_CEILING completion);
+ * the real usage replaces the pre-charge when the response arrives; a call that never reports usage
+ * keeps the conservative pre-charge.
+ */
+export const MODEL_USD_PER_1M_TOKENS_DEFAULT = 2.0;
+export const MODEL_WORST_CASE_PROMPT_TOKENS = 3000;
+
+export function resolveUsdPer1MTokens(env: Record<string, string | undefined> = process.env): number {
+  const v = Number(env['MODEL_USD_PER_1M_TOKENS']);
+  return Number.isFinite(v) && v > MODEL_USD_PER_1M_TOKENS_DEFAULT ? v : MODEL_USD_PER_1M_TOKENS_DEFAULT;
+}
+
+export function worstCaseCallUsd(env: Record<string, string | undefined> = process.env): number {
+  return ((MODEL_WORST_CASE_PROMPT_TOKENS + MAX_TOKENS_CEILING) * resolveUsdPer1MTokens(env)) / 1_000_000;
+}
+
+/** Cumulative spend view of the ledger (counts and estimates only). */
+export function readLedgerSpend(ledgerPath: string): {
+  callCount: number;
+  tokensIn: number;
+  tokensOut: number;
+  usdEstimate: number;
+} | null {
+  try {
+    const d = JSON.parse(fs.readFileSync(ledgerPath, 'utf-8'));
+    return {
+      callCount: d.call_count,
+      tokensIn: typeof d.tokens_in === 'number' ? d.tokens_in : 0,
+      tokensOut: typeof d.tokens_out === 'number' ? d.tokens_out : 0,
+      usdEstimate:
+        typeof d.usd_estimate === 'number' ? d.usd_estimate : d.call_count * worstCaseCallUsd(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function withLedgerLock<T>(ledgerPath: string, fn: () => T): Promise<T | null> {
+  const lockPath = `${ledgerPath}.lock`;
+  const start = Date.now();
+  let fd: number | null = null;
+  while (fd === null) {
+    try {
+      fd = fs.openSync(lockPath, 'wx');
+    } catch (err: any) {
+      if (err?.code !== 'EEXIST' || Date.now() - start > 5000) return null;
+      await new Promise(r => setTimeout(r, 10));
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    try { fs.closeSync(fd); } catch {}
+    try { fs.unlinkSync(lockPath); } catch {}
+  }
+}
+
+/**
+ * D4: records the real token usage of a billed call and corrects the USD pre-charge to actual.
+ * Counts only; never prompts, keys or place data.
+ */
+export async function recordLedgerUsage(
+  ledgerPath: string,
+  callIndex: number,
+  usage: { prompt_tokens?: number; completion_tokens?: number } | undefined
+): Promise<void> {
+  const tin = typeof usage?.prompt_tokens === 'number' ? usage.prompt_tokens : undefined;
+  const tout = typeof usage?.completion_tokens === 'number' ? usage.completion_tokens : undefined;
+  if (tin === undefined && tout === undefined) return; // keep the conservative pre-charge
+  await withLedgerLock(ledgerPath, () => {
+    const data = JSON.parse(fs.readFileSync(ledgerPath, 'utf-8'));
+    const entry = (data.reservations as LedgerReservationEntry[]).find(r => r.callIndex === callIndex);
+    if (!entry) return;
+    const actual = (((tin ?? 0) + (tout ?? 0)) * resolveUsdPer1MTokens()) / 1_000_000;
+    const pre = typeof entry.usd_precharge === 'number' ? entry.usd_precharge : 0;
+    entry.tokens_in = tin;
+    entry.tokens_out = tout;
+    entry.usd = Math.round(actual * 1e6) / 1e6;
+    entry.usd_precharge = 0;
+    data.tokens_in = (data.tokens_in ?? 0) + (tin ?? 0);
+    data.tokens_out = (data.tokens_out ?? 0) + (tout ?? 0);
+    data.usd_estimate = Math.round(((data.usd_estimate ?? 0) - pre + actual) * 1e6) / 1e6;
+    const tmp = `${ledgerPath}.tmp.${process.pid}.${Date.now()}`;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(tmp, ledgerPath);
+  });
 }
 
 export interface LedgerState {
@@ -509,12 +607,27 @@ export async function reserveLedgerSlot(
       return { success: false, callCount: data.call_count, maxCalls, error: 'cap_exceeded' };
     }
 
+    // 3. D4 USD guard: cumulative estimate (backfilled conservatively for calls made before token
+    //    recording) plus this call's worst case must stay below the owner's USD 20 limit.
+    const anyData = data as any;
+    const worst = worstCaseCallUsd();
+    if (typeof anyData.usd_estimate !== 'number') {
+      anyData.usd_estimate = Math.round(data.call_count * worst * 1e6) / 1e6;
+      anyData.usd_basis = 'calls before D4 token recording are charged at the per-call worst case';
+    }
+    if (anyData.usd_estimate + worst >= MODEL_USD_GUARDRAIL) {
+      logger(`[ModelProxy] USD guard: estimate ${anyData.usd_estimate} + worst ${worst} would reach USD ${MODEL_USD_GUARDRAIL}`);
+      return { success: false, callCount: data.call_count, maxCalls, error: 'usd_guard' };
+    }
+    anyData.usd_estimate = Math.round((anyData.usd_estimate + worst) * 1e6) / 1e6;
+
     data.call_count += 1;
     data.reservations.push({
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
       endpoint,
       callIndex: data.call_count,
+      usd_precharge: worst,
     });
 
     const tmpFile = `${ledgerPath}.tmp.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}`;
@@ -1595,6 +1708,8 @@ export class ModelDevProxy {
           reasoning_tokens?: number;
         };
       };
+      // D4: record real tokens and correct the USD pre-charge (owner limit USD 20 cumulative).
+      await recordLedgerUsage(this.config.ledgerPath, reservation.callCount, (json as any).usage);
 
       this.lastFinishReason = json.choices?.[0]?.finish_reason;
       this.lastReasoningTokens =
@@ -1836,6 +1951,8 @@ export class ModelDevProxy {
           reasoning_tokens?: number;
         };
       };
+      // D4: record real tokens and correct the USD pre-charge (owner limit USD 20 cumulative).
+      await recordLedgerUsage(this.config.ledgerPath, reservation.callCount, (json as any).usage);
 
       this.lastFinishReason = json.choices?.[0]?.finish_reason;
       this.lastReasoningTokens =
@@ -1961,6 +2078,8 @@ export class ModelDevProxy {
         choices?: Array<{ message?: { content?: unknown }; finish_reason?: string }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
+      // D4: record real tokens and correct the USD pre-charge (owner limit USD 20 cumulative).
+      await recordLedgerUsage(this.config.ledgerPath, reservation.callCount, (json as any).usage);
       appendModelUsage(this.config.ledgerPath, {
         endpoint: 'candidates',
         promptTokens: json.usage?.prompt_tokens,
@@ -2149,6 +2268,8 @@ export class ModelDevProxy {
           reasoning_tokens?: number;
         };
       };
+      // D4: record real tokens and correct the USD pre-charge (owner limit USD 20 cumulative).
+      await recordLedgerUsage(this.config.ledgerPath, reservation.callCount, (json as any).usage);
 
       this.lastFinishReason = json.choices?.[0]?.finish_reason;
       this.lastReasoningTokens =

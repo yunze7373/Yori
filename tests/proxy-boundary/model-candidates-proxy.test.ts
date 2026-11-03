@@ -23,6 +23,8 @@ import {
   estimateModelSpendUsd,
   resolveOperatingCap,
   resolveModelLiveEnabled,
+  readLedgerSpend,
+  worstCaseCallUsd,
 } from '../../src/adapters/model/server-proxy.js';
 import {
   validateCandidateReasoningInput,
@@ -230,4 +232,40 @@ describe('D4 budget, hard stop, security and spend math', () => {
     await mw(ok.req, ok.res, ok.next);
     expect(ok.response.statusCode).toBe(200);
   });
+
+  it('USD: tokens recorded per call; the worst-case pre-charge is corrected to actual', async () => {
+    fs.writeFileSync(ledgerPath, JSON.stringify({ version: 1, call_count: 22, reservations: [], usd_estimate: 0.5 }));
+    globalThis.fetch = modelReply({ order: ['google-A'], reason: 'Near Cafe is open now and 45 m away.', citedFactKeys: [] }) as any;
+    const proxy = new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath });
+    expect((await proxy.handleCandidates(INPUT)).engineStatus).toBe('meta_model_live');
+    const raw = JSON.parse(fs.readFileSync(ledgerPath, 'utf-8'));
+    const entry = raw.reservations.find((r: any) => r.callIndex === 23);
+    expect(entry).toMatchObject({ endpoint: 'candidates', tokens_in: 410, tokens_out: 62, usd_precharge: 0 });
+    expect(entry.usd).toBeCloseTo(((410 + 62) * 2) / 1e6, 9);
+    const spend = readLedgerSpend(ledgerPath)!;
+    expect(spend).toMatchObject({ callCount: 23, tokensIn: 410, tokensOut: 62 });
+    expect(spend.usdEstimate).toBeCloseTo(0.5 + (472 * 2) / 1e6, 6);
+  });
+
+  it('USD: a ledger without spend data is backfilled at the per-call worst case (conservative)', async () => {
+    seed(32);
+    globalThis.fetch = modelReply({ order: ['google-A'], reason: 'Near Cafe is open now and 45 m away.', citedFactKeys: [] }) as any;
+    const proxy = new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath });
+    await proxy.handleCandidates(INPUT);
+    const spend = readLedgerSpend(ledgerPath)!;
+    expect(spend.callCount).toBe(33);
+    expect(spend.usdEstimate).toBeCloseTo(32 * worstCaseCallUsd() + (472 * 2) / 1e6, 6);
+  });
+
+  it('USD guard: a call that could reach USD 20 cumulative is refused before any fetch', async () => {
+    fs.writeFileSync(ledgerPath, JSON.stringify({ version: 1, call_count: 40, reservations: [], usd_estimate: 19.99 }));
+    const fetchSpy = modelReply({ order: ['google-A'], reason: 'unused reason text', citedFactKeys: [] });
+    globalThis.fetch = fetchSpy as any;
+    const proxy = new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath });
+    const res = await proxy.handleCandidates(INPUT);
+    expect(res).toMatchObject({ usedFallback: true, fallbackReason: 'budget_exhausted' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(readLedgerSpend(ledgerPath)).toMatchObject({ callCount: 40, usdEstimate: 19.99 });
+  });
 });
+
