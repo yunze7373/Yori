@@ -37,7 +37,8 @@ function places() {
 }
 
 async function setup(page: Page) {
-  const calls: string[] = [];
+  const calls: string[] & { clientWaits?: string[] } = [];
+  calls.clientWaits = [];
   const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
   await page.route('**/api/xmemo/**', r => r.fulfill(json({ enabled: false, connected: false })));
   await page.route('**/api/calendar/**', r => r.fulfill(json({ enabled: false, configured: false })));
@@ -54,6 +55,7 @@ async function setup(page: Page) {
   await page.route(u => u.pathname === '/api/model/candidates', async r => {
     const body = JSON.parse(r.request().postData() || '{}');
     calls.push(body.request);
+    calls.clientWaits!.push(r.request().headers()['x-yori-client-wait-ms'] ?? 'missing');
     const reason =
       body.request === 'why'
         ? 'Mid Ramen is open now, rated 4.2 by 310 people and 125 m away.'
@@ -65,7 +67,8 @@ async function setup(page: Page) {
         engineStatus: 'baseten_fallback',
         engineLabel: LABEL,
         primaryFailure: 'timeout',
-        latencyMs: 9400,
+        // Realistic: the 30 s Muse Spark deadline fired, then Baseten answered in 6.8 s.
+        latencyMs: 36800,
         ledger: { callCount: 38, cap: 100 },
       })
     );
@@ -134,6 +137,8 @@ test.describe('D8-BASETEN-FALLBACK: labelled fallback engine after a proven Muse
       expect(pillBox && pillBox.x + pillBox.width <= vp.width).toBe(true);
       expect(await page.locator('body').innerText()).not.toContain('Meta Muse Spark');
       expect(calls.filter(c => c === 'rank')).toHaveLength(1);
+      // The app declares a wait that covers the Muse deadline + the Baseten attempt (30 + 8 + 2 s).
+      expect(calls.clientWaits).toEqual(['40000']);
       await expectHeroAboveFold(page, vp);
       await page.screenshot({ path: path.join(EVIDENCE_DIR, `d8-baseten-fallback-${vp.name}.png`) });
       await context.close();

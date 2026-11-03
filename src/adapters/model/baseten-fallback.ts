@@ -25,12 +25,13 @@ import {
   type CandidateReasoningInput,
   type CandidateReasoningOutput,
 } from './candidate-reasoning.js';
+import { BASETEN_FALLBACK_TIMEOUT_MS } from './timeout-config.js';
 
 export const BASETEN_BASE_URL = 'https://inference.baseten.co/v1';
 export const BASETEN_OPERATING_CAP_DEFAULT = 20;
 export const BASETEN_USD_SUBCAP = 10;
 export const BASETEN_MAX_TOKENS = 600;
-export const BASETEN_TIMEOUT_MS = 8000;
+export const BASETEN_TIMEOUT_MS = BASETEN_FALLBACK_TIMEOUT_MS;
 /** Worst-case pricing for the pre-charge: USD per 1M tokens, input and output (UNVERIFIED). */
 export const BASETEN_USD_PER_1M_TOKENS = 3.0;
 export const BASETEN_WORST_CASE_PROMPT_TOKENS = 3000;

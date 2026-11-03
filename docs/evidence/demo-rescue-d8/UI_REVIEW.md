@@ -7,7 +7,7 @@ That shape is proven against the real handler with a fake fetch in
 
 | File | What it shows |
 |---|---|
-| `d8-baseten-fallback-390x844.png`, `d8-baseten-fallback-1280x800.png` | The lunch card's reason line is labelled `Baseten fallback · gpt-oss-120b` (`data-engine="baseten_fallback"`). The header engine pill reads `Baseten fallback` (`data-engine-status="baseten_fallback"`, `data-provenance="fallback_engine"`). `Meta Muse Spark` appears nowhere on the page |
+| `d8-baseten-fallback-390x844.png`, `d8-baseten-fallback-1280x800.png` | Recorded latency 36,800 ms (the 30 s Muse Spark deadline, then a 6.8 s Baseten answer; the app waits up to 40 s). The lunch card's reason line is labelled `Baseten fallback · gpt-oss-120b` (`data-engine="baseten_fallback"`). The header engine pill reads `Baseten fallback` (`data-engine-status="baseten_fallback"`, `data-provenance="fallback_engine"`). `Meta Muse Spark` appears nowhere on the page |
 | `d8-ask-why-390x844.png` | Ask "why" is answered by the same engine, ending `· Baseten fallback · gpt-oss-120b`. The Ask header keeps one status line |
 
 ## Review notes

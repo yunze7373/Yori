@@ -266,7 +266,11 @@ test.describe('D3-VISUAL-PASS floor', () => {
         const note = d.page.locator('#nearby-now-note');
         await expect.soft(note).toBeVisible();
         await expect.soft(note, `(h) nearby ${variant} uses the designed state component`).toHaveClass(/nearby-state/);
-        await d.page.locator('#nearby-now').scrollIntoViewIfNeeded();
+        // The card can re-render while async statuses land (the node is replaced): retry the scroll
+        // instead of failing on a detached element (intermittent under full-suite load).
+        await expect(async () => {
+          await d.page.locator('#nearby-now').scrollIntoViewIfNeeded({ timeout: 1000 });
+        }).toPass({ timeout: 8000 });
         await shot(d.page, `nearby-${variant}`, vp.name);
         await d.context.close();
       }

@@ -63,3 +63,22 @@ export function clientCanAwaitServer(clientWaitMs: number | null | undefined, se
   return typeof clientWaitMs === 'number' && Number.isFinite(clientWaitMs) && clientWaitMs >= serverTimeoutMs;
 }
 
+/**
+ * D8: the labelled Baseten fallback runs only AFTER the candidates deadline fires, with its own
+ * timeout. The candidates/why request therefore waits for both plus a margin, and declares that
+ * wait; the server reserves Baseten only when the remaining declared wait still covers its timeout
+ * plus the margin (otherwise it is skipped: labelled offline, nothing billed).
+ */
+export const BASETEN_FALLBACK_TIMEOUT_MS = 8000;
+export const CLIENT_WAIT_MARGIN_MS = 1000;
+export const CANDIDATES_CLIENT_WAIT_MS = CANDIDATES_MODEL_TIMEOUT_MS + BASETEN_FALLBACK_TIMEOUT_MS + 2 * CLIENT_WAIT_MARGIN_MS;
+
+/** D8: may a Baseten attempt start now, given the client's declared wait and the time already used? */
+export function remainingWaitCoversFallback(clientWaitMs: number | null | undefined, elapsedMs: number): boolean {
+  return (
+    typeof clientWaitMs === 'number' &&
+    Number.isFinite(clientWaitMs) &&
+    clientWaitMs - elapsedMs >= BASETEN_FALLBACK_TIMEOUT_MS + CLIENT_WAIT_MARGIN_MS
+  );
+}
+

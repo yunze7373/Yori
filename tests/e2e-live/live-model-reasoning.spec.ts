@@ -138,7 +138,7 @@ test.describe('D4-MODEL-REASONING-ON: live reasoning over real candidates (recor
       // Exactly one ranking call for this candidate set, with the real ids.
       await page.evaluate(() => window.dispatchEvent(new Event('focus')));
       await page.waitForTimeout(600);
-      expect(calls.candidates.filter(c => c.request === 'rank')).toEqual([{ request: 'rank', ids: ['google-A', 'google-B'], clientWait: '31000' }]);
+      expect(calls.candidates.filter(c => c.request === 'rank')).toEqual([{ request: 'rank', ids: ['google-A', 'google-B'], clientWait: '40000' }]);
       // Many renders (grant, places, weather, focus refresh) and no plan-reasoning call for Live lunch.
       expect(calls.reason).toBe(0);
       await page.evaluate(() => window.scrollTo(0, 0));

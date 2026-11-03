@@ -257,6 +257,7 @@ import {
   resolveModelTimeoutMs,
   resolveCandidatesTimeoutMs,
   clientCanAwaitServer,
+  remainingWaitCoversFallback,
   CLIENT_WAIT_HEADER,
 } from './timeout-config.js';
 
@@ -2176,9 +2177,14 @@ export class ModelDevProxy {
     } catch {
       clearTimeout(timer);
       if (!controller.signal.aborted) return { ...fb('error', ledger), latencyMs: Date.now() - start };
-      // D8: PROVEN timeout (our deadline fired) -> exactly one labelled Baseten attempt.
+      // D8: PROVEN timeout (our deadline fired) -> exactly one labelled Baseten attempt, but only
+      // if the client's declared wait still covers it; otherwise skip (not reserved, not billed).
       const baseten = this.config.baseten;
-      if (baseten?.enabled) {
+      const fitsClientWait = !opts || remainingWaitCoversFallback(opts.clientWaitMs, Date.now() - start);
+      if (baseten?.enabled && !fitsClientWait) {
+        this.logger('[ModelProxy] Baseten fallback skipped: the client wait cannot cover it');
+      }
+      if (baseten?.enabled && fitsClientWait) {
         const alt = await callBasetenFallback(input, baseten);
         if (alt.ok) {
           return {

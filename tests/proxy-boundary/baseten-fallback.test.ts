@@ -24,6 +24,14 @@ import {
   BASETEN_OPERATING_CAP_DEFAULT,
   BASETEN_USD_SUBCAP,
 } from '../../src/adapters/model/baseten-fallback.js';
+import {
+  BASETEN_FALLBACK_TIMEOUT_MS,
+  CANDIDATES_CLIENT_WAIT_MS,
+  CANDIDATES_MODEL_TIMEOUT_MS,
+  CLIENT_WAIT_MARGIN_MS,
+  MODEL_CLIENT_WAIT_MS,
+  clientCanAwaitServer,
+} from '../../src/adapters/model/timeout-config.js';
 import type { CandidateReasoningInput } from '../../src/adapters/model/candidate-reasoning.js';
 
 const MUSE_KEY = 'sk-FAKE-muse-d8-0123456789';
@@ -209,3 +217,80 @@ describe('D8 proven-timeout-only fallback on /api/model/candidates', () => {
     expect(r.engineStatus).toBe('offline_deterministic'); // invented numbers fail the same post-check
   }, 30000);
 });
+
+describe('D8 timing on the REAL default constants (fake timers; no shortened timeouts)', () => {
+  /** Muse hangs until its 30 s deadline aborts it; Baseten answers after `basetenMs` (or hangs). */
+  function timedFetch(basetenMs: number | 'hang') {
+    const calls = { muse: 0, baseten: 0 };
+    globalThis.fetch = vi.fn((url: any, init: any) => {
+      if (String(url).startsWith(BASETEN_BASE_URL)) {
+        calls.baseten += 1;
+        return new Promise((resolve, reject) => {
+          init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+          if (basetenMs !== 'hang') {
+            setTimeout(
+              () => resolve({ ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify(GOOD) } }], usage: { prompt_tokens: 400, completion_tokens: 80 } }) } as any),
+              basetenMs
+            );
+          }
+        });
+      }
+      calls.muse += 1;
+      return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' }))));
+    }) as any;
+    return calls;
+  }
+  /** The real defaults: no candidatesTimeoutMs override (30 s), the real Baseten timeout (8 s). */
+  const realProxy = () => new ModelDevProxy({ apiKey: MUSE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath, baseten: baseten() });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('the declared candidates wait covers the worst case: Muse deadline + Baseten timeout + margin', () => {
+    expect((realProxy() as any).config.candidatesTimeoutMs).toBe(CANDIDATES_MODEL_TIMEOUT_MS);
+    expect(CANDIDATES_MODEL_TIMEOUT_MS).toBe(30_000);
+    expect(BASETEN_FALLBACK_TIMEOUT_MS).toBe(8_000);
+    const worstServerMs = CANDIDATES_MODEL_TIMEOUT_MS + BASETEN_FALLBACK_TIMEOUT_MS + CLIENT_WAIT_MARGIN_MS;
+    expect(clientCanAwaitServer(CANDIDATES_CLIENT_WAIT_MS, worstServerMs)).toBe(true);
+    // The old D5 wait could not: this is the reviewer's finding.
+    expect(clientCanAwaitServer(MODEL_CLIENT_WAIT_MS, worstServerMs)).toBe(false);
+  });
+
+  it('a real 30 s timeout then a 7 s Baseten answer reaches the client inside its declared wait', async () => {
+    const calls = timedFetch(7_000);
+    const pending = realProxy().handleCandidates(INPUT, { clientWaitMs: CANDIDATES_CLIENT_WAIT_MS });
+    await vi.advanceTimersByTimeAsync(CANDIDATES_MODEL_TIMEOUT_MS);
+    expect(calls.baseten).toBe(1);
+    await vi.advanceTimersByTimeAsync(7_000);
+    const r = await pending;
+    expect(r).toMatchObject({ engineStatus: 'baseten_fallback', primaryFailure: 'timeout' });
+    expect(r.latencyMs!).toBeGreaterThanOrEqual(CANDIDATES_MODEL_TIMEOUT_MS + 7_000);
+    expect(r.latencyMs!).toBeLessThan(CANDIDATES_CLIENT_WAIT_MS);
+  });
+
+  it('a declared wait too short for the fallback never reserves or bills Baseten (labelled offline)', async () => {
+    const calls = timedFetch(1_000);
+    const pending = realProxy().handleCandidates(INPUT, { clientWaitMs: MODEL_CLIENT_WAIT_MS }); // 31 s
+    await vi.advanceTimersByTimeAsync(CANDIDATES_MODEL_TIMEOUT_MS + 2_000);
+    const r = await pending;
+    expect(calls.muse).toBe(1);
+    expect(calls.baseten).toBe(0);
+    expect(fs.existsSync(basetenLedgerPath)).toBe(false);
+    expect(r).toMatchObject({ engineStatus: 'offline_deterministic', fallbackReason: 'timeout' });
+  });
+
+  it('a Baseten call that hangs ends at its own timeout, still inside the client wait (labelled offline)', async () => {
+    const calls = timedFetch('hang');
+    const pending = realProxy().handleCandidates(INPUT, { clientWaitMs: CANDIDATES_CLIENT_WAIT_MS });
+    await vi.advanceTimersByTimeAsync(CANDIDATES_MODEL_TIMEOUT_MS + BASETEN_FALLBACK_TIMEOUT_MS);
+    const r = await pending;
+    expect(calls.baseten).toBe(1);
+    expect(r).toMatchObject({ engineStatus: 'offline_deterministic', fallbackReason: 'timeout' });
+    expect(r.latencyMs!).toBeLessThan(CANDIDATES_CLIENT_WAIT_MS);
+  });
+});
+

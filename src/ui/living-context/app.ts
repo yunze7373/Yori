@@ -121,7 +121,7 @@ import { mockLunchAdapter } from '../../plugins/lunch/adapter.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
 import { deterministicCandidateReasoning, type CandidateReasoningInput } from '../../adapters/model/candidate-reasoning.js';
-import { MODEL_CLIENT_WAIT_MS, CLIENT_WAIT_HEADER } from '../../adapters/model/timeout-config.js';
+import { MODEL_CLIENT_WAIT_MS, CANDIDATES_CLIENT_WAIT_MS, CLIENT_WAIT_HEADER } from '../../adapters/model/timeout-config.js';
 import { renderV2Home } from './v2-home-view.js';
 import { initRealMaps } from './real-map.js';
 import {
@@ -2348,10 +2348,11 @@ export function renderApp(
       // D4: wait longer than any server timeout (the candidates route may take up to 30 s), and
       // declare it, so the server never bills an answer this client would abandon.
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), MODEL_CLIENT_WAIT_MS);
+      // D8: covers the Muse deadline AND the one labelled Baseten attempt after it.
+      const timer = setTimeout(() => controller.abort(), CANDIDATES_CLIENT_WAIT_MS);
       const resp = await fetch('/api/model/candidates', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', [CLIENT_WAIT_HEADER]: String(MODEL_CLIENT_WAIT_MS) },
+        headers: { 'Content-Type': 'application/json', [CLIENT_WAIT_HEADER]: String(CANDIDATES_CLIENT_WAIT_MS) },
         body: JSON.stringify(input),
         signal: controller.signal,
       });
