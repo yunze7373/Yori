@@ -99,6 +99,8 @@ async function openDemoDepart(page: Page) {
 
 async function settle(page: Page) {
   await page.evaluate(() => window.scrollTo(0, 0));
+  // Capture and measure only after motion settles (change-moment crossfade, card entrance).
+  await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished.catch(() => null))));
   await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))));
 }
 

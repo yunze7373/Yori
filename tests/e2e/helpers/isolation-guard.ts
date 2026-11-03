@@ -33,7 +33,7 @@ export async function checkIsolatedServer(baseUrl: string, fetchFn: typeof fetch
 }
 
 /** URLs the config publishes for specs that must address a server directly. */
-export function configuredUrl(name: 'YORI_TEST_BUILD_URL' | 'YORI_SHIPPING_URL'): string {
+export function configuredUrl(name: 'YORI_TEST_BUILD_URL' | 'YORI_SHIPPING_URL' | 'YORI_DEMO_URL'): string {
   const v = process.env[name];
   if (!v) throw new Error(`${name} is not set: run Playwright with playwright.config.ts (it publishes the server URLs)`);
   return v;

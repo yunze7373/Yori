@@ -226,7 +226,7 @@ test.describe('D2-LUNCH-DEFAULT-ON: nearby restaurants visibly work once locatio
     // D1b (seen on the real device when Overpass answered 502): the failure is said, not silent.
     await expect(page.locator('#nearby-now-note .nearby-state-title')).toHaveText('Nearby search failed');
     await expect(page.locator('#nearby-now-note .nearby-state-desc')).toHaveText(
-      'OpenStreetMap Overpass did not answer. Try again in a moment.'
+      "Nearby places didn't load. Try again in a moment." // UI-QUIET-PRECISION plain-language copy
     );
     await expect(page.locator('.v2-candidate-card')).toHaveCount(0);
 

@@ -85,6 +85,8 @@ export function humanizeSignalKind(kind: string): string {
       return 'Meal timing status';
     case 'mock_places':
     case 'places':
+    case 'places_lunch':
+    case 'nearby_places':
       return 'Nearby places';
     case 'user_request':
       return 'User request';
@@ -413,9 +415,9 @@ export function renderWhySheet(
                           </div>
                           ${
                             isUserRequest
-                              ? `<span class="card-badge badge-user-request" data-slot="chrome" data-slot-reason="User request badge">THIS SESSION</span>`
+                              ? `<span class="card-badge badge-user-request qp-caps-tag" data-slot="chrome" data-slot-reason="User request badge">THIS SESSION</span>`
                               : `
-                              <span class="card-badge ${isSim ? 'badge-simulated' : 'badge-real'}" data-slot="chrome" data-slot-reason="Signal simulated badge">
+                              <span class="card-badge qp-caps-tag ${isSim ? 'badge-simulated' : 'badge-real'}" data-slot="chrome" data-slot-reason="Signal simulated badge">
                                 ${escapeHtml(isSim ? STRINGS.header.simulatedBadge : 'REAL')}
                               </span>
                               `

@@ -184,7 +184,7 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     ? 'Confirmed taste preference'
     : 'Demo profile · sample';
   const basis = isLive && !tasteFact
-    ? `Nearby dining: ${cuisine}`
+    ? `A ${cuisine.toLowerCase()} spot close to you` /* UI-QUIET-PRECISION: plain language */
     : `Based on taste: ${cuisine} (${provenance})`;
 
   // Compact schematic map

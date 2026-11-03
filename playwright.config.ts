@@ -38,8 +38,10 @@ const googleMockEnv: Record<string, string> = {
  */
 const TEST_BUILD_URL = 'http://localhost:4173';
 const SHIPPING_PREVIEW_URL = 'http://localhost:4174';
+const DEMO_RECORDING_URL = 'http://localhost:4286';
 process.env['YORI_TEST_BUILD_URL'] = TEST_BUILD_URL;
 process.env['YORI_SHIPPING_URL'] = SHIPPING_PREVIEW_URL;
+process.env['YORI_DEMO_URL'] = DEMO_RECORDING_URL;
 
 export default defineConfig({
   testDir: './tests',

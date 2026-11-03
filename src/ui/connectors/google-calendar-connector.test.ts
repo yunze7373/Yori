@@ -94,7 +94,7 @@ describe('D11 Connectors view: Google Calendar row', () => {
   it('not set up: honest label, no button, no disclosure', () => {
     const v = view({ configured: false, state: 'disconnected', disabledReason: 'no_client_id', icsFallback: false });
     expect(v.rowState).toBe('not_set_up');
-    expect(v.detail).toBe('Not set up yet: the owner adds a Google OAuth client to enable this');
+    expect(v.detail).toBe('Calendar sync is coming soon'); // UI-QUIET-PRECISION human copy
     expect(v.connect).toBeUndefined();
     expect(v.disclosure).toBeUndefined();
     expect(view({ configured: false, state: 'disconnected', disabledReason: 'owner_off', icsFallback: false }).detail).toBe('Off (owner setting)');

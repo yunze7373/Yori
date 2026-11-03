@@ -56,7 +56,7 @@ function renderMapSvg(map: MapVM): string {
         ${
           map.weatherCallout
             ? `
-          <g class="v2-map-weather-callout" transform="translate(${map.weatherCallout.x - 94}, ${map.weatherCallout.y - 20})">
+          <g class="v2-map-weather-callout" transform="translate(${isProminent ? 8 : map.weatherCallout.x - 94}, ${isProminent ? 8 : map.weatherCallout.y - 20})">
             <rect width="188" height="40" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
             <text x="94" y="13" fill="#FFFFFF" font-size="12.5" font-weight="700" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutText" data-slot="domain">
               ${escapeHtml(map.weatherCallout.text)}
@@ -253,7 +253,10 @@ function renderMapDurationCallout(map: MapVM): string {
 }
 
 export function renderMapCard(map: MapVM, options?: RealMapRenderOptions): string {
-  return renderRealMapCard(map, renderMapSvg, options);
+  const html = renderRealMapCard(map, renderMapSvg, options);
+  // UI-QUIET-PRECISION (area 2): the map panel carries the same route-minutes callout as the strip.
+  const callout = renderMapDurationCallout(map);
+  return callout ? html.replace(/(<div class="v2-map-canvas[^>]*>)/, `$1${callout}`) : html;
 }
 
 function renderActionRow(vm: HomeCompositionVM): string {
@@ -565,8 +568,17 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
   // 3. Transit Value
   let transitValue: string;
   if (vm.isLive) {
-    // D2: card distances are straight-line (labelled by the provider), never claimed as a walk.
-    transitValue = vm.topCandidateDistance || vm.options?.[0]?.detail || 'Nearby dining';
+    if (vm.layoutKind === 'journey') {
+      // UI-QUIET-PRECISION (review 407d9d26 A3): a depart plan shows the route's own travel fact,
+      // or no transit row at all; never a place distance or 'Nearby dining'.
+      const sel = vm.options?.find(o => o.isSelected) ?? vm.options?.[0];
+      const minutes = sel?.travelMinutes;
+      const modeLabel = sel?.mode === 'bus' ? 'Bus' : sel?.mode === 'walk' ? 'Walk' : 'Drive';
+      transitValue = typeof minutes === 'number' && minutes > 0 ? `${modeLabel} · ${Math.round(minutes)} min` : '';
+    } else {
+      // D2: card distances are straight-line (labelled by the provider), never claimed as a walk.
+      transitValue = vm.topCandidateDistance || '';
+    }
   } else if (vm.layoutKind === 'journey') {
     transitValue =
       vm.options?.[0]?.detail ||
@@ -600,7 +612,7 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
           </div>
           <span class="signal-label">WEATHER</span>
         </div>
-        <div class="signal-value">${escapeHtml(weatherValue)}</div>
+        <div class="signal-value">${keepTimesTogether(escapeHtml(weatherValue))}</div>
         ${
           vm.isLive && vm.weatherProvenanceLine && weatherValue !== 'Unavailable' && !weatherValue.startsWith('Off')
             ? `<div class="signal-meta" id="signal-tile-weather-provenance" data-provenance="live" data-source="open-meteo">${escapeHtml(vm.weatherProvenanceLine)}</div>`
@@ -615,9 +627,12 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
           </div>
           <span class="signal-label">CALENDAR</span>
         </div>
-        <div class="signal-value">${escapeHtml(calendarValue)}</div>
+        <div class="signal-value">${keepTimesTogether(escapeHtml(calendarValue))}</div>
       </div>
 
+      ${
+        transitValue
+          ? `
       <div class="signal-tile" id="signal-tile-transit">
         <div class="signal-tile-top">
           <div class="signal-icon-circle transit" aria-hidden="true">
@@ -625,8 +640,11 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
           </div>
           <span class="signal-label">TRANSIT</span>
         </div>
-        <div class="signal-value">${escapeHtml(transitValue)}</div>
+        <div class="signal-value">${keepTimesTogether(escapeHtml(transitValue))}</div>
       </div>
+      `
+          : ''
+      }
 
       ${
         shouldRenderMemory
@@ -638,7 +656,7 @@ function renderSignalTiles(vm: HomeCompositionVM): string {
           </div>
           <span class="signal-label">MEMORY</span>
         </div>
-        <div class="signal-value">${escapeHtml(memoryValue)}</div>
+        <div class="signal-value">${keepTimesTogether(escapeHtml(memoryValue))}</div>
       </div>
       `
           : ''
@@ -697,6 +715,17 @@ function renderGoogleCredits(c: NonNullable<HomeCompositionVM['candidateCards']>
   return `<div class="v2-google-credits" data-attribution="google"><span class="powered-by-google">Powered by Google</span>${
     authorHtml ? `<span class="photo-credit">Photo: ${authorHtml}</span>` : ''
   }</div>`;
+}
+
+/** UI-QUIET-PRECISION: the engineering tail ' · fails closed' stays in the text, visually quiet. */
+function renderQuietBasis(basis: string): string {
+  const m = /^(.*?)( · fails closed)$/.exec(basis);
+  return m ? `${escapeHtml(m[1]!)}<span class="qp-visually-hidden">${escapeHtml(m[2]!)}</span>` : escapeHtml(basis);
+}
+
+/** UI-QUIET-PRECISION (review 407d9d26 A5): a time like '3:00 PM' never breaks across lines. */
+function keepTimesTogether(escaped: string): string {
+  return escaped.replace(/(\d{1,2}:\d{2}) (AM|PM)/g, '$1&nbsp;$2');
 }
 
 /** UI-QUIET-PRECISION (owner reference 04): category eyebrow icons, one stroke family. */
@@ -826,7 +855,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           `
               : ''
           }
-          ${vm.basis ? `<p class="quiet-basis">${escapeHtml(vm.basis)}</p>` : ''}
+          ${vm.basis ? `<p class="quiet-basis">${renderQuietBasis(vm.basis)}</p>` : ''}
           ${vm.locationState ? renderLocationControls(vm) : ''}
         </section>
       </div>

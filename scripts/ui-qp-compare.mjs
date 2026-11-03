@@ -22,6 +22,12 @@ const PAIRS = [
   ['home-rain-390', '03_mobile_experience_v1_approved.png', 418, 72, 214, 426, 'fold-depart-390x844.png', 'Home · weather-aware plan (reference 03 screen 1 vs app, Demo rain scene)'],
   ['lunch-390', '03_mobile_experience_v1_approved.png', 420, 575, 258, 317, 'fold-lunch-390x844.png', 'Lunch suggestions (reference 03 scenario 2 screen 1 vs app, Live lunch, recorded places)'],
   ['home-desktop-1280', '01_desktop_living_context_concept.png', 30, 136, 1038, 646, 'home-lunch-1280x800.png', 'Home desktop (reference 01 vs app at 1280x800)'],
+  // Area 2 surfaces (reference 03 screens; 04 sets the tokens)
+  ['area2-trip-detail-390', '03_mobile_experience_v1_approved.png', 677, 72, 216, 426, 'area2-trip-detail-390x844.png', 'Expanded trip detail (reference 03 screen 2 vs app at 390x844)'],
+  ['area2-ask-reply-390', '03_mobile_experience_v1_approved.png', 936, 72, 212, 426, 'area2-ask-reply-390x844.png', 'Ask conversation (reference 03 screen 3 vs app at 390x844, Live recorded reply)'],
+  ['area2-restaurant-detail-390', '03_mobile_experience_v1_approved.png', 733, 575, 255, 317, 'area2-restaurant-detail-390x844.png', 'Restaurant detail (reference 03 scenario 2 screen 2 vs app at 390x844)'],
+  ['area2-accepted-390', '03_mobile_experience_v1_approved.png', 1440, 72, 210, 426, 'area2-accepted-390x844.png', 'Updated result after Accept (reference 03 screen 5 vs app at 390x844)'],
+  ['area2-desktop-rail-1280', '01_desktop_living_context_concept.png', 30, 136, 1038, 646, 'area2-accepted-1280x800.png', 'Desktop depart with the map rail (reference 01 vs app at 1280x800)'],
 ];
 
 const NATURAL_WIDTH = { '04_owner_polish_target_home_connectors.jpg': 1280, '03_mobile_experience_v1_approved.png': 1672, '01_desktop_living_context_concept.png': 1448 };
@@ -37,7 +43,7 @@ for (const [name, ref, x, y, w, h, app, caption] of PAIRS) {
   }
   const height = name.includes('desktop') ? 520 : 720;
   const refScale = height / h;
-  const page = await browser.newPage({ viewport: { width: 1600, height: height + 90 } });
+  const page = await browser.newPage({ viewport: { width: 2400, height: height + 90 } });
   await page.setContent(`<!doctype html><html><body style="margin:0;background:#EDEAE2;font:14px Inter,system-ui,sans-serif;color:#15302A">
     <div style="display:flex;gap:28px;align-items:flex-start;padding:20px 24px 0">
       <figure style="margin:0">
@@ -57,7 +63,7 @@ for (const [name, ref, x, y, w, h, app, caption] of PAIRS) {
     const right = Math.max(...figs.map(f => f.getBoundingClientRect().right));
     return { width: Math.ceil(right + 24), height: Math.ceil(document.body.scrollHeight) };
   });
-  await page.screenshot({ path: path.join(EV, `compare-${name}.png`), clip: { x: 0, y: 0, width: Math.min(1600, box.width), height: box.height } });
+  await page.screenshot({ path: path.join(EV, `compare-${name}.png`), clip: { x: 0, y: 0, width: Math.min(2400, box.width), height: box.height } });
   await page.close();
   console.log(`wrote compare-${name}.png`);
 }

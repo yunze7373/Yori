@@ -37,9 +37,10 @@ export function renderConversationOverlay(
               </svg>
             </button>
             <div class="conversation-avatar-mark" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" fill="#16382F"/>
-                <path d="M7 12l3 3 7-7" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <circle cx="16" cy="16" r="16" fill="#1E4A3B"/>
+                <path d="M16 8c4 2.1 6.2 5.3 6.2 8.9a6.2 6.2 0 0 1-12.4 0C9.8 13.3 12 10.1 16 8z" stroke="#E7EFE8" stroke-width="1.6" stroke-linejoin="round"/>
+                <path d="M16 12.5v10.5M16 17l-2.6-2.1M16 20l2.8-2.3" stroke="#E7EFE8" stroke-width="1.6" stroke-linecap="round"/>
               </svg>
             </div>
             <div class="conversation-title-block">
@@ -52,7 +53,7 @@ export function renderConversationOverlay(
                 <span class="engine-status-chip" id="engine-status-chip" data-engine-status="${store.getEngineStatus()}">${escapeHtml(engineStatusLabel)}</span>`
                     : ''
                 }
-                ${renderModelStatusPill({ status: store.getEngineStatus(), label: engineStatusLabel, id: 'conversation-model-status-pill', latencyMs: globalDecisionLogger.getLatest()?.latencyMs })}
+                ${/* UI-QUIET-PRECISION: no latency on the surface (it lives in the Sources sheet). */ renderModelStatusPill({ status: store.getEngineStatus(), label: engineStatusLabel, id: 'conversation-model-status-pill' })}
               </div>
             </div>
           </div>
@@ -133,9 +134,10 @@ export function renderTranscriptItems(
         return `
         <article class="chat-bubble-wrapper chat-bubble-assistant is-inflight" id="${escapeHtml(msg.id)}">
           <div class="chat-avatar-mark" aria-hidden="true">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" fill="#16382F"/>
-              <path d="M7 12l3 3 7-7" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="16" fill="#1E4A3B"/>
+              <path d="M16 8c4 2.1 6.2 5.3 6.2 8.9a6.2 6.2 0 0 1-12.4 0C9.8 13.3 12 10.1 16 8z" stroke="#E7EFE8" stroke-width="1.8" stroke-linejoin="round"/>
+              <path d="M16 12.5v10.5" stroke="#E7EFE8" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
           </div>
           <div class="chat-bubble">
@@ -157,9 +159,10 @@ export function renderTranscriptItems(
             !isUser
               ? `
             <div class="chat-avatar-mark" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="12" r="10" fill="#16382F"/>
-                <path d="M7 12l3 3 7-7" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+                <circle cx="16" cy="16" r="16" fill="#1E4A3B"/>
+                <path d="M16 8c4 2.1 6.2 5.3 6.2 8.9a6.2 6.2 0 0 1-12.4 0C9.8 13.3 12 10.1 16 8z" stroke="#E7EFE8" stroke-width="1.8" stroke-linejoin="round"/>
+                <path d="M16 12.5v10.5" stroke="#E7EFE8" stroke-width="1.8" stroke-linecap="round"/>
               </svg>
             </div>
           `

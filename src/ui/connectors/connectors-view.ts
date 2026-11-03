@@ -271,7 +271,7 @@ function formatPillLabel(state: string, detail: string): string {
 function renderGoogleCalendarRow(google: GoogleCalendarConnectorInfo | undefined): string {
   if (!google) return '';
   const notSetUp: Record<string, string> = {
-    no_client_id: 'Not set up yet: the owner adds a Google OAuth client to enable this',
+    no_client_id: 'Calendar sync is coming soon',
     owner_off: 'Off (owner setting)',
     endpoint_override_rejected: 'Not available (server configuration was rejected)',
   };

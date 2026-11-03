@@ -2160,3 +2160,843 @@ body {
   height: 46px;
   min-height: 46px;
 }
+
+/* ---------- Area 2 carry-over (review 407d9d26) ---------- */
+
+/* A1 map strip: tags top-left, duration callout bottom-right, clear of the route's own labels
+   (origin bottom-left, destination top-right); a taller strip so the route art fills it. */
+.now-card .now-map-strip .v2-map-canvas {
+  height: 132px;
+}
+
+.now-card .now-map-strip .map-strip-header {
+  top: 8px;
+  left: 8px;
+}
+
+.qp-map-callout {
+  top: auto;
+  right: 10px;
+  bottom: 10px;
+  left: auto;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 5px;
+  transform: none;
+}
+
+/* A2 Live rain hero: the cause line carries the rain window and the buffer; the forecast caption
+   and the rain-window text beside the umbrella chip only repeated it (still in the DOM). */
+.v2-journey-card:has(#hero-cause-effect) .now-rationale-forecast,
+.v2-journey-card:has(#hero-cause-effect) #forecast-status {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+}
+
+/* A5 signal list: values wrap (never cut a time); one column at every width. */
+.now-card .hero-signals-grid {
+  grid-template-columns: 1fr !important;
+}
+
+.now-card .hero-signals-grid .signal-tile:nth-child(odd) {
+  border-right: 0;
+}
+
+.now-card .hero-signals-grid .signal-tile {
+  border-bottom: 1px solid var(--qp-line) !important;
+}
+
+.now-card .hero-signals-grid .signal-tile:last-child {
+  border-bottom: 0 !important;
+}
+
+.now-card .hero-signals-grid .signal-value {
+  overflow: visible;
+  white-space: normal;
+  text-overflow: clip;
+  text-wrap: balance;
+}
+
+/* =====================================================================
+   Area 2 (ECC39C): every remaining surface on the same tokens
+   ===================================================================== */
+
+/* A1: the map strip's tags sit in a caption row above the art; the callout takes the free
+   top-left corner inside it, clear of the origin (bottom-left) and destination (top-right). */
+.now-card .now-map-strip .map-strip-header {
+  position: static;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qp-s2);
+  padding: 8px 10px 0;
+}
+
+.now-card .now-map-strip .map-strip-label {
+  padding: 0;
+  background: none;
+  font-size: 0.625rem;
+  color: var(--qp-ink-quiet);
+}
+
+.now-card .now-map-strip .map-strip-header .card-badge {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.now-card .now-map-strip .v2-map-canvas {
+  height: 116px;
+}
+
+.qp-map-callout {
+  top: 8px;
+  right: auto;
+  bottom: auto;
+  left: 10px;
+}
+
+/* ---------- Sheets (Why, Sources): one calm sheet language ---------- */
+
+.app-layout ~ * .modal-card,
+.modal-card {
+  border: 1px solid var(--qp-line);
+  border-radius: 24px;
+  background: var(--qp-canvas);
+  box-shadow: var(--qp-shadow-float);
+}
+
+.modal-card .modal-header {
+  padding: var(--qp-s5) var(--qp-s5) var(--qp-s3);
+  border-bottom: 1px solid var(--qp-line);
+}
+
+.modal-card .modal-title {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--qp-ink);
+  text-wrap: balance;
+}
+
+.modal-card .modal-body {
+  padding: var(--qp-s4) var(--qp-s5);
+}
+
+.modal-card .why-section {
+  margin: 0 0 var(--qp-s5);
+}
+
+.modal-card .why-section-title {
+  margin: 0 0 var(--qp-s2);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--qp-ink-soft);
+}
+
+/* Items: one white list on the ivory sheet, hairline separators, no nested boxes. */
+.modal-card .why-item-list,
+.modal-card .why-signals-list,
+.modal-card .sources-signals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--qp-line);
+  border-radius: var(--qp-r-tile);
+  background: var(--qp-surface);
+  list-style: none;
+}
+
+.modal-card .why-item-row,
+.modal-card .why-situation-item,
+.modal-card .sources-item,
+.modal-card .why-item-list > li,
+.modal-card .why-signals-list > li {
+  margin: 0;
+  padding: var(--qp-s3) var(--qp-s4);
+  border: 0;
+  border-bottom: 1px solid var(--qp-line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.modal-card .why-item-list > :last-child,
+.modal-card .why-signals-list > :last-child,
+.modal-card .sources-signals-list > :last-child {
+  border-bottom: 0;
+}
+
+.modal-card .why-item-label,
+.modal-card .sources-item-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--qp-ink);
+}
+
+.modal-card .why-item-desc,
+.modal-card .sources-item-desc,
+.modal-card .why-situation-text {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--qp-ink-soft);
+}
+
+.modal-card .why-item-time,
+.modal-card .why-recorded-time {
+  font-size: 0.75rem;
+  color: var(--qp-ink-quiet);
+}
+
+.modal-card .sources-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qp-s2);
+  margin-bottom: 2px;
+}
+
+/* Provenance tags: quiet sentence-case captions with a dot, never shouting pills. */
+.modal-card .signal-badge,
+.modal-card .card-badge,
+.modal-card .why-badge,
+.modal-card [class*='-badge']:not(.modal-card) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--qp-line);
+  border-radius: 999px;
+  background: var(--qp-canvas);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  color: var(--qp-ink-soft);
+}
+
+.modal-card .signal-badge.live-badge {
+  border-color: #CFE3D5;
+  background: var(--qp-sage-wash);
+  color: var(--qp-forest);
+}
+
+.modal-card .why-derivation-text,
+.modal-card .sources-description,
+.modal-card .why-derivation {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--qp-ink-soft);
+}
+
+.modal-card .modal-footer {
+  padding: var(--qp-s3) var(--qp-s5) var(--qp-s5);
+  border-top: 1px solid var(--qp-line);
+  background: var(--qp-canvas);
+}
+
+.modal-card .modal-footer .btn,
+.modal-card .modal-footer button {
+  min-height: 44px;
+  border-radius: var(--qp-r-btn);
+}
+
+.modal-card .modal-close-btn,
+.modal-card [id^='btn-close'] {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+}
+
+@media (max-width: 767px) {
+  /* Phones: the sheet rises from the bottom with a grab handle. */
+  .modal-backdrop {
+    align-items: flex-end;
+  }
+
+  .modal-backdrop .modal-card {
+    width: 100%;
+    max-height: 88vh;
+    margin: 0;
+    border-radius: 24px 24px 0 0;
+    border-bottom: 0;
+  }
+
+  .modal-backdrop .modal-card::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: 8px auto 0;
+    border-radius: 999px;
+    background: var(--qp-line-strong);
+  }
+}
+
+/* ---------- Ask panel and replies ---------- */
+
+.conversation-shell {
+  background: var(--qp-canvas);
+}
+
+.conversation-shell .conversation-header {
+  padding: var(--qp-s3) var(--qp-s4);
+  border-bottom: 1px solid var(--qp-line);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.conversation-shell .conversation-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--qp-ink);
+}
+
+.conversation-shell .conversation-subtitle-row {
+  gap: 6px;
+}
+
+.conversation-shell .model-status-pill,
+.conversation-shell .engine-status-chip,
+.conversation-shell .context-chip,
+.conversation-shell .v2-offline-badge {
+  padding: 2px 8px;
+  border: 1px solid var(--qp-line);
+  border-radius: 999px;
+  background: var(--qp-canvas);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--qp-ink-soft);
+  box-shadow: none;
+}
+
+.conversation-shell .conversation-btn-icon,
+.conversation-shell .conversation-pin-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--qp-line);
+  border-radius: 999px;
+  background: var(--qp-surface);
+  color: var(--qp-ink-soft);
+}
+
+.conversation-shell .conversation-transcript {
+  padding: var(--qp-s4);
+  background: var(--qp-canvas);
+}
+
+.conversation-shell .chat-bubble {
+  border: 1px solid var(--qp-line);
+  border-radius: 18px 18px 18px 6px;
+  background: var(--qp-surface);
+  box-shadow: 0 1px 2px rgba(31, 41, 33, 0.04);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--qp-ink);
+}
+
+.conversation-shell [class*='user'] .chat-bubble,
+.conversation-shell .chat-row-user .chat-bubble,
+.conversation-shell .chat-bubble.user {
+  border: 0;
+  border-radius: 18px 18px 6px 18px;
+  background: var(--qp-forest);
+  color: #FFFFFF;
+}
+
+.conversation-shell .chat-avatar-mark {
+  width: 28px;
+  height: 28px;
+}
+
+.conversation-shell input,
+.conversation-shell textarea,
+#conversation-input {
+  min-height: 48px;
+  padding: 0 var(--qp-s4);
+  border: 1px solid var(--qp-line-strong);
+  border-radius: 999px;
+  background: var(--qp-surface);
+  font-size: 0.9375rem;
+  color: var(--qp-ink);
+}
+
+#conversation-input:focus-visible {
+  outline: 2px solid var(--qp-forest);
+  outline-offset: 1px;
+}
+
+#conversation-send-btn {
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--qp-forest);
+  color: #FFFFFF;
+  box-shadow: 0 6px 14px -8px rgba(30, 74, 59, 0.7);
+}
+
+.conversation-shell .decision-log-bar {
+  border-top: 1px solid var(--qp-line);
+  background: var(--qp-canvas);
+}
+
+.conversation-shell .decision-log-viewer {
+  border: 1px solid var(--qp-line);
+  border-radius: var(--qp-r-tile);
+  background: #FBFAF6;
+  font-size: 0.75rem;
+  color: var(--qp-ink-soft);
+}
+
+/* ---------- Detail views (restaurant, trip) ---------- */
+
+/* On a detail view the Home greeting and pill step back; the wordmark row stays. */
+.app-layout[data-detail]:not([data-detail='none']) .qp-header .greeting-title,
+.app-layout[data-detail]:not([data-detail='none']) .qp-header .greeting-subheading,
+.app-layout[data-detail]:not([data-detail='none']) .qp-header .qp-context-row {
+  display: none;
+}
+
+.v2-detail-top-nav .v2-back-btn {
+  min-height: 44px;
+  padding: 0 var(--qp-s4) 0 var(--qp-s3);
+  border: 1px solid var(--qp-line);
+  border-radius: 999px;
+  background: var(--qp-surface);
+  font-weight: 600;
+  color: var(--qp-ink);
+}
+
+.v2-detail-top-nav .card-badge,
+.v2-detail-badge {
+  padding: 2px 10px;
+  border: 1px solid var(--qp-line);
+  border-radius: 999px;
+  background: var(--qp-surface);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--qp-ink-soft);
+}
+
+.v2-restaurant-hero-art {
+  overflow: hidden;
+  border: 1px solid var(--qp-line);
+  border-radius: var(--qp-r-card);
+}
+
+.v2-detail-title,
+.v2-view-title {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--qp-ink);
+}
+
+.v2-restaurant-detail .v2-cuisine-chip,
+.v2-restaurant-detail .v2-distance-chip,
+.v2-restaurant-detail .v2-open-chip,
+.v2-restaurant-detail .v2-rating-chip,
+.v2-restaurant-detail .v2-price-chip {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--qp-ink-soft);
+}
+
+.v2-restaurant-detail .v2-open-chip {
+  color: var(--qp-ok);
+  font-weight: 600;
+}
+
+.v2-restaurant-detail .v2-rating-chip {
+  color: var(--qp-ink);
+  font-weight: 650;
+}
+
+.v2-restaurant-actions .btn {
+  min-height: 48px;
+  border-radius: var(--qp-r-btn);
+  font-weight: 600;
+}
+
+.v2-section-heading {
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--qp-ink-soft);
+}
+
+/* No empty "Map not available" boxes on details or Home. */
+.v2-map-card:has(.map-unavailable-canvas) {
+  display: none;
+}
+
+.v2-trip-summary-times,
+.v2-detail-header {
+  border-color: var(--qp-line);
+}
+
+/* ---------- Consent and designed states ---------- */
+
+.quiet-card {
+  border: 1px solid var(--qp-line);
+  border-radius: var(--qp-r-card);
+  background: var(--qp-surface);
+  box-shadow: var(--qp-shadow-card);
+}
+
+.quiet-card .quiet-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--qp-ink);
+  text-wrap: balance;
+}
+
+.quiet-card .quiet-subtitle,
+.quiet-card .quiet-basis {
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--qp-ink-soft);
+  text-wrap: pretty;
+}
+
+.quiet-card .quiet-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--qp-sage-wash);
+  color: var(--qp-forest);
+}
+
+.v2-location-notice-banner {
+  border: 1px solid #D5E3D8;
+  border-radius: var(--qp-r-tile);
+  background: var(--qp-sage-wash);
+  box-shadow: none;
+  text-align: left;
+}
+
+.v2-location-notice-banner .v2-location-notice-title {
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--qp-ink);
+}
+
+.v2-location-notice-banner .v2-location-notice-desc {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--qp-ink-soft);
+}
+
+.v2-location-controls .btn {
+  min-height: 48px;
+  border-radius: var(--qp-r-btn);
+  font-weight: 600;
+}
+
+.nearby-state {
+  border: 1px solid var(--qp-line);
+  border-radius: var(--qp-r-tile);
+  background: #FBFAF6;
+  box-shadow: none;
+}
+
+.nearby-state.nearby-state-error {
+  border-color: #EBC9C2;
+  background: #FBF1EE;
+}
+
+.nearby-state .nearby-state-title {
+  font-weight: 650;
+  color: var(--qp-ink);
+}
+
+.nearby-state .nearby-state-desc {
+  color: var(--qp-ink-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-card,
+  .conversation-shell * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Tags whose source text is all caps (REAL, THIS SESSION, SIMULATED) read in sentence case; tags
+   with their own casing ("Synced from XMemo", "Meta model · live") keep it. */
+.modal-card .signal-badge,
+.modal-card .card-badge {
+  display: inline-block;
+  line-height: 1.5;
+}
+
+.modal-card .qp-caps-tag {
+  text-transform: lowercase;
+}
+
+.modal-card .qp-caps-tag::first-letter {
+  text-transform: uppercase;
+}
+
+.modal-card .why-empty-text {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-style: normal;
+  font-size: 0.875rem;
+  color: var(--qp-ink-quiet);
+}
+
+/* Restaurant detail: facts read as one quiet line, not a wall of pills. */
+.v2-restaurant-detail .v2-attribute-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--qp-s3);
+}
+
+.v2-restaurant-detail .v2-attr-chip {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--qp-ink-soft);
+}
+
+.v2-restaurant-detail .v2-basis-card {
+  padding: var(--qp-s3) var(--qp-s4);
+  border: 1px solid var(--qp-line);
+  border-radius: var(--qp-r-tile);
+  background: var(--qp-surface);
+  box-shadow: none;
+}
+
+.v2-restaurant-detail .v2-basis-text {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--qp-ink-soft);
+}
+
+.v2-restaurant-detail .mock-places-notice {
+  font-size: 0.75rem;
+  font-style: normal;
+  color: var(--qp-ink-quiet);
+}
+
+.v2-restaurant-detail .v2-detail-title {
+  font-size: 1.75rem;
+  line-height: 1.15;
+}
+
+/* ---------- Map panel (desktop rail and details) ---------- */
+
+.v2-map-card .v2-map-canvas {
+  position: relative;
+}
+
+/* Real tiles: muted, warm, desaturated so the forest route and pins lead. */
+.v2-map-card .leaflet-tile-pane,
+.real-map-container .leaflet-tile-pane {
+  filter: saturate(0.5) sepia(0.14) brightness(1.04) contrast(0.92);
+}
+
+/* No zoom controls on the Home strip. */
+.now-map-strip .leaflet-control-zoom {
+  display: none;
+}
+
+.v2-map-card.desktop-map-card {
+  border: 1px solid var(--qp-line);
+  border-radius: var(--qp-r-card);
+  background: var(--qp-surface);
+  box-shadow: none;
+}
+
+.v2-map-card .desktop-map-header .section-label,
+.v2-map-card .map-header .section-label {
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  color: var(--qp-ink-soft);
+}
+
+.v2-map-card .card-badge {
+  padding: 2px 8px;
+  border: 1px solid var(--qp-line);
+  border-radius: 999px;
+  background: var(--qp-canvas);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--qp-ink-soft);
+}
+
+/* The schematic fallback is said once, quietly (not a yellow alarm). */
+.v2-map-card .map-fallback-banner {
+  margin: 0 0 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--qp-ink-quiet);
+}
+
+.v2-map-card .map-fallback-banner svg {
+  display: none;
+}
+
+.v2-map-card .v2-map-canvas.prominent {
+  overflow: hidden;
+  border-radius: var(--qp-r-tile);
+  background: #EEF1EA;
+}
+
+/* ---------- Detail-view and consent refinements ---------- */
+
+.app-layout[data-detail]:not([data-detail='none']) .qp-header-leaf {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .app-layout[data-detail]:not([data-detail='none']) .v2-detail-top-nav {
+    padding-right: 64px;
+  }
+}
+
+.v2-location-notice-banner.prompt,
+.v2-location-notice-banner.denied {
+  border: 1px solid #D5E3D8;
+  border-radius: var(--qp-r-tile);
+  background: var(--qp-sage-wash);
+  box-shadow: none;
+}
+
+/* Trip options: left-aligned rows, the selected one lifted, ranking text muted. */
+.v2-mode-tab.v2-option-card {
+  padding: var(--qp-s3) var(--qp-s4);
+  border: 1px solid var(--qp-line);
+  border-radius: var(--qp-r-tile);
+  background: var(--qp-surface);
+  box-shadow: none;
+  text-align: left;
+  transition: border-color 160ms var(--qp-ease), box-shadow 160ms var(--qp-ease);
+}
+
+.v2-mode-tab.v2-option-card.selected {
+  border-color: #B5CBBB;
+  box-shadow: 0 0 0 1px rgba(30, 74, 59, 0.12);
+}
+
+.v2-mode-tab.v2-option-card .v2-option-top {
+  justify-content: flex-start;
+  gap: var(--qp-s2);
+}
+
+.v2-mode-tab.v2-option-card .v2-tab-duration {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--qp-ink);
+}
+
+.v2-mode-tab.v2-option-card .v2-tab-times,
+.v2-mode-tab.v2-option-card .v2-option-meta {
+  font-size: 0.8125rem;
+  color: var(--qp-ink-soft);
+}
+
+.v2-options-grid.v2-mode-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--qp-s2);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.desktop-map-canvas .qp-map-callout,
+.v2-map-canvas.prominent .qp-map-callout {
+  top: auto;
+  right: 12px;
+  bottom: 12px;
+  left: auto;
+}
+
+.v2-mode-tab.v2-option-card,
+.v2-mode-tab.v2-option-card * {
+  text-align: left;
+}
+
+.v2-mode-tab.v2-option-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+/* The header's top bar never blocks the page under it (it overlays the detail nav at desktop). */
+.qp-topbar {
+  pointer-events: none;
+}
+
+.qp-topbar > * {
+  pointer-events: auto;
+}
+
+/* AA everywhere the Why list renders (sheet, demo why-order sheet): quiet ink on white. */
+.why-item-list {
+  background: var(--qp-surface);
+}
+
+.why-item-time,
+.why-recorded-time,
+.why-item-time span {
+  color: var(--qp-ink-quiet);
+}
+
+/* Sheets slide in without fading, so their text is at full contrast from the first frame. */
+.modal-card {
+  animation-name: qpSheetIn;
+}
+
+@keyframes qpSheetIn {
+  from {
+    transform: translateY(12px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}

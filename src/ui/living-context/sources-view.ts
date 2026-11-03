@@ -170,7 +170,7 @@ export function renderSourcesSheet(
       <li class="sources-item" id="${escapeHtml(itemId)}" data-provenance="fixture">
         <div class="sources-item-header">
           <span class="sources-item-title">${escapeHtml(item.title)}</span>
-          <span class="signal-badge simulated-badge">${escapeHtml(item.badge)}</span>
+          <span class="signal-badge simulated-badge qp-caps-tag">${escapeHtml(item.badge)}</span>
         </div>
         <div class="sources-item-desc">${escapeHtml(item.desc)}</div>
       </li>

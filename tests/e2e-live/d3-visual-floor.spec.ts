@@ -93,6 +93,8 @@ const LIVE_FORBIDDEN = /\b(fixture|simulated|replay|demo profile|demo scene)\b/i
 
 /** (e) every visible interactive control in the main surface is at least 44x44 CSS px. */
 async function smallTargets(page: Page, scope: string) {
+  // Measure after entrance motion settles (a mid-animation transform shrinks boxes below 44 px).
+  await page.evaluate(() => Promise.all(document.getAnimations().map(a => a.finished.catch(() => null))));
   return page.evaluate(sel => {
     const root = document.querySelector(sel) ?? document.body;
     const out: string[] = [];

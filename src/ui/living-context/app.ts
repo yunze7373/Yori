@@ -2621,12 +2621,12 @@ export function renderApp(
       } else {
         livePlacesList = [];
         livePlacesError = true;
-        nearbyNowNote = { kind: 'error', title: 'Nearby search failed', desc: 'OpenStreetMap Overpass did not answer. Try again in a moment.' };
+        nearbyNowNote = { kind: 'error', title: 'Nearby search failed', desc: "Nearby places didn't load. Try again in a moment." };
       }
     } catch {
       livePlacesList = [];
       livePlacesError = true;
-      nearbyNowNote = { kind: 'error', title: 'Nearby search failed', desc: 'OpenStreetMap Overpass did not answer. Try again in a moment.' };
+      nearbyNowNote = { kind: 'error', title: 'Nearby search failed', desc: "Nearby places didn't load. Try again in a moment." };
     } finally {
       livePlacesLoading = false;
       update();
@@ -4107,7 +4107,7 @@ export function renderApp(
 
     if (activeDetail?.type === 'connectors') {
       root.innerHTML = `
-        <div class="app-layout" data-ui-version="${uiVersion}" data-context-mode="${contextMode}">
+        <div class="app-layout" data-ui-version="${uiVersion}" data-context-mode="${contextMode}" data-detail="${activeDetail ? escapeHtml(String(activeDetail.type)) : 'none'}">
           ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, true, isDesktopLayout, activeDetail?.originatingElementId) : ''}
           <div class="desktop-center-column">
             ${renderConnectorsView(latestConnectorStatuses)}
@@ -4425,7 +4425,7 @@ export function renderApp(
     };
 
     root.innerHTML = `
-      <div class="app-layout" data-ui-version="${uiVersion}" data-context-mode="${contextMode}">
+      <div class="app-layout" data-ui-version="${uiVersion}" data-context-mode="${contextMode}" data-detail="${activeDetail ? escapeHtml(String(activeDetail.type)) : 'none'}">
         ${uiVersion === 'v2' ? renderDesktopLeftNav(activeTab, false, isDesktopLayout) : ''}
         <div class="desktop-center-column">
           <header class="header-bar" role="banner">

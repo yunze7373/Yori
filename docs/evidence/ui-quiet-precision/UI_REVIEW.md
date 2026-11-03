@@ -141,3 +141,82 @@ consent prompts, toasts, and the designed loading / empty / offline / error stat
 - 03 Home rain;
 - 03 Lunch;
 - 01 desktop.
+
+---
+
+# Area 2 (INBOX-20261103-ECC39C): carry-over polish and every remaining surface
+
+Same tokens (`quiet-precision.css`, an "Area 2" section appended), one icon family, no jargon on
+user surfaces. Provenance stays one tap away: the Sources sheet keeps the engine status with
+latency, and the dev-only decision log keeps the redacted record.
+
+## Review order (owner freeze 22:00 JST, 11/04)
+
+This is increment 1 and holds the whole of area 2, because it was green by 08:30. It reads in the
+owner's priority order. Demo path first: rain hero redundancy and TRANSIT row (A2, A3), lunch and
+the Why sheet (A5, Why sheet), Ask panel (Ask), map label overlap (A1), desktop rail and map (Trip
+detail and map panel), Calendar copy (A4). Then states, the decision log, restaurant detail and
+toasts.
+
+## Regressions found by the full suite and fixed
+
+- **The header top bar blocked clicks on detail views at desktop.** The bar is absolutely
+  positioned across the header. With the greeting hidden on detail views, it lay over the detail
+  "Back" control. The bar now has `pointer-events: none` and its own controls `auto`.
+- **The Why time captions failed AA while the sheet animated in.** At rest they are 5.3:1, but axe
+  measured mid-fade. Sheets now slide in without fading (transform only), so text is at full
+  contrast from the first frame.
+- **The rail map's rain label crossed the route.** On the large map (desktop rail, trip detail),
+  "Rain forecast · simulated" sat on the drive line next to "Piano lesson". It now takes the free
+  top-left corner. The duration callout stays bottom-right. A new check walks every route line
+  every 2 px and fails if any point, or any place label, falls inside the rain label. Without the
+  fix it fails at `route-drive`.
+- **Sentence-case tags lowercased proper nouns.** "Synced from XMemo" became "Synced from xmemo".
+  Only tags whose source text is all caps (`REAL`, `THIS SESSION`, `SIMULATED`, demo signal
+  labels) carry `qp-caps-tag` and read in sentence case. Every other tag keeps its own casing.
+
+## (A) Carry-over from review 407d9d26
+
+| Item | Fix |
+|---|---|
+| A1 map strip collisions | The "Route map" and "Schematic · simulated" tags sit in a caption row above the art. The duration callout takes the free top-left corner, clear of the origin (bottom-left) and destination (top-right) labels. The strip is taller (116 px) so the route fills it. On the desktop map panel the callout sits bottom-right. |
+| A2 Live rain redundancy | The cause line carries the rain window and the buffer ("Rain expected 2:00–3:00 PM · take an umbrella; leaving 10 min earlier (2:35 → 2:25)."). The duplicate rain-window text beside the umbrella chip and the forecast caption are visually quiet (still in the DOM). Result: one cause line, one schedule sentence, one chip. |
+| A3 TRANSIT row mislabelled | On a Live depart plan the row shows the route's own fact ("Drive · 15 min" from `travelMinutes`) or is omitted. It never shows a place distance or "Nearby dining" (unit test in `presentation.test.ts`). |
+| A4 Calendar developer copy | "Calendar sync is coming soon" (was "Not set up yet: the owner adds a Google OAuth client…"). |
+| A5 Truncated times | Signal values never cut a time: "3:00 PM" is joined with a non-breaking space, and values wrap (balanced) in one column at every width. |
+| A6 Capture mid-motion | Evidence waits for `document.getAnimations()` to finish before capturing. The D3 floor touch-target check and the s2-connectors box read wait the same way. |
+
+## (B) Surfaces
+
+| Surface | What changed |
+|---|---|
+| Why sheet | A bottom sheet on phones (grab handle; centred card on desktop) on the ivory canvas with a serif title. Evidence is one white list with hairline rows, no nested boxes. Tags are quiet sentence-case captions ("Real", "This session"). Raw signal names are humanised ("places lunch" → "Nearby places"). The empty memory note is plain text. |
+| Sources sheet | Same language. The engine status (with latency) lives here. |
+| Ask panel and replies | A calm header with a serif title, the Yori leaf avatar and **one** engine status without latency. White assistant bubbles and forest user bubbles. A pill composer with a forest send button. The decision log bar stays dev-only. |
+| Decision log (dev) | Same tokens: a soft panel with a hairline border. |
+| Restaurant detail | The Home greeting and pill step back on detail views. Rounded hero art; serif title; facts as one quiet line (the straight-line qualifier stays here); basis "A ramen spot close to you" (was "Nearby dining: Ramen"); Save / Directions at 48 px; **no empty "Map not available" box**. |
+| Trip detail and map panel | Left-aligned option rows with the selected one lifted; quiet badges. The map panel has muted, warm, desaturated tiles (CSS filter on the Leaflet tile pane), the existing custom pins and forest route, a duration callout from `travelMinutes`, no zoom controls on the Home strip, and the schematic fallback said once, quietly. |
+| Consent | The Location card uses the calm sage panel. The engineering tail "· fails closed" is no longer shown (kept in the DOM for the existing specs). |
+| Designed states | The empty and error notes are calm panels (blush for errors). Error copy is plain ("Nearby places didn't load. Try again in a moment.", was "OpenStreetMap Overpass did not answer"). When location is denied, the header says "Weather needs location". |
+
+## Acceptance (automated, `tests/e2e-live/ui-quiet-precision-area2.spec.ts`)
+
+- Every surface at 390x844 and 1280x800, captured after motion settles (`area2-*.png`).
+- A visible-text jargon scan per user surface: no `fails closed`, `Overpass`, `places lunch`,
+  `Not set up yet`, `the owner adds`, `deterministic`, `…ms`, `Nearby dining`.
+- The Ask header pill shows no latency.
+- The restaurant detail keeps the straight-line qualifier and shows no empty map box.
+- Zero console errors (the recorded places 500 in the error state is the only expected one).
+- `area2-screen-recording-390x844.webm` (≤ 20 s): Why sheet, detail, back, Ask reply.
+- Comparisons `compare-area2-*.png`: 03 screen 2 (trip detail), screen 3 (conversation), scenario
+  2 screen 2 (restaurant detail), screen 5 (updated result), and 01 (desktop rail).
+
+## Remaining deviations (area 2)
+
+1. **No real map tiles in the evidence.** Test builds run with `VITE_MAP_TILES=off`, so the map
+   panel shows the honest schematic. The tile styling (muted filter, pins, forest route) applies
+   when tiles load in the shipping build.
+2. **Restaurant photos** in the evidence are the honest illustration tiles. Recorded places carry
+   no photo, and the tests never fetch Google photos.
+3. **Toasts:** Accept changes the action row in place ("Accepted · Undo · Why"); there is no
+   separate toast to style.

@@ -542,6 +542,17 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
       expect(html).not.toContain('Lunch break · 12:15 PM');
     });
 
+    it('A3 (UI-QUIET-PRECISION): a Live depart plan shows the route fact or no transit row, never a place label', () => {
+      const departNoRoute = { ...baseCandidateVM, layoutKind: 'journey', options: [], topCandidateDistance: '125 m (straight-line)' } as unknown as HomeCompositionVM;
+      const noRoute = renderV2Home(departNoRoute);
+      expect(noRoute).not.toContain('id="signal-tile-transit"');
+      expect(noRoute).not.toContain('Nearby dining');
+      const withRoute = { ...departNoRoute, options: [{ id: 'o1', label: 'Drive', title: 'Drive', mode: 'drive', travelMinutes: 15, isSelected: true }] } as unknown as HomeCompositionVM;
+      const html = renderV2Home(withRoute);
+      const transit = html.match(/id="signal-tile-transit"[\s\S]*?<div class="signal-value">([^<]*)<\/div>/)?.[1];
+      expect(transit).toBe('Drive · 15 min');
+    });
+
     it('omits memory signal tile in Live mode when no confirmed fact exists', () => {
       const html = renderV2Home(baseCandidateVM);
       expect(html).not.toContain('id="signal-tile-memory"');

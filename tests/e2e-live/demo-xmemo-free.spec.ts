@@ -14,8 +14,9 @@ import { test, expect, type Page, type Browser } from '@playwright/test';
 import path from 'node:path';
 import fs from 'node:fs';
 import { getEvidenceDir } from '../e2e/helpers/evidence-dir.js';
+import { configuredUrl } from '../e2e/helpers/isolation-guard.js';
 
-const APP = 'http://localhost:4286';
+const APP = configuredUrl('YORI_DEMO_URL');
 const EVIDENCE_DIR = getEvidenceDir('demo-xmemo-free');
 const FIX = { latitude: 35.689487, longitude: 139.691706 };
 
