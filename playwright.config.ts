@@ -10,6 +10,8 @@ const offlineProviderEnv: Record<string, string> = {
   ROUTE_LIVE_ENABLED: 'false',
   WEATHER_LIVE_ENABLED: 'false',
   MODEL_LIVE_ENABLED: '0',
+  // D8: no e2e server may call Baseten (recorded responses only).
+  BASETEN_LIVE_ENABLED: '0',
   // D11: no e2e server may use the owner's Google client or token file (recorded mock only).
   GOOGLE_OAUTH_ENABLED: 'false',
 };

@@ -2295,7 +2295,11 @@ export function renderApp(
     order: string[];
     reason: string;
     live: boolean;
+    /** D8: which engine answered; 'baseten_fallback' only after a proven Muse Spark timeout. */
+    engine: 'meta_model_live' | 'baseten_fallback' | 'offline_deterministic';
+    statusLabel: string;
   } | null = null;
+  const BASETEN_LABEL_PATTERN = /^Baseten fallback · [A-Za-z0-9._-]{1,128}$/;
   let candidateReasoningInFlightKey: string | null = null;
   // D4: at most one S5 plan-reasoning request in flight.
   let planReasoningInFlight = false;
@@ -2336,7 +2340,7 @@ export function renderApp(
     const keepLocalRank = () => {
       if (request !== 'rank') return;
       const local = deterministicCandidateReasoning(input);
-      candidateReasoning = { key, order: [...local.order], reason: local.reason, live: false };
+      candidateReasoning = { key, order: [...local.order], reason: local.reason, live: false, engine: 'offline_deterministic', statusLabel: 'Reasoned locally' };
       update();
     };
     const started = Date.now();
@@ -2362,13 +2366,26 @@ export function renderApp(
         fallbackReason?: string;
         latencyMs?: number;
         ledger?: { callCount: number; cap: number } | null;
+        engineLabel?: string;
       };
       if (!data.result?.reason || !Array.isArray(data.result.order)) {
         keepLocalRank();
         return null;
       }
-      const live = data.engineStatus === 'meta_model_live';
-      candidateReasoning = { key: `rank|${input.candidates.map(c => c.id).join(',')}`, order: data.result.order, reason: data.result.reason, live };
+      // D8: a Baseten answer is an accepted model answer, but it is labelled as the fallback
+      // engine and never as Muse Spark.
+      const engine: 'meta_model_live' | 'baseten_fallback' | 'offline_deterministic' =
+        data.engineStatus === 'meta_model_live' ? 'meta_model_live' : data.engineStatus === 'baseten_fallback' ? 'baseten_fallback' : 'offline_deterministic';
+      const live = engine !== 'offline_deterministic';
+      const statusLabel =
+        engine === 'meta_model_live'
+          ? 'Meta Muse Spark · live'
+          : engine === 'baseten_fallback'
+            ? typeof data.engineLabel === 'string' && BASETEN_LABEL_PATTERN.test(data.engineLabel)
+              ? data.engineLabel
+              : 'Baseten fallback'
+            : 'Reasoned locally';
+      candidateReasoning = { key: `rank|${input.candidates.map(c => c.id).join(',')}`, order: data.result.order, reason: data.result.reason, live, engine, statusLabel };
       globalDecisionLogger.log({
         timestamp: new Date().toISOString(),
         templateId: `candidates_${request}`,
@@ -2377,12 +2394,12 @@ export function renderApp(
         outputReasonCodes: [],
         outputIntent: undefined,
         validationResult: { valid: live, reason: live ? undefined : data.fallbackReason },
-        engineStatus: live ? 'meta_model_live' : 'offline_deterministic',
+        engineStatus: engine,
         latencyMs: typeof data.latencyMs === 'number' ? data.latencyMs : Date.now() - started,
         ledgerPosition: data.ledger ? `${data.ledger.callCount}/${data.ledger.cap}` : undefined,
       });
       update();
-      return { reason: data.result.reason, statusLabel: live ? 'Meta Muse Spark · live' : 'Reasoned locally' };
+      return { reason: data.result.reason, statusLabel };
     } catch {
       keepLocalRank();
       return null;
@@ -3583,7 +3600,7 @@ export function renderApp(
         }
 
         // D4: one live reasoning call per new Live lunch candidate set.
-        let candidateReasoningForVm: { order: string[]; reason: string; statusLabel: string } | undefined;
+        let candidateReasoningForVm: { order: string[]; reason: string; statusLabel: string; engine: 'meta_model_live' | 'baseten_fallback' | 'offline_deterministic' } | undefined;
         if (contextMode === 'live' && nowPlan?.intentId === 'lunch') {
           lastLiveLunchPlan = nowPlan;
           const ids = candidateReasoningInput(nowPlan, 'rank').candidates.map(c => c.id).join(',');
@@ -3596,13 +3613,14 @@ export function renderApp(
             candidateReasoningForVm = {
               order: candidateReasoning.order,
               reason: candidateReasoning.reason,
-              statusLabel: candidateReasoning.live ? 'Meta Muse Spark · live' : 'Reasoned locally',
+              statusLabel: candidateReasoning.statusLabel,
+              engine: candidateReasoning.engine,
             };
           } else if (ids) {
             // D4: while the live answer is pending, show the labelled local answer (distance order
             // unchanged); only an accepted live answer replaces it.
             const local = deterministicCandidateReasoning(candidateReasoningInput(nowPlan, 'rank'));
-            candidateReasoningForVm = { order: [...local.order], reason: local.reason, statusLabel: 'Reasoned locally' };
+            candidateReasoningForVm = { order: [...local.order], reason: local.reason, statusLabel: 'Reasoned locally', engine: 'offline_deterministic' };
           }
         } else if (contextMode === 'live') {
           lastLiveLunchPlan = null;

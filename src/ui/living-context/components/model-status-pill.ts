@@ -31,7 +31,8 @@ export function renderModelStatusPill(options: ModelStatusPillOptions): string {
   const label = options.label || ENGINE_STATUS_LABELS[status] || status;
   const isLive = status === 'meta_model_live';
   const isReplay = status === 'recorded_model_replay';
-  const provenance = isLive ? 'live' : isReplay ? 'replay' : 'deterministic';
+  // D8: a Baseten answer is a model answer from the labelled fallback engine, not deterministic.
+  const provenance = isLive ? 'live' : isReplay ? 'replay' : status === 'baseten_fallback' ? 'fallback_engine' : 'deterministic';
   const latencyPart = typeof options.latencyMs === 'number' && options.latencyMs > 0 ? ` · ${options.latencyMs}ms` : '';
   const elementId = options.id || 'model-status-pill';
   const extraClass = options.className ? ` ${options.className}` : '';

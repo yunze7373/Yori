@@ -85,6 +85,17 @@ In adherence to Yori's core principle of **ruthless engineering truthfulness**, 
 
 ---
 
+**D8-BASETEN-FALLBACK (labelled fallback engine): DELIVERED, recorded only.**
+- **What it does:** on a proven Muse Spark timeout, and only then, the proxy asks one Baseten LLM
+  once. The answer is labelled `Baseten fallback · <model>`, never as Muse Spark.
+- **Limits:** its own ledger (20 calls, USD 10 sub-cap, refused before the call).
+- **Evidence:** `tests/proxy-boundary/baseten-fallback.test.ts`,
+  `tests/e2e-live/live-baseten-fallback.spec.ts` and `docs/evidence/demo-rescue-d8/`.
+- **No Claim:** no live Baseten call has been made. Paid Baseten use awaits the owner's
+  authorization (`docs/demo/BASETEN_FALLBACK.md`).
+
+---
+
 ## 4. One-Page Owner Smoke Checklist
 
 > [!IMPORTANT]

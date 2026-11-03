@@ -80,7 +80,7 @@ export interface BuildHomeCompositionOptions {
   /** D7: discovery line for the lunch card. */
   placesAttributionLine?: string;
   /** D4: live (or labelled deterministic) reasoning over the real candidates: order + one reason. */
-  candidateReasoning?: { order: readonly string[]; reason: string; statusLabel: string };
+  candidateReasoning?: { order: readonly string[]; reason: string; statusLabel: string; engine?: 'meta_model_live' | 'baseten_fallback' | 'offline_deterministic' };
   calendarConnected?: boolean;
   calendarNoRouteReason?: string;
   calendarSignalValue?: {
@@ -1066,7 +1066,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     placesAttributionLine: options.isLive ? options.placesAttributionLine : undefined,
     candidateReasonLine:
       options.isLive && options.candidateReasoning
-        ? { text: options.candidateReasoning.reason, statusLabel: options.candidateReasoning.statusLabel }
+        ? { text: options.candidateReasoning.reason, statusLabel: options.candidateReasoning.statusLabel, engine: options.candidateReasoning.engine }
         : undefined,
     calendarConnected: options.calendarConnected,
     calendarSignalValue: options.calendarSignalValue ?? (() => {

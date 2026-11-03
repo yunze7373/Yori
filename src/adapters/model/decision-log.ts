@@ -17,13 +17,16 @@ export type EngineStatus =
   | 'meta_model_live'
   | 'recorded_model_replay'
   | 'scripted_fixture'
-  | 'offline_deterministic';
+  | 'offline_deterministic'
+  /** D8: Baseten answered after a proven Muse Spark timeout (never shown as Meta/Muse Spark). */
+  | 'baseten_fallback';
 
 export const ENGINE_STATUS_LABELS: Record<EngineStatus, string> = {
   meta_model_live: 'Meta model · live',
   recorded_model_replay: 'Recorded Meta model output · replay',
   scripted_fixture: 'Scripted model fixture · not a live model call',
   offline_deterministic: 'Offline fallback · deterministic',
+  baseten_fallback: 'Baseten fallback',
 };
 
 export interface DecisionLogValidationResult {

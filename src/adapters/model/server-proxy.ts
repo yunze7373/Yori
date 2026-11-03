@@ -23,6 +23,7 @@ import type {
 } from './types.js';
 import { validateFactsInWording } from './fact-checker.js';
 import { isAllowlistedLoopbackHost, isLoopbackPeer } from '../xmemo/loopback-allowlist.js';
+import { callBasetenFallback, resolveBasetenConfig, type BasetenConfig } from './baseten-fallback.js';
 import {
   validateCandidateReasoningInput,
   validateCandidateReasoningOutput,
@@ -37,7 +38,12 @@ export interface ModelCandidatesResponse {
   readonly result: CandidateReasoningOutput;
   readonly usedFallback: boolean;
   readonly fallbackReason?: string;
-  readonly engineStatus: 'meta_model_live' | 'offline_deterministic';
+  /** D8: 'baseten_fallback' only after a PROVEN Muse Spark timeout; never presented as Muse Spark. */
+  readonly engineStatus: 'meta_model_live' | 'offline_deterministic' | 'baseten_fallback';
+  /** D8: the user-facing engine label for a Baseten answer, e.g. 'Baseten fallback · gpt-oss-120b'. */
+  readonly engineLabel?: string;
+  /** D8: why the primary engine did not answer (only 'timeout' can route to Baseten). */
+  readonly primaryFailure?: 'timeout';
   readonly latencyMs?: number;
   /** Ledger position after this call (null when nothing was reserved). */
   readonly ledger?: { readonly callCount: number; readonly cap: number } | null;
@@ -125,6 +131,8 @@ export interface ModelProxyConfig {
   readonly ledgerPath: string;
   readonly reasoningBudgetCeiling?: number;
   readonly allowExtendedVerificationTimeout?: boolean;
+  /** D8: the labelled Baseten fallback (used only on a proven Muse Spark timeout). */
+  readonly baseten?: BasetenConfig;
 }
 
 let processLiveCallCount = 0;
@@ -759,6 +767,7 @@ export function resolveModelConfig(
     reasoningEffort,
     ledgerPath,
     reasoningBudgetCeiling: resolveReasoningBudgetCeiling(process.env),
+    baseten: resolveBasetenConfig(process.env),
   };
 }
 
@@ -1059,6 +1068,7 @@ export class ModelDevProxy {
         ledgerPath,
         reasoningBudgetCeiling,
         allowExtendedVerificationTimeout: customConfig.allowExtendedVerificationTimeout,
+        baseten: customConfig.baseten ?? resolved.baseten,
       };
     } else {
       this.config = resolved;
@@ -2114,9 +2124,10 @@ export class ModelDevProxy {
     const ledger = { callCount: reservation.callCount, cap };
 
     const start = Date.now();
+    // D8: the primary call's own deadline; only this timer firing counts as a proven timeout.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
       const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.config.apiKey}` },
@@ -2162,9 +2173,27 @@ export class ModelDevProxy {
         return { ...fb(out.reason, ledger), latencyMs };
       }
       return { result: out.data, usedFallback: false, engineStatus: 'meta_model_live', latencyMs, ledger };
-    } catch (err: unknown) {
-      const isTimeout = err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError');
-      return { ...fb(isTimeout ? 'timeout' : 'error', ledger), latencyMs: Date.now() - start };
+    } catch {
+      clearTimeout(timer);
+      if (!controller.signal.aborted) return { ...fb('error', ledger), latencyMs: Date.now() - start };
+      // D8: PROVEN timeout (our deadline fired) -> exactly one labelled Baseten attempt.
+      const baseten = this.config.baseten;
+      if (baseten?.enabled) {
+        const alt = await callBasetenFallback(input, baseten);
+        if (alt.ok) {
+          return {
+            result: alt.result,
+            usedFallback: false,
+            engineStatus: 'baseten_fallback',
+            engineLabel: baseten.label,
+            primaryFailure: 'timeout',
+            latencyMs: Date.now() - start,
+            ledger,
+          };
+        }
+        this.logger(`[ModelProxy] Baseten fallback did not answer (${alt.reason})`);
+      }
+      return { ...fb('timeout', ledger), latencyMs: Date.now() - start };
     }
   }
 
