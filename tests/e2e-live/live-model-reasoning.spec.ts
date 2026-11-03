@@ -5,7 +5,10 @@
  * billed calls. Verifies:
  * - live reasoning reorders the REAL candidates and the card shows ONE honest status
  *   ('Meta Muse Spark · live'); the labelled fallback shows 'Reasoned locally';
- * - one ranking call per candidate set (no repeat on re-render);
+ * - one ranking call per candidate set (no repeat on re-render), declaring the app's 31 s wait;
+ * - zero /api/model/reason calls for a Live lunch plan set (the candidate reasoner covers it);
+ * - while the live answer is pending, the labelled local answer is shown; only an accepted live
+ *   answer replaces it (delayed recorded response);
  * - Ask 'why' / 'closer' answer from the reasoner in the transcript, with the status.
  */
 
@@ -34,11 +37,11 @@ function places() {
 }
 
 interface Calls {
-  candidates: { request: string; ids: string[] }[];
+  candidates: { request: string; ids: string[]; clientWait: string | undefined }[];
   reason: number;
 }
 
-async function setup(page: Page, mode: 'live' | 'fallback'): Promise<Calls> {
+async function setup(page: Page, mode: 'live' | 'fallback', delayMs = 0): Promise<Calls> {
   const calls: Calls = { candidates: [], reason: 0 };
   const json = (body: unknown, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
   await page.route('**/api/xmemo/**', r => r.fulfill(json({ enabled: false, connected: false })));
@@ -51,7 +54,8 @@ async function setup(page: Page, mode: 'live' | 'fallback'): Promise<Calls> {
   await page.route(u => u.pathname === '/api/places', r =>
     r.fulfill(json({ enabled: true, discovery: 'google', places: places(), attribution: 'Powered by Google' }))
   );
-  // D4 regression: the S5 plan-reasoning path billed on EVERY render (unstable key); now once per plan set.
+  // D4: the S5 plan-reasoning path billed on EVERY render (unstable key), and its 2 s client wait
+  // abandoned every live answer; a Live lunch plan set now sends none at all.
   await page.route(u => u.pathname === '/api/model/reason', r => {
     calls.reason += 1;
     return r.fulfill(json({ result: { orderedPlanIds: [], rationale: [] }, usedFallback: true, fallbackReason: 'disabled', engineStatus: 'offline_deterministic' }));
@@ -62,7 +66,8 @@ async function setup(page: Page, mode: 'live' | 'fallback'): Promise<Calls> {
   );
   await page.route(u => u.pathname === '/api/model/candidates', async r => {
     const body = JSON.parse(r.request().postData() || '{}');
-    calls.candidates.push({ request: body.request, ids: (body.candidates ?? []).map((c: any) => c.id) });
+    calls.candidates.push({ request: body.request, ids: (body.candidates ?? []).map((c: any) => c.id), clientWait: r.request().headers()['x-yori-client-wait-ms'] });
+    if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
     if (mode === 'fallback') {
       return r.fulfill(
         json({
@@ -133,9 +138,9 @@ test.describe('D4-MODEL-REASONING-ON: live reasoning over real candidates (recor
       // Exactly one ranking call for this candidate set, with the real ids.
       await page.evaluate(() => window.dispatchEvent(new Event('focus')));
       await page.waitForTimeout(600);
-      expect(calls.candidates.filter(c => c.request === 'rank')).toEqual([{ request: 'rank', ids: ['google-A', 'google-B'] }]);
-      // Many renders (grant, places, weather, focus refresh) and only one plan-reasoning call.
-      expect(calls.reason).toBe(1);
+      expect(calls.candidates.filter(c => c.request === 'rank')).toEqual([{ request: 'rank', ids: ['google-A', 'google-B'], clientWait: '31000' }]);
+      // Many renders (grant, places, weather, focus refresh) and no plan-reasoning call for Live lunch.
+      expect(calls.reason).toBe(0);
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.screenshot({ path: path.join(EVIDENCE_DIR, `d4-live-rank-${vp.name}.png`) });
       await context.close();
@@ -152,6 +157,26 @@ test.describe('D4-MODEL-REASONING-ON: live reasoning over real candidates (recor
     await expect(page.locator('.v2-candidate-card').first().locator('.v2-candidate-name')).toHaveText('Near Cafe');
     expect(await page.locator('body').innerText()).not.toContain('Meta Muse Spark · live');
     await page.screenshot({ path: path.join(EVIDENCE_DIR, 'd4-fallback-390x844.png') });
+    await context.close();
+  });
+
+  test('while the live answer is pending the labelled local answer shows; the accepted live answer replaces it', async ({ browser }) => {
+    const { context, page } = await device(browser, { width: 390, height: 844 });
+    const calls = await setup(page, 'live', 4000);
+    await openNearby(page);
+    const reason = page.locator('#candidate-model-reason');
+    // Pending: deterministic distance order and the honest local label, no live claim.
+    await expect(reason).toHaveAttribute('data-engine', 'offline_deterministic', { timeout: 3000 });
+    await expect(reason.locator('.model-reason-status')).toHaveText('Reasoned locally');
+    await expect(reason.locator('.model-reason-text')).toHaveText('Near Cafe: open now, 45 m away, rated 4.6.');
+    await expect(page.locator('.v2-candidate-card').first().locator('.v2-candidate-name')).toHaveText('Near Cafe');
+    expect(calls.candidates.length).toBe(1);
+    // Accepted live answer arrives: it replaces the local one and reorders.
+    await expect(reason).toHaveAttribute('data-engine', 'meta_model_live', { timeout: 10000 });
+    await expect(reason.locator('.model-reason-status')).toHaveText('Meta Muse Spark · live');
+    await expect(page.locator('.v2-candidate-card').first().locator('.v2-candidate-name')).toHaveText('Mid Ramen');
+    expect(calls.candidates.filter(c => c.request === 'rank')).toHaveLength(1);
+    expect(calls.reason).toBe(0);
     await context.close();
   });
 
@@ -175,7 +200,7 @@ test.describe('D4-MODEL-REASONING-ON: live reasoning over real candidates (recor
     await page.locator('#conversation-send-btn').click();
     await expect(transcript).toContainText('Near Cafe is the closest at 45 m and open now. · Meta Muse Spark · live', { timeout: 10000 });
     expect(calls.candidates.map(c => c.request)).toEqual(['rank', 'why', 'closer']);
-    expect(calls.reason).toBe(1);
+    expect(calls.reason).toBe(0);
     await context.close();
   });
 });

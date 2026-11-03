@@ -1017,7 +1017,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   }>${escapeHtml(topC.basis)}</div>
                   ${
                     vm.isLive && vm.candidateReasonLine
-                      ? `<div class="v2-candidate-model-reason" id="candidate-model-reason" data-engine="${vm.candidateReasonLine.statusLabel.includes('live') ? 'meta_model_live' : 'offline_deterministic'}"><span class="model-reason-status">${escapeHtml(vm.candidateReasonLine.statusLabel)}</span><span class="model-reason-text">${escapeHtml(vm.candidateReasonLine.text)}</span></div>`
+                      ? `<div class="v2-candidate-model-reason" id="candidate-model-reason" data-engine="${vm.candidateReasonLine.statusLabel.includes('live') ? 'meta_model_live' : 'offline_deterministic'}"><span class="model-reason-status">${escapeHtml(vm.candidateReasonLine.statusLabel)}</span><span class="model-reason-text" title="${escapeHtml(vm.candidateReasonLine.text)}">${escapeHtml(vm.candidateReasonLine.text)}</span></div>`
                       : ''
                   }
                   <div class="v2-candidate-footer">
@@ -1183,7 +1183,6 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             <div class="now-title ${vm.planDiff ? 'plan-diff-highlight' : ''}" id="now-title" data-slot="chrome" data-slot-reason="Candidates hero headline">${escapeHtml(vm.headline)}</div>
           `
           }
-          ${renderNearbyNow(vm, 'card')}
           <div class="mock-places-notice" data-slot="chrome" data-slot-reason="Places disclosure notice">${
             vm.isLive
               ? escapeHtml(vm.placesAttributionLine || 'OpenStreetMap via Overpass (ODbL) · live nearby dining')
@@ -1223,6 +1222,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
         </div>
 
         ${renderActionRow(vm)}
+        ${/* D4: the refresh control follows the plan actions, so the pick's reason line never pushes
+            Accept / Not now under the docked ask bar at 390. */ renderNearbyNow(vm, 'card')}
 
         <!-- Candidate Cards with Local Labelled SVG Illustrations (Demo order; Live renders them under the title) -->
         ${vm.isLive ? '' : candidateListHtml}

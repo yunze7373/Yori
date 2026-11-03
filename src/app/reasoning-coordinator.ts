@@ -11,6 +11,7 @@
  * 6. UI never blocks on the model: asynchronous execution after deterministic composition.
  */
 
+import { CLIENT_WAIT_HEADER } from '../adapters/model/timeout-config.js';
 import type {
   PreparedPlan,
   ContextSnapshot,
@@ -119,7 +120,8 @@ export async function coordinateReasoning(
 
     const response = await fetchFn(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // D4: declare the real client wait; the server refuses to bill a call it would outlast.
+      headers: { 'Content-Type': 'application/json', [CLIENT_WAIT_HEADER]: String(timeoutMs) },
       body: JSON.stringify(reasoningInput),
       signal: controller.signal,
     });

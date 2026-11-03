@@ -102,6 +102,7 @@ export interface ModelReasoningResponse {
     | 'error'
     | 'truncated'
     | 'extraction_fault'
+    | 'client_wait_too_short'
     | ReasoningValidationFailureReason;
   readonly engineStatus?: EngineStatus;
 }
@@ -117,6 +118,8 @@ export interface ModelProxyConfig {
   readonly maxCalls: number;
   readonly lifetimeMaxCalls: number;
   readonly timeoutMs: number;
+  /** D4: server timeout for /api/model/candidates (30 s; MODEL_TIMEOUT_MS can only lower it). */
+  readonly candidatesTimeoutMs?: number;
   readonly maxTokensOverride?: number;
   readonly reasoningEffort?: ReasoningEffort;
   readonly ledgerPath: string;
@@ -146,11 +149,12 @@ export const MODEL_LIFETIME_MAX_CALLS = 200;
 export const MODEL_OPERATING_CAP_DEFAULT = 100;
 export const MODEL_PER_RUN_MAX_CALLS = 10;
 /**
- * D4: completion budget for the live candidate and plan-reasoning calls. 300 truncated the first
- * live candidates answer (finish_reason=length), so the Reviewer (decision 9505c59f) set 1024 as the
- * code default; MODEL_MAX_TOKENS can only LOWER it on these paths.
+ * D4: completion budget for the live candidate and plan-reasoning calls. 300 and then 1024 both
+ * truncated (finish_reason=length; Muse Spark spends the budget on reasoning first). S1-LIVE-2 finished
+ * 4/4 with stop at 4096, so the Reviewer (decision ae9b0e30) set 4096 as the code default;
+ * MODEL_MAX_TOKENS can only LOWER it on these paths.
  */
-export const MODEL_APP_MAX_TOKENS = 1024;
+export const MODEL_APP_MAX_TOKENS = 4096;
 export function resolveD4MaxTokens(override?: number): number {
   return override !== undefined ? Math.min(override, MODEL_APP_MAX_TOKENS) : MODEL_APP_MAX_TOKENS;
 }
@@ -243,6 +247,9 @@ import {
   MIN_MODEL_TIMEOUT_MS,
   MAX_MODEL_TIMEOUT_MS,
   resolveModelTimeoutMs,
+  resolveCandidatesTimeoutMs,
+  clientCanAwaitServer,
+  CLIENT_WAIT_HEADER,
 } from './timeout-config.js';
 
 export {
@@ -747,6 +754,7 @@ export function resolveModelConfig(
     maxCalls,
     lifetimeMaxCalls,
     timeoutMs,
+    candidatesTimeoutMs: resolveCandidatesTimeoutMs(process.env['MODEL_TIMEOUT_MS']),
     maxTokensOverride,
     reasoningEffort,
     ledgerPath,
@@ -774,6 +782,18 @@ export class RateLimiter {
   public reset(): void {
     this.requests = [];
   }
+}
+
+/** D4: options for HTTP-originated billed calls (direct server-side callers pass none). */
+export interface BilledCallOptions {
+  /** How long the client declared it will wait (CLIENT_WAIT_HEADER); null when missing or invalid. */
+  readonly clientWaitMs: number | null;
+}
+
+export function parseClientWaitHeader(headers: Record<string, unknown> | undefined): number | null {
+  const raw = headers?.[CLIENT_WAIT_HEADER];
+  if (typeof raw !== 'string' || !/^\d{1,7}$/.test(raw.trim())) return null;
+  return parseInt(raw.trim(), 10);
 }
 
 /** D4: true only for a loopback socket peer (IPv4, IPv6, or IPv4-mapped IPv6). */
@@ -1032,6 +1052,10 @@ export class ModelDevProxy {
         maxCalls,
         lifetimeMaxCalls,
         timeoutMs,
+        candidatesTimeoutMs:
+          customConfig.candidatesTimeoutMs !== undefined
+            ? Math.max(MIN_MODEL_TIMEOUT_MS, Math.min(resolved.candidatesTimeoutMs ?? MAX_MODEL_TIMEOUT_MS, customConfig.candidatesTimeoutMs))
+            : resolved.candidatesTimeoutMs,
         maxTokensOverride,
         reasoningEffort,
         ledgerPath,
@@ -1385,7 +1409,7 @@ export class ModelDevProxy {
             resolve(true);
             return;
           }
-          const result = await this.handleCandidates(v.data);
+          const result = await this.handleCandidates(v.data, { clientWaitMs: parseClientWaitHeader(req.headers) });
           res.statusCode = 200;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify(result));
@@ -1464,7 +1488,7 @@ export class ModelDevProxy {
               resolve(true);
               return;
             }
-            const result = await this.handleReasoning(inputValidation.data!);
+            const result = await this.handleReasoning(inputValidation.data!, { clientWaitMs: parseClientWaitHeader(req.headers) });
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify(result));
@@ -1814,7 +1838,8 @@ export class ModelDevProxy {
    * Any violation or failure safely discards the whole output for the deterministic ranking.
    */
   public async handleReasoning(
-    rawInput: unknown
+    rawInput: unknown,
+    opts?: BilledCallOptions
   ): Promise<ModelReasoningResponse> {
     this.resetDiagnosticsMetadata();
     const inputValidation = validateReasoningInputSchema(rawInput);
@@ -1852,6 +1877,16 @@ export class ModelDevProxy {
         result: fallback,
         usedFallback: true,
         fallbackReason: 'error',
+        engineStatus: 'offline_deterministic',
+      };
+    }
+
+    // D4: never bill a call the client has said it will not wait for.
+    if (opts && !clientCanAwaitServer(opts.clientWaitMs, this.config.timeoutMs)) {
+      return {
+        result: fallback,
+        usedFallback: true,
+        fallbackReason: 'client_wait_too_short',
         engineStatus: 'offline_deterministic',
       };
     }
@@ -2043,7 +2078,8 @@ export class ModelDevProxy {
    * strict post-check; anything else returns the labelled deterministic answer.
    */
   public async handleCandidates(
-    input: import('./candidate-reasoning.js').CandidateReasoningInput
+    input: import('./candidate-reasoning.js').CandidateReasoningInput,
+    opts?: BilledCallOptions
   ): Promise<ModelCandidatesResponse> {
     this.resetDiagnosticsMetadata();
     const fallback = deterministicCandidateReasoning(input);
@@ -2062,6 +2098,9 @@ export class ModelDevProxy {
     if (pre.status === 'ok' && pre.callCount >= cap) return fb('budget_exhausted', { callCount: pre.callCount, cap });
     if (this.getDiagnostics().status === 'disabled') return fb('disabled');
     if (processLiveCallCount >= this.config.maxCalls) return fb('run_cap');
+    const timeoutMs = this.config.candidatesTimeoutMs ?? this.config.timeoutMs;
+    // D4: never bill a call the client has said it will not wait for.
+    if (opts && !clientCanAwaitServer(opts.clientWaitMs, timeoutMs)) return fb('client_wait_too_short');
     if (this.runStartLedgerCount === undefined) this.runStartLedgerCount = pre.status === 'ok' ? pre.callCount : 0;
 
     const reservation = await reserveLedgerSlot(
@@ -2079,7 +2118,7 @@ export class ModelDevProxy {
     const start = Date.now();
     try {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.config.apiKey}` },

@@ -36,3 +36,30 @@ export function resolveModelTimeoutMs(
   }
   return Math.max(MIN_MODEL_TIMEOUT_MS, Math.min(MAX_MODEL_TIMEOUT_MS, parsed));
 }
+
+/**
+ * D4 (Reviewer ae9b0e30): the live candidates route may wait up to 30 s, because a Muse Spark answer
+ * of 1.5k-2k completion tokens takes 17-22 s. MODEL_TIMEOUT_MS can only lower it.
+ */
+export const CANDIDATES_MODEL_TIMEOUT_MS = MAX_MODEL_TIMEOUT_MS;
+export function resolveCandidatesTimeoutMs(rawEnvVal?: string | number | undefined): number {
+  if (rawEnvVal === undefined || rawEnvVal === null || String(rawEnvVal).trim() === '') {
+    return CANDIDATES_MODEL_TIMEOUT_MS;
+  }
+  return Math.min(CANDIDATES_MODEL_TIMEOUT_MS, resolveModelTimeoutMs(rawEnvVal));
+}
+
+/**
+ * D4: how long the app waits for a billed model call. Every server timeout is clamped to at most
+ * MAX_MODEL_TIMEOUT_MS, so this wait always outlasts the server and a paid answer is never thrown
+ * away by the client. The app declares it in CLIENT_WAIT_HEADER; the server refuses to bill a call
+ * whose declared wait is missing or shorter than its own timeout.
+ */
+export const MODEL_CLIENT_WAIT_MS = MAX_MODEL_TIMEOUT_MS + 1000;
+export const CLIENT_WAIT_HEADER = 'x-yori-client-wait-ms';
+
+/** True only when the declared client wait is at least the server's timeout for that route. */
+export function clientCanAwaitServer(clientWaitMs: number | null | undefined, serverTimeoutMs: number): boolean {
+  return typeof clientWaitMs === 'number' && Number.isFinite(clientWaitMs) && clientWaitMs >= serverTimeoutMs;
+}
+

@@ -5,7 +5,8 @@
  * Acceptance Checks:
  * 1. Dual Gate A (390x844 mobile):
  *    - Real-shaped candidates (lunch places from Overpass + depart from calendar).
- *    - Asynchronous reasoning coordinator calls /api/model/reason with strict schema.
+ *    - D4: a Live lunch plan set is reasoned by /api/model/candidates (recorded here); the
+ *      plan-reasoning call /api/model/reason is never sent for it.
  *    - Model reasoning elevates preferred candidate and supplies validated rationale.
  *    - UI displays honest engine status (#model-status-pill) in the ambient line: 'Meta model · live' vs labelled fallback.
  *    - Full-page Conversation Shell displays #engine-status-chip and #conversation-model-status-pill.
@@ -26,6 +27,38 @@ import path from 'path';
 import fs from 'fs';
 
 const EVIDENCE_DIR = path.resolve('docs/evidence/live-reason');
+
+/**
+ * D4 (Reviewer ae9b0e30): a Live lunch plan set is reasoned by the candidate reasoner
+ * (/api/model/candidates), and /api/model/reason is NOT sent for it. These gates therefore answer
+ * the candidates route with a RECORDED response in the D4 proxy's exact shape, assert zero
+ * plan-reasoning requests, and check the honest engine status that the candidate answer drives.
+ */
+async function routeRecordedCandidates(page: Page): Promise<{ reason: number; candidates: number }> {
+  const calls = { reason: 0, candidates: 0 };
+  await page.route(u => u.pathname === '/api/model/reason', async route => {
+    calls.reason += 1;
+    await route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+  });
+  await page.route(u => u.pathname === '/api/model/candidates', async route => {
+    calls.candidates += 1;
+    const cands: any[] = route.request().postDataJSON()?.candidates ?? [];
+    const top = cands[0];
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        // The recorded reason always describes the pick it ranks first (the card's hero).
+        result: { order: cands.map(c => c.id), reason: `${top?.name} is ${top?.distanceMeters} m away.`, citedFactKeys: [] },
+        usedFallback: false,
+        engineStatus: 'meta_model_live',
+        latencyMs: 2140,
+        ledger: { callCount: 40, cap: 100 },
+      }),
+    });
+  });
+  return calls;
+}
 
 test.beforeAll(() => {
   if (!fs.existsSync(EVIDENCE_DIR)) {
@@ -244,47 +277,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     await page.setViewportSize({ width: 390, height: 844 });
     await setupClockAndMemory(page);
 
-    // Intercept model reasoning endpoint
-    let interceptedReasonCount = 0;
-    await page.route('**/api/model/reason', async route => {
-      interceptedReasonCount++;
-      const req = route.request().postDataJSON();
-      const candidates = req?.candidates ?? [];
-      const availableSignalIds = req?.availableSignalIds ?? [];
-      const confirmedFactKeys = req?.confirmedFactKeys ?? [];
-      const orderedPlanIds = candidates.map((c: any) => c.id);
-
-      // Model rationale citing confirmed taste preference and real signal
-      const rationale = candidates.map((c: any) => ({
-        planId: c.id,
-        citedSignalIds:
-          c.citedSignalIds && c.citedSignalIds.length > 0
-            ? [c.citedSignalIds[0]]
-            : availableSignalIds.length > 0
-              ? [availableSignalIds[0]]
-              : [],
-        citedFactKeys:
-          c.citedFactKeys && c.citedFactKeys.length > 0
-            ? [c.citedFactKeys[0]]
-            : confirmedFactKeys.length > 0
-              ? [confirmedFactKeys[0]]
-              : [],
-        reasonCode: 'matches_confirmed_preference',
-      }));
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          result: {
-            orderedPlanIds,
-            rationale,
-          },
-          usedFallback: false,
-          engineStatus: 'recorded_model_replay',
-        }),
-      });
-    });
+    const modelCalls = await routeRecordedCandidates(page);
 
     // Intercept model command endpoint
     await page.route('**/api/model/command', async route => {
@@ -318,9 +311,12 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     // 2. Verify Home UI surfaces honest engine status pill
     const modelStatusPill = page.locator('#model-status-pill');
     await expect(modelStatusPill).toBeVisible();
-    await expect(modelStatusPill).toHaveAttribute('data-engine-status', 'recorded_model_replay');
-    await expect(modelStatusPill).toHaveAttribute('data-provenance', 'replay');
-    await expect(modelStatusPill).toContainText('Recorded Meta model output · replay');
+    // D4: the candidate reasoner answered this Live lunch set; no plan-reasoning call was sent.
+    await expect.poll(() => modelCalls.candidates).toBeGreaterThanOrEqual(1);
+    expect(modelCalls.reason).toBe(0);
+    await expect(modelStatusPill).toHaveAttribute('data-engine-status', 'meta_model_live');
+    await expect(modelStatusPill).toHaveAttribute('data-provenance', 'live');
+    await expect(modelStatusPill).toContainText('Meta model · live');
 
     // Verify #living-header-line height <= 2 lines (strictly 1 line <= 28px) at 390
     const headerLine = page.locator('#living-header-line');
@@ -380,11 +376,11 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     // Verify conversation header displays honest engine status chip and pill
     const engineStatusChip = page.locator('#engine-status-chip');
     await expect(engineStatusChip).toBeVisible();
-    await expect(engineStatusChip).toContainText('Recorded Meta model output · replay');
+    await expect(engineStatusChip).toContainText('Meta model · live');
 
     const convModelPill = page.locator('#conversation-model-status-pill');
     await expect(convModelPill).toBeVisible();
-    await expect(convModelPill).toHaveAttribute('data-engine-status', 'recorded_model_replay');
+    await expect(convModelPill).toHaveAttribute('data-engine-status', 'meta_model_live');
 
     // Capture conversation shell mobile screenshot
     await page.screenshot({
@@ -402,9 +398,10 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     const logContent = await decisionLogViewer.textContent();
 
     // Decision log must carry engineStatus, latencyMs, and zero secrets
-    expect(logContent).toContain('recorded_model_replay');
+    expect(logContent).toContain('meta_model_live');
     expect(logContent).toContain('latencyMs');
-    expect(logContent).toContain('reason_rank');
+    expect(logContent).toContain('candidates_rank');
+    expect(logContent).not.toContain('reason_rank');
     expect(logContent).not.toContain('sk-');
     expect(logContent).not.toContain('apiKey');
 
@@ -421,41 +418,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     await page.setViewportSize({ width: 1280, height: 800 });
     await setupClockAndMemory(page);
 
-    await page.route('**/api/model/reason', async route => {
-      const req = route.request().postDataJSON();
-      const candidates = req?.candidates ?? [];
-      const availableSignalIds = req?.availableSignalIds ?? [];
-      const confirmedFactKeys = req?.confirmedFactKeys ?? [];
-      const orderedPlanIds = candidates.map((c: any) => c.id);
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          result: {
-            orderedPlanIds,
-            rationale: candidates.map((c: any) => ({
-              planId: c.id,
-              citedSignalIds:
-                c.citedSignalIds && c.citedSignalIds.length > 0
-                  ? [c.citedSignalIds[0]]
-                  : availableSignalIds.length > 0
-                    ? [availableSignalIds[0]]
-                    : [],
-              citedFactKeys:
-                c.citedFactKeys && c.citedFactKeys.length > 0
-                  ? [c.citedFactKeys[0]]
-                  : confirmedFactKeys.length > 0
-                    ? [confirmedFactKeys[0]]
-                    : [],
-              reasonCode: 'matches_confirmed_preference',
-            })),
-          },
-          usedFallback: false,
-          engineStatus: 'recorded_model_replay',
-        }),
-      });
-    });
+    const modelCalls = await routeRecordedCandidates(page);
 
     await page.goto('/?mode=live&test=1&geo=1');
     await page.waitForLoadState('networkidle');
@@ -469,7 +432,10 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     // Verify desktop header ambient line displays model status pill
     const modelStatusPill = page.locator('#model-status-pill');
     await expect(modelStatusPill).toBeVisible();
-    await expect(modelStatusPill).toContainText('Recorded Meta model output · replay');
+    // D4: the candidate reasoner answered this Live lunch set; no plan-reasoning call was sent.
+    await expect.poll(() => modelCalls.candidates).toBeGreaterThanOrEqual(1);
+    expect(modelCalls.reason).toBe(0);
+    await expect(modelStatusPill).toContainText('Meta model · live');
 
     // Capture desktop home screenshot
     await page.screenshot({
@@ -488,7 +454,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     const modelSourceItem = page.locator('#source-item-model');
     await expect(modelSourceItem).toBeVisible();
     await expect(modelSourceItem).toContainText('Reasoning Engine');
-    await expect(modelSourceItem).toContainText('Recorded Meta model output · replay');
+    await expect(modelSourceItem).toContainText('Meta model · live');
 
     // Close sources modal
     const closeWhyBtn = page.locator('#btn-close-why');
@@ -503,7 +469,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     await expect(overlay).toBeVisible();
 
     const engineChip = page.locator('#engine-status-chip');
-    await expect(engineChip).toContainText('Recorded Meta model output · replay');
+    await expect(engineChip).toContainText('Meta model · live');
 
     // Capture desktop conversation screenshot
     await page.screenshot({
@@ -574,41 +540,7 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
     await page.setViewportSize({ width: 1280, height: 800 });
     await setupClockAndMemory(page);
 
-    await page.route('**/api/model/reason', async route => {
-      const req = route.request().postDataJSON();
-      const candidates = req?.candidates ?? [];
-      const availableSignalIds = req?.availableSignalIds ?? [];
-      const confirmedFactKeys = req?.confirmedFactKeys ?? [];
-      const orderedPlanIds = candidates.map((c: any) => c.id);
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          result: {
-            orderedPlanIds,
-            rationale: candidates.map((c: any) => ({
-              planId: c.id,
-              citedSignalIds:
-                c.citedSignalIds && c.citedSignalIds.length > 0
-                  ? [c.citedSignalIds[0]]
-                  : availableSignalIds.length > 0
-                    ? [availableSignalIds[0]]
-                    : [],
-              citedFactKeys:
-                c.citedFactKeys && c.citedFactKeys.length > 0
-                  ? [c.citedFactKeys[0]]
-                  : confirmedFactKeys.length > 0
-                    ? [confirmedFactKeys[0]]
-                    : [],
-              reasonCode: 'matches_confirmed_preference',
-            })),
-          },
-          usedFallback: false,
-          engineStatus: 'meta_model_live',
-        }),
-      });
-    });
+    const modelCalls = await routeRecordedCandidates(page);
 
     await page.goto('/?mode=live&test=1&geo=1');
     await page.waitForLoadState('networkidle');
@@ -620,6 +552,9 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
 
     const modelStatusPill = page.locator('#model-status-pill');
     await expect(modelStatusPill).toBeVisible();
+    // D4: the candidate reasoner answered this Live lunch set; no plan-reasoning call was sent.
+    await expect.poll(() => modelCalls.candidates).toBeGreaterThanOrEqual(1);
+    expect(modelCalls.reason).toBe(0);
     await expect(modelStatusPill).toHaveAttribute('data-engine-status', 'meta_model_live');
     await expect(modelStatusPill).toHaveAttribute('data-provenance', 'live');
     await expect(modelStatusPill).toContainText('Meta model · live');

@@ -119,6 +119,8 @@ import { mockFuelAdapter } from '../../plugins/fuel/adapter.js';
 import { mockLunchAdapter } from '../../plugins/lunch/adapter.js';
 import { buildGroundedNavigateUrl } from '../navigation/navigate-url.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
+import { deterministicCandidateReasoning, type CandidateReasoningInput } from '../../adapters/model/candidate-reasoning.js';
+import { MODEL_CLIENT_WAIT_MS, CLIENT_WAIT_HEADER } from '../../adapters/model/timeout-config.js';
 import { renderV2Home } from './v2-home-view.js';
 import { initRealMaps } from './real-map.js';
 import {
@@ -2234,7 +2236,7 @@ export function renderApp(
   let planReasoningInFlight = false;
   let lastLiveLunchPlan: PreparedPlan | null = null;
 
-  function candidateReasoningInput(plan: PreparedPlan, request: 'rank' | 'why' | 'closer' | 'quieter') {
+  function candidateReasoningInput(plan: PreparedPlan, request: 'rank' | 'why' | 'closer' | 'quieter'): CandidateReasoningInput {
     const candidates = (plan.optionsOrSteps as readonly any[])
       .filter(o => o && typeof o.recordId === 'string' && typeof o.straightLineDistanceMeters === 'number')
       .slice(0, 5)
@@ -2247,7 +2249,7 @@ export function renderApp(
         rating: typeof o.rating === 'number' ? o.rating : undefined,
         userRatingCount: typeof o.userRatingCount === 'number' ? o.userRatingCount : undefined,
         priceLevel: typeof o.priceLevel === 'number' ? o.priceLevel : undefined,
-        source: o.provenance === 'google' ? 'google' : 'osm',
+        source: (o.provenance === 'google' ? 'google' : 'osm') as 'google' | 'osm',
       }));
     const confirmedFacts = (plan.why?.memoryFactsUsed ?? [])
       .filter(f => f.status === 'confirmed' && typeof f.value === 'string' && /^[a-z0-9_]{1,60}$/.test(f.key))
@@ -2265,18 +2267,30 @@ export function renderApp(
     if (input.candidates.length === 0) return null;
     const key = `${request}|${input.candidates.map(c => c.id).join(',')}`;
     if (request === 'rank') candidateReasoningInFlightKey = key;
+    // A failed rank keeps the labelled local answer for this candidate set (no retry on re-render).
+    const keepLocalRank = () => {
+      if (request !== 'rank') return;
+      const local = deterministicCandidateReasoning(input);
+      candidateReasoning = { key, order: [...local.order], reason: local.reason, live: false };
+      update();
+    };
     const started = Date.now();
     try {
+      // D4: wait longer than any server timeout (the candidates route may take up to 30 s), and
+      // declare it, so the server never bills an answer this client would abandon.
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 20000);
+      const timer = setTimeout(() => controller.abort(), MODEL_CLIENT_WAIT_MS);
       const resp = await fetch('/api/model/candidates', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', [CLIENT_WAIT_HEADER]: String(MODEL_CLIENT_WAIT_MS) },
         body: JSON.stringify(input),
         signal: controller.signal,
       });
       clearTimeout(timer);
-      if (!resp.ok) return null;
+      if (!resp.ok) {
+        keepLocalRank();
+        return null;
+      }
       const data = (await resp.json()) as {
         result?: { order?: string[]; reason?: string };
         engineStatus?: string;
@@ -2284,7 +2298,10 @@ export function renderApp(
         latencyMs?: number;
         ledger?: { callCount: number; cap: number } | null;
       };
-      if (!data.result?.reason || !Array.isArray(data.result.order)) return null;
+      if (!data.result?.reason || !Array.isArray(data.result.order)) {
+        keepLocalRank();
+        return null;
+      }
       const live = data.engineStatus === 'meta_model_live';
       candidateReasoning = { key: `rank|${input.candidates.map(c => c.id).join(',')}`, order: data.result.order, reason: data.result.reason, live };
       globalDecisionLogger.log({
@@ -2302,6 +2319,7 @@ export function renderApp(
       update();
       return { reason: data.result.reason, statusLabel: live ? 'Meta Muse Spark · live' : 'Reasoned locally' };
     } catch {
+      keepLocalRank();
       return null;
     } finally {
       if (candidateReasoningInFlightKey === key) candidateReasoningInFlightKey = null;
@@ -3463,6 +3481,11 @@ export function renderApp(
               reason: candidateReasoning.reason,
               statusLabel: candidateReasoning.live ? 'Meta Muse Spark · live' : 'Reasoned locally',
             };
+          } else if (ids) {
+            // D4: while the live answer is pending, show the labelled local answer (distance order
+            // unchanged); only an accepted live answer replaces it.
+            const local = deterministicCandidateReasoning(candidateReasoningInput(nowPlan, 'rank'));
+            candidateReasoningForVm = { order: [...local.order], reason: local.reason, statusLabel: 'Reasoned locally' };
           }
         } else if (contextMode === 'live') {
           lastLiveLunchPlan = null;
@@ -6151,6 +6174,15 @@ export function renderApp(
 
     // Coordinate reasoning asynchronously after deterministic composition (Requirement 4 & S5-LIVE-REASON)
     // D4: single-flight, once per STABLE plan set (see coordinationKey).
+    // D4: a Live lunch plan set is reasoned by the candidate reasoner (/api/model/candidates), so the
+    // plan-reasoning call is not sent for it at all.
+    const liveLunchCoveredByCandidates =
+      contextMode === 'live' &&
+      living.now?.intentId === 'lunch' &&
+      candidateReasoningInput(living.now, 'rank').candidates.length > 0;
+    if (liveLunchCoveredByCandidates && coordinatedScene !== coordinationKey) {
+      coordinatedScene = coordinationKey;
+    }
     if (coordinatedScene !== coordinationKey && !planReasoningInFlight) {
       const allPlans = [living.now, ...living.ahead].filter((p): p is PreparedPlan => p !== null);
       if (allPlans.length > 0) {
@@ -6160,7 +6192,8 @@ export function renderApp(
         const requestScene = currentScene;
         const requestId = ++reasoningRequestId;
 
-        coordinateReasoning(living, snapshot, combinedMemory)
+        // D4: wait (and declare) longer than any server timeout, so a billed answer is never abandoned.
+        coordinateReasoning(living, snapshot, combinedMemory, { timeoutMs: MODEL_CLIENT_WAIT_MS })
           .finally(() => {
             planReasoningInFlight = false;
           })

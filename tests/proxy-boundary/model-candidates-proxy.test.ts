@@ -5,7 +5,9 @@
  *   ledger with a labelled deterministic answer, zero outbound calls when MODEL_LIVE_ENABLED is off.
  * - Security: /api/model/* refuses LAN hosts and non-loopback socket peers (even with a forged
  *   loopback Host) with or without DEV_DEVICE_TESTING=true; a missing peer fails closed.
- * - Completion budget: 1024 on the D4 live paths; MODEL_MAX_TOKENS can only lower it.
+ * - Completion budget: 4096 on the D4 live paths; MODEL_MAX_TOKENS can only lower it.
+ * - Waits: candidates may wait 30 s (env lowers only); a billed call is refused when the client's
+ *   declared wait (x-yori-client-wait-ms) is missing or shorter than the server timeout.
  * - /api/model/candidates: live answer only after the post-check; the key never appears in the
  *   response or the usage log; tokens are logged per call; usage math inside USD 20.
  */
@@ -25,6 +27,7 @@ import {
   MODEL_APP_MAX_TOKENS,
   resolveD4MaxTokens,
   isLoopbackPeer,
+  parseClientWaitHeader,
   estimateModelSpendUsd,
   resolveOperatingCap,
   resolveModelLiveEnabled,
@@ -37,6 +40,15 @@ import {
   deterministicCandidateReasoning,
   type CandidateReasoningInput,
 } from '../../src/adapters/model/candidate-reasoning.js';
+import {
+  CANDIDATES_MODEL_TIMEOUT_MS,
+  MAX_MODEL_TIMEOUT_MS,
+  MODEL_CLIENT_WAIT_MS,
+  CLIENT_WAIT_HEADER,
+  clientCanAwaitServer,
+  resolveCandidatesTimeoutMs,
+  resolveModelTimeoutMs,
+} from '../../src/adapters/model/timeout-config.js';
 
 const FAKE_KEY = 'sk-FAKE-d4-candidates-0123456789';
 
@@ -58,12 +70,19 @@ function modelReply(content: unknown, usage = { prompt_tokens: 410, completion_t
   }));
 }
 
-function reqRes(url: string, host: string, bodyObj?: unknown, method = 'POST', remoteAddress: string | null = '127.0.0.1') {
+function reqRes(
+  url: string,
+  host: string,
+  bodyObj?: unknown,
+  method = 'POST',
+  remoteAddress: string | null = '127.0.0.1',
+  extraHeaders: Record<string, string> = {}
+) {
   const bodyStr = bodyObj !== undefined ? JSON.stringify(bodyObj) : '';
   const req: any = {
     url,
     method,
-    headers: { host, 'content-type': 'application/json' },
+    headers: { host, 'content-type': 'application/json', ...extraHeaders },
     socket: remoteAddress === null ? {} : { remoteAddress },
     on: (event: string, handler: (...a: any[]) => void) => {
       if (event === 'data' && bodyStr) handler(Buffer.from(bodyStr));
@@ -179,7 +198,7 @@ describe('D4 budget, hard stop, security and spend math', () => {
     expect(res.result.order[0]).toBe('google-B');
     expect(res.ledger).toEqual({ callCount: 23, cap: 100 });
     const body = JSON.parse(String((fetchSpy.mock.calls[0] as any)[1].body));
-    expect(body.max_tokens).toBe(1024);
+    expect(body.max_tokens).toBe(4096);
     expect(JSON.stringify(res)).not.toContain(FAKE_KEY);
     const usage = fs.readFileSync(path.join(tempDir, 'model-usage-log.jsonl'), 'utf-8');
     expect(JSON.parse(usage.trim())).toMatchObject({ endpoint: 'candidates', promptTokens: 410, completionTokens: 62, callCount: 23 });
@@ -292,21 +311,73 @@ describe('D4 budget, hard stop, security and spend math', () => {
     }
   });
 
-  it('completion budget: 1024 by default on candidates and reason; MODEL_MAX_TOKENS can only lower it', async () => {
-    expect(MODEL_APP_MAX_TOKENS).toBe(1024);
-    expect(resolveD4MaxTokens(undefined)).toBe(1024);
+  it('completion budget: 4096 by default on candidates and reason; MODEL_MAX_TOKENS can only lower it', async () => {
+    expect(MODEL_APP_MAX_TOKENS).toBe(4096);
+    expect(resolveD4MaxTokens(undefined)).toBe(4096);
     expect(resolveD4MaxTokens(512)).toBe(512);
-    expect(resolveD4MaxTokens(8192)).toBe(1024);
+    expect(resolveD4MaxTokens(8192)).toBe(4096);
     const bodies: any[] = [];
     globalThis.fetch = vi.fn(async (_u: string, init: any) => {
       bodies.push(JSON.parse(init.body));
       return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ order: ['google-A'], reason: 'Near Cafe is open now and 45 m away.', citedFactKeys: [] }) }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } }) };
     }) as any;
-    for (const [override, expected] of [[undefined, 1024], [4096, 1024], [600, 600]] as const) {
+    for (const [override, expected] of [[undefined, 4096], [8192, 4096], [600, 600]] as const) {
       const proxy = new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath, maxTokensOverride: override });
       await proxy.handleCandidates(INPUT);
       expect(bodies.at(-1).max_tokens, String(override)).toBe(expected);
     }
+  });
+
+  it('waits: candidates server timeout is 30 s and env can only lower it; the app wait outlasts every server timeout', () => {
+    expect(CANDIDATES_MODEL_TIMEOUT_MS).toBe(30000);
+    expect(resolveCandidatesTimeoutMs(undefined)).toBe(30000);
+    expect(resolveCandidatesTimeoutMs('')).toBe(30000);
+    expect(resolveCandidatesTimeoutMs('10000')).toBe(10000);
+    expect(resolveCandidatesTimeoutMs('60000')).toBe(30000);
+    expect(new ModelDevProxy({ apiKey: FAKE_KEY, ledgerPath }) as any).toHaveProperty('config.candidatesTimeoutMs', 30000);
+    expect(new ModelDevProxy({ apiKey: FAKE_KEY, ledgerPath, candidatesTimeoutMs: 90000 }) as any).toHaveProperty('config.candidatesTimeoutMs', 30000);
+    // Invariant: every server-side timeout the app path can resolve is at most MAX_MODEL_TIMEOUT_MS,
+    // and the app's declared wait is strictly longer, so a billed answer is never abandoned.
+    for (const raw of [undefined, '1', '15000', '30000', '99999', 'x']) {
+      expect(resolveModelTimeoutMs(raw)).toBeLessThanOrEqual(MAX_MODEL_TIMEOUT_MS);
+      expect(clientCanAwaitServer(MODEL_CLIENT_WAIT_MS, resolveModelTimeoutMs(raw))).toBe(true);
+      expect(clientCanAwaitServer(MODEL_CLIENT_WAIT_MS, resolveCandidatesTimeoutMs(raw))).toBe(true);
+    }
+    expect(clientCanAwaitServer(2000, 15000)).toBe(false);
+    expect(clientCanAwaitServer(null, 15000)).toBe(false);
+    expect(parseClientWaitHeader({ [CLIENT_WAIT_HEADER]: '31000' })).toBe(31000);
+    expect(parseClientWaitHeader({ [CLIENT_WAIT_HEADER]: '-5' })).toBeNull();
+    expect(parseClientWaitHeader({ [CLIENT_WAIT_HEADER]: '1e9' })).toBeNull();
+    expect(parseClientWaitHeader({})).toBeNull();
+  });
+
+  it('client wait: a billed candidates or reason call is refused (0 fetch, ledger unchanged) unless the declared wait covers the server timeout', async () => {
+    const fetchSpy = modelReply({ order: ['google-A'], reason: 'Near Cafe is open now and 45 m away.', citedFactKeys: [] });
+    globalThis.fetch = fetchSpy as any;
+    const mw = createModelProxyMiddleware(new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath }));
+    const reasonBody = {
+      candidates: [{ id: 'plan-depart-1', intentId: 'depart', confidence: 1.0, places: ['Downtown Office'], times: ['2:25 PM'], citedSignalIds: ['calendar:2026-11-02T14:30:00Z'], citedFactKeys: [] }],
+      availableSignalIds: ['calendar:2026-11-02T14:30:00Z'],
+      confirmedFactKeys: [],
+    };
+    for (const wait of [undefined, '2000', '29999']) {
+      const headers: Record<string, string> = wait === undefined ? {} : { [CLIENT_WAIT_HEADER]: wait };
+      const c = reqRes('/api/model/candidates', 'localhost:4173', INPUT, 'POST', '127.0.0.1', headers);
+      await mw(c.req, c.res, c.next);
+      expect(JSON.parse(c.response.body), `candidates wait=${wait}`).toMatchObject({ usedFallback: true, fallbackReason: 'client_wait_too_short', engineStatus: 'offline_deterministic' });
+      const r = reqRes('/api/model/reason', 'localhost:4173', reasonBody, 'POST', '127.0.0.1', wait === '29999' ? { [CLIENT_WAIT_HEADER]: '2000' } : headers);
+      await mw(r.req, r.res, r.next);
+      expect(r.response.statusCode, `reason wait=${wait}`).toBe(200);
+      expect(JSON.parse(r.response.body), `reason wait=${wait}`).toMatchObject({ usedFallback: true, fallbackReason: 'client_wait_too_short' });
+    }
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(readLedgerState(ledgerPath).callCount).toBe(22);
+    // The app's declared wait covers the 30 s server timeout: the call goes out and is counted.
+    const ok = reqRes('/api/model/candidates', 'localhost:4173', INPUT, 'POST', '127.0.0.1', { [CLIENT_WAIT_HEADER]: String(MODEL_CLIENT_WAIT_MS) });
+    await mw(ok.req, ok.res, ok.next);
+    expect(JSON.parse(ok.response.body)).toMatchObject({ usedFallback: false, engineStatus: 'meta_model_live' });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(readLedgerState(ledgerPath).callCount).toBe(23);
   });
 
   it('USD: tokens recorded per call; the worst-case pre-charge is corrected to actual', async () => {

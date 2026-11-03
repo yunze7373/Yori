@@ -319,9 +319,9 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
     }
   });
 
-  // D4 rework (Reviewer 9505c59f): the plan-reasoning path now defaults to 1024 (env can only lower it);
+  // D4 rework (Reviewer ae9b0e30): the plan-reasoning path now defaults to 4096 (env can only lower it);
   // refine and command keep their S1 budgets.
-  it('verifies max_tokens per endpoint: refine 150, reason 1024 (D4), command 300', async () => {
+  it('verifies max_tokens per endpoint: refine 150, reason 4096 (D4), command 300', async () => {
     process.env.MODEL_API_KEY = 'sk-test-token-cap-key';
     process.env.MODEL_LIVE_ENABLED = '1';
 
@@ -395,7 +395,7 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
 
       expect(capturedBodies).toHaveLength(3);
       expect(capturedBodies[0].max_tokens).toBe(150);
-      expect(capturedBodies[1].max_tokens).toBe(1024);
+      expect(capturedBodies[1].max_tokens).toBe(4096);
       expect(capturedBodies[2].max_tokens).toBe(300);
     } finally {
       globalThis.fetch = originalFetch;

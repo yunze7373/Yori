@@ -6540,26 +6540,26 @@ button.v2-view-detail-link:focus-visible {
   text-decoration: underline;
 }
 
-/* D4: the pick's reason with one honest engine status (live model or local fallback). */
+/* D4: the pick's reason with one honest engine status (live model or local fallback). It is always
+   shown on a Live lunch card (the local answer while the live one is pending), so it stays compact:
+   the status leads inline and the line adds no box, keeping the plan actions above the fold at 390. */
 .v2-candidate-model-reason {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 6px 0 2px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.6);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin: 4px 0 2px;
   font-size: 0.8125rem;
   line-height: 1.35;
   color: var(--color-ink, #162824);
 }
 
 .model-reason-status {
+  margin-right: 6px;
   font-size: 0.6875rem;
-  font-weight: 600;
-  color: var(--color-accent, #2d6a4f);
-}
-
-.v2-candidate-model-reason[data-engine='offline_deterministic'] .model-reason-status {
-  color: var(--color-ink-muted, #5C6F68);
+  font-weight: 700;
+  /* Without a box behind it the label sits on the tinted card, so it uses full ink for AA contrast;
+     the words ("live" vs "Reasoned locally") carry the distinction. */
+  color: var(--color-ink, #162824);
 }
