@@ -1547,6 +1547,15 @@ export class XMemoDevProxy {
       return false;
     }
 
+    // DEMO-XMEMO-FREE: the demo-recording switch turns every XMemo route off (no state, no
+    // network); the client does not call these in that mode either.
+    if (process.env['YORI_DEMO_HIDE_XMEMO'] === '1') {
+      res.statusCode = urlPath === '/api/xmemo/status' ? 200 : 403;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(urlPath === '/api/xmemo/status' ? { enabled: false, connected: false } : { error: 'disabled' }));
+      return true;
+    }
+
     // 1. Host header validation: local loopback host required on ALL routes
     const hostHeader = (req.headers?.['host'] || req.headers?.[':authority']) as string | undefined;
     if (!isLocalHost(hostHeader)) {

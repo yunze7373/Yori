@@ -8,6 +8,7 @@
  * - In Demo mode: explicit simulated scenario fixtures with SIMULATED labels.
  */
 
+import { isXmemoHidden } from '../demo-flags.js';
 import { escapeHtml } from './presentation.js';
 import { STRINGS } from './strings.js';
 import { humanizeSignalKind } from '../review/why-sheet.js';
@@ -88,10 +89,13 @@ export function renderSourcesSheet(
     ? (connectorStatuses.location.state === 'connected' ? 'Browser geolocation · Shared this session (never continuously tracked or persisted).' : connectorStatuses.location.detail)
     : 'Browser geolocation · One-shot consented acquisition (never continuously tracked or persisted).';
 
-  const xmemoDetail = connectorStatuses?.xmemo?.detail
-    ? connectorStatuses.xmemo.detail
-    : 'Local only · Sovereign in-browser storage (XMemo not connected · no unauthorized remote sync).';
-  const isXmemoConnected = connectorStatuses?.xmemo
+  // DEMO-XMEMO-FREE: with the demo switch on, memory is described only as what it is: local.
+  const xmemoDetail = isXmemoHidden()
+    ? 'Local only · saved on this device.'
+    : connectorStatuses?.xmemo?.detail
+      ? connectorStatuses.xmemo.detail
+      : 'Local only · Sovereign in-browser storage (XMemo not connected · no unauthorized remote sync).';
+  const isXmemoConnected = !isXmemoHidden() && connectorStatuses?.xmemo
     ? connectorStatuses.xmemo.state === 'connected'
     : false;
 

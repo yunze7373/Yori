@@ -10,6 +10,7 @@
  * - Data controls: Export Raw Data, Reset Storage with two-step confirmation (INV-110).
  */
 
+import { isXmemoHidden } from '../demo-flags.js';
 import type { MemoryFact } from '../../core/contracts/index.js';
 import type { PromptBudgetRecord } from '../../core/storage/index.js';
 import { escapeHtml, formatTime } from '../living-context/presentation.js';
@@ -242,7 +243,7 @@ export function renderMeView(state: MeViewState): string {
           <span class="card-badge badge-confirmed" data-slot="chrome" data-slot-reason="Manage connectors badge">Manage</span>
         </div>
         <p class="me-card-desc" data-slot="chrome" data-slot-reason="Connectors section description">
-          Manage live context sources including Location, Calendar, Weather, XMemo, and Notifications.
+          ${isXmemoHidden() ? 'Manage live context sources including Location, Calendar, Weather, and Notifications.' : 'Manage live context sources including Location, Calendar, Weather, XMemo, and Notifications.'}
         </p>
         <div class="data-actions-row">
           <button type="button" class="btn btn-primary" id="btn-me-connectors" data-slot="chrome" data-slot-reason="Open connectors button">
@@ -255,7 +256,7 @@ export function renderMeView(state: MeViewState): string {
       <section class="card me-card" aria-labelledby="me-data-title">
         <h2 id="me-data-title" class="section-label" data-slot="chrome" data-slot-reason="Data controls section label">${escapeHtml(STRINGS.me.dataControlsTitle)}</h2>
         <p class="me-card-desc" data-slot="chrome" data-slot-reason="Data controls description">
-          Resetting storage clears local browser preferences and history only. Remote XMemo vault records are preserved and never deleted from this client.
+          ${isXmemoHidden() ? 'Resetting storage clears the preferences and history saved on this device.' : 'Resetting storage clears local browser preferences and history only. Remote XMemo vault records are preserved and never deleted from this client.'}
         </p>
         <div class="data-actions-row">
           <button type="button" class="btn btn-secondary" id="btn-me-export" data-slot="chrome" data-slot-reason="Export raw data button">

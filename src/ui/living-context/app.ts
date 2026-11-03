@@ -14,6 +14,7 @@
  * - Storage persistence via WebStorageDriver (AC-105-4)
  */
 
+import { applyDemoStatus, demoFlagsReady, isXmemoHidden } from '../demo-flags.js';
 import { appliedRainBufferMinutes, forecastCitation } from '../view-models/rain-buffer.js';
 import { STRINGS } from './strings.js';
 import { runPipeline, type PipelineResult } from '../../core/pipeline/index.js';
@@ -1774,7 +1775,23 @@ export function renderApp(
     });
   }
   const sharedStorage = customStorage ?? new YoriStorage(new WebStorageDriver());
-  const memoryPort = customMemoryPort ?? createCompositeMemoryPort(sharedStorage);
+  const memoryPort =
+    customMemoryPort ??
+    createCompositeMemoryPort(sharedStorage, {
+      // DEMO-XMEMO-FREE: with the demo switch on, the remote memory is never asked (local only).
+      statusChecker: async () => {
+        await demoFlagsReady;
+        if (isXmemoHidden()) return { enabled: false, connected: false };
+        try {
+          const r = await fetch('/api/xmemo/status', { cache: 'no-store' });
+          if (!r.ok) return { enabled: false, connected: false };
+          const d = (await r.json()) as { enabled?: boolean; connected?: boolean; statusText?: string };
+          return { enabled: Boolean(d?.enabled), connected: Boolean(d?.connected), statusText: d?.statusText };
+        } catch {
+          return { enabled: false, connected: false };
+        }
+      },
+    });
   let activeLoadedFacts: readonly MemoryFact[] = [];
   const actionStore: ActionStateStore = createActionStateStore();
   let conversationCleanup: (() => void) | null = null;
@@ -2023,6 +2040,18 @@ export function renderApp(
   }
 
   async function checkXMemoStatus() {
+    // DEMO-XMEMO-FREE: wait for the server's demo flags; with XMemo hidden, no /api/xmemo request.
+    await demoFlagsReady;
+    if (isXmemoHidden()) {
+      xmemoStatus = { enabled: false, connected: false, connectionState: 'off' };
+      try {
+        activeLoadedFacts = await memoryPort.loadFacts();
+      } catch {
+        // local memory unavailable: keep what is loaded
+      }
+      update();
+      return;
+    }
     try {
       if (typeof fetch !== 'undefined') {
         const resp = await fetch('/api/xmemo/status', { cache: 'no-store' });
@@ -2063,10 +2092,15 @@ export function renderApp(
       if (typeof fetch !== 'undefined') {
         isWeatherLoading = true;
         update();
-        const resp = await fetch('/api/weather/status', { cache: 'no-store' });
+        const resp = await fetch('/api/weather/status', { cache: 'no-store' }).catch(err => {
+          applyDemoStatus(null);
+          throw err;
+        });
+        if (!resp.ok) applyDemoStatus(null);
         if (resp.ok) {
           weatherError = null;
           const data = await resp.json();
+          applyDemoStatus(data);
           weatherOutboundHosts = data.enabled ? readOutboundHosts(data) : [];
           if (data.enabled) {
             weatherStatus = data;
@@ -4506,11 +4540,11 @@ export function renderApp(
                       <span class="connector-chip-label">Weather</span>
                       <span class="connector-chip-val">${escapeHtml(weatherLabel)}</span>
                     </span>
-                    <span class="connector-status-chip xmemo" id="chip-status-xmemo" title="Memory: ${escapeHtml(xmemoLabel)}">
+                    ${isXmemoHidden() ? '' : `<span class="connector-status-chip xmemo" id="chip-status-xmemo" title="Memory: ${escapeHtml(xmemoLabel)}">
                       <span class="connector-chip-icon" aria-hidden="true">🧠</span>
                       <span class="connector-chip-label">XMemo</span>
                       <span class="connector-chip-val">${escapeHtml(xmemoLabel)}</span>
-                    </span>
+                    </span>`}
                     <span class="connector-status-chip notifications" id="chip-status-alerts" title="Alerts: ${escapeHtml(notifLabel)}">
                       <span class="connector-chip-icon" aria-hidden="true">🔔</span>
                       <span class="connector-chip-label">Alerts</span>

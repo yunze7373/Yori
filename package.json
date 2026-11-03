@@ -18,6 +18,7 @@
     "test:e2e": "playwright test",
     "verify:production": "node scripts/verify-production-build.ts",
     "demo:https": "node scripts/demo-https.mjs",
+    "demo:record": "npm run build && YORI_DEMO_HIDE_XMEMO=1 vite preview --port 4173 --strictPort",
     "verify:live:spark": "vite-node scripts/live-verify-spark.ts",
     "verify:live:xmemo": "vite-node scripts/live-verify-xmemo.ts"
   },

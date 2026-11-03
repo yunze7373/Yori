@@ -370,6 +370,8 @@ export function createWeatherProxyMiddleware(
           attribution: OPEN_METEO_ATTRIBUTION,
           // D2: exact outbound host for the consent copy.
           outboundHosts: [{ purpose: 'weather', host: 'api.open-meteo.com' }],
+          // DEMO-XMEMO-FREE: present only when the demo-recording switch is on.
+          ...(process.env['YORI_DEMO_HIDE_XMEMO'] === '1' ? { demo: { hideXmemo: true } } : {}),
         })
       );
       return;

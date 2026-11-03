@@ -91,5 +91,15 @@ export default defineConfig({
       reuseExistingServer: false,
       timeout: 120000,
     },
+    // DEMO-XMEMO-FREE: the demo-recording build (switch on), offline, never reused. Bound to
+    // 127.0.0.1 explicitly; DEV_DEVICE_TESTING lets its public status routes answer this test port.
+    {
+      env: { ...offlineProviderEnv, YORI_DEMO_HIDE_XMEMO: '1', DEV_DEVICE_TESTING: 'true' },
+      command:
+        'npx tsc --noEmit && VITE_MAP_TILES=off npx vite build --mode test --outDir dist-test-demo && npx vite preview --outDir dist-test-demo --host 127.0.0.1 --port 4286 --strictPort',
+      port: 4286,
+      reuseExistingServer: false,
+      timeout: 120000,
+    },
   ],
 });

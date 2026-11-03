@@ -6,6 +6,7 @@
  * Every connector row reflects truthful runtime state read live this session.
  */
 
+import { isXmemoHidden } from '../demo-flags.js';
 import { escapeHtml } from '../living-context/presentation.js';
 import type { ConnectorId, ConnectorStatus, GoogleCalendarConnectorInfo } from './types.js';
 
@@ -148,6 +149,7 @@ export function renderConnectorsView(
             </div>
           </li>
 
+${isXmemoHidden() ? '' : `
           <!-- 4. XMemo -->
           <li class="connector-card" id="connector-row-xmemo">
             <div class="connector-card-main">
@@ -180,6 +182,7 @@ export function renderConnectorsView(
               </div>
             </div>
           </li>
+          `}
 
           <!-- 5. Notifications -->
           <li class="connector-card" id="connector-row-notifications">

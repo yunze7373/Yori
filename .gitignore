@@ -60,6 +60,7 @@ node_modules/
 dist/
 dist-test/
 dist-test-google/
+dist-test-demo/
 build/
 out/
 .next/
