@@ -59,6 +59,10 @@ async function setup(page: Page, opts: { weather?: 'ok' | 'off' } = {}): Promise
   );
   await page.route(u => u.pathname === '/api/places', r => r.fulfill(json({ enabled: true, discovery: 'google', places: places(), attribution: 'Powered by Google' })));
   await page.route(u => u.pathname === '/api/model/command', r => r.fulfill(json({ result: null, usedFallback: true, fallbackReason: 'disabled', engineStatus: 'offline_deterministic' })));
+  // The disabled answers the isolated test server gives (own test ports are outside the API Host
+  // allowlist, so unmocked routes would be refused there).
+  await page.route(u => u.pathname === '/api/model/reason', r => r.fulfill(json({ usedFallback: true, fallbackReason: 'disabled', engineStatus: 'offline_deterministic' })));
+  await page.route(u => u.pathname === '/api/google/status', r => r.fulfill(json({ enabled: false, configured: false })));
   await page.route(u => u.pathname === '/api/model/candidates', r =>
     r.fulfill(json({
       result: { order: ['google-B', 'google-A', 'google-C'], reason: 'Mid Ramen is open now, rated 4.2 by 310 people and 125 m away.', citedFactKeys: [] },
@@ -274,6 +278,40 @@ test.describe('UI-QUIET-PRECISION: Home header band, Now card and Lunch', () => 
       const detailBg = await page.locator('#connector-row-location .connector-detail').evaluate(e => getComputedStyle(e).backgroundColor);
       expect(detailBg === 'rgba(0, 0, 0, 0)' || detailBg === 'transparent').toBe(true);
       await page.screenshot({ path: path.join(EVIDENCE_DIR, `connectors-${vp.name}.png`) });
+      await context.close();
+    });
+  }
+
+  for (const vp of VIEWPORTS) {
+    test(`zero console errors and no layout shift after load (CLS ~ 0) @${vp.name}`, async ({ browser }) => {
+      const { context, page } = await device(browser, vp);
+      const errors: string[] = [];
+      page.on('console', m => { if (m.type() === 'error') errors.push(m.text().slice(0, 160)); });
+      page.on('pageerror', e => errors.push(`pageerror: ${String(e).slice(0, 160)}`));
+      const failed: string[] = [];
+      page.on('response', r => { if (r.status() >= 400) failed.push(`${r.status()} ${new URL(r.url()).pathname}`); });
+      await setup(page);
+      await page.addInitScript(() => {
+        (window as any).__qpCls = 0;
+        new PerformanceObserver(list => {
+          for (const e of list.getEntries() as any[]) if (!e.hadRecentInput) (window as any).__qpCls += e.value;
+        }).observe({ type: 'layout-shift', buffered: true });
+      });
+      const cls: Record<string, number> = {};
+      for (const [name, open] of [
+        ['depart', openDemoDepart],
+        ['lunch', openLiveLunch],
+        ['connectors', async (p: Page) => { await p.goto('/?mode=live&tab=connectors'); await expect(p.locator('#connector-row-location')).toBeVisible(); }],
+      ] as const) {
+        await open(page);
+        await page.waitForTimeout(1200);
+        cls[name] = await page.evaluate(() => Math.round(((window as any).__qpCls ?? 0) * 1000) / 1000);
+      }
+      console.log('QP_CLS', vp.name, JSON.stringify(cls), 'FAILED', JSON.stringify([...new Set(failed)]));
+      for (const [name, v] of Object.entries(cls)) expect(v, `${name} CLS`).toBeLessThanOrEqual(0.02);
+      // The recorded routes answer every API call; the only allowed noise is the deliberately
+      // 404ed photo host (no real photo is fetched in tests).
+      expect(errors.filter(e => !/lh3\.googleusercontent|Failed to load resource: the server responded with a status of 404/.test(e))).toEqual([]);
       await context.close();
     });
   }

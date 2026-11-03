@@ -2198,7 +2198,7 @@ export class ModelDevProxy {
         this.logger(`[ModelProxy] Discarding candidates output (${out.reason}/${out.detail})`);
         return { ...fb(out.reason, ledger), latencyMs };
       }
-      usage('accepted');
+      usage('accepted', undefined, out.data.postCheck);
       return { result: out.data, usedFallback: false, engineStatus: 'meta_model_live', latencyMs, ledger };
     } catch {
       clearTimeout(timer);

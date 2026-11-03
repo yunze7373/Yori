@@ -57,6 +57,7 @@ consent prompts, toasts, and the designed loading / empty / offline / error stat
 - No visible `deterministic`, `…ms`, `fallback ·` or `(straight-line)` on the cards. The same
   facts are one tap away (Sources sheet engine status; the distance qualifier in the chip's
   text and title).
+- Zero console errors and CLS 0.000 after load on depart, lunch and Connectors at 390 and 1280.
 - Contrast ≥ 4.5:1 (computed) for the greeting line, the pill's source list, the hero title, the
   subject, the explanation, Accept and Not now.
 - Defect (b): no fix names the missing location; a fix from Connectors gets its weather request
@@ -82,6 +83,23 @@ consent prompts, toasts, and the designed loading / empty / offline / error stat
 7. The **other surfaces** (Why, Sources interior, Ask panel, decision log, detail, map panel,
    consent, toasts, states) are the next commits.
 
+## Test isolation (Reviewer 21:20 JST, incident at :4173)
+
+- **(a)** `playwright.config.ts` never reuses a running server on the test or shipping port
+  (`reuseExistingServer: false`, `--strictPort`).
+  - Negative proof: with a server already on the test port, the run aborts with
+    "http://localhost:4283 is already used".
+- **(b)** `production-gating` and `live-default-env` read their URLs from the config, which
+  publishes `YORI_TEST_BUILD_URL` / `YORI_SHIPPING_URL`; they fail if those are unset. No
+  hard-coded 4173/4174 is left in any spec.
+- **(c)** `tests/env/isolation-guard.spec.ts` fails when a target server reports a live provider
+  (weather, places or route `enabled:true`) or a live model (`diagnostics.status === 'enabled'`).
+  - Unit proof: `src/ui/isolation-guard.test.ts`.
+  - Live negative proof: a preview with live flags on 5173 was flagged on all four (weather,
+    places, route, model); the isolated preview returned `[]`.
+- The contaminated PNGs under `docs/evidence/{live-default,live-depart,live-lunch,live-reason,ui-polish}`
+  are restored. This slice re-captures only its own folder, from its own isolated test build.
+
 ## Defects fixed in this submission
 
 - **(a) Muse Spark call #38 billed, then discarded.** Its raw reply was never recorded.
@@ -90,8 +108,12 @@ consent prompts, toasts, and the designed loading / empty / offline / error stat
   - The post-check is strict on facts, tolerant of honest phrasing: rounded distances, km,
     walking minutes consistent with the distance, rounded counts or ratings, a name instead of
     an id, JSON inside prose, and a long reason cut at a sentence end.
-  - Proven on synthetic replies (`tests/proxy-boundary/candidate-postcheck-soft.test.ts`; 18 of
-    20 fail on the old code).
+  - **Fail soft for unverifiable numbers:** the clause carrying the number is dropped and the rest
+    re-checked ("Soba Ichi is open now, only 30 m away." shows "Soba Ichi is open now."). The
+    usage log records `outcome: accepted, rejectDetail: numeral_stripped`. Nothing honest left
+    means a rejection. Out-of-set ids stay strictly rejected.
+  - Proven on synthetic replies (`tests/proxy-boundary/candidate-postcheck-soft.test.ts`; the
+    honest-phrasing cases fail on the old code).
 - **(b) "Weather unavailable" with location shared.** A fix acquired outside the consent sheet
   never triggered a weather request.
   - Now any consented fix without a weather request gets one.

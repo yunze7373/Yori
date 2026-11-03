@@ -209,6 +209,9 @@ test.describe('S2-CONNECTORS: Settings > Connectors Screen', () => {
 
     // Desktop Viewport (1280x800)
     await page.setViewportSize({ width: 1280, height: 800 });
+    // The view re-renders once connector statuses load; read the box after it has settled.
+    await expect(page.locator('.connectors-container')).toBeVisible();
+    await expect.poll(async () => (await page.locator('.connectors-container').boundingBox())?.width ?? null).not.toBeNull();
     const containerBox = await page.locator('.connectors-container').boundingBox();
     expect(containerBox?.width).toBeLessThanOrEqual(720);
 

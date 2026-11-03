@@ -67,11 +67,36 @@ describe('defect (a): honest phrasing that the old post-check rejected now passe
   });
 });
 
+describe('defect (a): an unverifiable numeral fails soft (its clause is dropped, the rest re-checked)', () => {
+  it.each([
+    ['comma clause', 'Soba Ichi is open now, only 30 m away.', 'Soba Ichi is open now.'],
+    ['and-clause', 'Soba Ichi is open now and opens until 22:00 tonight.', 'Soba Ichi is open now.'],
+    ['second sentence', 'Soba Ichi is open now and close by. It is rated 4.9 by locals.', 'Soba Ichi is open now, close by.'],
+  ])('%s', (_name, reason, shown) => {
+    const out = ok(reason);
+    expect(out.valid, JSON.stringify(out)).toBe(true);
+    if (out.valid) {
+      expect(out.data.reason).toBe(shown);
+      expect(out.data.postCheck).toBe('numeral_stripped');
+      expect(out.data.reason).not.toMatch(/30|22|4\.9/);
+    }
+  });
+
+  it('nothing honest left -> rejected (never an empty or made-up reason)', () => {
+    expect(ok('Only 30 m away.')).toMatchObject({ valid: false, detail: 'unverified_number' });
+    expect(ok('Rated 4.9, 30 m away.')).toMatchObject({ valid: false, detail: 'unverified_number' });
+  });
+
+  it('an out-of-set id stays strictly rejected even when the reason is fine', () => {
+    expect(ok('Soba Ichi is open now.', ['google-Z'])).toMatchObject({ valid: false, reason: 'fact_check_failed', detail: 'unknown_id' });
+  });
+});
+
 describe('defect (a): invented facts still fail, with a content-free detail code', () => {
   it.each([
-    ['an invented distance', ok('Soba Ichi is only 30 m away.'), 'unverified_number'],
-    ['invented opening hours', ok('Soba Ichi is open until 22:00 tonight.'), 'unverified_number'],
-    ['an invented rating', ok('Soba Ichi is rated 4.9 by locals.'), 'unverified_number'],
+    ['an invented distance (one clause)', ok('Only 30 m away.'), 'unverified_number'],
+    ['invented opening hours (one clause)', ok('Open until 22:00 tonight.'), 'unverified_number'],
+    ['an invented rating (one clause)', ok('Rated 4.9 by locals.'), 'unverified_number'],
     ['an unknown place', ok('Sushi Zen is the best pick.', ['Sushi Zen']), 'unknown_id'],
     ['a URL', ok('See https://example.com for Soba Ichi.'), 'url_or_key'],
     ['a reason too long to cut', ok('x'.repeat(500)), 'reason_too_long'],
@@ -129,6 +154,15 @@ describe('defect (a): every billed answer leaves a content-free outcome line', (
     expect(r).toMatchObject({ engineStatus: 'meta_model_live', usedFallback: false });
     expect(r.result.reason).toBe('Soba Ichi is open now and about a 5-minute walk away.');
     expect(line).toMatchObject({ outcome: 'accepted', finishReason: 'stop' });
+  });
+
+  it('a soft-stripped answer is shown live and logged accepted with the content-free code', async () => {
+    reply(JSON.stringify({ order: ['google-A', 'google-B'], reason: 'Soba Ichi is open now, only 30 m away.', citedFactKeys: [] }));
+    const { r, line, raw } = await run();
+    expect(r).toMatchObject({ engineStatus: 'meta_model_live' });
+    expect(r.result.reason).toBe('Soba Ichi is open now.');
+    expect(line).toMatchObject({ outcome: 'accepted', rejectDetail: 'numeral_stripped', finishReason: 'stop' });
+    for (const leak of ['Soba', '30 m', 'google-A']) expect(raw, leak).not.toContain(leak);
   });
 
   it('a truncated or non-JSON reply is logged with its extraction outcome', async () => {

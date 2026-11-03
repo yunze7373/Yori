@@ -30,6 +30,17 @@ const googleMockEnv: Record<string, string> = {
   CALENDAR_ICS_URL: 'http://127.0.0.1:4291/feed.ics',
 };
 
+/**
+ * Isolation (A22CFB incident 2026-11-03): the suite never reuses a running server on the test or
+ * shipping ports (an owner preview there makes the run fail fast instead of being tested), every
+ * spec reads these URLs from here (published to workers via env), and
+ * tests/env/isolation-guard.spec.ts fails when a target server reports any live provider.
+ */
+const TEST_BUILD_URL = 'http://localhost:4173';
+const SHIPPING_PREVIEW_URL = 'http://localhost:4174';
+process.env['YORI_TEST_BUILD_URL'] = TEST_BUILD_URL;
+process.env['YORI_SHIPPING_URL'] = SHIPPING_PREVIEW_URL;
+
 export default defineConfig({
   testDir: './tests',
   testMatch: /.*\.spec\.ts/,
@@ -40,7 +51,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: TEST_BUILD_URL,
     trace: 'on-first-retry',
   },
   projects: [
@@ -63,16 +74,16 @@ export default defineConfig({
     {
       // D2: the keyless trio defaults ON in shipping; e2e pins it OFF so no test reaches a provider.
       env: { ...offlineProviderEnv },
-      command: 'npm run build:test && npm run preview:test -- --port 4173',
+      command: 'npm run build:test && npm run preview:test -- --port 4173 --strictPort',
       port: 4173,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 60000,
     },
     {
       env: { ...offlineProviderEnv },
-      command: 'npm run build && npm run preview -- --port 4174',
+      command: 'npm run build && npm run preview -- --port 4174 --strictPort',
       port: 4174,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 60000,
     },
     // D11: recorded Google mock (loopback only) and the ONE server that talks to it, on an

@@ -41,6 +41,8 @@ export interface CandidateReasoningOutput {
   readonly order: readonly string[];
   readonly reason: string;
   readonly citedFactKeys: readonly string[];
+  /** Set when the post-check dropped a clause with an unverifiable number (content-free code). */
+  readonly postCheck?: 'numeral_stripped';
 }
 
 export const CANDIDATE_REASON_MAX_CHARS = 180;
@@ -219,8 +221,21 @@ export function validateCandidateReasoningOutput(
   if (!reason) return reject('schema_invalid', 'reason_too_long');
   if (/https?:\/\/|www\.|key=|AIza/i.test(reason)) return reject('fact_check_failed', 'url_or_key');
   const nums = allowedNumbers(input);
-  for (const tok of reason.match(/\d[\d,]*(?:\.\d+)?/g) ?? []) {
-    if (!nums.has(tok) && !nums.has(tok.replace(/,/g, ''))) return reject('fact_check_failed', 'unverified_number');
+  const verified = (text: string) =>
+    (text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).every(tok => nums.has(tok) || nums.has(tok.replace(/,/g, '')));
+  let shownReason = reason;
+  let postCheck: CandidateReasoningOutput['postCheck'];
+  if (!verified(reason)) {
+    // Fail soft: drop only the clauses that carry an unverifiable number, keep the rest if it still
+    // says something (and re-check it); never rewrite the model's words.
+    const kept = reason
+      .split(/(?<=[.!?;])\s+|,\s+|\s+(?:and|but)\s+|\s+—\s+/)
+      .map(c => c.trim().replace(/[.!?;,]+$/, ''))
+      .filter(c => c.length > 0 && verified(c));
+    const rebuilt = kept.length > 0 ? `${kept.join(', ')}.` : '';
+    if (rebuilt.length < 12 || !verified(rebuilt)) return reject('fact_check_failed', 'unverified_number');
+    shownReason = rebuilt.charAt(0).toUpperCase() + rebuilt.slice(1);
+    postCheck = 'numeral_stripped';
   }
   const confirmedKeys = new Set(input.confirmedFacts.map(f => f.key));
   const cited = Array.isArray(r.citedFactKeys) ? r.citedFactKeys : [];
@@ -230,7 +245,7 @@ export function validateCandidateReasoningOutput(
     const nearest = [...input.candidates].sort((a, b) => a.distanceMeters - b.distanceMeters)[0]!;
     if (order[0] !== nearest.id) return reject('request_mismatch', 'closer_not_nearest');
   }
-  return { valid: true, data: { order, reason, citedFactKeys: cited as string[] } };
+  return { valid: true, data: { order, reason: shownReason, citedFactKeys: cited as string[], ...(postCheck ? { postCheck } : {}) } };
 }
 
 /** Labelled deterministic answer used when the model is off, exhausted, slow or rejected. */

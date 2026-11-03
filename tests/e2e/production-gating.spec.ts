@@ -1,7 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
+import { configuredUrl } from './helpers/isolation-guard.js';
 
-const SHIPPING_PREVIEW_URL = 'http://localhost:4174';
-const TEST_BUILD_URL = 'http://localhost:4173';
+const SHIPPING_PREVIEW_URL = configuredUrl('YORI_SHIPPING_URL');
+const TEST_BUILD_URL = configuredUrl('YORI_TEST_BUILD_URL');
 
 /**
  * D2 (DEMO_RESCUE): the shipping build defaults the keyless trio ON after the owner §9
