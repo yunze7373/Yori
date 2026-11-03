@@ -59,6 +59,17 @@ export class CalendarConnectorPort implements ConnectorPort {
 
       const res = await fetch('/api/calendar/status', { cache: 'no-store' });
       if (!res.ok) {
+        // D11: the server refuses the owner's calendar to a non-loopback client (LAN demo:https).
+        const err = (await res.json().catch(() => null)) as { code?: string } | null;
+        if (res.status === 403 && err?.code === 'non_loopback_client') {
+          return {
+            id: this.id,
+            state: 'unavailable',
+            detail: 'Calendar is shown on this Mac or through surface E (localhost) only',
+            source: '/api/calendar/status',
+            updatedAt,
+          };
+        }
         return {
           id: this.id,
           state: 'unavailable',

@@ -46,6 +46,9 @@ allow read-only calendar access. You return to Connectors showing **Connected ·
   location and status. Descriptions are not requested.
 - **Expiry:** if access expires or is revoked, Yori says so and falls back to your iCal feed. With no
   iCal feed, it shows no calendar. It never invents events.
+- **Never on the LAN:** the events (Google or iCal) are served only to this Mac's own browser or to
+  the phone through surface E (`http://localhost:4174`). Any other device on the network gets `403`
+  with no events, even when `npm run demo:https` is serving the app on the LAN.
 
 ## Caveats (stated in the plan)
 

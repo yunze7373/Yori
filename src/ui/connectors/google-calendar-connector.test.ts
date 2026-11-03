@@ -74,6 +74,13 @@ describe('D11 calendar port: Google sub-state', () => {
     expect(s.google).toMatchObject({ configured: false, disabledReason: 'no_client_id', state: 'disconnected' });
   });
 
+  it('non-loopback client (LAN demo:https) -> honest calendar state, no events claimed', async () => {
+    globalThis.fetch = vi.fn(async () => ({ ok: false, status: 403, json: async () => ({ code: 'non_loopback_client' }) })) as any;
+    const s = await new CalendarConnectorPort().status();
+    expect(s).toMatchObject({ state: 'unavailable', detail: 'Calendar is shown on this Mac or through surface E (localhost) only' });
+    expect(s.google).toBeUndefined();
+  });
+
   it('/api/google/status unreachable -> no Google sub-state at all (nothing invented)', async () => {
     globalThis.fetch = vi.fn(async (url: any) =>
       String(url) === '/api/google/status' ? { ok: false, json: async () => ({}) } : { ok: true, json: async () => ({ enabled: false, configured: false }) }

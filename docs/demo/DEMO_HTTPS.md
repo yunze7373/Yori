@@ -67,6 +67,13 @@ every session.
 
 ## A. Phone over trusted LAN HTTPS
 
+> **Private data stays off the LAN.** The model proxy (`/api/model`), Google sign-in
+> (`/api/google`) and your calendar (`/api/calendar`, both the Google and the iCal source) answer only
+> a loopback client on the Mac. A phone, or anyone else on the Wi-Fi, reaching the LAN address gets
+> `403`. The Connectors card then reads *Calendar is shown on this Mac or through surface E
+> (localhost) only*, and no events are sent. Use surface E (`localhost:4174` over `ssh -R`) when the
+> phone should show your calendar: it arrives as loopback.
+
 One-time setup on the Mac (Terminal, in the repo folder):
 
 ```bash

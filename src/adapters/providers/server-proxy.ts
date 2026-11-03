@@ -20,7 +20,7 @@ import {
   type DemoCityCoordinate,
 } from './weather-types.js';
 import { OpenMeteoWeatherAdapter } from './open-meteo-adapter.js';
-import { isAllowlistedLoopbackHost } from '../xmemo/loopback-allowlist.js';
+import { isAllowlistedLoopbackHost, isLoopbackPeer } from '../xmemo/loopback-allowlist.js';
 import {
   OSRM_ATTRIBUTION,
   type Coordinate,
@@ -1206,6 +1206,21 @@ export function createCalendarProxyMiddleware(
 
     if (!rawPathname.startsWith('/api/calendar')) {
       return next();
+    }
+
+    // D11 rework (Reviewer 85e66fd7): the owner's calendar (Google via the owner's token, or the
+    // private iCal feed) is served only to a loopback socket peer, for both sources and regardless
+    // of DEV_DEVICE_TESTING; the Host header is client-supplied and a missing peer fails closed.
+    // The phone reaches it through surface E (ssh -R to localhost:4174), which arrives as loopback.
+    if (!isLoopbackPeer(req.socket?.remoteAddress)) {
+      res.writeHead(403, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(
+        JSON.stringify({
+          error: 'Calendar is available on this Mac or through surface E (localhost) only',
+          code: 'non_loopback_client',
+        })
+      );
+      return;
     }
 
     // --- TEST SEAM INJECTION (provokes denied / stale / timeout / error) ---

@@ -6,7 +6,8 @@
  *   with TTL, 0600 token file, in-proxy refresh, expiry -> 'expired', disconnect revokes + deletes.
  * - Routes: loopback peer + Host allowlist + Origin guards; bad/replayed state -> 400 with no
  *   exchange; LAN peer / non-allowlisted Host -> 403; missing client id -> disabled, honest label.
- * - /api/calendar: unconfigured is byte-identical to the iCal-only build; connected -> Google events
+ * - /api/calendar: loopback socket peer only for both sources (LAN peer -> 403, no fetch, no token);
+ *   unconfigured is byte-identical to the iCal-only build; connected -> Google events
  *   with provenance google_calendar and parity with the iCal mapping; 401 -> one refresh -> expired
  *   -> iCal fallback, else no calendar.
  */
@@ -383,6 +384,64 @@ describe('D11 /api/calendar source selection', () => {
     const none = createCalendarProxyMiddleware({ enabled: false, configured: false, icsUrl: null } as any, icsAdapter(), { core, fetchFn: g.fetchFn });
     expect(JSON.parse((await call(none, '/api/calendar')).body)).toMatchObject({ enabled: false, configured: false, events: [], google: { calendar: 'expired' } });
     expect(JSON.parse((await call(none, '/api/calendar/status')).body)).toMatchObject({ enabled: false, configured: false, google: { calendar: 'expired' } });
+  });
+
+  it('SECURITY: a LAN peer gets 403 on every /api/calendar route (Google connected, DEV_DEVICE_TESTING=true): no events, no token use, no upstream fetch', async () => {
+    const g = recordedGoogle();
+    const core = new GoogleOAuthCore(resolveGoogleOAuthConfig(env()), g.fetchFn, () => T0);
+    await connect(core);
+    const before = g.calls.length;
+    const icsFetch = vi.fn(async () => ({ ok: true, status: 200, statusText: 'OK', text: async () => ICS_TEXT }));
+    const ics = new IcsCalendarAdapter({ defaultTimezone: 'Asia/Tokyo', fetchFn: icsFetch as any });
+    const getToken = vi.spyOn(core, 'getAccessToken');
+    process.env['DEV_DEVICE_TESTING'] = 'true';
+    try {
+      const mw = createCalendarProxyMiddleware(icsConfig as any, ics, { core, fetchFn: g.fetchFn });
+      for (const url of ['/api/calendar', '/api/calendar/events', '/api/calendar/status']) {
+        for (const probe of [
+          { peer: '192.168.31.45', host: 'localhost:4174' },
+          { peer: '192.168.31.45', host: '192.168.31.45:4443' },
+          { peer: '::ffff:192.168.31.45', host: 'localhost:4173' },
+          { peer: null, host: 'localhost:4173' },
+        ]) {
+          const r = reqRes(url, probe);
+          await mw(r.req, r.res, r.next);
+          expect(r.out.status, `${url} ${JSON.stringify(probe)}`).toBe(403);
+          expect(JSON.parse(r.out.body)).toEqual({ error: 'Calendar is available on this Mac or through surface E (localhost) only', code: 'non_loopback_client' });
+          expect(r.out.body).not.toMatch(/Piano|Music Ave|google_calendar|events/);
+        }
+      }
+      expect(g.calls.length).toBe(before);
+      expect(getToken).not.toHaveBeenCalled();
+      expect(icsFetch).not.toHaveBeenCalled();
+      // Loopback (this Mac, or the phone via surface E ssh -R to localhost:4174) is served.
+      const ok = reqRes('/api/calendar', { peer: '127.0.0.1', host: 'localhost:4174' });
+      await mw(ok.req, ok.res, ok.next);
+      expect(ok.out.status).toBe(200);
+      expect(JSON.parse(ok.out.body)).toMatchObject({ provider: 'google_calendar' });
+      expect(JSON.parse(ok.out.body).events).toHaveLength(3);
+    } finally {
+      delete process.env['DEV_DEVICE_TESTING'];
+    }
+  });
+
+  it('SECURITY: the iCal-only source is guarded the same way (no Google client)', async () => {
+    const icsFetch = vi.fn(async () => ({ ok: true, status: 200, statusText: 'OK', text: async () => ICS_TEXT }));
+    const off = new GoogleOAuthCore(resolveGoogleOAuthConfig({}), recordedGoogle().fetchFn);
+    process.env['DEV_DEVICE_TESTING'] = 'true';
+    try {
+      const mw = createCalendarProxyMiddleware(icsConfig as any, new IcsCalendarAdapter({ defaultTimezone: 'Asia/Tokyo', fetchFn: icsFetch as any }), { core: off });
+      const lan = reqRes('/api/calendar', { peer: '192.168.31.45', host: 'localhost:4174' });
+      await mw(lan.req, lan.res, lan.next);
+      expect(lan.out.status).toBe(403);
+      expect(icsFetch).not.toHaveBeenCalled();
+      const ok = reqRes('/api/calendar', { peer: '::1', host: 'localhost:4174' });
+      await mw(ok.req, ok.res, ok.next);
+      expect(ok.out.status).toBe(200);
+      expect(JSON.parse(ok.out.body).events).toHaveLength(3);
+    } finally {
+      delete process.env['DEV_DEVICE_TESTING'];
+    }
   });
 
   it('owner switch CALENDAR_LIVE_ENABLED=false keeps Google unused even when connected', async () => {

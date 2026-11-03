@@ -43,6 +43,7 @@ function createMockReqRes(url: string, headers: Record<string, string> = { host:
     url,
     method: 'GET',
     headers,
+    socket: { remoteAddress: '127.0.0.1' },
   };
 
   const response: MockResponse = {

@@ -2715,9 +2715,11 @@ export function renderApp(
   void checkRouteStatus();
   void checkPlacesStatus();
   void checkCalendarStatus();
-  // D11: render once the real statuses arrive; a direct /?tab=connectors load (the Google consent
-  // return lands there) otherwise kept showing the placeholder statuses.
-  void refreshConnectorStatuses().then(() => update());
+  // D11: on a direct /?tab=connectors load (the Google consent return lands there), render once the
+  // real statuses arrive. Only that view needs it; elsewhere a late re-render would only churn the DOM.
+  void refreshConnectorStatuses().then(() => {
+    if (activeDetail?.type === 'connectors') update();
+  });
 
   let liveRefreshInFlight = false;
 
