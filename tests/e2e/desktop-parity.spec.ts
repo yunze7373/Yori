@@ -64,38 +64,20 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
     await page.goto('/?ui=v2&dev=1');
     await page.waitForSelector('.app-layout[data-ui-version="v2"]');
 
-    // 1. Greeting Row visible
-    const greetingRow = page.locator('.desktop-greeting-row');
+    // 1. Editorial header visible (UI-QUIET-PRECISION replaced the greeting row + chip strip).
+    const greetingRow = page.locator('.qp-header');
     await expect(greetingRow).toBeVisible();
 
     // 2. Greeting Title and Subtitle
     await expect(page.locator('#desktop-greeting-title')).toHaveText(/Good (morning|afternoon|evening)\.?/);
     await expect(page.locator('.desktop-greeting-sub')).toContainText("I've already looked ahead for you.");
 
-    // 3. Status strip with 5 chips
-    const strip = page.locator('#desktop-connector-strip');
-    await expect(strip).toBeVisible();
-
-    const locationChip = page.locator('#chip-status-location');
-    await expect(locationChip).toBeVisible();
-    await expect(locationChip).toContainText('Location');
-
-    const calendarChip = page.locator('#chip-status-calendar');
-    await expect(calendarChip).toBeVisible();
-    await expect(calendarChip).toContainText('Calendar');
-    await expect(calendarChip).toContainText('N/A'); // Truthful: no calendar provider configured
-
-    const weatherChip = page.locator('#chip-status-weather');
-    await expect(weatherChip).toBeVisible();
-    await expect(weatherChip).toContainText('Weather');
-
-    const xmemoChip = page.locator('#chip-status-xmemo');
-    await expect(xmemoChip).toBeVisible();
-    await expect(xmemoChip).toContainText('XMemo');
-
-    const alertsChip = page.locator('#chip-status-alerts');
-    await expect(alertsChip).toBeVisible();
-    await expect(alertsChip).toContainText('Alerts');
+    // 3. UI-QUIET-PRECISION (owner 17:08 JST): no connector chip strip on Home. One ambient line
+    //    carries time, weather and place; connector states live in Settings > Connectors.
+    await expect(page.locator('#desktop-connector-strip')).toHaveCount(0);
+    await expect(page.locator('.connector-status-chip')).toHaveCount(0);
+    await expect(page.locator('#living-header-ambient')).toBeVisible();
+    await expect(page.locator('#living-header-ambient .qp-ambient-seg')).toHaveCount(3);
 
     // 4. Header controls: Pill status, dev demo controls, header avatar
     await expect(page.locator('#pill-context-status')).toBeVisible();
@@ -120,7 +102,7 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
     // Top Badge
     const thoughtBadge = heroCard.locator('.hero-thought-badge');
     await expect(thoughtBadge).toBeVisible();
-    await expect(thoughtBadge).toContainText('THOUGHT AHEAD FOR YOU');
+    await expect(thoughtBadge).toContainText('Thought ahead for you'); // UI-QUIET-PRECISION: sentence case
 
     // Headline
     const headline = heroCard.locator('#now-title');
@@ -285,7 +267,8 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
       // Check heading, subtitle, and connector strip vertical bounding boxes
       const headingBox = await page.locator('#desktop-greeting-title').boundingBox();
       const subBox = await page.locator('.desktop-greeting-sub').boundingBox();
-      const stripBox = await page.locator('#desktop-connector-strip').boundingBox();
+      // UI-QUIET-PRECISION: the ambient line replaced the connector strip under the greeting.
+      const stripBox = await page.locator('#living-header-ambient').boundingBox();
 
       expect(headingBox).not.toBeNull();
       expect(subBox).not.toBeNull();

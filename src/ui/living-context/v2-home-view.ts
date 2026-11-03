@@ -687,6 +687,35 @@ function renderGoogleCredits(c: NonNullable<HomeCompositionVM['candidateCards']>
   }</div>`;
 }
 
+/** UI-QUIET-PRECISION (owner reference 04): category eyebrow icons, one stroke family. */
+const EYEBROW_ICON_ATTRS = 'width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"';
+const EYEBROW_ICONS = {
+  travel: `<svg ${EYEBROW_ICON_ATTRS}><path d="M5 16.5V12l1.8-4.6A2 2 0 0 1 8.7 6h6.6a2 2 0 0 1 1.9 1.4L19 12v4.5"/><path d="M4 12.5h16v4H4z"/><circle cx="7.5" cy="18" r="1.4"/><circle cx="16.5" cy="18" r="1.4"/></svg>`,
+  lunch: `<svg ${EYEBROW_ICON_ATTRS}><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10"/><path d="M17 21V3c-1.9 1-3 3.2-3 6.5V13h3"/></svg>`,
+  fuel: `<svg ${EYEBROW_ICON_ATTRS}><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M4 21h12M8 8h4"/><path d="M15 10h2a2 2 0 0 1 2 2v4.5a1.5 1.5 0 0 0 3 0V8l-3-3"/></svg>`,
+};
+
+/** A soft rain glyph for the hero card when rain drives the plan (reference 04). */
+const RAIN_GLYPH = `<svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><path d="M14 30h20a8 8 0 0 0 1.2-15.9A12 12 0 0 0 12.4 17 8.4 8.4 0 0 0 14 30z" fill="#DCE8F6" stroke="#9DB8D9" stroke-width="1.6"/><path d="M17 35l-2 4M24 35l-2 4M31 35l-2 4" stroke="#7FA3CF" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+
+/**
+ * UI-QUIET-PRECISION: '125 m (straight-line)' shows as '125 m' on the card; the qualifier stays in
+ * the text (screen readers, tooltip, Why/details) and is only visually quiet.
+ */
+function renderDistanceText(text: string): string {
+  const m = /^(.*?)( \(straight-line\))$/.exec(text);
+  return m ? `${escapeHtml(m[1]!)}<span class="qp-dist-qualifier">${escapeHtml(m[2]!)}</span>` : escapeHtml(text);
+}
+
+/** UI-QUIET-PRECISION: a shelf photo keeps its author credit (Google photo policy), small. */
+function renderPhotoCredit(c: NonNullable<HomeCompositionVM['candidateCards']>[number]): string {
+  if (c.provenance !== 'google' || !c.placePhoto?.uri) return '';
+  const authors = c.placePhoto.authorAttributions
+    .map(a => (a.uri ? `<a href="${escapeHtml(a.uri)}" target="_blank" rel="noopener noreferrer">${escapeHtml(a.displayName)}</a>` : escapeHtml(a.displayName)))
+    .join(', ');
+  return authors ? `<div class="qp-photo-credit">Photo: ${authors}</div>` : '';
+}
+
 /**
  * D3: the ONE provenance chip a card carries (floor item b). Text says where the card's content
  * comes from: live sensing, the user's own confirmation, or (dev-only Demo) a simulation.
@@ -851,10 +880,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               <!-- Hero Thought Badge & Relative Time -->
               <div class="hero-thought-header">
                 <span class="hero-thought-badge">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right: 4px;">
-                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-                  </svg>
-                  <span>THOUGHT AHEAD FOR YOU</span>
+                  ${EYEBROW_ICONS.travel}
+                  <span class="qp-eyebrow-label" aria-hidden="true">Travel</span>
+                  <span class="qp-visually-hidden">Thought ahead for you</span>
                 </span>
                 <div class="hero-header-meta">
                   <span class="now-relative-time">${escapeHtml(vm.countdownStr || '')}</span>
@@ -900,6 +928,12 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   : ''
               }
 
+              ${
+                vm.leaveTimeStr
+                  ? `<p class="qp-hero-title" data-slot="chrome" data-slot-reason="Hero leave-by title"><span data-slot="chrome" data-slot-reason="Leave-by prefix">Leave by </span><span class="qp-hero-title-time" ${vm.fieldSourceRefs?.leaveTime ? `data-source-ref="${escapeHtml(vm.fieldSourceRefs.leaveTime.recordId)}.${escapeHtml(vm.fieldSourceRefs.leaveTime.field)}" data-slot="domain"` : 'data-slot="chrome" data-slot-reason="Leave-by time"'}>${escapeHtml(vm.leaveTimeStr)}</span></p>`
+                  : ''
+              }
+              ${vm.isRain ? `<span class="qp-hero-glyph" aria-hidden="true">${RAIN_GLYPH}</span>` : ''}
               ${
                 vm.fieldSourceRefs?.subjectTitle && vm.fieldSourceRefs?.apptTime && vm.apptTimeStr
                   ? `
@@ -980,7 +1014,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                 if (!topC) return '';
                 const moreCount = vm.candidateCards.length - 1;
                 return `
-          <div class="v2-candidate-list" aria-label="${escapeHtml(
+          <div class="v2-candidate-list" tabindex="0" role="region" aria-label="${escapeHtml(
             vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel')
               ? 'Fuel Recommendations'
               : 'Lunch Recommendations'
@@ -1005,7 +1039,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   <h3 class="v2-candidate-name" data-source-ref="${topC.fieldSourceRefs?.name ? `${escapeHtml(topC.fieldSourceRefs.name.recordId)}.${escapeHtml(topC.fieldSourceRefs.name.field)}` : `${escapeHtml(topC.id)}.name`}" data-slot="domain">${escapeHtml(topC.name)}</h3>
                   <div class="v2-candidate-tags">
                     <span class="v2-cuisine-chip" ${topC.fieldSourceRefs?.cuisine ? `data-source-ref="${escapeHtml(topC.fieldSourceRefs.cuisine.recordId)}.${escapeHtml(topC.fieldSourceRefs.cuisine.field)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Candidate category label"`}>${escapeHtml(topC.cuisine)}</span>
-                    <span class="v2-distance-chip" data-source-ref="${topC.fieldSourceRefs?.distanceText ? `${escapeHtml(topC.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(topC.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(topC.id)}.distanceText`}" data-slot="domain">${escapeHtml(topC.distanceText)}</span>
+                    <span class="v2-distance-chip" data-source-ref="${topC.fieldSourceRefs?.distanceText ? `${escapeHtml(topC.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(topC.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(topC.id)}.distanceText`}" data-slot="domain" title="${escapeHtml(topC.distanceText)}">${renderDistanceText(topC.distanceText)}</span>
                     ${vm.isLive ? (topC.openingStatus === 'open' || topC.openNow === true ? `<span class="v2-open-chip">Open now</span>` : topC.openingStatus === 'closed' ? `<span class="v2-open-chip closed">Closed</span>` : `<span class="v2-open-chip unknown">Hours unknown</span>`) : ''}
                     ${vm.isLive ? renderGoogleFacts(topC) : ''}
                     ${topC.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
@@ -1041,15 +1075,15 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                       data-slot="chrome"
                       data-slot-reason="View details button"
                       aria-label="View details for ${escapeHtml(topC.name)}"
-                    >Details → · +${moreCount} more options</button>
+                    >Details →<span class="qp-more-count"> · +${moreCount} more options</span></button>
                   </div>
                   ${vm.isLive ? renderGoogleCredits(topC) : ''}
                 </div>
               </div>
             </div>
 
-            <!-- Hidden Shelf for Candidate Grounding and DOM Accessibility -->
-            <div class="v2-candidates-shelf" style="display: none;" aria-hidden="true">
+            <!-- UI-QUIET-PRECISION: the other candidates are visible compact photo cards in the same row. -->
+            <div class="v2-candidates-shelf qp-photo-shelf">
               ${vm.candidateCards
                 .slice(1)
                 .map(
@@ -1061,8 +1095,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                   data-provenance="${vm.isLive ? 'live' : 'fixture'}"
                   ${vm.isLive ? `data-source="${c.provenance === 'google' ? 'google' : 'overpass'}"` : ''}
                 >
-                  <div class="v2-candidate-art" role="img" aria-label="${escapeHtml(c.photo.altText)}">
-                    ${c.photo.svgMarkup}
+                  ${renderCandidateThumb(c, 'qp-shelf-photo') || `<div class="v2-candidate-art qp-shelf-photo" role="img" aria-label="${escapeHtml(c.photo.altText)}">
+                    ${c.photo.svgMarkup}`}
                     ${
                       vm.isLive
                         ? ''
@@ -1073,8 +1107,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     <h3 class="v2-candidate-name" data-source-ref="${c.fieldSourceRefs?.name ? `${escapeHtml(c.fieldSourceRefs.name.recordId)}.${escapeHtml(c.fieldSourceRefs.name.field)}` : `${escapeHtml(c.id)}.name`}" data-slot="domain">${escapeHtml(c.name)}</h3>
                     <div class="v2-candidate-tags">
                       <span class="v2-cuisine-chip" ${c.fieldSourceRefs?.cuisine ? `data-source-ref="${escapeHtml(c.fieldSourceRefs.cuisine.recordId)}.${escapeHtml(c.fieldSourceRefs.cuisine.field)}" data-slot="domain"` : `data-slot="chrome" data-slot-reason="Candidate category label"`}>${escapeHtml(c.cuisine)}</span>
-                      <span class="v2-distance-chip" data-source-ref="${c.fieldSourceRefs?.distanceText ? `${escapeHtml(c.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(c.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(c.id)}.distanceText`}" data-slot="domain">${escapeHtml(c.distanceText)}</span>
+                      <span class="v2-distance-chip" data-source-ref="${c.fieldSourceRefs?.distanceText ? `${escapeHtml(c.fieldSourceRefs.distanceText.recordId)}.${escapeHtml(c.fieldSourceRefs.distanceText.field)}` : `${escapeHtml(c.id)}.distanceText`}" data-slot="domain" title="${escapeHtml(c.distanceText)}">${renderDistanceText(c.distanceText)}</span>
                       ${vm.isLive ? (c.openingStatus === 'open' || c.openNow === true ? `<span class="v2-open-chip">Open now</span>` : c.openingStatus === 'closed' ? `<span class="v2-open-chip closed">Closed</span>` : `<span class="v2-open-chip unknown">Hours unknown</span>`) : ''}
+                      ${vm.isLive ? renderGoogleFacts(c) : ''}
                       ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
                       ${c.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Dietary filter tag">Vegetarian</span>` : ''}
                     </div>
@@ -1083,6 +1118,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                         ? `data-source-ref="${escapeHtml(c.fieldSourceRefs.basis.recordId)}.${escapeHtml(c.fieldSourceRefs.basis.field)}" data-slot="domain"`
                         : `data-slot="chrome" data-slot-reason="Recommendation ranking basis label"`
                     }>${escapeHtml(c.basis)}</div>
+                    ${vm.isLive ? renderPhotoCredit(c) : ''}
                   </div>
                 </div>
               `
@@ -1104,10 +1140,9 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           <!-- Hero Thought Badge & Relative Time -->
           <div class="hero-thought-header">
             <span class="hero-thought-badge">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style="margin-right: 4px;">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-              </svg>
-              <span>THOUGHT AHEAD FOR YOU</span>
+              ${vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? EYEBROW_ICONS.fuel : EYEBROW_ICONS.lunch}
+              <span class="qp-eyebrow-label" aria-hidden="true">${vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'Fuel' : 'Lunch'}</span>
+              <span class="qp-visually-hidden">Thought ahead for you</span>
             </span>
             <div class="hero-header-meta">
               <span class="now-relative-time">${vm.title === 'Low Fuel Warning' || vm.planId?.includes('fuel') ? 'nearby' : (vm.isLive ? 'nearby' : 'nearby · 12:15 PM')}</span>

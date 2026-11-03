@@ -478,7 +478,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     // Mobile copy "Ask Yori..." is visible, desktop copy is hidden, scrollWidth <= clientWidth (no truncation)
     await expect(page.locator('#ask-bar .v2-ask-mobile')).toBeVisible();
     await expect(page.locator('#ask-bar .v2-ask-desktop')).toBeHidden();
-    expect(await page.locator('#ask-bar .v2-ask-mobile').innerText()).toBe('Ask Yori...');
+    expect(await page.locator('#ask-bar .v2-ask-mobile').innerText()).toBe('Ask Yori anything…'); // UI-QUIET-PRECISION copy (reference 04)
     const askBarNoTruncation = await askBarText.evaluate(el => el.scrollWidth <= el.clientWidth);
     expect(askBarNoTruncation, 'Ask bar text should fit without ellipsis truncation').toBe(true);
 
@@ -518,7 +518,7 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     await page.waitForTimeout(200);
     await expect(page.locator('#ask-bar .v2-ask-desktop')).toBeVisible();
     await expect(page.locator('#ask-bar .v2-ask-mobile')).toBeHidden();
-    expect(await page.locator('#ask-bar .v2-ask-desktop').innerText()).toBe('Ask Yori about your day...');
+    expect(await page.locator('#ask-bar .v2-ask-desktop').innerText()).toBe('Ask Yori anything…'); // UI-QUIET-PRECISION copy (reference 04)
 
     await expect(page.locator('.map-header .v2-heading-desktop').first()).toBeVisible();
     await expect(page.locator('.map-header .v2-heading-mobile').first()).toBeHidden();

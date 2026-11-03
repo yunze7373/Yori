@@ -8,7 +8,8 @@
  *    - D4: a Live lunch plan set is reasoned by /api/model/candidates (recorded here); the
  *      plan-reasoning call /api/model/reason is never sent for it.
  *    - Model reasoning elevates preferred candidate and supplies validated rationale.
- *    - UI displays honest engine status (#model-status-pill) in the ambient line: 'Meta model · live' vs labelled fallback.
+ *    - UI displays honest engine status (#model-status-pill) in the Sources sheet, one tap from Home
+ *      (UI-QUIET-PRECISION moved it out of the header band): 'Meta model · live' vs labelled fallback.
  *    - Full-page Conversation Shell displays #engine-status-chip and #conversation-model-status-pill.
  *    - Redacted Decision Log captures templateId, input ids, reasonCodes, latencyMs, and engineStatus.
  * 2. Dual Gate B (1280x800 desktop):
@@ -24,6 +25,14 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import path from 'path';
+
+/** UI-QUIET-PRECISION: the engine status lives in the Sources sheet, one tap from Home. */
+async function openEngineStatus(page: Page) {
+  await page.locator('#pill-context-status').click();
+  const pill = page.locator('#model-status-pill');
+  await expect(pill).toBeVisible();
+  return pill;
+}
 import fs from 'fs';
 
 const EVIDENCE_DIR = path.resolve('docs/evidence/live-reason');
@@ -308,15 +317,16 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
       await reqLocBtn.click();
     }
 
-    // 2. Verify Home UI surfaces honest engine status pill
-    const modelStatusPill = page.locator('#model-status-pill');
-    await expect(modelStatusPill).toBeVisible();
+    // 2. Honest engine status (UI-QUIET-PRECISION: in the Sources sheet, one tap from Home)
     // D4: the candidate reasoner answered this Live lunch set; no plan-reasoning call was sent.
     await expect.poll(() => modelCalls.candidates).toBeGreaterThanOrEqual(1);
     expect(modelCalls.reason).toBe(0);
+    const modelStatusPill = await openEngineStatus(page);
     await expect(modelStatusPill).toHaveAttribute('data-engine-status', 'meta_model_live');
     await expect(modelStatusPill).toHaveAttribute('data-provenance', 'live');
     await expect(modelStatusPill).toContainText('Meta model · live');
+    await page.keyboard.press('Escape');
+    await expect(modelStatusPill).toHaveCount(0);
 
     // Verify #living-header-line height <= 2 lines (strictly 1 line <= 28px) at 390
     const headerLine = page.locator('#living-header-line');
@@ -429,13 +439,14 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
       await reqLocBtn.click();
     }
 
-    // Verify desktop header ambient line displays model status pill
-    const modelStatusPill = page.locator('#model-status-pill');
-    await expect(modelStatusPill).toBeVisible();
+    // Honest engine status (UI-QUIET-PRECISION: in the Sources sheet, one tap from Home)
     // D4: the candidate reasoner answered this Live lunch set; no plan-reasoning call was sent.
     await expect.poll(() => modelCalls.candidates).toBeGreaterThanOrEqual(1);
     expect(modelCalls.reason).toBe(0);
+    const modelStatusPill = await openEngineStatus(page);
     await expect(modelStatusPill).toContainText('Meta model · live');
+    await page.keyboard.press('Escape');
+    await expect(modelStatusPill).toHaveCount(0);
 
     // Capture desktop home screenshot
     await page.screenshot({
@@ -521,9 +532,8 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
       await page.waitForTimeout(300);
     }
 
-    // Verify UI displays labelled fallback
-    const modelStatusPill = page.locator('#model-status-pill');
-    await expect(modelStatusPill).toBeVisible();
+    // Verify UI displays labelled fallback (UI-QUIET-PRECISION: in the Sources sheet)
+    const modelStatusPill = await openEngineStatus(page);
     await expect(modelStatusPill).toHaveAttribute('data-engine-status', 'offline_deterministic');
     await expect(modelStatusPill).toContainText('Offline fallback · deterministic');
 
@@ -550,11 +560,10 @@ test.describe('S5-LIVE-REASON: Model Interpreter Live Path & Honest Engine Statu
       await reqLocBtn.click();
     }
 
-    const modelStatusPill = page.locator('#model-status-pill');
-    await expect(modelStatusPill).toBeVisible();
     // D4: the candidate reasoner answered this Live lunch set; no plan-reasoning call was sent.
     await expect.poll(() => modelCalls.candidates).toBeGreaterThanOrEqual(1);
     expect(modelCalls.reason).toBe(0);
+    const modelStatusPill = await openEngineStatus(page);
     await expect(modelStatusPill).toHaveAttribute('data-engine-status', 'meta_model_live');
     await expect(modelStatusPill).toHaveAttribute('data-provenance', 'live');
     await expect(modelStatusPill).toContainText('Meta model · live');

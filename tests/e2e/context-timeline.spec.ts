@@ -165,7 +165,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     // S1 Hero shows candidate lunch cards based on taste memory
     const candidatesHero = page.locator('.now-card.v2-candidates-hero');
     await expect(candidatesHero).toBeVisible();
-    await expect(candidatesHero.locator('.hero-thought-badge')).toContainText('THOUGHT AHEAD FOR YOU');
+    await expect(candidatesHero.locator('.hero-thought-badge')).toContainText('Thought ahead for you'); // UI-QUIET-PRECISION: sentence case
     // Candidate cards rendered with taste citation
     const candidateCards = page.locator('.v2-candidate-card');
     expect(await candidateCards.count()).toBeGreaterThanOrEqual(2);
@@ -281,9 +281,9 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
       // Right panel must NOT show quiet state during S3 re-plan
       await expect(rightPanel).not.toContainText('Selected quiet state');
       await expect(rightPanel).not.toContainText('Schedule is clear');
-      // Connector strip weather chip matches rain
-      const weatherChip = page.locator('#chip-status-weather');
-      await expect(weatherChip).toContainText('Rain forecast');
+      // UI-QUIET-PRECISION: the connector strip left Home; the rain shows in the ambient line.
+      await expect(page.locator('#desktop-connector-strip')).toHaveCount(0);
+      await expect(page.locator('#living-header-line')).toContainText('Rain');
     }
 
     const video = page.video();

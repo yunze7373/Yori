@@ -98,7 +98,7 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     // Ask bar is rendered docked at the bottom of the home screen
     const askBar = page.locator('#ask-bar');
     await expect(askBar).toBeVisible();
-    await expect(askBar).toContainText('Ask Yori about your day...');
+    await expect(askBar).toContainText('Ask Yori anything…'); // UI-QUIET-PRECISION copy (reference 04)
 
     // Assert ask bar is strictly within viewport on initial load (at 390x844 and 1280x800)
     const viewport = page.viewportSize()!;

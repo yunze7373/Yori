@@ -448,8 +448,10 @@ export function createWeatherProxyMiddleware(
                 },
           })
         );
-      } catch {
-        // Fixed message only: provider errors can embed the request URL (and so the fix).
+      } catch (err) {
+        // Fixed message only: provider errors can embed the request URL (and so the fix). The log
+        // line carries the error class only (UI-QUIET-PRECISION (b)), never the URL or coordinates.
+        console.warn(`[weather] /api/weather/current failed: ${(err as { name?: string })?.name ?? 'error'}${deviceFix ? ' (device fix)' : ' (demo city)'}`);
         res.writeHead(500, {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-store',

@@ -56,8 +56,8 @@ export const STRINGS = Object.freeze({
     comingSoonBadge: 'Coming soon',
   }),
   conversation: Object.freeze({
-    askBarPlaceholder: 'Ask Yori about your day...',
-    askBarPlaceholderMobile: 'Ask Yori...',
+    askBarPlaceholder: 'Ask Yori anything…',
+    askBarPlaceholderMobile: 'Ask Yori anything…',
     askBarAriaLabel: 'Open Ask Yori conversation',
     title: 'Ask Yori',
     closeAriaLabel: 'Close conversation',

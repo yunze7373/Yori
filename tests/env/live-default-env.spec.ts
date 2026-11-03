@@ -368,7 +368,8 @@ test.describe('S2-LIVE-DEFAULT: Production Live Default and Dev Mode Gating', ()
     await page.goto(SHIPPING_PREVIEW_URL);
     await page.waitForSelector('.app-layout[data-context-mode="live"]');
     await expect(page.locator('#btn-request-location')).toBeVisible();
-    await expect(page.locator('#living-header-line')).toContainText('Weather unavailable');
+    // UI-QUIET-PRECISION defect (b): after Deny there is no fix, so the header names it.
+    await expect(page.locator('#living-header-line')).toContainText('Weather needs location');
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await page.waitForTimeout(500);
     expect(dataRequests, 'no provider data request before location consent').toEqual([]);

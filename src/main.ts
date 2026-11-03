@@ -4,6 +4,7 @@
  */
 
 import './ui/living-context/styles.css';
+import './ui/living-context/quiet-precision.css';
 import { renderApp } from './ui/living-context/app.js';
 
 const appEl = document.getElementById('app');

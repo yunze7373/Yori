@@ -190,7 +190,8 @@ test.describe('D1-LOCATION-WEATHER: weather follows the consented device fix', (
       await page.waitForTimeout(500);
       expect(traffic.currentUrls).toEqual([]);
       await expect(page.locator('#live-weather-now, #signal-tile-weather-provenance')).toHaveCount(0);
-      await expect(page.locator('#living-header-line')).toContainText('Weather unavailable');
+      // UI-QUIET-PRECISION defect (b): no fix -> the header names the missing location.
+      await expect(page.locator('#living-header-line')).toContainText('Weather needs location');
       const tile = page.locator('#signal-tile-weather .signal-value');
       if ((await tile.count()) > 0) {
         await expect(tile).not.toContainText('°C');

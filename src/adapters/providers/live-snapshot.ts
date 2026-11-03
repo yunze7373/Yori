@@ -220,14 +220,19 @@ export function formatLiveTime(isoString: string | undefined, timeZone?: string)
 export function deriveLiveLivingHeaderFromSnapshot(
   snapshot: ContextSnapshot,
   timeZone?: string,
-  options?: { weatherDisabled?: boolean }
+  options?: { weatherDisabled?: boolean; weatherNeedsLocation?: boolean }
 ): DerivedLivingHeader {
   const effectiveTz = timeZone || snapshot.timezone || 'UTC';
   const timeDisplay = formatLiveTime(snapshot.asOf, effectiveTz);
 
   // 1. Weather condition
   const weatherSignal = snapshot.signals.find(s => s.kind === 'weather');
-  let weatherDisplay = options?.weatherDisabled ? 'Weather: Off' : 'Weather unavailable';
+  // UI-QUIET-PRECISION (b): with no consented fix yet, say what is missing, not that weather failed.
+  let weatherDisplay = options?.weatherDisabled
+    ? 'Weather: Off'
+    : options?.weatherNeedsLocation
+      ? 'Weather needs location'
+      : 'Weather unavailable';
 
   if (!options?.weatherDisabled && weatherSignal) {
     const liveSig = weatherSignal as Partial<LiveSignal>;

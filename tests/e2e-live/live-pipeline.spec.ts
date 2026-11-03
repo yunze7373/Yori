@@ -520,11 +520,12 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
       await expect(page.locator('.v2-location-notice-banner.denied')).toBeVisible();
     }
 
-    // 2. Weather failure mode: living header displays "Weather unavailable", never 'Clear'
+    // 2. Weather failure mode: never 'Clear'. With location denied there is no fix to ask about,
+    //    so the header names what is missing (UI-QUIET-PRECISION defect (b)).
     const livingHeader = page.locator('#living-header-line');
     await expect(livingHeader).toBeVisible();
     const headerText = await livingHeader.textContent();
-    expect(headerText).toContain('Weather unavailable');
+    expect(headerText).toContain('Weather needs location');
     expect(headerText).not.toContain('Clear');
 
     // Zero fixture provenance
@@ -1019,10 +1020,8 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     expect(weatherTileVal).not.toContain('21');
     expect(weatherTileVal).not.toContain('Clear');
 
-    // 3. Connector strip chip: 'Unavailable' (NEVER 'Open-Meteo')
-    const stripWeatherChip = await page.locator('#chip-status-weather').innerText();
-    expect(stripWeatherChip).toContain('Unavailable');
-    expect(stripWeatherChip).not.toContain('Open-Meteo');
+    // 3. UI-QUIET-PRECISION: no connector strip on Home (connector state lives in Settings).
+    await expect(page.locator('#chip-status-weather')).toHaveCount(0);
 
     await context.close();
   });

@@ -54,8 +54,7 @@ export const VIDEO_SCRIPT_FIXTURES = {
       'SIMULATED',
       'Spatial Context Map', // desktop heading
       'Route Map', // mobile heading
-      'Ask Yori about your day...', // desktop placeholder
-      'Ask Yori...', // mobile placeholder
+      'Ask Yori anything…', // placeholder (UI-QUIET-PRECISION copy, reference 04)
       'Tap to chat',
     ],
   },
@@ -209,10 +208,10 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
 
     if (isMobile) {
       await expect(page.locator('.map-header .v2-heading-mobile')).toHaveText('Route Map');
-      await expect(page.locator('#ask-bar .v2-ask-mobile')).toHaveText('Ask Yori...');
+      await expect(page.locator('#ask-bar .v2-ask-mobile')).toHaveText('Ask Yori anything…'); // UI-QUIET-PRECISION copy (reference 04)
     } else {
       await expect(page.locator('.map-header .v2-heading-desktop')).toHaveText('Spatial Context Map');
-      await expect(page.locator('#ask-bar .v2-ask-desktop')).toHaveText('Ask Yori about your day...');
+      await expect(page.locator('#ask-bar .v2-ask-desktop')).toHaveText('Ask Yori anything…'); // UI-QUIET-PRECISION copy (reference 04)
     }
     await expect(page.locator('#ask-bar .ask-bar-hint')).toHaveText('Tap to chat');
 

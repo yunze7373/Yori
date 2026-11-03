@@ -11,6 +11,8 @@
 import { isXmemoHidden } from '../demo-flags.js';
 import { escapeHtml } from './presentation.js';
 import { STRINGS } from './strings.js';
+import { renderModelStatusPill } from './components/model-status-pill.js';
+import type { EngineStatus } from '../../adapters/model/decision-log.js';
 import { humanizeSignalKind } from '../review/why-sheet.js';
 import type { ContextSnapshot, ContextSignal } from '../../core/contracts/index.js';
 import type { LocationStatus } from '../../adapters/providers/location-port.js';
@@ -57,7 +59,9 @@ export function renderSourcesSheet(
   liveLocation?: LocationStatus | null,
   connectorStatuses?: Record<string, { state: string; detail: string }>,
   engineStatus?: string,
-  engineStatusLabel?: string
+  engineStatusLabel?: string,
+  /** UI-QUIET-PRECISION: the engine status (with latency) lives here, one tap from Home. */
+  engineLatencyMs?: number
 ): string {
   const isLive = mode === 'live';
   const title = isLive ? 'Active Sources · Live context' : 'Sources & Provenance · Demo';
@@ -150,6 +154,7 @@ export function renderSourcesSheet(
           <span class="sources-item-title">Reasoning Engine</span>
           <span class="signal-badge ${engineStatus === 'meta_model_live' ? 'live-badge' : engineStatus === 'recorded_model_replay' ? 'simulated-badge' : 'local-badge'}">${escapeHtml(engineStatusLabel || (engineStatus === 'meta_model_live' ? 'Meta model · live' : engineStatus === 'recorded_model_replay' ? 'Recorded Meta model output · replay' : 'Offline fallback · deterministic'))}</span>
         </div>
+        ${isLive && engineStatus ? renderModelStatusPill({ status: engineStatus as EngineStatus, label: engineStatusLabel, latencyMs: engineLatencyMs, className: 'sources-engine-pill' }) : ''}
         <div class="sources-item-desc">${engineStatus === 'meta_model_live' ? 'Live Meta model API (constrained decision engine · owner budget gated)' : engineStatus === 'recorded_model_replay' ? 'Recorded Meta model output · replay (zero billed calls · offline test fixtures)' : 'Deterministic fallback grammar · offline execution (zero external model calls)'}</div>
       </li>
     `

@@ -85,7 +85,7 @@ import {
 } from '../../core/storage/index.js';
 import { renderWhySheet } from '../review/why-sheet.js';
 import { renderSourcesSheet } from './sources-view.js';
-import { renderModelStatusPill } from './components/model-status-pill.js';
+import { BOTANICAL_LEAF, CHEVRON_ICON, dayPartForHour, renderAmbientLine } from './quiet-header.js';
 import { renderAdjustDialog, type AdjustDialogValues } from '../review/adjust-dialog.js';
 import { renderDismissDialog } from '../review/dismiss-dialog.js';
 import { attachModalAccessibility, restoreInvokingFocus } from '../review/modal-accessibility.js';
@@ -2086,6 +2086,16 @@ export function renderApp(
 
   let isWeatherLoading = false;
   let weatherError: string | null = null;
+  // UI-QUIET-PRECISION (b): live current-conditions state per consented fix. Any path that yields a
+  // fix (consent sheet, Connectors, Nearby now, a refresh) gets its weather request from update(),
+  // so the header never says 'Weather unavailable' merely because a fix arrived after the boot check.
+  // The fix is never acquired without the user's in-session consent.
+  let liveWeatherState: { status: 'idle' | 'pending' | 'ok' | 'needs_location' | 'failed'; reason?: string; fixKey?: string } = { status: 'idle' };
+  const noteWeatherFailure = (reason: string, fixKey?: string) => {
+    liveWeatherState = { status: 'failed', reason, fixKey };
+    // Reason code only: never the request URL (it carries the rounded fix).
+    if (typeof console !== 'undefined') console.info(`[weather] current conditions unavailable: ${reason}`);
+  };
 
   async function checkWeatherStatus() {
     try {
@@ -2113,7 +2123,9 @@ export function renderApp(
             if (!currentUrl) {
               liveWeatherSignal = null;
               liveWeatherProvenance = null;
+              if (contextMode === 'live') liveWeatherState = { status: 'needs_location' };
             } else {
+              if (contextMode === 'live') liveWeatherState = { status: 'pending', fixKey: currentUrl };
               try {
                 const currResp = await fetch(currentUrl, { cache: 'no-store' });
                 if (currResp.ok) {
@@ -2125,20 +2137,25 @@ export function renderApp(
                       fetchedAt: typeof currData.fetchedAt === 'string' ? currData.fetchedAt : undefined,
                       atDeviceFix: currData.coordinate?.kind === 'device_fix',
                     };
+                    if (contextMode === 'live') liveWeatherState = { status: 'ok', fixKey: currentUrl };
                     update();
                   } else if (contextMode === 'live') {
                     liveWeatherSignal = null;
                     liveWeatherProvenance = null;
+                    noteWeatherFailure('no_signal', currentUrl);
                   }
                 } else if (contextMode === 'live') {
                   liveWeatherSignal = null;
                   liveWeatherProvenance = null;
+                  await currResp.text().catch(() => '');
+                  noteWeatherFailure(`http_${currResp.status}`, currentUrl);
                 }
               } catch {
                 // fail-closed
                 if (contextMode === 'live') {
                   liveWeatherSignal = null;
                   liveWeatherProvenance = null;
+                  noteWeatherFailure('network', currentUrl);
                 }
               }
             }
@@ -2151,6 +2168,8 @@ export function renderApp(
       // Ignore network errors
     } finally {
       isWeatherLoading = false;
+      // The status check itself failed: never leave the fix 'pending' (update() would not retry).
+      if (liveWeatherState.status === 'pending') noteWeatherFailure('status_unavailable', liveWeatherState.fixKey);
       update();
     }
   }
@@ -2888,6 +2907,14 @@ export function renderApp(
 
   function update() {
     const isDesktopLayout = typeof window !== 'undefined' && window.innerWidth >= 1024;
+    // UI-QUIET-PRECISION (b): a consented fix with no weather request for it yet gets one now.
+    if (contextMode === 'live' && weatherStatus.enabled && !isWeatherLoading && liveWeatherState.status !== 'pending') {
+      const fixUrl = resolveWeatherCurrentUrl(contextMode, defaultLocationPort.getLocation(), defaultLocationPort.getConsentStatus?.());
+      if (fixUrl && liveWeatherState.fixKey !== fixUrl) {
+        liveWeatherState = { status: 'pending', fixKey: fixUrl };
+        setTimeout(() => void checkWeatherStatus(), 0);
+      }
+    }
     const sceneState =
       contextMode === 'live'
         ? computeLiveState(
@@ -3144,11 +3171,26 @@ export function renderApp(
         ? (typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'America/Los_Angeles')
         : snapshotTimezone;
     const baseGreeting = getGreeting(effectiveNowIso, effectiveTz);
+    // UI-QUIET-PRECISION: the header tint follows the same clock as the greeting.
+    const headerDayPart = (() => {
+      try {
+        const h = parseInt(
+          new Intl.DateTimeFormat('en-US', { ...(effectiveTz ? { timeZone: effectiveTz } : {}), hour: 'numeric', hourCycle: 'h23' }).format(new Date(effectiveNowIso)),
+          10
+        );
+        return dayPartForHour(Number.isFinite(h) ? h : 12);
+      } catch {
+        return dayPartForHour(12);
+      }
+    })();
 
     const derivedLivingHeader =
       contextMode === 'demo'
         ? deriveLivingHeaderFromSnapshot(effectiveSnapshot, effectiveTz)
-        : deriveLiveLivingHeaderFromSnapshot(effectiveSnapshot, effectiveTz, { weatherDisabled: !weatherStatus.enabled });
+        : deriveLiveLivingHeaderFromSnapshot(effectiveSnapshot, effectiveTz, {
+            weatherDisabled: !weatherStatus.enabled,
+            weatherNeedsLocation: !liveWeatherSignal && liveWeatherState.status === 'needs_location',
+          });
 
     const currentLivingHeaderLine =
       derivedLivingHeader
@@ -4280,21 +4322,6 @@ export function renderApp(
     const isLive = contextMode === 'live';
     let panelState = createInitialPanelState(selectedCardState);
 
-    const locConn = latestConnectorStatuses?.location;
-    const isLiveConnected = isLive
-      ? (liveLocationStatus.status === 'available')
-      : (locConn?.state === 'connected');
-    const isLivePrompt = isLive
-      ? (liveLocationStatus.status === 'prompt')
-      : (locConn?.state === 'permission_needed');
-    const isLiveDenied = isLive
-      ? (liveLocationStatus.status === 'denied')
-      : (locConn?.state === 'denied');
-    const isLiveStale = isLive && Boolean(liveLocationStatus.isStale);
-
-    const locState = isLiveConnected ? 'available' : isLivePrompt ? 'prompt' : isLiveDenied ? 'denied' : 'unavailable';
-    const locLabel = isLiveConnected ? 'Available' : isLivePrompt ? 'Prompt' : isLiveDenied ? 'Denied' : isLiveStale ? 'Stale' : 'Unavailable';
-    const calLabel = 'N/A';
     const weatherSig = effectiveSnapshot?.signals?.find(s => s.kind === 'weather') as Partial<LiveSignal> | undefined;
     const isWeatherSigStaleOrUnavail =
       !weatherSig ||
@@ -4305,17 +4332,6 @@ export function renderApp(
       Boolean((weatherSig as any)?.isStale) ||
       (liveWeatherSignal ? isWeatherStale(liveWeatherSignal, Date.parse(snapshotAsOf || new Date().toISOString())) : false);
 
-    const weatherCondition = (weatherSig?.value as any)?.condition;
-    const weatherLabel = contextMode === 'live'
-      ? (weatherStatus.enabled ? (isWeatherSigStaleOrUnavail ? 'Unavailable' : 'Open-Meteo') : 'Off')
-      : (weatherCondition === 'rain' || currentScene === 'rain' ? 'Rain forecast' : (weatherCondition === 'clear' ? 'Clear' : '20°C'));
-    const xmemoConn = latestConnectorStatuses?.xmemo;
-    const xmemoLabel = contextMode === 'live'
-      ? (xmemoConn?.state === 'connected' ? 'Connected' : 'Disconnected')
-      : 'Simulated';
-    const notifConn = latestConnectorStatuses?.notifications;
-    const notifState = notifConn?.state === 'connected' ? 'available' : 'unavailable';
-    const notifLabel = notifConn?.state === 'connected' ? 'On' : 'N/A';
 
     const selectedOption = (
       nowPlan?.optionsOrSteps?.find(o => typeof o === 'object' && o !== null && (o as any).isSelected) ??
@@ -4401,23 +4417,50 @@ export function renderApp(
               ${
                 uiVersion === 'v2'
                   ? `
-              <div class="v2-header-container">
-                <div class="desktop-greeting-row">
-                  <div class="greeting-text-group">
-                    ${!isDesktopLayout ? `<div class="v2-mobile-brand-bar"><span class="v2-brand-wordmark">Yori</span></div>` : ''}
-                    <div class="living-header-ambient" id="living-header-ambient" role="region" aria-label="Living Context Line">
-                      <span class="living-header-line" id="living-header-line">${escapeHtml(currentLivingHeaderLine)}</span>
-                      <span class="living-header-chip card-badge" id="living-header-chip">${contextMode === 'live' ? 'live' : 'simulated'}</span>
-                      ${contextMode === 'live' ? renderModelStatusPill({ status: actionStore.getEngineStatus(), label: actionStore.getEngineStatusLabel(), latencyMs: globalDecisionLogger.getLatest()?.latencyMs }) : ''}
-                    </div>
-                    <h1 class="greeting-title" id="desktop-greeting-title">${escapeHtml(greeting.greeting)}</h1>
-                    <p class="greeting-subheading desktop-greeting-sub">${escapeHtml(greeting.subheading)}</p>
-                  </div>
-
-                  <div class="desktop-header-controls">
+              <div class="v2-header-container qp-header" data-daypart="${headerDayPart}">
+                <div class="qp-header-tint" aria-hidden="true"></div>
+                <div class="qp-header-leaf" aria-hidden="true">${BOTANICAL_LEAF}</div>
+                <div class="qp-topbar">
+                  ${!isDesktopLayout ? `<span class="v2-brand-wordmark qp-wordmark">Yori</span>` : ''}
+                  <span class="qp-topbar-spacer"></span>
                     ${
-                      contextMode === 'demo'
+                      isDevMode
                         ? `
+                    <button
+                      type="button"
+                      class="btn-dev-demo-controls"
+                      id="btn-dev-demo-controls"
+                      aria-label="Demo controls for presentation"
+                      title="Demo controls (Presentation)"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                      </svg>
+                      <span>Demo controls</span>
+                    </button>
+                    `
+                        : ''
+                    }
+
+                  <button
+                    type="button"
+                    class="header-avatar-btn qp-avatar"
+                    id="btn-header-avatar"
+                    aria-label="Profile and settings"
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M19 20v-1.5a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4V20"></path>
+                      <circle cx="12" cy="7.5" r="3.5"></circle>
+                    </svg>
+                  </button>
+                </div>
+                <h1 class="greeting-title" id="desktop-greeting-title">${escapeHtml(greeting.greeting)}</h1>
+                <p class="greeting-subheading desktop-greeting-sub">${escapeHtml(greeting.subheading)}</p>
+                <div class="qp-context-row">
+                  ${
+                    contextMode === 'demo'
+                      ? `
                     <div class="timeline-controls-bar" id="timeline-controls" role="toolbar" aria-label="Demo timeline controls">
                       <button
                         type="button"
@@ -4467,101 +4510,39 @@ export function renderApp(
                       </div>
                     </div>
                     `
-                        : `
-                    <button
-                      type="button"
-                      class="context-pill live"
-                      id="pill-context-status"
-                      aria-label="View sources and truth status"
-                      data-provenance="live"
-                      data-source="device_clock"
-                      data-fetched-at="${new Date().toISOString()}"
-                    >
-                      <div class="context-pill-content">
-                        <div class="context-pill-header">
-                          <span class="context-pill-dot" aria-hidden="true"></span>
-                          <span class="context-pill-title">${STRINGS.header.livePill}</span>
-                          <span class="context-pill-chevron" aria-hidden="true">›</span>
-                        </div>
-                        <div class="context-pill-subtitle" id="pill-subline">${escapeHtml(sourcesSubline)}</div>
-                      </div>
-                    </button>
-                    `
-                    }
-
-                    ${
-                      isDevMode
-                        ? `
-                    <button
-                      type="button"
-                      class="btn-dev-demo-controls"
-                      id="btn-dev-demo-controls"
-                      aria-label="Demo controls for presentation"
-                      title="Demo controls (Presentation)"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                      </svg>
-                      <span>Demo controls</span>
-                    </button>
-                    `
-                        : ''
-                    }
-
-                    <button
-                      type="button"
-                      class="header-avatar-btn"
-                      id="btn-header-avatar"
-                      aria-label="Profile and settings"
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="12" cy="7" r="4"></circle>
-                      </svg>
-                    </button>
-                  </div>
+                      : `
+                  <button
+                    type="button"
+                    class="context-pill live qp-live-pill"
+                    id="pill-context-status"
+                    aria-label="View sources and truth status"
+                    data-provenance="live"
+                    data-source="device_clock"
+                    data-fetched-at="${new Date().toISOString()}"
+                  >
+                    <span class="context-pill-content">
+                      <span class="context-pill-header">
+                        <span class="context-pill-dot" aria-hidden="true"></span>
+                        <span class="context-pill-title">${STRINGS.header.livePill}</span>
+                        <span class="context-pill-chevron" aria-hidden="true">${CHEVRON_ICON}</span>
+                      </span>
+                      <span class="context-pill-subtitle" id="pill-subline">${escapeHtml(sourcesSubline)}</span>
+                    </span>
+                  </button>
+                  `
+                  }
+                  ${
+                    weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || (!isWeatherStale(liveWeatherSignal) && !isWeatherSigStaleOrUnavail))
+                      ? `<span class="weather-attribution qp-attribution" id="weather-attribution" data-provenance="${contextMode === 'live' ? 'live' : 'fixture'}" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal.issuedAt || (liveWeatherSignal.value as any)?.fetchedAt || new Date().toISOString())}"><a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer"><span class="qp-attr-long">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</span><span class="qp-attr-short" aria-hidden="true">Open-Meteo</span></a></span>`
+                      : ''
+                  }
                 </div>
-
-                <div class="desktop-connector-strip-wrapper">
-                  <div class="desktop-connector-strip" id="desktop-connector-strip" role="region" aria-label="Connectors Status">
-                    <span class="connector-status-chip location" id="chip-status-location" title="Location: ${escapeHtml(locLabel)}">
-                      <span class="connector-chip-icon" aria-hidden="true">📍</span>
-                      <span class="connector-chip-label">Location</span>
-                      <span class="connector-chip-val ${locState}">${escapeHtml(locLabel)}</span>
-                    </span>
-                    <span class="connector-status-chip calendar" id="chip-status-calendar" title="Calendar: Not available yet">
-                      <span class="connector-chip-icon" aria-hidden="true">📅</span>
-                      <span class="connector-chip-label">Calendar</span>
-                      <span class="connector-chip-val unavailable">${calLabel}</span>
-                    </span>
-                    <span class="connector-status-chip weather" id="chip-status-weather" title="Weather: ${escapeHtml(weatherLabel)}">
-                      <span class="connector-chip-icon" aria-hidden="true">🌤️</span>
-                      <span class="connector-chip-label">Weather</span>
-                      <span class="connector-chip-val">${escapeHtml(weatherLabel)}</span>
-                    </span>
-                    ${isXmemoHidden() ? '' : `<span class="connector-status-chip xmemo" id="chip-status-xmemo" title="Memory: ${escapeHtml(xmemoLabel)}">
-                      <span class="connector-chip-icon" aria-hidden="true">🧠</span>
-                      <span class="connector-chip-label">XMemo</span>
-                      <span class="connector-chip-val">${escapeHtml(xmemoLabel)}</span>
-                    </span>`}
-                    <span class="connector-status-chip notifications" id="chip-status-alerts" title="Alerts: ${escapeHtml(notifLabel)}">
-                      <span class="connector-chip-icon" aria-hidden="true">🔔</span>
-                      <span class="connector-chip-label">Alerts</span>
-                      <span class="connector-chip-val ${notifState}">${escapeHtml(notifLabel)}</span>
-                    </span>
-                  </div>
+                <!-- The honest living-header line (time, weather, place) stays for assistive tech and the
+                     Sources sheet; the surface shows the one Live context pill (owner reference 04). -->
+                <div class="living-header-ambient qp-ambient qp-visually-hidden" id="living-header-ambient" role="region" aria-label="Living Context Line">
+                  <span class="living-header-chip qp-mode-cue" id="living-header-chip" data-mode="${contextMode}">${contextMode === 'live' ? 'live' : 'simulated'}</span>
+                  ${renderAmbientLine(currentLivingHeaderLine)}
                 </div>
-
-                ${
-                  weatherStatus.enabled && liveWeatherSignal && (contextMode !== 'live' || (!isWeatherStale(liveWeatherSignal) && !isWeatherSigStaleOrUnavail))
-                    ? `
-                <div class="weather-attribution" id="weather-attribution" data-provenance="${contextMode === 'live' ? 'live' : 'fixture'}" data-source="open-meteo" data-fetched-at="${escapeHtml(liveWeatherSignal.issuedAt || (liveWeatherSignal.value as any)?.fetchedAt || new Date().toISOString())}">
-                  <a href="${escapeHtml(weatherStatus.attribution?.url || 'https://open-meteo.com/')}" target="_blank" rel="noopener noreferrer">${escapeHtml(weatherStatus.attribution?.text || STRINGS.header.weatherAttribution)}</a>
-                </div>
-                `
-                    : ''
-                }
               </div>
               `
                   : `
@@ -4749,7 +4730,7 @@ export function renderApp(
                 syncedKeys
               )
             : activeModal?.type === 'sources'
-            ? renderSourcesSheet(activeModal.mode, snapshot, weatherStatus.enabled, defaultLocationPort.getLocation(), latestConnectorStatuses, actionStore.getEngineStatus(), actionStore.getEngineStatusLabel())
+            ? renderSourcesSheet(activeModal.mode, snapshot, weatherStatus.enabled, defaultLocationPort.getLocation(), latestConnectorStatuses, actionStore.getEngineStatus(), actionStore.getEngineStatusLabel(), globalDecisionLogger.getLatest()?.latencyMs)
             : activeModal?.type === 'adjust'
             ? renderAdjustDialog(activeModal.values)
             : activeModal?.type === 'dismiss'

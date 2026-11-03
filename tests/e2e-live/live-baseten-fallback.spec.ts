@@ -128,6 +128,14 @@ test.describe('D8-BASETEN-FALLBACK: labelled fallback engine after a proven Muse
       await expect(reason).toHaveAttribute('data-engine', 'baseten_fallback', { timeout: 10000 });
       await expect(reason.locator('.model-reason-status')).toHaveText(LABEL);
       await expect(page.locator('.v2-candidate-card').first().locator('.v2-candidate-name')).toHaveText('Mid Ramen');
+      expect(await page.locator('body').innerText()).not.toContain('Meta Muse Spark');
+      expect(calls.filter(c => c === 'rank')).toHaveLength(1);
+      // The app declares a wait that covers the Muse deadline + the Baseten attempt (30 + 8 + 2 s).
+      expect(calls.clientWaits).toEqual(['40000']);
+      await expectHeroAboveFold(page, vp);
+      await page.screenshot({ path: path.join(EVIDENCE_DIR, `d8-baseten-fallback-${vp.name}.png`) });
+      // UI-QUIET-PRECISION: the engine status pill lives in the Sources sheet, one tap from Home.
+      await page.locator('#pill-context-status').click();
       const pill = page.locator('#model-status-pill');
       await expect(pill).toHaveAttribute('data-engine-status', 'baseten_fallback');
       await expect(pill).toHaveAttribute('data-provenance', 'fallback_engine');
@@ -135,12 +143,6 @@ test.describe('D8-BASETEN-FALLBACK: labelled fallback engine after a proven Muse
       // The pill stays within the viewport at every width (no clipped engine label).
       const pillBox = await pill.boundingBox();
       expect(pillBox && pillBox.x + pillBox.width <= vp.width).toBe(true);
-      expect(await page.locator('body').innerText()).not.toContain('Meta Muse Spark');
-      expect(calls.filter(c => c === 'rank')).toHaveLength(1);
-      // The app declares a wait that covers the Muse deadline + the Baseten attempt (30 + 8 + 2 s).
-      expect(calls.clientWaits).toEqual(['40000']);
-      await expectHeroAboveFold(page, vp);
-      await page.screenshot({ path: path.join(EVIDENCE_DIR, `d8-baseten-fallback-${vp.name}.png`) });
       await context.close();
     });
   }
