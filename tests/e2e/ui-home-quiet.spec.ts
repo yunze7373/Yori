@@ -286,7 +286,8 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await expect(tripDetail).toBeVisible();
     await expect(tripDetail.locator('.v2-timeline')).toBeVisible();
     await expect(tripDetail.locator('.v2-options-grid')).toBeVisible();
-    await expect(tripDetail.locator('.habit-note')).toBeVisible();
+    // HABIT-LEARN addendum 2: no habit-note in trip detail
+    await expect(tripDetail.locator('.habit-note')).toHaveCount(0);
 
     // Return to Home
     await page.locator('#trip-detail-back-btn').click();

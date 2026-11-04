@@ -177,7 +177,7 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     // claim that the sample profile is the user's own.
     await expect(page.locator('#btn-why')).toHaveCount(0);
     await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
-    await expect(page.locator('.signal-tile, .now-basis, .v2-candidate-basis')).toHaveCount(0);
+    await expect(page.locator('.signal-tile, .v2-candidate-basis')).toHaveCount(0);
     await expect(nowCardD3).not.toContainText('You confirmed');
 
     // P3: Ensure first lunch option tile is scrolled above bottom tab bar on mobile
@@ -233,7 +233,7 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await expect(page.locator('#btn-adjust')).toBeVisible();
     await expect(page.locator('#btn-why')).toHaveCount(0);
     await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
-    await expect(page.locator('.signal-tile, .now-basis, .v2-candidate-basis')).toHaveCount(0);
+    await expect(page.locator('.signal-tile, .v2-candidate-basis')).toHaveCount(0);
     const rainCardText = await page.locator('.now-card').innerText();
     expect(rainCardText).not.toContain('live route');
 
@@ -338,7 +338,7 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await expect(page.locator('#now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
     await expect(page.locator('#btn-why')).toHaveCount(0);
     await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
-    await expect(page.locator('.signal-tile, .now-basis, .v2-candidate-basis')).toHaveCount(0);
+    await expect(page.locator('.signal-tile, .v2-candidate-basis')).toHaveCount(0);
 
     // -------------------------------------------------------------------------
     // Step 6: Reasoning Demo (Model Off) & Deterministic Fallback Invariance

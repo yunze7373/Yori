@@ -225,19 +225,15 @@ test.describe('UI-QUIET-PRECISION area 2: every remaining surface at the 04 bar'
       await page.locator('#btn-nearby-now').click();
       await expect(page.locator('#candidate-model-reason')).toHaveAttribute('data-engine', 'meta_model_live', { timeout: 10000 });
 
-      await page.locator('#btn-why').click();
-      await expect(page.locator('#why-sheet')).toBeVisible();
-      await expect(page.locator('#why-sheet')).toContainText('Nearby places');
-      await shot(page, 'why-lunch', vp.name);
-      await expectNoJargon(page, 'why-lunch', '#why-sheet');
-      await page.keyboard.press('Escape');
+      // HABIT-LEARN addendum 2: no Why action or sheet on lunch card
+      await expect(page.locator('#btn-why')).toHaveCount(0);
       await expect(page.locator('#why-sheet')).toHaveCount(0);
 
-      // Sources keeps the technical provenance (engine status with latency) one tap away.
+      // HABIT-LEARN addendum 2: context pill opens Settings > Connectors instead of a Sources sheet.
       await page.locator('#pill-context-status').click();
-      await expect(page.locator('#model-status-pill')).toBeVisible();
-      await shot(page, 'sources', vp.name);
-      await page.keyboard.press('Escape');
+      await expect(page.locator('#connectors-page')).toBeVisible();
+      await page.locator('#btn-connectors-back').click();
+      await expect(page.locator('#connectors-page')).toHaveCount(0);
 
       await page.locator('.v2-candidate-card .v2-view-detail-link').first().click();
       await expect(page.locator('.v2-restaurant-detail')).toBeVisible();
@@ -280,11 +276,9 @@ test.describe('UI-QUIET-PRECISION area 2: every remaining surface at the 04 bar'
       await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S3'));
       await expect(page.locator('.v2-journey-card .qp-hero-glyph')).toBeVisible();
 
-      await page.locator('#btn-why').click();
-      await expect(page.locator('#why-sheet')).toBeVisible();
-      await shot(page, 'why-depart', vp.name);
-      await expectNoJargon(page, 'why-depart', '#why-sheet');
-      await page.keyboard.press('Escape');
+      // HABIT-LEARN addendum 2: no Why action or sheet on departure card
+      await expect(page.locator('#btn-why')).toHaveCount(0);
+      await expect(page.locator('#why-sheet')).toHaveCount(0);
 
       await page.locator('#btn-view-trip-details').click();
       await expect(page.locator('.v2-mode-tab').first()).toBeVisible();
@@ -427,9 +421,8 @@ test.describe('UI-QUIET-PRECISION area 2: every remaining surface at the 04 bar'
     await page.locator('#btn-nearby-now').click();
     await expect(page.locator('#candidate-model-reason')).toHaveAttribute('data-engine', 'meta_model_live', { timeout: 10000 });
     await page.waitForTimeout(500);
-    await page.locator('#btn-why').click();
-    await page.waitForTimeout(1200);
-    await page.keyboard.press('Escape');
+    // HABIT-LEARN addendum 2: no Why action
+    await expect(page.locator('#btn-why')).toHaveCount(0);
     await page.waitForTimeout(500);
     await page.locator('.v2-candidate-card .v2-view-detail-link').first().click();
     await page.waitForTimeout(1200);

@@ -711,18 +711,11 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await page.waitForTimeout(200);
     await expect(page.locator('.quiet-title')).toHaveText('Nothing needs your attention right now.');
 
-    // --- Part 4 (Why Sheet & Adjust) Verbatim Quotes ---
+    // --- Part 4 (Adjust) Verbatim Quotes; HABIT-LEARN addendum 2: no Why sheet ---
     await selectDemoScene(page, 'rain');
     await page.waitForTimeout(200);
 
-    await page.locator('#btn-why').click();
-    await expect(page.locator('#why-sheet-title')).toHaveText("Why you're seeing this");
-    await expect(page.locator('.why-section h3').first()).toContainText('Evidence & Signals');
-    await expect(page.locator('.why-section h3').nth(1)).toContainText('Memory & Habits');
-    await expect(
-      page.locator('#why-sheet-backdrop').getByText('Demo profile · sample preference').first()
-    ).toBeVisible();
-    await page.locator('#btn-close-why').click();
+    await expect(page.locator('#btn-why')).toHaveCount(0);
     await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
 
     // Open Adjust dialog and save preference
