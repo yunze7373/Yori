@@ -67,6 +67,13 @@ export interface DepartureComparisonItem {
   readonly recommendationReasonCode?: string;
 }
 
+export interface MessageAction {
+  readonly id: string;
+  readonly label: string;
+  readonly variant: 'primary' | 'secondary';
+  readonly action: 'allow_location' | 'not_now';
+}
+
 export interface MessageItem {
   id: string;
   sender: 'user' | 'assistant' | 'system';
@@ -79,6 +86,8 @@ export interface MessageItem {
   workingDetail?: string;
   comparisonOptions?: readonly DepartureComparisonItem[];
   suggestions?: readonly string[];
+  actions?: readonly MessageAction[];
+  pendingUtterance?: string;
 }
 
 export interface ActionHistorySnapshot {
@@ -104,6 +113,7 @@ export interface ActionStateStoreOptions {
   initialInteractionState?: InteractionState;
   reducedMotion?: boolean;
   interpreter?: CommandInterpreter;
+  locationRequestHandler?: () => Promise<import('../../adapters/providers/location-port.js').LocationStatus>;
 }
 
 export interface ActionStateStore {
@@ -134,6 +144,10 @@ export interface ActionStateStore {
   setCandidateReasoner(
     reasoner: ((request: 'why' | 'closer' | 'quieter') => Promise<{ reason: string; statusLabel: string }>) | null
   ): void;
+  setLocationRequestHandler(
+    handler: (() => Promise<import('../../adapters/providers/location-port.js').LocationStatus>) | null
+  ): void;
+  handleMessageAction(msgId: string, action: 'allow_location' | 'not_now'): Promise<void>;
 
   setCommandContext(ctx: ActionCommandContext): void;
   getCommandContext(): ActionCommandContext | undefined;

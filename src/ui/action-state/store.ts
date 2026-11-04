@@ -36,7 +36,7 @@ import {
 import { departPreparer } from '../../plugins/depart/preparer.js';
 import { lunchPreparer } from '../../plugins/lunch/preparer.js';
 import { fuelPreparer } from '../../plugins/fuel/index.js';
-import { defaultLocationPort } from '../../adapters/providers/location-port.js';
+import { defaultLocationPort, type LocationStatus } from '../../adapters/providers/location-port.js';
 import {
   createUserRequestOverride,
   type UserRequestOverride,
@@ -85,6 +85,7 @@ export class DefaultActionStateStore implements ActionStateStore {
   private pendingFuelDisambiguation = false;
   private activeEvidenceBundle?: any = undefined;
   private activeSnapshot?: ContextSnapshot = undefined;
+  private locationRequestHandler: (() => Promise<LocationStatus>) | null = null;
 
   constructor(options: ActionStateStoreOptions = {}) {
     this.actionState = {
@@ -95,6 +96,7 @@ export class DefaultActionStateStore implements ActionStateStore {
     this.interactionState = options.initialInteractionState ?? 'HOME';
     this.reducedMotionOption = options.reducedMotion;
     this.interpreter = options.interpreter ?? defaultModelCommandInterpreter;
+    this.locationRequestHandler = options.locationRequestHandler ?? null;
   }
 
   public getActionState(): ActionStateRecord {
@@ -217,6 +219,75 @@ export class DefaultActionStateStore implements ActionStateStore {
 
   public setNearbyRequestHandler(handler: ((source: 'ask') => void) | null): void {
     this.nearbyRequestHandler = handler;
+  }
+
+  public setLocationRequestHandler(
+    handler: (() => Promise<LocationStatus>) | null
+  ): void {
+    this.locationRequestHandler = handler;
+  }
+
+  public async requestLocationPermission(): Promise<LocationStatus> {
+    if (this.locationRequestHandler) {
+      return this.locationRequestHandler();
+    }
+    if (
+      'consentAndRequest' in defaultLocationPort &&
+      typeof (defaultLocationPort as any).consentAndRequest === 'function'
+    ) {
+      return (defaultLocationPort as any).consentAndRequest();
+    }
+    return defaultLocationPort.getLocation();
+  }
+
+  public async handleMessageAction(
+    msgId: string,
+    action: 'allow_location' | 'not_now'
+  ): Promise<void> {
+    const msg = this.transcriptList.find(m => m.id === msgId);
+    let pendingText: string | undefined;
+    if (msg) {
+      delete msg.actions;
+      pendingText = msg.pendingUtterance;
+      delete msg.pendingUtterance;
+    }
+
+    if (action === 'allow_location') {
+      const locStatus = await this.requestLocationPermission();
+      if (locStatus.status === 'available' && locStatus.coords) {
+        if (pendingText) {
+          this.notify();
+          if (typeof this.submitMessageAsync === 'function') {
+            await this.submitMessageAsync(pendingText);
+          } else {
+            this.submitMessage(pendingText);
+          }
+          return;
+        }
+      } else {
+        const denyLine = "No problem — I'll work with what I have.";
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: denyLine,
+          timestamp: new Date().toISOString(),
+        });
+        this.notify();
+        return;
+      }
+    } else if (action === 'not_now') {
+      const notNowLine = "No problem — I'll work with what I have.";
+      this.transcriptList.push({
+        id: `msg-${Date.now()}-a`,
+        sender: 'assistant',
+        text: notNowLine,
+        timestamp: new Date().toISOString(),
+      });
+      this.notify();
+      return;
+    }
+
+    this.notify();
   }
 
   public isLiveMode(): boolean {
@@ -571,6 +642,10 @@ export class DefaultActionStateStore implements ActionStateStore {
     const remembered = this.tryMemoryStatement(trimmed, now);
     if (remembered) return remembered;
 
+    if (contextOverride && !this.commandContext) {
+      this.commandContext = contextOverride;
+    }
+
     const { ctx, interpCtx } = this.buildInterpretationContext(contextOverride);
     const cmd = this.interpreter.interpret(trimmed, interpCtx);
     return this.applyCommand(trimmed, cmd, ctx, now);
@@ -599,6 +674,24 @@ export class DefaultActionStateStore implements ActionStateStore {
     const rememberedAsync = this.tryMemoryStatement(trimmed, now);
     if (rememberedAsync) return rememberedAsync;
 
+    if (contextOverride && !this.commandContext) {
+      this.commandContext = contextOverride;
+    }
+
+    const { ctx, interpCtx } = this.buildInterpretationContext(contextOverride);
+    const locStatus = defaultLocationPort.getLocation();
+    const isLive =
+      this.isLiveMode() ||
+      this.nearbyRequestHandler !== null ||
+      ctx?.sceneId === 'live' ||
+      ctx?.snapshot?.signals?.some(s => (s as any).provenance === 'live' || s.kind === 'places_lunch');
+
+    const quick = this.interpreter.interpret(trimmed, interpCtx);
+    const quickNeedsLoc = quick.intent === 'FIND_LUNCH' || quick.intent === 'FIND_FUEL';
+    if (isLive && quickNeedsLoc && (locStatus.status === 'prompt' || locStatus.status === 'denied')) {
+      return this.applyCommand(trimmed, quick, ctx, now);
+    }
+
     const inflightId = `msg-${Date.now()}-inflight`;
     this.transcriptList.push({
       id: inflightId,
@@ -609,7 +702,6 @@ export class DefaultActionStateStore implements ActionStateStore {
     });
     this.notify();
 
-    const { ctx, interpCtx } = this.buildInterpretationContext(contextOverride);
     let cmd: InterpretedCommand;
     try {
       if (typeof (this.interpreter as any).interpretAsync === 'function') {
@@ -885,6 +977,61 @@ export class DefaultActionStateStore implements ActionStateStore {
     now: string = new Date().toISOString()
   ): { collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan } {
     const suppliedFacts = this.extractSuppliedFacts(ctx);
+
+    const isLive =
+      this.isLiveMode() ||
+      this.nearbyRequestHandler !== null ||
+      ctx?.sceneId === 'live' ||
+      ctx?.snapshot?.signals?.some(s => (s as any).provenance === 'live' || s.kind === 'places_lunch');
+
+    const needsLocation =
+      cmd.intent === 'FIND_LUNCH' ||
+      cmd.intent === 'FIND_FUEL' ||
+      (cmd.intent === 'WHY' && ctx?.plan?.intentId === 'lunch');
+
+    if (isLive && needsLocation) {
+      const locStatus = defaultLocationPort.getLocation();
+      if (locStatus.status === 'prompt') {
+        const promptMsg = 'I need your location to find places near you.';
+        this.resolveDegraded('Location permission required.');
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: promptMsg,
+          timestamp: new Date().toISOString(),
+          actions: [
+            {
+              id: 'act-allow-loc',
+              label: 'Allow location',
+              variant: 'primary',
+              action: 'allow_location',
+            },
+            {
+              id: 'act-not-now',
+              label: 'Not now',
+              variant: 'secondary',
+              action: 'not_now',
+            },
+          ],
+          pendingUtterance: trimmed,
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: promptMsg };
+      }
+      if (locStatus.status === 'denied') {
+        const deniedMsg =
+          'Location access is blocked in your browser settings. Please enable location in your browser to find places near you.';
+        this.resolveDegraded(deniedMsg);
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: deniedMsg,
+          timestamp: new Date().toISOString(),
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: deniedMsg };
+      }
+    }
 
     // D4: live candidate reasoning for Live lunch plans (why / closer / quieter).
     const lunchFilters = cmd.intent === 'FIND_LUNCH' ? cmd.slots.filters ?? [] : [];
@@ -1404,28 +1551,44 @@ export class DefaultActionStateStore implements ActionStateStore {
 
       if (isDynamicLunch) {
         if (locStatus.status === 'prompt') {
-          const degradedMsg = 'Location permission needed to search for nearby lunch spots. Please grant location access.';
-          this.resolveDegraded(degradedMsg);
+          const promptMsg = 'I need your location to find places near you.';
+          this.resolveDegraded('Location permission required.');
           this.transcriptList.push({
             id: `msg-${Date.now()}-a`,
             sender: 'assistant',
-            text: degradedMsg,
+            text: promptMsg,
             timestamp: new Date().toISOString(),
+            actions: [
+              {
+                id: 'act-allow-loc',
+                label: 'Allow location',
+                variant: 'primary',
+                action: 'allow_location',
+              },
+              {
+                id: 'act-not-now',
+                label: 'Not now',
+                variant: 'secondary',
+                action: 'not_now',
+              },
+            ],
+            pendingUtterance: trimmed,
           });
           this.notify();
-          return { collapsed: false, rule: 'degraded_failure', response: degradedMsg };
+          return { collapsed: false, rule: 'degraded_failure', response: promptMsg };
         }
         if (locStatus.status === 'denied') {
-          const degradedMsg = 'Location permission was denied. Cannot find lunch places without location access.';
-          this.resolveDegraded(degradedMsg);
+          const deniedMsg =
+            'Location access is blocked in your browser settings. Please enable location in your browser to find places near you.';
+          this.resolveDegraded(deniedMsg);
           this.transcriptList.push({
             id: `msg-${Date.now()}-a`,
             sender: 'assistant',
-            text: degradedMsg,
+            text: deniedMsg,
             timestamp: new Date().toISOString(),
           });
           this.notify();
-          return { collapsed: false, rule: 'degraded_failure', response: degradedMsg };
+          return { collapsed: false, rule: 'degraded_failure', response: deniedMsg };
         }
         if (locStatus.status === 'unavailable' || !locStatus.coords) {
           const degradedMsg = 'Location is currently unavailable. Please enter coordinates manually.';
@@ -1608,7 +1771,47 @@ export class DefaultActionStateStore implements ActionStateStore {
       this.beginCommand(trimmed, 'Finding nearby gas stations · simulated', 'comparing');
 
       const locStatus = defaultLocationPort.getLocation();
-      if (locStatus.status !== 'available' || !locStatus.coords) {
+      if (locStatus.status === 'prompt') {
+        const promptMsg = 'I need your location to find places near you.';
+        this.resolveDegraded('Location permission required.');
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: promptMsg,
+          timestamp: new Date().toISOString(),
+          actions: [
+            {
+              id: 'act-allow-loc',
+              label: 'Allow location',
+              variant: 'primary',
+              action: 'allow_location',
+            },
+            {
+              id: 'act-not-now',
+              label: 'Not now',
+              variant: 'secondary',
+              action: 'not_now',
+            },
+          ],
+          pendingUtterance: trimmed,
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: promptMsg };
+      }
+      if (locStatus.status === 'denied') {
+        const deniedMsg =
+          'Location access is blocked in your browser settings. Please enable location in your browser to find places near you.';
+        this.resolveDegraded(deniedMsg);
+        this.transcriptList.push({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: deniedMsg,
+          timestamp: new Date().toISOString(),
+        });
+        this.notify();
+        return { collapsed: false, rule: 'degraded_failure', response: deniedMsg };
+      }
+      if (locStatus.status === 'unavailable' || !locStatus.coords) {
         const degradedMsg =
           'Cannot search for gas stations: location is unavailable or denied. Location is required to find nearby fuel.';
         this.resolveDegraded(degradedMsg);

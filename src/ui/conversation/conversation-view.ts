@@ -171,6 +171,29 @@ export function renderTranscriptItems(
           <div class="chat-bubble">
             <p class="chat-text">${escapeHtml(msg.text)}</p>
             ${
+              msg.actions && msg.actions.length > 0
+                ? `
+              <div class="chat-actions-group" role="group" aria-label="Message actions">
+                ${msg.actions
+                  .map(
+                    (act) => `
+                  <button
+                    type="button"
+                    class="btn ${act.variant === 'primary' ? 'btn-primary' : 'btn-outline'} btn-sm chat-action-btn"
+                    data-action="${escapeHtml(act.action)}"
+                    data-message-id="${escapeHtml(msg.id)}"
+                    ${!isLatestMessage ? 'disabled aria-disabled="true"' : ''}
+                  >
+                    ${escapeHtml(act.label)}
+                  </button>
+                `
+                  )
+                  .join('')}
+              </div>
+            `
+                : ''
+            }
+            ${
               msg.suggestions && msg.suggestions.length > 0
                 ? `
               <div class="chat-suggestions" role="group" aria-label="Suggested prompts">
@@ -420,6 +443,23 @@ export function attachConversationEvents(
 
   const wireTranscriptButtons = () => {
     if (!transcriptEl) return;
+
+    const actionButtons = transcriptEl.querySelectorAll<HTMLButtonElement>(
+      '.chat-action-btn:not([disabled])'
+    );
+    actionButtons.forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const action = btn.dataset.action as 'allow_location' | 'not_now' | undefined;
+        const msgId = btn.dataset.messageId;
+        if (!action || !msgId) return;
+        actionButtons.forEach((b) => {
+          b.disabled = true;
+          b.setAttribute('aria-disabled', 'true');
+        });
+        await store.handleMessageAction(msgId, action);
+      });
+    });
 
     const suggestionButtons = transcriptEl.querySelectorAll<HTMLButtonElement>(
       '.chat-suggestion-chip'

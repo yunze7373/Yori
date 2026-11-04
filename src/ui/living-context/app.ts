@@ -2092,7 +2092,10 @@ export function renderApp(
       : [];
   };
   if (contextMode === 'live') {
-    defaultLocationPort.setLocation('prompt');
+    const currentLoc = defaultLocationPort.getLocation();
+    if (currentLoc.status !== 'denied' && currentLoc.status !== 'unavailable') {
+      defaultLocationPort.setLocation('prompt');
+    }
     defaultModelCommandInterpreter.setMode('live');
   }
   let liveLocationStatus = defaultLocationPort.getLocation();
@@ -2949,6 +2952,46 @@ export function renderApp(
       }
     );
   };
+  const requestLocationForAsk = async (): Promise<LocationStatus> => {
+    if (contextMode === 'live') {
+      defaultLocationPort.setSimulated(false);
+      defaultLocationPort.setLiveEnabled(true);
+    }
+    let status: LocationStatus;
+    if (
+      'consentAndRequest' in defaultLocationPort &&
+      typeof (defaultLocationPort as any).consentAndRequest === 'function'
+    ) {
+      status = await (defaultLocationPort as any).consentAndRequest();
+    } else {
+      if (
+        'grantConsent' in defaultLocationPort &&
+        typeof (defaultLocationPort as any).grantConsent === 'function'
+      ) {
+        (defaultLocationPort as any).grantConsent();
+      }
+      if (
+        'requestCurrentPosition' in defaultLocationPort &&
+        typeof (defaultLocationPort as any).requestCurrentPosition === 'function'
+      ) {
+        await (defaultLocationPort as any).requestCurrentPosition();
+      }
+      status = defaultLocationPort.getLocation();
+    }
+    liveLocationStatus = status;
+    if (contextMode === 'live') {
+      await checkWeatherStatus();
+      await refreshLiveRoute();
+      await checkPlacesStatus();
+      await refreshLiveCalendar();
+    }
+    await refreshConnectorStatuses();
+    update();
+    return status;
+  };
+
+  actionStore.setLocationRequestHandler(requestLocationForAsk);
+
   if (contextMode === 'live') {
     actionStore.setNearbyRequestHandler(source => void requestNearbyNow(source));
     actionStore.setCandidateReasoner(liveCandidateReasoner);
@@ -6321,38 +6364,7 @@ export function renderApp(
     const reqLocBtn = root.querySelector('#btn-request-location');
     if (reqLocBtn) {
       reqLocBtn.addEventListener('click', async () => {
-        if (contextMode === 'live') {
-          defaultLocationPort.setSimulated(false);
-          defaultLocationPort.setLiveEnabled(true);
-        }
-        if (
-          'consentAndRequest' in defaultLocationPort &&
-          typeof (defaultLocationPort as any).consentAndRequest === 'function'
-        ) {
-          liveLocationStatus = await (defaultLocationPort as any).consentAndRequest();
-        } else {
-          if (
-            'grantConsent' in defaultLocationPort &&
-            typeof (defaultLocationPort as any).grantConsent === 'function'
-          ) {
-            (defaultLocationPort as any).grantConsent();
-          }
-          if (
-            'requestCurrentPosition' in defaultLocationPort &&
-            typeof (defaultLocationPort as any).requestCurrentPosition === 'function'
-          ) {
-            await (defaultLocationPort as any).requestCurrentPosition();
-          }
-          liveLocationStatus = defaultLocationPort.getLocation();
-        }
-        if (contextMode === 'live') {
-          await checkWeatherStatus();
-          await refreshLiveRoute();
-          await checkPlacesStatus();
-          await refreshLiveCalendar();
-        }
-        await refreshConnectorStatuses();
-        update();
+        await requestLocationForAsk();
       });
     }
 

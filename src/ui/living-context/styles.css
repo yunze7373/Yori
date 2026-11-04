@@ -1894,6 +1894,46 @@ button:focus-visible, a:focus-visible, select:focus-visible {
   flex-wrap: wrap;
 }
 
+.chat-actions-group {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.chat-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm, 8px);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+  text-align: center;
+  transition: background-color 160ms ease,
+              border-color 160ms ease,
+              color 160ms ease,
+              transform 160ms ease,
+              box-shadow 160ms ease;
+}
+
+.chat-action-btn:focus-visible {
+  outline: 2px solid var(--color-primary, #1E4A3B);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-action-btn {
+    transition: none;
+    transform: none;
+  }
+}
+
 .chat-comparison-box {
   margin-top: 12px;
   display: flex;
