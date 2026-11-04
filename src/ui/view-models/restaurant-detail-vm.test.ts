@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { deriveRestaurantDetailVM } from './restaurant-detail-vm.js';
+import { deriveRestaurantDetailVM, formatCuisineBasis, formatCuisineLabel } from './restaurant-detail-vm.js';
 import { isPlanAccepted } from './home-vm.js';
 import type { PreparedPlan } from '../../core/contracts/index.js';
 
@@ -193,5 +193,33 @@ describe('S3-LIVE-LUNCH: RestaurantDetailVM Derivation', () => {
       headline: 'Lunch options near you',
     } as unknown as PreparedPlan;
     expect(isPlanAccepted(nextDayPlan, acceptedPlanIds)).toBe(false);
+  });
+});
+
+describe('UI-QUIET-PRECISION increment 2: cuisine basis reads as plain English', () => {
+  it.each([
+    ['italian', 'Italian · close to you'],
+    ['indian', 'Indian · close to you'],
+    ['ramen;japanese', 'Ramen · close to you'],
+    ['cafe', 'Cafe · close to you'],
+    ['fast_food', 'Fast food · close to you'],
+    ['  sushi ; japanese ', 'Sushi · close to you'],
+    [undefined, 'Close to you'],
+    ['', 'Close to you'],
+    [';', 'Close to you'],
+  ])('%s -> %s', (raw, expected) => {
+    expect(formatCuisineBasis(raw)).toBe(expected);
+  });
+
+  it('never yields the article grammar ("A italian spot")', () => {
+    for (const raw of ['italian', 'indian', 'american', 'ramen;japanese']) {
+      expect(formatCuisineBasis(raw)).not.toMatch(/^An? /);
+    }
+  });
+
+  it('formatCuisineLabel keeps only the first OSM token', () => {
+    expect(formatCuisineLabel('ramen;japanese')).toBe('Ramen');
+    expect(formatCuisineLabel('coffee_shop')).toBe('Coffee shop');
+    expect(formatCuisineLabel(undefined)).toBeUndefined();
   });
 });

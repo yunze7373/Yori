@@ -549,3 +549,36 @@ describe('V1: Scene-Driven Home Composition & View Models (§4)', () => {
     });
   });
 });
+
+describe('UI-QUIET-PRECISION increment 2: Live location consent and denied copy', () => {
+  const snap = (status: string, extra: any[] = []) =>
+    ({
+      asOf: '2026-11-04T03:00:00.000Z',
+      timezone: 'Asia/Tokyo',
+      signals: [{ id: 'loc', kind: 'location_status', value: { status }, issuedAt: '2026-11-04T03:00:00.000Z', source: 'live' }, ...extra],
+    }) as any;
+
+  it('Live prompt: sentence-case title, one plain purpose line, no basis line', () => {
+    const vm = buildHomeComposition({ plan: null, spatialEvidence: null, snapshot: snap('prompt'), isLive: true } as any);
+    expect(vm.title).toBe('Use your location');
+    expect(vm.headline).toBe('Yori uses it to find lunch places near you.');
+    expect(vm.basis).toBe('');
+    expect(vm.locationState).toBe('prompt');
+  });
+
+  it('Live prompt with a calendar event names the route purpose', () => {
+    const cal = { id: 'cal', kind: 'calendar', value: { title: 'Review' }, issuedAt: '2026-11-04T03:00:00.000Z', source: 'live' };
+    const vm = buildHomeComposition({ plan: null, spatialEvidence: null, snapshot: snap('prompt', [cal]), isLive: true } as any);
+    expect(vm.headline).toBe('Yori uses it to work out when you should leave.');
+  });
+
+  it('Live denied: no "enter coordinates manually" line', () => {
+    const vm = buildHomeComposition({ plan: null, spatialEvidence: null, snapshot: snap('denied'), isLive: true } as any);
+    expect(`${vm.title} ${vm.headline} ${vm.basis}`).not.toMatch(/coordinates manually|fails closed/);
+  });
+
+  it('Demo keeps its own copy (city presets and manual coordinates exist there)', () => {
+    const vm = buildHomeComposition({ plan: null, spatialEvidence: null, snapshot: snap('prompt'), isLive: false } as any);
+    expect(vm.title).toBe('Location Needed');
+  });
+});

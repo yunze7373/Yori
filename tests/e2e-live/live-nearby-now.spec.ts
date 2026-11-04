@@ -193,7 +193,11 @@ test.describe('D2-LUNCH-DEFAULT-ON: nearby restaurants visibly work once locatio
       expect(body).not.toMatch(/simulated|Demo profile|Based on taste|· walk\b/i);
       expect(await page.locator('[data-provenance="fixture"]').count()).toBe(0);
 
-      await hero.scrollIntoViewIfNeeded();
+      // Home re-renders as async statuses land (weather, model reason) and replaces the card node;
+      // retry the scroll on a fresh resolve instead of failing on a detached element (review 2ebf8df1 P3).
+      await expect(async () => {
+        await hero.scrollIntoViewIfNeeded({ timeout: 1000 });
+      }).toPass({ timeout: 8000 });
       await page.screenshot({ path: path.join(EVIDENCE_DIR, `d2-lunch-card-${vp.name}.png`) });
 
       // Detail
@@ -224,10 +228,11 @@ test.describe('D2-LUNCH-DEFAULT-ON: nearby restaurants visibly work once locatio
     await expect(page.locator('#btn-nearby-now')).toBeVisible({ timeout: 10000 });
     expect(traffic.places.length).toBe(1);
     // D1b (seen on the real device when Overpass answered 502): the failure is said, not silent.
-    await expect(page.locator('#nearby-now-note .nearby-state-title')).toHaveText('Nearby search failed');
-    await expect(page.locator('#nearby-now-note .nearby-state-desc')).toHaveText(
-      "Nearby places didn't load. Try again in a moment." // UI-QUIET-PRECISION plain-language copy
-    );
+    await expect(page.locator('#nearby-now-note .nearby-state-title')).toHaveText("Nearby places didn't load."); // one failure line
+    await expect(page.locator('#nearby-now-note .nearby-state-desc')).toHaveCount(0);
+    // UI-QUIET-PRECISION increment 2: the one action is Retry, and nothing claims "all caught up".
+    await expect(page.locator('#btn-nearby-now')).toHaveText('Retry');
+    await expect(page.locator('.quiet-card')).not.toContainText(/all caught up|No proactive reminders/i);
     await expect(page.locator('.v2-candidate-card')).toHaveCount(0);
 
     await page.locator('#btn-nearby-now').click();

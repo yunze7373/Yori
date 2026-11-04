@@ -21,7 +21,7 @@ import type {
   ContextSnapshot,
   MemoryFact,
 } from '../../core/contracts/index.js';
-import { formatTime, formatAheadPlan, humanizeProposalTitle } from '../living-context/presentation.js';
+import { formatTime, formatAheadPlan, humanizeProposalTitle, formatConfirmedMemoryNote } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
 import { deriveTimelineVM } from './timeline-vm.js';
 import { deriveOptionCardVMs } from './option-card-vm.js';
@@ -1043,13 +1043,29 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
   let confirmedMemoryNote: string | undefined;
   if (confirmedFact) {
     confirmedMemoryFact = confirmedFact.key;
-    const valStr = typeof confirmedFact.value === 'string' ? confirmedFact.value : (confirmedFact.value ? JSON.stringify(confirmedFact.value) : '');
-    const cleanKey = confirmedFact.key.includes('taste') ? 'Taste' : humanizeProposalTitle(confirmedFact.key);
-    confirmedMemoryNote = valStr ? `${cleanKey}: ${valStr} (confirmed)` : `${cleanKey} (confirmed)`;
+    confirmedMemoryNote = formatConfirmedMemoryNote(confirmedFact.key, confirmedFact.value);
+  }
+
+  // Live location copy in plain words (UI-QUIET-PRECISION increment 2). Demo keeps its own copy:
+  // only Demo has city presets and manual coordinates.
+  const liveLocationCopy: { title?: string; headline?: string; basis?: string } = {};
+  if (options.isLive && raw.layoutKind === 'quiet' && raw.locationState === 'prompt') {
+    const sigs = options.snapshot?.signals ?? [];
+    const purpose = sigs.some(s => s.kind === 'calendar')
+      ? 'work out when you should leave'
+      : sigs.some(s => s.kind === 'fuel_percent' || s.kind === 'fuel_status')
+      ? 'find gas stations near you'
+      : 'find lunch places near you';
+    liveLocationCopy.title = 'Use your location';
+    liveLocationCopy.headline = `Yori uses it to ${purpose}.`;
+    liveLocationCopy.basis = '';
+  } else if (options.isLive && raw.layoutKind === 'quiet' && raw.locationState === 'denied') {
+    liveLocationCopy.basis = '';
   }
 
   return {
     ...raw,
+    ...liveLocationCopy,
     planDiff: options.planDiff ?? null,
     weatherError: options.weatherError,
     isLoading: Boolean(options.isLoading),

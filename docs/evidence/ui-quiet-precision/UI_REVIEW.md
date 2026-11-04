@@ -220,3 +220,21 @@ toasts.
    no photo, and the tests never fetch Google photos.
 3. **Toasts:** Accept changes the action row in place ("Accepted · Undo · Why"); there is no
    separate toast to style.
+
+# Area 2, increment 2 (INBOX-20261103-CD2F30, base 0486822)
+
+The carry-over from review 2ebf8df1. Before/after crops are `inc2-before-after-*.png`, built by
+`node scripts/ui-qp-before-after.mjs 0486822` ("before" is read from the approved commit).
+
+| Item | Fix | Proof |
+|---|---|---|
+| (1) P2 restaurant basis grammar | The basis is `${Cuisine} · close to you`. It uses the first OSM `;` token, reads `_` as a space and capitalises: "Italian · close to you", "Ramen · close to you". With no cuisine it reads "Close to you". The facts line uses the same label, so "ramen;japanese" shows "Ramen". | Unit: italian, indian, `ramen;japanese`, cafe, `fast_food`, padded tokens, undefined, empty, `;`, and "never `A`/`An` …" (`restaurant-detail-vm.test.ts`). `inc2-before-after-1-restaurant-basis.png` |
+| (2) P2 Live MEMORY row | The row is a fact: "Prep buffer · 10 min (you confirmed)". A known-key map gives labels and minute units (prep buffer, rain buffer, prep time, when it rains, getting around, grocery store, taste). Unknown keys fall back to a humanised key, and the row never shows the question-form proposal title. | Unit: 12 key/value cases plus "no `?`, `Remember`, `_` or `{`" (`presentation.test.ts`). `inc2-before-after-2-memory-row.png` |
+| (3) P2 desktop rail clipping | The cause was the page-centred, 680 px Ask dock: at 1280 it overlapped the rail's left edge (dock right 964 > rail left 900). The dock now sits in the centre column only (left 240, right 380, max 680). | e2e @1280 and @1440: the dock is inside the centre column. The Destination weather eyebrow, temperature and time are inside the card, unclipped, and hit-testable at both ends and the centre. The test failed before the fix (964 > 900). `inc2-rail-1280x800.png`, `inc2-before-after-3-rail-weather.png` |
+| (4) P2 consent copy (Live) | Title "Use your location". One line: "Yori uses it to find lunch places near you." (or "…work out when you should leave." / "…find gas stations near you."). Then the host disclosure, then **Use my location** / **Not now**. No "enter coordinates manually", no restatement, no Title Case. Live denied loses its "enter coordinates manually" line. Demo keeps its copy, since only Demo has city presets and manual coordinates. | Unit (VM + render). e2e @390 and @1280: the copy and banned phrases are checked, and both buttons are hit-testable at first paint with scrollY 0. `inc2-before-after-4a-consent.png` |
+| (4) P2 failure copy | One failure line, "Nearby places didn't load.", then **Retry** (the same request). "You're all caught up" and the trailing "No proactive reminders…" line are not shown beside a failure. Empty and ready states keep their calm subtitle. | Unit (order: failure first, then Retry). e2e: Retry label, no "all caught up". `live-nearby-now` still proves Retry fires a new request. `inc2-before-after-4b-error.png` |
+| (5) P3 rail map rain label | On large maps the label is compact (172x38, 11.5 px) in the free top-left corner. | The geometry check now also needs ≥ 40 px between the label and any place label. It failed at 34 px before the change. |
+| (6) P3 live-nearby-now flake | The scroll before the card capture retries on a fresh resolve (Home re-renders replace the node). | `live-nearby-now.spec.ts` 35/35 over `--repeat-each=5`. |
+
+Owner docs: the smoke checklist in `docs/architecture/SUBMISSION_READINESS.md` §4 now quotes the
+new consent copy. Its drift test checks `Use your location`, `Use my location` and `Not now`.

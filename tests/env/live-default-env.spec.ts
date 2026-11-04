@@ -173,14 +173,14 @@ test.describe('S2-LIVE-DEFAULT: Production Live Default and Dev Mode Gating', ()
     // 3. Honest gated quiet state
     const quietTitle = page.locator('#quiet-title');
     await expect(quietTitle).toBeVisible();
-    await expect(quietTitle).toContainText('Location Needed');
+    await expect(quietTitle).toContainText('Use your location'); // UI-QUIET-PRECISION increment 2
 
     const quietSubtitle = page.locator('#quiet-subtitle');
-    await expect(quietSubtitle).toContainText('Location permission needed to find nearby lunch places');
+    await expect(quietSubtitle).toContainText('Yori uses it to find lunch places near you.');
 
     const requestLocationBtn = page.locator('#btn-request-location');
     await expect(requestLocationBtn).toBeVisible();
-    await expect(requestLocationBtn).toHaveText('Use My Location');
+    await expect(requestLocationBtn).toHaveText('Use my location');
 
     // 4. Zero fixture provenance anywhere in DOM
     const fixtureElements = page.locator('[data-provenance="fixture"]');

@@ -261,6 +261,51 @@ export function formatNoticeMessage(notice: {
  * Maps a memory proposal key into a plain human sentence.
  * Eliminates raw identifiers and repetitive prefixes.
  */
+/** Known memory keys: a plain label and whether the value is minutes. */
+const MEMORY_FACT_LABELS: Readonly<Record<string, { label: string; minutes?: boolean }>> = {
+  prep_buffer_minutes: { label: 'Prep buffer', minutes: true },
+  prep_buffer_preference: { label: 'Prep buffer', minutes: true },
+  buffer_minutes: { label: 'Prep buffer', minutes: true },
+  rain_buffer_minutes: { label: 'Rain buffer', minutes: true },
+  prep_duration_minutes: { label: 'Prep time', minutes: true },
+  rain_transport_preference: { label: 'When it rains' },
+  habit_rain_transit: { label: 'When it rains' },
+  rain_habit: { label: 'When it rains' },
+  transit_pref: { label: 'Getting around' },
+  transit_habit: { label: 'Getting around' },
+  preferred_grocery_store: { label: 'Grocery store' },
+  grocery_store_preference: { label: 'Grocery store' },
+  suppress_lunch: { label: 'Lunch suggestions' },
+  suppress_lunch_recommendations: { label: 'Lunch suggestions' },
+};
+
+/**
+ * The Home MEMORY row as a fact the user recognises ("Prep buffer · 10 min (you confirmed)").
+ * Never the question-form proposal title ("Remember preference for …?") and never a raw key.
+ */
+export function formatConfirmedMemoryNote(key: string, value: unknown): string {
+  const known = MEMORY_FACT_LABELS[key];
+  const isTaste = !known && /taste|cuisine/.test(key);
+  const minutes = known?.minutes ?? (!isTaste && /_minutes$/.test(key));
+  const label =
+    known?.label ??
+    (isTaste
+      ? 'Taste'
+      : (() => {
+          const words = key.replace(/_minutes$/, '').replace(/[_-]+/g, ' ').replace(/[^A-Za-z0-9 ]/g, '').trim();
+          return words ? words.charAt(0).toUpperCase() + words.slice(1).toLowerCase() : 'Preference';
+        })());
+
+  let shown = '';
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    shown = minutes ? `${value} min` : String(value);
+  } else if (typeof value === 'string' && value.trim()) {
+    const text = value.trim().replace(/_/g, ' ');
+    shown = minutes && /^\d+(\.\d+)?$/.test(text) ? `${text} min` : text;
+  }
+  return shown ? `${label} · ${shown} (you confirmed)` : `${label} (you confirmed)`;
+}
+
 export function humanizeProposalTitle(key: string): string {
   switch (key) {
     case 'suppress_lunch':

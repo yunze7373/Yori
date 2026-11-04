@@ -298,7 +298,7 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     // 1. Verify honest gated quiet state before location is shared
     const quietTitle = page.locator('#quiet-title, .quiet-title');
     await expect(quietTitle).toBeVisible();
-    await expect(quietTitle).toContainText('Location Needed');
+    await expect(quietTitle).toContainText('Use your location'); // UI-QUIET-PRECISION increment 2
 
     const reqLocBtn = page.locator('#btn-request-location');
     await expect(reqLocBtn).toBeVisible();
@@ -595,7 +595,7 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
 
     const memoryTile = page.locator('#signal-tile-memory');
     await expect(memoryTile).toBeVisible();
-    await expect(memoryTile).toContainText('Japanese or Italian (confirmed)');
+    await expect(memoryTile).toContainText('Taste · Japanese or Italian (you confirmed)');
 
     // Provenance honesty on Home
     const homeFixtureCount = await page.locator('[data-provenance="fixture"]').count();

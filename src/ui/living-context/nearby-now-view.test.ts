@@ -91,3 +91,61 @@ describe('D2 consent copy names the exact enabled hosts', () => {
     expect(html).toContain('your location is not sent to any provider');
   });
 });
+
+describe('UI-QUIET-PRECISION increment 2: Live consent and failure read plainly', () => {
+  const visible = (html: string) =>
+    html
+      .replace(/<span class="[^"]*qp-visually-hidden[^"]*">[^<]*<\/span>/g, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&#39;|&#039;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&')
+      .replace(/\s+/g, ' ');
+
+  it('consent: one sentence-case title, one plain line, the disclosure, then Use my location / Not now', () => {
+    const vm = {
+      ...quiet,
+      title: 'Use your location',
+      headline: 'Yori uses it to find lunch places near you.',
+      basis: '',
+      locationState: 'prompt',
+      consentHosts: [{ purpose: 'nearby places and photos', host: 'places.googleapis.com' }],
+    } as HomeCompositionVM;
+    const html = renderV2Home(vm);
+    const text = visible(html);
+    expect(text).toContain('Use your location');
+    expect(text).toContain('Yori uses it to find lunch places near you.');
+    expect(text).toContain('sent only to: places.googleapis.com (nearby places and photos)');
+    expect(html).toMatch(/id="btn-request-location"[^>]*>\s*Use my location\s*</);
+    expect(html).toMatch(/id="btn-deny-location"[^>]*>\s*Not now\s*</);
+    for (const banned of ['coordinates manually', 'Location Permission Needed', 'Grant permission', 'Use My Location', '>Deny<', 'Location Needed']) {
+      expect(text).not.toContain(banned);
+    }
+    // Primary before secondary, disclosure before both.
+    expect(html.indexOf('location-consent-hosts')).toBeLessThan(html.indexOf('btn-request-location'));
+    expect(html.indexOf('btn-request-location')).toBeLessThan(html.indexOf('btn-deny-location'));
+  });
+
+  it('failure: no "all caught up" beside it, one failure line, Retry, no trailing reminder line', () => {
+    const html = renderV2Home({
+      ...quiet,
+      headline: "You're all caught up. We'll let you know when something comes up.",
+      basis: 'No proactive reminders needed for your schedule right now.',
+      nearbyNow: { state: 'ready', note: { kind: 'error', title: "Nearby places didn't load.", desc: '' } },
+    });
+    const text = visible(html);
+    expect(text).not.toMatch(/all caught up/i);
+    expect(text).not.toContain('No proactive reminders');
+    expect(html).toMatch(/id="btn-nearby-now"[^>]*>Retry</);
+    expect(text).toContain("Nearby places didn't load.");
+    expect(html).not.toContain('class="nearby-state-desc"');
+    // The failure is said first, then the action.
+    expect(html.indexOf('id="nearby-now-note"')).toBeLessThan(html.indexOf('id="btn-nearby-now"'));
+  });
+
+  it('empty and ready states keep the calm subtitle and the Nearby now button', () => {
+    const html = renderV2Home({ ...quiet, nearbyNow: { state: 'ready', note: { kind: 'empty', title: 'No places open nearby', desc: 'Try again later.' } } });
+    expect(visible(html)).toContain("You're all caught up.");
+    expect(html).toMatch(/id="btn-nearby-now"[^>]*>Nearby now</);
+  });
+});

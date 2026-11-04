@@ -153,8 +153,10 @@ async function expectRainLabelClear(page: Page): Promise<number> {
         }
       }
       for (const text of Array.from(canvas.querySelectorAll('.v2-map-marker text'))) {
+        // Clear by at least 40 px, so the two never read as one cluster (review 2ebf8df1 P3).
         const t = text.getBoundingClientRect();
-        if (t.left < r.right && t.right > r.left && t.top < r.bottom && t.bottom > r.top) hits.push(`label "${text.textContent?.trim()}"`);
+        const gap = 40;
+        if (t.left < r.right + gap && t.right > r.left - gap && t.top < r.bottom + gap && t.bottom > r.top - gap) hits.push(`label "${text.textContent?.trim()}"`);
       }
     }
     return { hits, checked };
@@ -189,6 +191,28 @@ test.describe('UI-QUIET-PRECISION area 2: every remaining surface at the 04 bar'
       await page.waitForSelector('.app-layout[data-context-mode="live"]');
       await shot(page, 'consent', vp.name);
       await expectNoJargon(page, 'consent');
+      // Increment 2: one sentence-case title, one plain line, the disclosure, then two clear actions.
+      const consent = await visibleText(page, '.quiet-card');
+      expect(consent).toContain('Use your location');
+      expect(consent).toContain('Yori uses it to find lunch places near you.');
+      for (const banned of ['coordinates manually', 'Location Needed', 'Location Permission Needed', 'Grant permission', 'Use My Location']) {
+        expect(consent, `consent shows "${banned}"`).not.toContain(banned);
+      }
+      // At first paint, with no scrolling, both buttons are hit-testable at every corner (nothing,
+      // including the floating Ask bar, covers them).
+      for (const id of ['#btn-request-location', '#btn-deny-location']) {
+        const covered = await page.locator(id).evaluate(el => {
+          const r = el.getBoundingClientRect();
+          // Inset past the rounded corners (pill buttons), so a corner sample lands on the button.
+          const ix = Math.min(r.width / 2, r.height / 2 + 2);
+          const pts = [[r.left + ix, r.top + 3], [r.right - ix, r.top + 3], [r.left + ix, r.bottom - 3], [r.right - ix, r.bottom - 3], [r.left + r.width / 2, r.top + r.height / 2]];
+          return pts
+            .map(([x, y]) => { const hit = document.elementFromPoint(x!, y!); return !hit || hit === el || el.contains(hit) ? '' : `${Math.round(x!)},${Math.round(y!)} ${hit.className}`; })
+            .filter(Boolean);
+        });
+        expect(covered, `${id} covered at first paint`).toEqual([]);
+      }
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
 
       await page.locator('#btn-request-location').click();
       await page.locator('#btn-nearby-now').click();
@@ -281,6 +305,13 @@ test.describe('UI-QUIET-PRECISION area 2: every remaining surface at the 04 bar'
         await page.waitForTimeout(1200);
         await shot(page, name, vp.name);
         await expectNoJargon(page, name, 'main');
+        if (name === 'state-error') {
+          // Increment 2: one failure line and Retry; nothing claims "all caught up" beside it.
+          const card = await visibleText(page, '.quiet-card');
+          expect(card).toContain("Nearby places didn't load.");
+          expect(card).not.toMatch(/all caught up|No proactive reminders/i);
+          await expect(page.locator('#btn-nearby-now')).toHaveText('Retry');
+        }
         expect(errors.filter(e => !benign(e) && !/status of 500/.test(e))).toEqual([]);
         await context.close();
       }
@@ -292,6 +323,57 @@ test.describe('UI-QUIET-PRECISION area 2: every remaining surface at the 04 bar'
       await expect(page.locator('#living-header-line')).toContainText('Weather needs location');
       await shot(page, 'state-denied', vp.name);
       await expectNoJargon(page, 'state-denied', 'main');
+      expect(await visibleText(page, '.quiet-card')).not.toContain('coordinates manually');
+      await context.close();
+    });
+  }
+
+  for (const width of [1280, 1440]) {
+    test(`desktop rail: Destination weather sits whole inside its card, clear of the Ask bar @${width}`, async ({ browser }) => {
+      const { context, page, errors } = await device(browser, { width, height: 800 });
+      await setup(page, { weatherOff: true });
+      await page.goto('/?ui=v2&timeline=1');
+      await page.waitForSelector('.app-layout');
+      await page.evaluate(() => (window as any).__YORI_TIMELINE__.goTo('S3'));
+      const card = page.locator('.desktop-right-panel .desktop-weather-card');
+      await expect(card).toBeVisible();
+      await settle(page);
+
+      // The Ask dock stays inside the centre column at any desktop width.
+      const geometry = await page.evaluate(() => {
+        const dock = document.querySelector('.qp-ask-dock .ask-bar') as HTMLElement;
+        const rail = document.querySelector('.desktop-right-panel') as HTMLElement;
+        const side = document.querySelector('.desktop-sidebar, .app-layout > :first-child') as HTMLElement;
+        return { dock: dock.getBoundingClientRect().toJSON(), rail: rail.getBoundingClientRect().toJSON(), sideRight: side.getBoundingClientRect().right };
+      });
+      expect(geometry.dock.right).toBeLessThanOrEqual(geometry.rail.left);
+      expect(geometry.dock.left).toBeGreaterThanOrEqual(geometry.sideRight);
+
+      // Scrolled to the bottom of the rail, the eyebrow and the temperature are inside the card and
+      // nothing covers them (hit-test at each box's corners and centre).
+      await page.locator('.desktop-right-panel').evaluate(el => { el.scrollTop = el.scrollHeight; });
+      await settle(page);
+      const result = await card.evaluate(cardEl => {
+        const c = cardEl.getBoundingClientRect();
+        const problems: string[] = [];
+        for (const sel of ['.section-label', '.desktop-weather-temp', '.desktop-weather-time']) {
+          const el = cardEl.querySelector(sel) as HTMLElement | null;
+          if (!el) { problems.push(`${sel} missing`); continue; }
+          const r = el.getBoundingClientRect();
+          if (r.left < c.left || r.right > c.right || r.top < c.top || r.bottom > c.bottom) problems.push(`${sel} outside card`);
+          if (el.scrollWidth > el.clientWidth + 1) problems.push(`${sel} text clipped`);
+          const midY = r.top + r.height / 2;
+          for (const x of [r.left + 2, r.right - 2, r.left + r.width / 2]) {
+            const y = midY;
+            const hit = document.elementFromPoint(x, y);
+            if (!hit || !(el === hit || el.contains(hit))) problems.push(`${sel} covered at ${Math.round(x)},${Math.round(y)} by ${hit?.className || hit?.tagName}`);
+          }
+        }
+        return problems;
+      });
+      expect(result).toEqual([]);
+      await page.screenshot({ path: path.join(EVIDENCE_DIR, `inc2-rail-${width}x800.png`) });
+      expect(errors.filter(e => !benign(e))).toEqual([]);
       await context.close();
     });
   }

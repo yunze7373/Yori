@@ -3000,3 +3000,15 @@ body {
     transform: translateY(0);
   }
 }
+
+/* Desktop: the Ask dock floats over the centre column only, never over the sidebar or the rail
+   (at 1280 the centre column is 660 px; a 680 px page-centred dock covered the rail's edge). */
+@media (min-width: 1024px) {
+  .app-layout[data-ui-version='v2'] .qp-ask-dock {
+    left: 240px;
+    right: 380px;
+    width: auto;
+    max-width: 680px;
+    margin: 0 auto;
+  }
+}

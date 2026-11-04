@@ -56,12 +56,12 @@ function renderMapSvg(map: MapVM): string {
         ${
           map.weatherCallout
             ? `
-          <g class="v2-map-weather-callout" transform="translate(${isProminent ? 8 : map.weatherCallout.x - 94}, ${isProminent ? 8 : map.weatherCallout.y - 20})">
-            <rect width="188" height="40" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
-            <text x="94" y="13" fill="#FFFFFF" font-size="12.5" font-weight="700" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutText" data-slot="domain">
+          <g class="v2-map-weather-callout" transform="translate(${isProminent ? 6 : map.weatherCallout.x - 94}, ${isProminent ? 6 : map.weatherCallout.y - 20})">
+            <rect width="${isProminent ? 172 : 188}" height="${isProminent ? 38 : 40}" rx="8" fill="var(--color-primary-btn)" opacity="0.95"/>
+            <text x="${isProminent ? 86 : 94}" y="${isProminent ? 15 : 13}" fill="#FFFFFF" font-size="${isProminent ? 11.5 : 12.5}" font-weight="700" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutText" data-slot="domain">
               ${escapeHtml(map.weatherCallout.text)}
             </text>
-            <text x="94" y="31" fill="#E2EAE5" font-size="12.5" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutSubtext" data-slot="domain">
+            <text x="${isProminent ? 86 : 94}" y="${isProminent ? 30 : 31}" fill="#E2EAE5" font-size="${isProminent ? 11.5 : 12.5}" text-anchor="middle" font-family="var(--font-sans)" data-source-ref="weather-rain.calloutSubtext" data-slot="domain">
               ${escapeHtml(map.weatherCallout.subtext || '')}
             </text>
           </g>
@@ -355,24 +355,19 @@ export function renderLocationControls(vm: HomeCompositionVM): string {
         isPrompt
           ? `
         <div class="v2-location-notice-banner prompt" role="status">
-          <div class="v2-location-notice-title">Location Permission Needed</div>
-          <div class="v2-location-notice-desc">${
-            vm.isLive
-              ? 'Grant permission to discover nearby dining options.'
-              : 'Grant permission to discover nearby fuel stations or select a location manually.'
-          }</div>
           ${
             vm.isLive
               ? `<div class="v2-location-notice-hosts" id="location-consent-hosts">${escapeHtml(describeConsentHosts(vm))}</div>`
-              : ''
+              : `<div class="v2-location-notice-title">Location Permission Needed</div>
+          <div class="v2-location-notice-desc">Grant permission to discover nearby fuel stations or select a location manually.</div>`
           }
         </div>
         <div class="v2-location-action-row">
-          <button type="button" class="btn btn-primary v2-location-btn" id="btn-request-location" aria-label="Use My Location">
-            Use My Location
+          <button type="button" class="btn btn-primary v2-location-btn" id="btn-request-location" aria-label="Use my location">
+            Use my location
           </button>
-          <button type="button" class="btn btn-outline v2-location-btn" id="btn-deny-location" aria-label="Deny Location Access">
-            Deny
+          <button type="button" class="btn btn-outline v2-location-btn" id="btn-deny-location" aria-label="Not now, keep location off">
+            Not now
           </button>
         </div>
       `
@@ -783,27 +778,31 @@ function renderNearbyNow(vm: HomeCompositionVM, placement: 'quiet' | 'card'): st
   // On the lunch card the results speak for themselves; only failures/empties keep their note.
   const shownNote = placement === 'card' && note?.kind === 'info' ? undefined : note;
   const loading = state === 'loading';
+  // After a failure the one action is Retry (same request), beside one failure line.
+  const failed = note?.kind === 'error';
   const label = loading
     ? vm.nearbyNow.loadingLabel || 'Searching nearby…'
     : placement === 'quiet'
-    ? 'Nearby now'
+    ? failed ? 'Retry' : 'Nearby now'
     : 'Refresh nearby';
+  const noteHtml = shownNote
+    ? `<div class="nearby-state nearby-state-${shownNote.kind}" id="nearby-now-note" role="status">
+              <span class="nearby-state-icon" aria-hidden="true">${shownNote.kind === 'error' ? '!' : shownNote.kind === 'empty' ? '∅' : '✓'}</span>
+              <span class="nearby-state-text"><span class="nearby-state-title">${escapeHtml(shownNote.title)}</span>${shownNote.desc ? `<span class="nearby-state-desc">${escapeHtml(shownNote.desc)}</span>` : ''}</span>
+            </div>`
+    : '';
+  // A failure is said first, then its one action (Retry); other notes follow the button.
+  const noteFirst = failed && placement === 'quiet';
   return `
           <div class="nearby-now nearby-now-${placement}" id="nearby-now">
-            <button type="button" class="btn ${placement === 'quiet' ? 'btn-primary' : 'btn-outline btn-sm'} nearby-now-btn" id="btn-nearby-now" ${loading ? 'disabled aria-busy="true"' : ''} aria-label="${placement === 'quiet' ? 'Find restaurants near you now' : 'Refresh restaurants near you'}">${escapeHtml(label)}</button>
+            ${noteFirst ? noteHtml : ''}
+            <button type="button" class="btn ${placement === 'quiet' ? 'btn-primary' : 'btn-outline btn-sm'} nearby-now-btn" id="btn-nearby-now" ${loading ? 'disabled aria-busy="true"' : ''} aria-label="${placement === 'quiet' ? (failed && !loading ? 'Retry finding restaurants near you' : 'Find restaurants near you now') : 'Refresh restaurants near you'}">${escapeHtml(label)}</button>
             ${
               placement === 'quiet'
                 ? `<span class="nearby-now-caption">Restaurants around you · ${escapeHtml(vm.nearbyNow.sourceLabel || 'OpenStreetMap via Overpass')}</span>`
                 : ''
             }
-            ${
-              shownNote
-                ? `<div class="nearby-state nearby-state-${shownNote.kind}" id="nearby-now-note" role="status">
-              <span class="nearby-state-icon" aria-hidden="true">${shownNote.kind === 'error' ? '!' : shownNote.kind === 'empty' ? '∅' : '✓'}</span>
-              <span class="nearby-state-text"><span class="nearby-state-title">${escapeHtml(shownNote.title)}</span><span class="nearby-state-desc">${escapeHtml(shownNote.desc)}</span></span>
-            </div>`
-                : ''
-            }
+            ${noteFirst ? '' : noteHtml}
           </div>`;
 }
 
@@ -826,6 +825,8 @@ function renderLiveWeatherNow(vm: HomeCompositionVM): string {
 export function renderV2Home(vm: HomeCompositionVM): string {
   // 1. Quiet State
   if (vm.layoutKind === 'quiet') {
+    // A failed nearby search is not "all caught up": the card says the failure once, with Retry.
+    const nearbyFailed = Boolean(vm.isLive && !vm.suppressedQuiet && vm.nearbyNow?.state !== 'off' && vm.nearbyNow?.note?.kind === 'error');
     return `
       <div class="v2-home-container quiet">
         ${renderStateNotices(vm)}
@@ -839,7 +840,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           </div>
           ${vm.isLive ? renderProvenanceChip('live') : ''}
           <h2 class="quiet-title" id="quiet-title">${escapeHtml(vm.suppressedQuiet?.message || vm.title)}</h2>
-          <p class="quiet-subtitle" id="quiet-subtitle">${escapeHtml(vm.headline)}</p>
+          ${nearbyFailed ? '' : `<p class="quiet-subtitle" id="quiet-subtitle">${escapeHtml(vm.headline)}</p>`}
           ${renderLiveWeatherNow(vm)}
           ${vm.suppressedQuiet ? '' : renderNearbyNow(vm, 'quiet')}
           ${
@@ -855,7 +856,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
           `
               : ''
           }
-          ${vm.basis ? `<p class="quiet-basis">${renderQuietBasis(vm.basis)}</p>` : ''}
+          ${vm.basis && !nearbyFailed ? `<p class="quiet-basis">${renderQuietBasis(vm.basis)}</p>` : ''}
           ${vm.locationState ? renderLocationControls(vm) : ''}
         </section>
       </div>

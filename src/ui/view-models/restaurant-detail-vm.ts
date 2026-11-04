@@ -39,6 +39,23 @@ export interface DeriveRestaurantDetailOptions {
   isLive?: boolean;
 }
 
+
+
+/**
+ * A display label for an OSM cuisine tag: the first ';' token, '_' read as a space, capitalised
+ * ("ramen;japanese" -> "Ramen", "fast_food" -> "Fast food"). Undefined when there is nothing to say.
+ */
+export function formatCuisineLabel(raw: string | undefined): string | undefined {
+  const first = ((raw ?? '').split(';')[0] ?? '').replace(/_/g, ' ').trim().replace(/\s+/g, ' ');
+  if (!first) return undefined;
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
+/** The Live basis line: "Italian · close to you", or "Close to you" without a cuisine. */
+export function formatCuisineBasis(raw: string | undefined): string {
+  const label = formatCuisineLabel(raw);
+  return label ? `${label} · close to you` : 'Close to you';
+}
 export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions): RestaurantDetailVM {
   const {
     candidateId,
@@ -74,9 +91,7 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
   }
 
   const name = targetOpt?.name || targetOpt?.label || 'Restaurant Candidate';
-  const cuisine = targetOpt?.cuisine
-    ? targetOpt.cuisine.charAt(0).toUpperCase() + targetOpt.cuisine.slice(1)
-    : 'Dining';
+  const cuisine = formatCuisineLabel(targetOpt?.cuisine) ?? 'Dining';
   const isDynamicLunch = Boolean(snapshot?.signals?.some(s => s.kind === 'places_lunch'));
   const straightLineDist =
     (targetOpt as any)?.straightLineDistanceLabel ||
@@ -184,7 +199,7 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     ? 'Confirmed taste preference'
     : 'Demo profile · sample';
   const basis = isLive && !tasteFact
-    ? `A ${cuisine.toLowerCase()} spot close to you` /* UI-QUIET-PRECISION: plain language */
+    ? formatCuisineBasis(targetOpt?.cuisine) /* UI-QUIET-PRECISION: plain language */
     : `Based on taste: ${cuisine} (${provenance})`;
 
   // Compact schematic map

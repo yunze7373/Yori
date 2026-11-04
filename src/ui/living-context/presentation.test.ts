@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  formatConfirmedMemoryNote,
   escapeHtml,
   getGreeting,
   formatNowPlan,
@@ -578,5 +579,34 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
       expect(html).not.toContain('fuel station');
       expect(html).not.toContain('select-demo-city');
     });
+  });
+});
+
+describe('UI-QUIET-PRECISION increment 2: the MEMORY row reads as a human fact', () => {
+  it.each([
+    ['prep_buffer_minutes', 10, 'Prep buffer · 10 min (you confirmed)'],
+    ['prep_buffer_minutes', '10', 'Prep buffer · 10 min (you confirmed)'],
+    ['prep_buffer_preference', 15, 'Prep buffer · 15 min (you confirmed)'],
+    ['rain_buffer_minutes', 5, 'Rain buffer · 5 min (you confirmed)'],
+    ['prep_duration_minutes', 20, 'Prep time · 20 min (you confirmed)'],
+    ['taste_preference', 'Japanese or Italian', 'Taste · Japanese or Italian (you confirmed)'],
+    ['rain_transport_preference', 'bus', 'When it rains · bus (you confirmed)'],
+    ['preferred_grocery_store', 'Ozeki', 'Grocery store · Ozeki (you confirmed)'],
+    ['habit_coffee', 'oat_latte', 'Habit coffee · oat latte (you confirmed)'],
+    ['walk_minutes', 12, 'Walk · 12 min (you confirmed)'],
+    ['some_habit', undefined, 'Some habit (you confirmed)'],
+    ['some_habit', { nested: true }, 'Some habit (you confirmed)'],
+  ])('%s = %o -> %s', (key, value, expected) => {
+    expect(formatConfirmedMemoryNote(key, value)).toBe(expected);
+  });
+
+  it('never shows the question-form proposal title or a raw key', () => {
+    for (const key of ['prep_buffer_minutes', 'prep_buffer_preference', 'suppress_lunch', 'unknown_key_x', 'preferred_grocery_store']) {
+      const note = formatConfirmedMemoryNote(key, 10);
+      expect(note).not.toContain('?');
+      expect(note).not.toMatch(/Remember/i);
+      expect(note).not.toContain('_');
+      expect(note).not.toContain('{');
+    }
   });
 });

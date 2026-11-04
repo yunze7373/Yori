@@ -76,11 +76,11 @@ test.describe('V5-GEO: Consent-Aware Geolocation & Explicit Degradation (AC-211-
     // Consent buttons are present
     const requestBtn = page.locator('#btn-request-location');
     await expect(requestBtn).toBeVisible();
-    await expect(requestBtn).toContainText('Use My Location');
+    await expect(requestBtn).toContainText('Use my location'); // sentence case (UI-QUIET-PRECISION increment 2)
 
     const denyBtn = page.locator('#btn-deny-location');
     await expect(denyBtn).toBeVisible();
-    await expect(denyBtn).toContainText('Deny');
+    await expect(denyBtn).toContainText('Not now');
 
     // Manual location container is present
     const manualToggleBtn = page.locator('#btn-manual-location-toggle');

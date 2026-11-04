@@ -67,7 +67,7 @@ test.describe('PRE-S1-C: Production Gating of Dev/Test Hooks and URL Forcing', (
     await expect(page.locator('.app-layout')).toHaveAttribute('data-context-mode', 'live');
     const quietTitle = page.locator('#quiet-title');
     await expect(quietTitle).toBeVisible();
-    await expect(quietTitle).toContainText('Location Needed');
+    await expect(quietTitle).toContainText('Use your location'); // Live consent copy (UI-QUIET-PRECISION increment 2)
     await expect(page.locator('.v2-candidate-list')).toHaveCount(0);
 
     // 2. Observable geo_consent forcing is INERT:

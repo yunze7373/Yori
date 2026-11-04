@@ -189,7 +189,7 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
     // 1. Verify honest quiet state on Home screen
     const quietTitle = page.locator('#quiet-title, .quiet-title');
     await expect(quietTitle).toBeVisible();
-    await expect(quietTitle).toContainText(/Nothing needs your attention right now|All quiet for now|Location Shared|Location Needed/i);
+    await expect(quietTitle).toContainText(/Nothing needs your attention right now|All quiet for now|Location Shared|Location Needed|Use your location/i);
 
     // Zero fake appointments or piano lessons rendered
     const bodyText = await page.textContent('body');

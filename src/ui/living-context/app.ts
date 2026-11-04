@@ -2621,12 +2621,12 @@ export function renderApp(
       } else {
         livePlacesList = [];
         livePlacesError = true;
-        nearbyNowNote = { kind: 'error', title: 'Nearby search failed', desc: "Nearby places didn't load. Try again in a moment." };
+        nearbyNowNote = { kind: 'error', title: "Nearby places didn't load.", desc: '' };
       }
     } catch {
       livePlacesList = [];
       livePlacesError = true;
-      nearbyNowNote = { kind: 'error', title: 'Nearby search failed', desc: "Nearby places didn't load. Try again in a moment." };
+      nearbyNowNote = { kind: 'error', title: "Nearby places didn't load.", desc: '' };
     } finally {
       livePlacesLoading = false;
       update();

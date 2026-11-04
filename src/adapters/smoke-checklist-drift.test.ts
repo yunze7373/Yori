@@ -97,8 +97,9 @@ describe('Submission Readiness & Smoke Checklist Drift Guard', () => {
 
     // On-screen UI strings the owner is asked to confirm in §4
     const expectedUiStrings = [
-      'Location Needed',
-      'Use My Location',
+      'Use your location',
+      'Use my location',
+      'Not now',
       'Location Denied',
       'Location access denied by user',
       'Weather: Off',
@@ -156,7 +157,7 @@ describe('Submission Readiness & Smoke Checklist Drift Guard', () => {
     expect(docContent).not.toContain('Clear now');
     expect(docContent).not.toContain('browser settings instructions');
 
-    // Button label must be "Use My Location", never "Share Location"
+    // Button label must be "Use my location", never "Share Location"
     const checklistSection = docContent.split('## 4. One-Page Owner Smoke Checklist')[1]?.split('## 5.')[0] || '';
     expect(checklistSection).not.toContain('Share Location');
   });
