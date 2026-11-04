@@ -142,4 +142,4 @@ Use the **Demo Scenes** selector at the top-right of the navigation bar to test 
 
 ## 📄 License
 
-This project is proposed under the [MIT License](LICENSE). Final license selection is an explicit owner decision prior to public release.
+This project is licensed under the [MIT License](LICENSE).

@@ -27,8 +27,7 @@
 ## 📋 Owner Action Items
 
 ### 1. License Selection
-- [ ] **Review Proposed License**: Inspect [`LICENSE`](../../LICENSE). The default proposed license is the **MIT License**.
-- [ ] **Owner Action**: Confirm MIT or replace with your preferred open source or proprietary license prior to public release.
+- [x] **License**: Confirmed [`LICENSE`](../../LICENSE) as the **MIT License** (Owner decision).
 
 ### 2. Narrative & Description Review
 - [ ] **Review Project Description**: Inspect [`PROJECT_DESCRIPTION.md`](PROJECT_DESCRIPTION.md).
