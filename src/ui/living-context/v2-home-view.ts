@@ -721,6 +721,7 @@ const EYEBROW_ICONS = {
   travel: `<svg ${EYEBROW_ICON_ATTRS}><path d="M5 16.5V12l1.8-4.6A2 2 0 0 1 8.7 6h6.6a2 2 0 0 1 1.9 1.4L19 12v4.5"/><path d="M4 12.5h16v4H4z"/><circle cx="7.5" cy="18" r="1.4"/><circle cx="16.5" cy="18" r="1.4"/></svg>`,
   lunch: `<svg ${EYEBROW_ICON_ATTRS}><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10"/><path d="M17 21V3c-1.9 1-3 3.2-3 6.5V13h3"/></svg>`,
   fuel: `<svg ${EYEBROW_ICON_ATTRS}><path d="M5 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16M4 21h12M8 8h4"/><path d="M15 10h2a2 2 0 0 1 2 2v4.5a1.5 1.5 0 0 0 3 0V8l-3-3"/></svg>`,
+  shopping: `<svg ${EYEBROW_ICON_ATTRS}><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`,
 };
 
 /** A soft rain glyph for the hero card when rain drives the plan (reference 04). */
@@ -1352,6 +1353,34 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
             <span class="feed-section-subtitle">What's happening right now.</span>
           </div>
         </div>
+        ${
+          vm.shoppingReminder
+            ? `
+        <div class="card feed-now-card shopping-reminder-card" id="card-shopping-now" data-proposal-key="shopping_reminder" data-provenance="${vm.shoppingReminder.isSimulated ? 'fixture' : (vm.isLive ? 'live' : 'fixture')}" data-slot="chrome" data-slot-reason="Shopping reminder Now card">
+          <div class="hero-thought-header" style="margin-bottom: 8px;">
+            <span class="hero-thought-badge">
+              ${EYEBROW_ICONS.shopping}
+              <span class="qp-eyebrow-label" aria-hidden="true">Shopping</span>
+              <span class="qp-visually-hidden">Thought ahead for you</span>
+            </span>
+            <div class="hero-header-meta">
+              ${renderProvenanceChip(vm.shoppingReminder.isSimulated ? 'fixture' : (vm.isLive ? 'live' : 'fixture'))}
+            </div>
+          </div>
+          <div class="feed-now-body" style="align-items: flex-start; flex-direction: column; gap: 8px;">
+            <div class="feed-now-text">
+              <h3 class="feed-now-title proposal-title" style="font-size: 1.0625rem; font-weight: 600; line-height: 1.4; margin: 0;" data-slot="chrome" data-slot-reason="Shopping reminder title">${escapeHtml(vm.shoppingReminder.text)}</h3>
+              <p class="feed-now-desc proposal-basis" style="margin-top: 4px; font-size: 0.875rem; color: var(--color-ink-muted, #5C6F68);">From your shopping list</p>
+            </div>
+            <div class="shopping-actions-row" style="display: flex; gap: 8px; margin-top: 8px; align-items: center; flex-wrap: wrap;">
+              <a href="${escapeHtml(vm.shoppingReminder.directionsUrl || '#')}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline btn-shopping-directions">Directions</a>
+              <button type="button" class="btn btn-sm btn-primary btn-shopping-got-it">Got it</button>
+              <button type="button" class="btn btn-sm btn-quiet btn-shopping-not-now">Not now</button>
+            </div>
+          </div>
+        </div>
+        `
+            : `
         <div class="card feed-now-card" data-provenance="${vm.isLive ? 'live' : 'fixture'}">
           <div class="feed-now-body">
             <div class="feed-now-text">
@@ -1362,6 +1391,8 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
           </div>
           ${renderProvenanceChip(vm.isLive ? 'live' : 'fixture')}
         </div>
+        `
+        }
       </section>
 
       <!-- Section 2: Ahead -->

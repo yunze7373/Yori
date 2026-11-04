@@ -106,9 +106,9 @@ test.describe('SHOPPING-REMINDER: Demo Mode & Live Context', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForSelector('.app-layout');
 
-    // 2. Verify shopping reminder card is shown exactly once in "Nearby now"
+    // 2. Verify shopping reminder card is rendered AS the Now card (exactly once, not repeated in Nearby now)
     await expect(page.locator('.shopping-reminder-card')).toHaveCount(1);
-    const shoppingCard = page.locator('#card-shopping-now, .shopping-reminder-card').first();
+    const shoppingCard = page.locator('#feed-section-now #card-shopping-now, #card-shopping-now, .shopping-reminder-card').first();
     await expect(shoppingCard).toBeVisible();
     await expect(shoppingCard).toContainText('Pick up milk, eggs at Market Square Grocery');
     await expect(shoppingCard).toContainText(/simulated/i);
@@ -116,10 +116,16 @@ test.describe('SHOPPING-REMINDER: Demo Mode & Live Context', () => {
     await expect(shoppingCard.locator('.btn-shopping-got-it')).toBeVisible();
     await expect(shoppingCard.locator('.btn-shopping-not-now')).toBeVisible();
 
-    // Verify dedicated "Nearby now" section exists
-    const nearbyNowSection = page.locator('#feed-section-nearbynow');
-    await expect(nearbyNowSection).toBeVisible();
-    await expect(nearbyNowSection).toContainText('Nearby now');
+    // Verify it is placed in Section 1: Now
+    await expect(page.locator('#feed-section-now #card-shopping-now')).toBeVisible();
+
+    // Verify header subline says "I've already looked ahead for you." and not "Nothing needs you right now."
+    const greetingSub = page.locator('.greeting-subheading:visible').first();
+    await expect(greetingSub).toContainText("I've already looked ahead for you.");
+    await expect(greetingSub).not.toContainText("Nothing needs you right now.");
+
+    // Verify shopping card is NOT repeated in "Nearby now"
+    await expect(page.locator('#feed-section-nearbynow #card-shopping-now')).toHaveCount(0);
 
     // Capture screenshot: 01-demo-shopping-scene
     const shot01 = path.join(EVIDENCE_DIR, `01-demo-shopping-scene-${viewLabel}.png`);
@@ -169,7 +175,7 @@ test.describe('SHOPPING-REMINDER: Demo Mode & Live Context', () => {
     const viewLabel = `${projectName}-${testInfo.project.use.viewport?.width}x${testInfo.project.use.viewport?.height}`;
 
     // Grant location permission
-    await context.grantPermissions(['geolocation'], { origin: 'http://localhost:4289' });
+    await context.grantPermissions(['geolocation'], { origin: new URL(APP).origin });
     await context.setGeolocation(FIX);
 
     // 1. Visit Live mode
@@ -211,19 +217,29 @@ test.describe('SHOPPING-REMINDER: Demo Mode & Live Context', () => {
     await closeBtn.click();
     await expect(overlay).toBeHidden();
 
-    // 5. Verify proactive shopping card with real store 'Seijo Ishii Shinjuku' (shown once)
+    // 5. Verify proactive shopping card with real store 'Seijo Ishii Shinjuku' rendered on Now (shown once)
     await expect(page.locator('.shopping-reminder-card')).toHaveCount(1);
-    const liveCard = page.locator('#card-shopping-now, .shopping-reminder-card').first();
+    const liveCard = page.locator('#feed-section-now #card-shopping-now, #card-shopping-now, .shopping-reminder-card').first();
     await expect(liveCard).toBeVisible({ timeout: 10000 });
     await expect(liveCard).toContainText('Pick up milk, eggs at Seijo Ishii Shinjuku · 145m · Open now');
+    await expect(liveCard).toContainText(/live/i);
     await expect(liveCard.locator('.btn-shopping-directions')).toBeVisible();
     await expect(liveCard.locator('.btn-shopping-got-it')).toBeVisible();
     await expect(liveCard.locator('.btn-shopping-not-now')).toBeVisible();
 
-    // Verify dedicated "Nearby now" section
+    // Verify it is placed in Section 1: Now
+    await expect(page.locator('#feed-section-now #card-shopping-now')).toBeVisible();
+
+    // Verify header subline says "I've already looked ahead for you." and not "Nothing needs you right now."
+    const liveGreetingSub = page.locator('.greeting-subheading:visible').first();
+    await expect(liveGreetingSub).toContainText("I've already looked ahead for you.");
+    await expect(liveGreetingSub).not.toContainText("Nothing needs you right now.");
+
+    // Verify dedicated "Nearby now" section contains essentials and does NOT repeat the shopping card
     const nearbyNowSection = page.locator('#feed-section-nearbynow');
     await expect(nearbyNowSection).toBeVisible();
     await expect(nearbyNowSection).toContainText('Nearby now');
+    await expect(page.locator('#feed-section-nearbynow #card-shopping-now')).toHaveCount(0);
 
     // Verify live Nearby essentials shows Live badge (not "You confirmed")
     const essentialsItem = nearbyNowSection.locator('[data-proposal-key="nearby_essentials"]');

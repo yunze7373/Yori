@@ -81,11 +81,58 @@ describe('SHOPPING-REMINDER: Proactive card composition rules', () => {
     signals: [],
   };
 
-  it('renders card when list is non-empty and store is known', () => {
+  it('renders shopping reminder AS the Now card when Now would otherwise be quiet', () => {
     const reminderText = 'Pick up milk, eggs at Maruetsu · 350m · Open now';
     const directionsUrl = 'https://www.google.com/maps/dir/?api=1&destination=Maruetsu';
     const homeVM = buildHomeComposition({
       plan: null,
+      spatialEvidence: null,
+      snapshot: dummySnapshot,
+      isLive: true,
+      nearbyItems: [],
+      shoppingReminder: {
+        text: reminderText,
+        storeName: 'Maruetsu',
+        distanceLabel: '350m',
+        openStatus: 'open',
+        directionsUrl,
+        items: ['milk', 'eggs'],
+        isSimulated: false,
+      },
+    });
+
+    const html = renderV2Home(homeVM);
+    expect(html).toContain('feed-section-now');
+    expect(html).toContain('card-shopping-now');
+    expect(html).toContain('Pick up milk, eggs at Maruetsu · 350m · Open now');
+    expect(html).toContain('btn-shopping-directions');
+    expect(html).toContain('Directions');
+    expect(html).toContain('btn-shopping-got-it');
+    expect(html).toContain('Got it');
+    expect(html).toContain('btn-shopping-not-now');
+    expect(html).toContain('Not now');
+    expect(html).toContain('Live');
+    expect(html).toContain('Shopping');
+    // Not repeated in Nearby now
+    expect(html).not.toContain('feed-section-nearbynow');
+  });
+
+  it('keeps shopping reminder in Nearby now when Now already has a plan', () => {
+    const reminderText = 'Pick up milk, eggs at Maruetsu · 350m · Open now';
+    const directionsUrl = 'https://www.google.com/maps/dir/?api=1&destination=Maruetsu';
+    const samplePlan: any = {
+      id: 'plan-depart-1',
+      intentId: 'depart',
+      headline: 'Depart for Flight to SFO',
+      subjectTitle: 'Flight to SFO',
+      apptAt: '2026-11-05T18:00:00.000Z',
+      leaveAt: '2026-11-05T16:00:00.000Z',
+      timezone: 'America/Los_Angeles',
+      why: { primaryReason: 'Traffic buffer', evidenceSignals: [] },
+    };
+
+    const homeVM = buildHomeComposition({
+      plan: samplePlan,
       spatialEvidence: null,
       snapshot: dummySnapshot,
       isLive: true,
@@ -103,26 +150,15 @@ describe('SHOPPING-REMINDER: Proactive card composition rules', () => {
           ],
         },
       ],
-      shoppingReminder: {
-        text: reminderText,
-        storeName: 'Maruetsu',
-        distanceLabel: '350m',
-        openStatus: 'open',
-        directionsUrl,
-        items: ['milk', 'eggs'],
-        isSimulated: false,
-      },
+      shoppingReminder: undefined,
     });
 
     const html = renderV2Home(homeVM);
-    expect(html).toContain('Pick up milk, eggs at Maruetsu · 350m · Open now');
-    expect(html).toContain('btn-shopping-directions');
-    expect(html).toContain('Directions');
-    expect(html).toContain('btn-shopping-got-it');
-    expect(html).toContain('Got it');
-    expect(html).toContain('btn-shopping-not-now');
-    expect(html).toContain('Not now');
-    expect(html).toContain('You confirmed');
+    // Now card renders the depart plan
+    expect(html).toContain('Flight to SFO');
+    // Shopping reminder is rendered in Nearby now
+    expect(html).toContain('feed-section-nearbynow');
+    expect(html).toContain(reminderText);
   });
 
   it('does NOT render card when shopping list is empty or undefined', () => {
@@ -140,7 +176,7 @@ describe('SHOPPING-REMINDER: Proactive card composition rules', () => {
     expect(html).not.toContain('btn-shopping-got-it');
   });
 
-  it('renders SIMULATED pill in demo shopping scene with fictional store name', () => {
+  it('renders SIMULATED pill in demo shopping scene with fictional store name on Now card', () => {
     const reminderText = `Pick up milk, eggs at ${DEMO_SHOPPING_STORE.name} · 350m · Open now`;
     const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(DEMO_SHOPPING_STORE.name)}`;
     const homeVM = buildHomeComposition({
@@ -148,20 +184,7 @@ describe('SHOPPING-REMINDER: Proactive card composition rules', () => {
       spatialEvidence: null,
       snapshot: dummySnapshot,
       isLive: false,
-      nearbyItems: [
-        {
-          key: 'shopping_reminder',
-          title: reminderText,
-          basis: 'From your shopping list',
-          value: ['milk', 'eggs'],
-          provenance: 'fixture',
-          actions: [
-            { id: 'btn-shopping-directions', label: 'Directions', href: directionsUrl, variant: 'outline' },
-            { id: 'btn-shopping-got-it', label: 'Got it', variant: 'primary' },
-            { id: 'btn-shopping-not-now', label: 'Not now', variant: 'quiet' },
-          ],
-        },
-      ],
+      nearbyItems: [],
       shoppingReminder: {
         text: reminderText,
         storeName: DEMO_SHOPPING_STORE.name,
@@ -174,11 +197,15 @@ describe('SHOPPING-REMINDER: Proactive card composition rules', () => {
     });
 
     const html = renderV2Home(homeVM);
+    expect(html).toContain('feed-section-now');
+    expect(html).toContain('card-shopping-now');
     expect(html).toContain('Simulated');
+    expect(html).toContain('Shopping');
     expect(html).toContain(`Pick up milk, eggs at ${DEMO_SHOPPING_STORE.name} · 350m · Open now`);
     expect(html).toContain('Directions');
     expect(html).toContain('Got it');
     expect(html).toContain('Not now');
+    expect(html).not.toContain('feed-section-nearbynow');
   });
 
   it('verifies MemoryPort writeBack and forget integration for shopping list', async () => {

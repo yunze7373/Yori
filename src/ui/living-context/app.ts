@@ -3557,8 +3557,74 @@ export function renderApp(
             return `${timeStr} · ${weatherStr} · ${locStr}`;
           })();
 
+    const essentialsProposal = (contextMode === 'live' && liveEssentialsSummary) ? [{
+      key: 'nearby_essentials',
+      title: 'Nearby essentials',
+      basis: liveEssentialsSummary,
+      value: liveEssentialsSummary,
+      provenance: 'live' as const,
+    }] : [];
+
+    // SHOPPING-REMINDER: Proactive card
+    const activeShoppingFact = (activeLoadedFacts.length > 0 ? activeLoadedFacts : (storedEnvelope?.payload.memoryFacts ?? []))
+      .find(f => f.key === 'shopping_list' && isActiveMemoryFact(f))
+      ?? (contextMode === 'demo' && currentScene === 'shopping' && !demoShoppingForgotten ? DEMO_SHOPPING_FACT : undefined);
+
+    let shoppingItems: string[] = [];
+    if (activeShoppingFact) {
+      if (Array.isArray(activeShoppingFact.value)) {
+        shoppingItems = activeShoppingFact.value.map(String).filter(Boolean);
+      } else if (typeof activeShoppingFact.value === 'string') {
+        shoppingItems = activeShoppingFact.value.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
+
+    const currentStore = contextMode === 'live'
+      ? liveNearestStore
+      : (currentScene === 'shopping' ? DEMO_SHOPPING_STORE : null);
+
+    let shoppingReminderData: import('../view-models/types.js').ShoppingReminderVM | undefined = undefined;
+    let shoppingProposal: import('../view-models/types.js').ProposalItemVM[] = [];
+
+    if (shoppingItems.length > 0 && currentStore && !isShoppingSuppressed) {
+      const itemsListStr = shoppingItems.join(', ');
+      const distPart = currentStore.straightLineDistanceLabel ? ` · ${currentStore.straightLineDistanceLabel}` : '';
+      const openPart = currentStore.openingStatus === 'open' ? ' · Open now' : currentStore.openingStatus === 'closed' ? ' · Closed' : '';
+      const reminderText = `Pick up ${itemsListStr} at ${currentStore.name}${distPart}${openPart}`;
+      const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+        currentStore.address || currentStore.name || `${currentStore.coords.lat},${currentStore.coords.lng}`
+      )}`;
+
+      shoppingReminderData = {
+        text: reminderText,
+        storeName: currentStore.name,
+        distanceLabel: currentStore.straightLineDistanceLabel,
+        openStatus: currentStore.openingStatus,
+        directionsUrl,
+        items: shoppingItems,
+        isSimulated: contextMode !== 'live',
+      };
+
+      shoppingProposal = [{
+        key: 'shopping_reminder',
+        title: reminderText,
+        basis: 'From your shopping list',
+        value: shoppingItems,
+        provenance: contextMode === 'demo' ? ('fixture' as const) : ('user' as const),
+        actions: [
+          { id: 'btn-shopping-directions', label: 'Directions', href: directionsUrl, variant: 'outline' },
+          { id: 'btn-shopping-got-it', label: 'Got it', variant: 'primary' },
+          { id: 'btn-shopping-not-now', label: 'Not now', variant: 'quiet' },
+        ],
+      }];
+    }
+
+    const isShoppingInNow = Boolean(shoppingReminderData && !nowPlan);
+    const effectiveNearbyItems = isShoppingInNow ? essentialsProposal : [...shoppingProposal, ...essentialsProposal];
+
     const hasPreparedCard = Boolean(
       (
+        isShoppingInNow ||
         (nowPlan && !isPlanAccepted(nowPlan, acceptedPlanIds) && !storedSuppressions.some(s => s.targetIntent === nowPlan.intentId || (s as any).intentId === nowPlan.intentId)) ||
         (nowPlan && isPlanAccepted(nowPlan, acceptedPlanIds)) ||
         (admittedCandidate && !storedSuppressions.some(s => s.targetIntent === 'lunch' || (s as any).intentId === 'lunch')) ||
@@ -3643,69 +3709,6 @@ export function renderApp(
         };
       });
 
-    const essentialsProposal = (contextMode === 'live' && liveEssentialsSummary) ? [{
-      key: 'nearby_essentials',
-      title: 'Nearby essentials',
-      basis: liveEssentialsSummary,
-      value: liveEssentialsSummary,
-      provenance: 'live' as const,
-    }] : [];
-
-    // SHOPPING-REMINDER: Proactive card
-    const activeShoppingFact = (activeLoadedFacts.length > 0 ? activeLoadedFacts : (storedEnvelope?.payload.memoryFacts ?? []))
-      .find(f => f.key === 'shopping_list' && isActiveMemoryFact(f))
-      ?? (contextMode === 'demo' && currentScene === 'shopping' && !demoShoppingForgotten ? DEMO_SHOPPING_FACT : undefined);
-
-    let shoppingItems: string[] = [];
-    if (activeShoppingFact) {
-      if (Array.isArray(activeShoppingFact.value)) {
-        shoppingItems = activeShoppingFact.value.map(String).filter(Boolean);
-      } else if (typeof activeShoppingFact.value === 'string') {
-        shoppingItems = activeShoppingFact.value.split(',').map(s => s.trim()).filter(Boolean);
-      }
-    }
-
-    const currentStore = contextMode === 'live'
-      ? liveNearestStore
-      : (currentScene === 'shopping' ? DEMO_SHOPPING_STORE : null);
-
-    let shoppingReminderData: import('../view-models/types.js').ShoppingReminderVM | undefined = undefined;
-    let shoppingProposal: import('../view-models/types.js').ProposalItemVM[] = [];
-
-    if (shoppingItems.length > 0 && currentStore && !isShoppingSuppressed) {
-      const itemsListStr = shoppingItems.join(', ');
-      const distPart = currentStore.straightLineDistanceLabel ? ` · ${currentStore.straightLineDistanceLabel}` : '';
-      const openPart = currentStore.openingStatus === 'open' ? ' · Open now' : currentStore.openingStatus === 'closed' ? ' · Closed' : '';
-      const reminderText = `Pick up ${itemsListStr} at ${currentStore.name}${distPart}${openPart}`;
-      const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-        currentStore.address || currentStore.name || `${currentStore.coords.lat},${currentStore.coords.lng}`
-      )}`;
-
-      shoppingReminderData = {
-        text: reminderText,
-        storeName: currentStore.name,
-        distanceLabel: currentStore.straightLineDistanceLabel,
-        openStatus: currentStore.openingStatus,
-        directionsUrl,
-        items: shoppingItems,
-        isSimulated: contextMode !== 'live',
-      };
-
-      shoppingProposal = [{
-        key: 'shopping_reminder',
-        title: reminderText,
-        basis: 'From your shopping list',
-        value: shoppingItems,
-        provenance: contextMode === 'demo' ? ('fixture' as const) : ('user' as const),
-        actions: [
-          { id: 'btn-shopping-directions', label: 'Directions', href: directionsUrl, variant: 'outline' },
-          { id: 'btn-shopping-got-it', label: 'Got it', variant: 'primary' },
-          { id: 'btn-shopping-not-now', label: 'Not now', variant: 'quiet' },
-        ],
-      }];
-    }
-
-    const effectiveNearbyItems = [...shoppingProposal, ...essentialsProposal];
     const effectiveLearnedItems = learnedItems;
 
     if (activeTab === 'me') {
@@ -4219,7 +4222,7 @@ export function renderApp(
             timelineLabel: 'Demo timeline · simulated time',
           },
           nearbyItems: effectiveNearbyItems,
-          shoppingReminder: (currentScene === 'shopping' || (contextMode === 'live' && !nowPlan)) ? shoppingReminderData : undefined,
+          shoppingReminder: isShoppingInNow ? shoppingReminderData : undefined,
         });
         currentV2Composition = v2Composition;
         v2BodyHtml = renderV2Home(v2Composition);
