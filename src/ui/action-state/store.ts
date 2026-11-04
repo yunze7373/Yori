@@ -46,8 +46,9 @@ import { derivePlanTimingFacts } from '../view-models/timing.js';
 import {
   validateAssistantReply,
   containsSensitiveTraits,
+  extractDistanceTokens,
 } from '../../adapters/model/fact-checker.js';
-import type { SuppliedFacts } from '../../adapters/model/types.js';
+import type { SuppliedFacts, AppliedAction } from '../../adapters/model/types.js';
 import { buildHumanDerivation, humanizeMemoryKey } from '../review/why-sheet.js';
 import { classifyFactSource, provenanceLabel } from '../view-models/provenance.js';
 import {
@@ -716,6 +717,7 @@ export class DefaultActionStateStore implements ActionStateStore {
     const validPlaces: string[] = [];
     const suppliedDistances: string[] = [];
     const suppliedRatings: string[] = [];
+    const suppliedDurations: string[] = [];
     const suppliedOpenStatuses: string[] = [];
     let suppliedWeather: string | undefined;
 
@@ -734,9 +736,9 @@ export class DefaultActionStateStore implements ActionStateStore {
             if (o.label && !validPlaces.includes(o.label)) validPlaces.push(o.label);
             if (o.straightLineDistanceLabel) suppliedDistances.push(o.straightLineDistanceLabel);
             if (o.distanceMinutes !== undefined) {
-              suppliedDistances.push(`${o.distanceMinutes}m`);
-              suppliedDistances.push(`${o.distanceMinutes} min`);
-              suppliedDistances.push(`${o.distanceMinutes} minutes`);
+              suppliedDurations.push(`${o.distanceMinutes} min`);
+              suppliedDurations.push(`${o.distanceMinutes} minutes`);
+              suppliedDurations.push(String(o.distanceMinutes));
             }
             if (o.rating !== undefined) suppliedRatings.push(String(o.rating));
             if (o.openingStatus) suppliedOpenStatuses.push(o.openingStatus);
@@ -785,6 +787,7 @@ export class DefaultActionStateStore implements ActionStateStore {
           times: validTimes,
           distances: suppliedDistances,
           ratings: suppliedRatings,
+          durations: suppliedDurations,
           openStatuses: suppliedOpenStatuses,
           weather: suppliedWeather,
           routes: availableModes,
@@ -799,6 +802,10 @@ export class DefaultActionStateStore implements ActionStateStore {
     const places: string[] = [];
     const distances: string[] = [];
     const ratings: string[] = [];
+    const durations: string[] = [];
+    const weather: string[] = [];
+    const openStatuses: string[] = [];
+    const habits: string[] = [];
 
     if (ctx?.plan) {
       if (ctx.plan.leaveAt) times.push(ctx.plan.leaveAt);
@@ -814,18 +821,61 @@ export class DefaultActionStateStore implements ActionStateStore {
             if (o.name && !places.includes(o.name)) places.push(o.name);
             if (o.label && !places.includes(o.label)) places.push(o.label);
             if (o.straightLineDistanceLabel) distances.push(o.straightLineDistanceLabel);
+            if (o.label) {
+              const labelDists = extractDistanceTokens(o.label);
+              for (const ld of labelDists) {
+                if (!distances.includes(ld)) distances.push(ld);
+              }
+            }
             if (o.distanceMinutes !== undefined) {
-              distances.push(`${o.distanceMinutes}m`);
-              distances.push(`${o.distanceMinutes} min`);
-              distances.push(`${o.distanceMinutes} minutes`);
+              durations.push(`${o.distanceMinutes} min`);
+              durations.push(`${o.distanceMinutes} minutes`);
+              durations.push(String(o.distanceMinutes));
             }
             if (o.rating !== undefined) ratings.push(String(o.rating));
+            if (o.openingStatus) openStatuses.push(o.openingStatus);
+            if (o.openNow !== undefined) openStatuses.push(o.openNow ? 'open' : 'closed');
           }
         }
       }
     }
 
-    return { times, places, distances, ratings, prices: [] };
+    if (ctx?.snapshot?.signals) {
+      for (const s of ctx.snapshot.signals) {
+        if (s.kind === 'weather_current' || s.kind === 'weather') {
+          const w = (s as any).weather || (s as any).condition || (s as any).value?.condition || s.kind;
+          if (typeof w === 'string') weather.push(w);
+          if ((s as any).value?.temperature !== undefined) {
+            weather.push(`${(s as any).value.temperature}°C`);
+            weather.push(String((s as any).value.temperature));
+          }
+        }
+      }
+    }
+
+    if (ctx?.memory) {
+      for (const f of ctx.memory) {
+        const key = f.key.toLowerCase();
+        if (
+          !containsSensitiveTraits(key) &&
+          !containsSensitiveTraits(String(f.value ?? ''))
+        ) {
+          habits.push(`${f.key}: ${String(f.value ?? '')}`);
+        }
+      }
+    }
+
+    return {
+      times,
+      places,
+      distances,
+      ratings,
+      durations,
+      weather,
+      openStatuses,
+      habits,
+      prices: [],
+    };
   }
 
   private applyCommand(
@@ -835,13 +885,6 @@ export class DefaultActionStateStore implements ActionStateStore {
     now: string = new Date().toISOString()
   ): { collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan } {
     const suppliedFacts = this.extractSuppliedFacts(ctx);
-    let activeReply: string | undefined;
-    if (cmd.reply) {
-      const check = validateAssistantReply(cmd.reply, suppliedFacts, cmd.intent);
-      if (check.valid) {
-        activeReply = cmd.reply;
-      }
-    }
 
     // D4: live candidate reasoning for Live lunch plans (why / closer / quieter).
     const lunchFilters = cmd.intent === 'FIND_LUNCH' ? cmd.slots.filters ?? [] : [];
@@ -869,8 +912,14 @@ export class DefaultActionStateStore implements ActionStateStore {
       });
       this.notify();
       void this.candidateReasoner(candidateRequest)
-        .then(r => ({ text: activeReply ?? `${r.reason} · ${r.statusLabel}` }))
-        .catch(() => ({ text: activeReply ?? 'I could not reason about these places right now.' }))
+        .then(r => {
+          const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, cmd.intent) : { valid: false };
+          return { text: check.valid && cmd.reply ? cmd.reply : `${r.reason} · ${r.statusLabel}` };
+        })
+        .catch(() => {
+          const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, cmd.intent) : { valid: false };
+          return { text: check.valid && cmd.reply ? cmd.reply : 'I could not reason about these places right now.' };
+        })
         .then(({ text }) => {
           const idx = this.transcriptList.findIndex(m => m.id === msgId);
           if (idx !== -1) {
@@ -911,7 +960,8 @@ export class DefaultActionStateStore implements ActionStateStore {
           snapshot: ctx?.snapshot,
         });
         this.confirmPending('Plan confirmed for this time only', confirmedPlan);
-        const response = activeReply ?? 'Confirmed for this time only. Your departure plan is updated.';
+        const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'ACCEPT') : { valid: false };
+        const response = check.valid && cmd.reply ? cmd.reply : 'Confirmed for this time only. Your departure plan is updated.';
         this.transcriptList.push({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
@@ -924,7 +974,8 @@ export class DefaultActionStateStore implements ActionStateStore {
       }
 
       this.settle();
-      const response = activeReply ?? 'Plan accepted.';
+      const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'ACCEPT') : { valid: false };
+      const response = check.valid && cmd.reply ? cmd.reply : 'Plan accepted.';
       this.transcriptList.push({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
@@ -939,7 +990,8 @@ export class DefaultActionStateStore implements ActionStateStore {
     // 2. UNDO ('Undo', 'Revert')
     if (cmd.intent === 'UNDO') {
       const restored = this.undo();
-      const response = activeReply ?? (restored
+      const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'UNDO') : { valid: false };
+      const response = check.valid && cmd.reply ? cmd.reply : (restored
         ? 'Restored prior plan. Changes have been undone.'
         : 'Nothing to undo.');
       this.transcriptList.push({
@@ -1218,7 +1270,13 @@ export class DefaultActionStateStore implements ActionStateStore {
         newPlan
       );
 
-      const successMsg = activeReply ?? `Updated your plan to leave ${deltaMinutes} minutes later: ${newPlan.headline}.`;
+      const appliedAction: AppliedAction = {
+        intent: 'LEAVE_LATER',
+        deltaMinutes,
+        leaveTime: newPlan.headline,
+      };
+      const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'LEAVE_LATER', appliedAction) : { valid: false };
+      const successMsg = check.valid && cmd.reply ? cmd.reply : `Updated your plan to leave ${deltaMinutes} minutes later: ${newPlan.headline}.`;
       this.transcriptList.push({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
@@ -1313,7 +1371,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       this.activeSnapshot = ctx.snapshot;
 
       this.resolveExecutable(`Primary route switched to ${mode}.`, newPlan);
-      const successMsg = activeReply ?? `Switched primary route to ${mode}: ${newPlan.headline}.`;
+      const appliedAction: AppliedAction = {
+        intent: 'CHANGE_ROUTE',
+        mode,
+      };
+      const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'CHANGE_ROUTE', appliedAction) : { valid: false };
+      const successMsg = check.valid && cmd.reply ? cmd.reply : `Switched primary route to ${mode}: ${newPlan.headline}.`;
       this.transcriptList.push({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
@@ -1402,11 +1465,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (isDynamicLunch && this.nearbyRequestHandler && (filters.length === 0 || !hasLunchPlan)) {
         this.beginCommand(trimmed, 'Searching nearby · OpenStreetMap via Overpass', 'comparing');
         this.nearbyRequestHandler('ask');
-        const askMsg =
-          activeReply ??
-          (filters.length > 0
+        const defaultAskMsg =
+          filters.length > 0
             ? `Searching restaurants near you now (OpenStreetMap via Overpass). Ask for ${filtersDesc} again once they show on Home.`
-            : 'Searching restaurants near you now (OpenStreetMap via Overpass). They will show on Home in a moment.');
+            : 'Searching restaurants near you now (OpenStreetMap via Overpass). They will show on Home in a moment.';
+        const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'FIND_LUNCH') : { valid: false };
+        const askMsg = check.valid && cmd.reply ? cmd.reply : defaultAskMsg;
         this.resolveExecutable(askMsg);
         this.transcriptList.push({
           id: `msg-${Date.now()}-a`,
@@ -1500,7 +1564,12 @@ export class DefaultActionStateStore implements ActionStateStore {
           ? (topOption as { name?: string; label?: string }).name || (topOption as { name?: string; label?: string }).label
           : 'top recommendation';
 
-      const successMsg = activeReply ?? `Updated lunch options based on your request (${filtersDesc}): ${topName} is now your top recommendation.`;
+      const appliedAction: AppliedAction = {
+        intent: 'FIND_LUNCH',
+        topPickName: topName,
+      };
+      const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'FIND_LUNCH', appliedAction) : { valid: false };
+      const successMsg = check.valid && cmd.reply ? cmd.reply : `Updated lunch options based on your request (${filtersDesc}): ${topName} is now your top recommendation.`;
       this.transcriptList.push({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
@@ -1661,7 +1730,12 @@ export class DefaultActionStateStore implements ActionStateStore {
           ? (topOption as { name?: string; label?: string }).name || (topOption as { name?: string; label?: string }).label
           : 'nearby gas station';
 
-      const successMsg = activeReply ?? `Found nearby gas stations: ${topName} is the closest.`;
+      const appliedAction: AppliedAction = {
+        intent: 'FIND_FUEL',
+        topPickName: topName,
+      };
+      const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'FIND_FUEL', appliedAction) : { valid: false };
+      const successMsg = check.valid && cmd.reply ? cmd.reply : `Found nearby gas stations: ${topName} is the closest.`;
       this.transcriptList.push({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
@@ -1698,7 +1772,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       : isLunch
       ? "I can help with lunch recommendations."
       : "I can help adjust your departure plan.";
-    const responseText = activeReply ?? cmd.honestAnswer ?? fallbackText;
+
+    const appliedAction: AppliedAction = {
+      intent: 'UNSUPPORTED',
+    };
+    const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'UNSUPPORTED', appliedAction) : { valid: false };
+    const responseText = check.valid && cmd.reply ? cmd.reply : (cmd.honestAnswer ?? fallbackText);
 
     this.transcriptList.push({
       id: `msg-${Date.now()}-a`,

@@ -18,6 +18,7 @@
 
 import type { ReasoningReasonCode } from '../../adapters/model/reasoning.js';
 import type { EngineStatus } from '../../adapters/model/decision-log.js';
+import type { AppliedAction } from '../../adapters/model/types.js';
 
 export type CommandIntent =
   | 'LEAVE_LATER'
@@ -71,6 +72,9 @@ export interface CommandSuppliedFacts {
   readonly weather?: string;
   readonly routes?: readonly string[];
   readonly habits?: readonly string[];
+  readonly durations?: readonly string[];
+  readonly prices?: readonly string[];
+  readonly appliedAction?: AppliedAction;
 }
 
 export interface CommandInterpretationContext {

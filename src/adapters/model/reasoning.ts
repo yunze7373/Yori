@@ -989,9 +989,6 @@ export function validateDecisionCommandOutput(
     }
   }
   if (slots.filters !== undefined) {
-    if (typeof slots.filters === 'string') {
-      slots.filters = [slots.filters];
-    }
     if (!Array.isArray(slots.filters)) {
       return { valid: false, reason: 'schema_invalid', error: "'filters' must be an array" };
     }
@@ -1327,16 +1324,24 @@ export function validateDecisionCommandOutput(
 
   // 11. Validate assistant reply (if present)
   if (obj.reply !== undefined) {
+    const slots = (obj.slots as Record<string, unknown>) || {};
     const replyValidation = validateAssistantReply(
       obj.reply as string,
       {
         times: context?.validTimes ?? [],
         places: context?.validPlaces ?? [],
-        distances: context?.suppliedDistances ?? [],
-        ratings: context?.suppliedRatings ?? [],
-        prices: context?.suppliedPrices ?? [],
+        distances: (context as any)?.suppliedDistances ?? [],
+        ratings: (context as any)?.suppliedRatings ?? [],
+        durations: (context as any)?.suppliedDurations ?? [],
+        weather: (context as any)?.suppliedWeather ?? [],
+        prices: (context as any)?.suppliedPrices ?? [],
       },
-      typeof obj.intent === 'string' ? obj.intent : undefined
+      typeof obj.intent === 'string' ? obj.intent : undefined,
+      {
+        intent: typeof obj.intent === 'string' ? (obj.intent as any) : undefined,
+        deltaMinutes: typeof slots.deltaMinutes === 'number' ? slots.deltaMinutes : undefined,
+        mode: typeof slots.mode === 'string' ? (slots.mode as any) : undefined,
+      }
     );
     if (!replyValidation.valid) {
       return {

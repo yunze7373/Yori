@@ -11,6 +11,14 @@
  * - Disabled when no API key is present; D1-D6 outputs are identical with model disabled.
  */
 
+export interface AppliedAction {
+  readonly intent?: string;
+  readonly deltaMinutes?: number;
+  readonly mode?: string;
+  readonly topPickName?: string;
+  readonly leaveTime?: string;
+}
+
 export interface SuppliedFacts {
   readonly times: readonly string[];
   readonly places: readonly string[];
@@ -19,6 +27,12 @@ export interface SuppliedFacts {
   readonly ratings?: readonly string[];
   readonly distances?: readonly string[];
   readonly weather?: readonly string[];
+  readonly durations?: readonly string[];
+  readonly routes?: readonly string[];
+  readonly cardType?: string;
+  readonly habits?: readonly string[];
+  readonly openStatuses?: readonly string[];
+  readonly appliedAction?: AppliedAction;
 }
 
 export interface ModelPortRequest {

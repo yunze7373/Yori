@@ -459,4 +459,122 @@ describe('LLM-REPLY-GROUNDED: Store Integration (submitMessageAsync)', () => {
     expect(res.response).not.toContain('Error');
     expect(res.response).not.toContain('500');
   });
+
+  describe('Reviewer Adversarial Probes & Grounding Regression Suite', () => {
+    const reviewerSuppliedFacts = {
+      times: ['14:15', '2:15 PM'],
+      places: ['Kissa Hoshi', 'Sora Ramen'],
+      distances: ['350 m', '5m'],
+      ratings: ['4.5'],
+      durations: ['5 min', '5 minutes'],
+      prices: [],
+      weather: ['rain'],
+    };
+
+    it('rejects fabricated distances (3 km, 35 miles, 15m vs 350 m / 5m)', () => {
+      // 3 km away vs 350 m
+      const r1 = validateAssistantReply('Kissa Hoshi is 3 km away.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r1.valid).toBe(false);
+      expect(r1.reason).toBe('unlisted_fact_token');
+
+      // 35 miles vs 350 m
+      const r2 = validateAssistantReply('Kissa Hoshi is 35 miles from you.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r2.valid).toBe(false);
+      expect(r2.reason).toBe('unlisted_fact_token');
+
+      // 15m vs 5m
+      const r3 = validateAssistantReply('It is just 15m away.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r3.valid).toBe(false);
+      expect(r3.reason).toBe('unlisted_fact_token');
+
+      // Exact / normalized match
+      const r4 = validateAssistantReply('Kissa Hoshi is 350 m away.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r4.valid).toBe(true);
+      const r5 = validateAssistantReply('Kissa Hoshi is 350m away.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r5.valid).toBe(true);
+    });
+
+    it('rejects unlisted ratings via exact match (4 stars vs 4.5)', () => {
+      const r1 = validateAssistantReply('Kissa Hoshi is rated 4 stars on Google.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r1.valid).toBe(false);
+      expect(r1.reason).toBe('unlisted_fact_token');
+
+      const r2 = validateAssistantReply('Kissa Hoshi is rated 4.5 stars on Google.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r2.valid).toBe(true);
+    });
+
+    it('enforces numeric allowlist: rejects unlisted durations, opening hours, temperatures', () => {
+      // 12 minute walk (12 is unlisted)
+      const r1 = validateAssistantReply('Kissa Hoshi is a 12 minute walk.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r1.valid).toBe(false);
+      expect(r1.reason).toBe('unlisted_fact_token');
+
+      // open until 9 tonight (9 is unlisted)
+      const r2 = validateAssistantReply('Kissa Hoshi is open until 9 tonight.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r2.valid).toBe(false);
+      expect(r2.reason).toBe('unlisted_fact_token');
+
+      // 18 degrees and sunny when weather is rain
+      const r3 = validateAssistantReply('It is 18 degrees and sunny, so no umbrella needed.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r3.valid).toBe(false);
+      expect(r3.reason).toBe('unlisted_fact_token');
+    });
+
+    it('rejects unlisted proper noun places without suffix keywords (Ichiran)', () => {
+      // Mid-sentence unlisted venue
+      const r1 = validateAssistantReply('Try Ichiran instead, it is quieter.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r1.valid).toBe(false);
+      expect(r1.reason).toBe('unlisted_fact_token');
+
+      // Sentence-initial unlisted venue
+      const r2 = validateAssistantReply('Ichiran is a quieter spot for lunch.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r2.valid).toBe(false);
+      expect(r2.reason).toBe('unlisted_fact_token');
+
+      // Listed venue accepted
+      const r3 = validateAssistantReply('Sora Ramen is a quieter spot for lunch.', reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r3.valid).toBe(true);
+    });
+
+    it('enforces action alignment on delta shift and claims on non-action intents', () => {
+      // LEAVE_LATER: slot/applied delta is 15, model says 30
+      const r1 = validateAssistantReply(
+        "Done, I'll move your departure 30 minutes later.",
+        reviewerSuppliedFacts,
+        'LEAVE_LATER',
+        { intent: 'LEAVE_LATER', deltaMinutes: 15 }
+      );
+      expect(r1.valid).toBe(false);
+      expect(r1.reason).toBe('action_mismatch');
+
+      // LEAVE_LATER: matching delta 15
+      const r2 = validateAssistantReply(
+        "Done, I'll move your departure 15 minutes later.",
+        reviewerSuppliedFacts,
+        'LEAVE_LATER',
+        { intent: 'LEAVE_LATER', deltaMinutes: 15 }
+      );
+      expect(r2.valid).toBe(true);
+
+      // UNSUPPORTED: claiming to have booked a table
+      const r3 = validateAssistantReply(
+        "I've booked a table for you at Kissa Hoshi.",
+        reviewerSuppliedFacts,
+        'UNSUPPORTED',
+        { intent: 'UNSUPPORTED' }
+      );
+      expect(r3.valid).toBe(false);
+      expect(r3.reason).toBe('action_mismatch');
+    });
+
+    it('rejects sensitive diet trait assertions (vegan, vegetarian)', () => {
+      const r1 = validateAssistantReply("Since you're vegan, Kissa Hoshi is a good pick.", reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r1.valid).toBe(false);
+      expect(r1.reason).toBe('sensitive_traits');
+
+      const r2 = validateAssistantReply("You are vegetarian, so I found Sora Ramen.", reviewerSuppliedFacts, 'FIND_LUNCH');
+      expect(r2.valid).toBe(false);
+      expect(r2.reason).toBe('sensitive_traits');
+    });
+  });
 });

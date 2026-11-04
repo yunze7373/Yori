@@ -2074,6 +2074,14 @@ export class ModelDevProxy {
       let parsed: unknown;
       try {
         parsed = JSON.parse(content);
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as any).slots &&
+          typeof (parsed as any).slots.filters === 'string'
+        ) {
+          (parsed as any).slots.filters = [(parsed as any).slots.filters];
+        }
       } catch {
         return {
           result: fallback,
@@ -2379,7 +2387,7 @@ export class ModelDevProxy {
         },
         body: JSON.stringify({
           model: this.config.modelName,
-          max_tokens: resolveD4MaxTokens(this.config.maxTokensOverride),
+          max_tokens: this.config.maxTokensOverride !== undefined ? Math.min(this.config.maxTokensOverride, 4096) : 300,
           ...(this.config.reasoningEffort ? { reasoning_effort: this.config.reasoningEffort } : {}),
           messages: [
             {
@@ -2447,6 +2455,14 @@ export class ModelDevProxy {
       let parsed: unknown;
       try {
         parsed = JSON.parse(content);
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          (parsed as any).slots &&
+          typeof (parsed as any).slots.filters === 'string'
+        ) {
+          (parsed as any).slots.filters = [(parsed as any).slots.filters];
+        }
       } catch {
         return {
           result: null,

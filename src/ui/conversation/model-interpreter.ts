@@ -600,9 +600,19 @@ export class ModelCommandInterpreter implements CommandInterpreter {
           places: context?.validPlaces ?? [],
           distances: context?.suppliedFacts?.distances ?? [],
           ratings: context?.suppliedFacts?.ratings ?? [],
-          prices: [],
+          durations: context?.suppliedFacts?.durations ?? [],
+          weather: context?.suppliedFacts?.weather ? [context.suppliedFacts.weather] : [],
+          routes: context?.availableModes ?? context?.suppliedFacts?.routes ?? [],
+          openStatuses: context?.suppliedFacts?.openStatuses ?? [],
+          habits: context?.suppliedFacts?.habits ?? [],
+          prices: context?.suppliedFacts?.prices ?? [],
         },
-        typeof obj.intent === 'string' ? (obj.intent as string) : undefined
+        typeof obj.intent === 'string' ? (obj.intent as string) : undefined,
+        context?.suppliedFacts?.appliedAction ?? {
+          intent: typeof obj.intent === 'string' ? (obj.intent as any) : undefined,
+          deltaMinutes: typeof slots.deltaMinutes === 'number' ? slots.deltaMinutes : undefined,
+          mode: typeof slots.mode === 'string' ? (slots.mode as any) : undefined,
+        }
       );
       if (!replyValidation.valid) {
         return {

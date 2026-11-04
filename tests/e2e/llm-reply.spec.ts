@@ -62,7 +62,7 @@ function mockPlaces() {
   ];
 }
 
-async function routeMockServices(page: Page) {
+async function routeMockServices(page: Page, options?: { withDepartPlan?: boolean }) {
   const json = (body: unknown, status = 200) => ({
     status,
     contentType: 'application/json',
@@ -71,9 +71,100 @@ async function routeMockServices(page: Page) {
 
   // Base mock services
   await page.route('**/api/xmemo/**', r => r.fulfill(json({ enabled: false, connected: false })));
-  await page.route('**/api/calendar/**', r => r.fulfill(json({ enabled: false, configured: false })));
-  await page.route('**/api/route/**', r => r.fulfill(json({ enabled: false })));
-  await page.route('**/api/weather/**', r => r.fulfill(json({ enabled: false })));
+
+  if (options?.withDepartPlan) {
+    const nowMs = Date.now();
+    const apptTime = new Date(nowMs + 90 * 60 * 1000).toISOString();
+    const endApptTime = new Date(nowMs + 150 * 60 * 1000).toISOString();
+
+    await page.route(u => u.pathname === '/api/calendar/status', r =>
+      r.fulfill(json({ enabled: true, configured: true }))
+    );
+    await page.route(u => u.pathname === '/api/calendar', r =>
+      r.fulfill(json({
+        enabled: true,
+        provider: 'ics',
+        events: [
+          {
+            id: 'ev-piano',
+            title: 'Piano lesson',
+            startTime: apptTime,
+            endTime: endApptTime,
+            location: 'Shinjuku Piano Studio',
+          },
+        ],
+      }))
+    );
+    await page.route(u => u.pathname.startsWith('/api/geocode'), r =>
+      r.fulfill(json({
+        success: true,
+        result: {
+          coordinate: [35.69, 139.70],
+          displayName: 'Shinjuku Piano Studio',
+        },
+      }))
+    );
+    await page.route(u => u.pathname === '/api/route/status', r =>
+      r.fulfill(json({
+        enabled: true,
+        provider: 'osrm',
+        attribution: 'Powered by OSRM',
+      }))
+    );
+    await page.route(u => u.pathname === '/api/route', r =>
+      r.fulfill(json({
+        enabled: true,
+        route: {
+          geometry: [
+            [35.6895, 139.6917],
+            [35.69, 139.70],
+          ],
+          distanceM: 2000,
+          durationS: 600,
+          provider: 'osrm',
+          fetchedAt: new Date().toISOString(),
+          attribution: 'Route © OSRM · data © OpenStreetMap contributors',
+          mode: 'driving',
+        },
+      }))
+    );
+    await page.route(u => u.pathname === '/api/weather/status', r =>
+      r.fulfill(json({ enabled: true, provider: 'open-meteo' }))
+    );
+    await page.route(u => u.pathname.startsWith('/api/weather') && u.pathname !== '/api/weather/status', r => {
+      const nowIso = new Date().toISOString();
+      return r.fulfill(json({
+        source: 'Open-Meteo',
+        coordinate: { kind: 'device_fix', lat: 35.689, lng: 139.692 },
+        signals: [
+          {
+            kind: 'weather',
+            value: {
+              temperatureC: 18,
+              condition: 'clear',
+              precipitationRisk: 'none',
+            },
+            provider: 'open-meteo',
+            asOf: nowIso,
+            validFor: 3600000,
+            confidence: 1.0,
+            provenance: 'live',
+            consentScope: 'device_only',
+            status: 'available',
+          },
+        ],
+        forecast: {
+          rainExpected: false,
+          issuedAt: nowIso,
+          validFor: 3600000,
+        },
+      }));
+    });
+  } else {
+    await page.route('**/api/calendar/**', r => r.fulfill(json({ enabled: false, configured: false })));
+    await page.route('**/api/route/**', r => r.fulfill(json({ enabled: false })));
+    await page.route('**/api/weather/**', r => r.fulfill(json({ enabled: false })));
+  }
 
   // Model Diagnostics
   await page.route(u => u.pathname === '/api/model/diagnostics', r =>
@@ -143,6 +234,22 @@ async function routeMockServices(page: Page) {
           intent: 'UNSUPPORTED',
           slots: {},
           reply: 'Near Cafe is about 45m away, just a short walk.',
+          citedSignalIds: [],
+          citedFactKeys: [],
+          reasonCodes: [],
+        },
+        usedFallback: false,
+        engineStatus: 'meta_model_live',
+      }));
+      return;
+    }
+
+    if (utterance.includes('leave') || utterance.includes('later')) {
+      await route.fulfill(json({
+        result: {
+          intent: 'LEAVE_LATER',
+          slots: { deltaMinutes: 15 },
+          reply: 'Updated your plan to leave 15 minutes later.',
           citedSignalIds: [],
           citedFactKeys: [],
           reasonCodes: [],
@@ -227,6 +334,90 @@ for (const vp of VIEWPORTS) {
       // Settle evidence screenshot 2 (Free question reply)
       await page.screenshot({
         path: path.join(EVIDENCE_DIR, `free-question-${vp.name}.png`),
+      });
+
+      await context.close();
+    });
+
+    test(`Live Ask flow displays model-written reply for depart scenario at ${vp.name}`, async ({ browser }) => {
+      const context = await browser.newContext({
+        viewport: { width: vp.width, height: vp.height },
+        permissions: ['geolocation'],
+        geolocation: FIX,
+        isMobile: vp.width < 768,
+        hasTouch: vp.width < 768,
+      });
+      const page = await context.newPage();
+
+      // Seed confirmed prep and buffer memory facts in localStorage
+      await page.addInitScript(() => {
+        const now = new Date().toISOString();
+        localStorage.setItem('yori_state_v1', JSON.stringify({
+          schemaVersion: 1,
+          createdAt: now,
+          updatedAt: now,
+          payload: {
+            memoryFacts: [
+              {
+                key: 'prep_buffer_minutes',
+                value: 20,
+                status: 'confirmed',
+                provenance: 'user',
+                updatedAt: now,
+              },
+              {
+                key: 'prep_duration_minutes',
+                value: 20,
+                status: 'confirmed',
+                provenance: 'user',
+                updatedAt: now,
+              },
+            ],
+            proposals: [],
+            suppressions: [],
+            promptBudget: { date: now.slice(0, 10), count: 0 },
+            acceptedPlanIds: [],
+          },
+        }));
+      });
+
+      await routeMockServices(page, { withDepartPlan: true });
+
+      // 1. Open app in Live mode
+      await page.goto(`${APP}/?mode=live`);
+      await page.waitForSelector('.app-layout[data-context-mode="live"]');
+      await page.locator('#btn-request-location').click();
+
+      // Ensure departure plan card is visible
+      await expect(page.locator('.now-card')).toBeVisible({ timeout: 10000 });
+      await expect(page.locator('.now-card')).toContainText('Piano lesson');
+
+      // 2. Open Ask Sheet
+      const askBar = page.locator('#ask-bar');
+      await expect(askBar).toBeVisible();
+      await askBar.click();
+
+      const overlay = page.locator('#conversation-overlay');
+      await expect(overlay).toBeVisible();
+
+      // 3. User submits "leave 15 minutes later"
+      const input = page.locator('#conversation-input');
+      await input.fill('leave 15 minutes later');
+      await page.locator('#conversation-send-btn').click();
+
+      // Check transcript displays user message and model-written reply
+      const transcript = page.locator('#conversation-transcript');
+      await expect(transcript).toContainText('leave 15 minutes later');
+      await expect(transcript).toContainText('Updated your plan to leave 15 minutes later.');
+
+      // Invariant checks: No Why button, no confirmation prompt
+      await expect(page.locator('button:has-text("Why")')).toHaveCount(0);
+      await expect(page.locator('button:has-text("Confirm")')).toHaveCount(0);
+      await expect(page.locator('button:has-text("Looks good")')).toHaveCount(0);
+
+      // Screenshot settled state 3 (Depart reply)
+      await page.screenshot({
+        path: path.join(EVIDENCE_DIR, `depart-reply-${vp.name}.png`),
       });
 
       await context.close();
