@@ -157,6 +157,12 @@ export interface ProposalItemVM {
   readonly value?: unknown;
 }
 
+export interface DismissedNoteVM {
+  readonly note: string;
+  readonly intentId: string;
+  readonly planId?: string;
+}
+
 export interface HomeCompositionVM {
   readonly layoutKind: HomeLayoutKind;
   readonly planId?: string;
@@ -194,6 +200,7 @@ export interface HomeCompositionVM {
   readonly isAccepted: boolean;
   readonly canUndo?: boolean;
   readonly actions: readonly PlanAction[];
+  readonly dismissedNote?: DismissedNoteVM;
 
   // Geolocation & Manual Location State (V5-GEO)
   readonly locationState?: 'prompt' | 'denied' | 'unavailable';

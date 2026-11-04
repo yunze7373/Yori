@@ -234,13 +234,8 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await expect(dismissBtn).toBeVisible();
     await dismissBtn.click();
 
-    const dismissModal = page.locator('#dismiss-dialog-backdrop .modal-card');
-    await expect(dismissModal).toBeVisible();
-    await expect(page.locator('#dismiss-dialog-title')).toContainText('Dismiss Recommendation');
-
-    await page.locator('input[value="busy_today"]').check();
-    await page.locator('#btn-confirm-dismiss').click();
-    await expect(dismissModal).not.toBeVisible();
+    // NOT-NOW-ONE-TAP: one tap dismisses without modal
+    await expect(page.locator('#dismiss-dialog-backdrop')).toHaveCount(0);
 
     const quietTitle = page.locator('.quiet-title');
     await expect(quietTitle).toBeVisible();
@@ -335,11 +330,8 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await expect(dismissBtn).toBeVisible();
     await dismissBtn.click();
 
-    const dismissModal = page.locator('#dismiss-dialog-backdrop .modal-card');
-    await expect(dismissModal).toBeVisible();
-    await page.locator('input[value="dont_suggest_today"]').check();
-    await page.locator('#btn-confirm-dismiss').click();
-    await expect(dismissModal).not.toBeVisible();
+    // NOT-NOW-ONE-TAP: one tap dismisses without modal
+    await expect(page.locator('#dismiss-dialog-backdrop')).toHaveCount(0);
 
     const quietTitle = page.locator('.quiet-title');
     await expect(quietTitle).toBeVisible();

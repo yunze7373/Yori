@@ -230,19 +230,13 @@ test.describe('S3-MICRO: Microinteractions and Action Surfaces', () => {
     await expect(page.locator('#btn-why')).toHaveCount(0);
     await expect(page.locator('#why-sheet')).toHaveCount(0);
 
-    // (d) Dismiss Plan to Quiet Empty State
+    // (d) Dismiss Plan to Quiet Empty State (NOT-NOW-ONE-TAP: one tap dismisses without modal)
     const dismissBtn = page.locator('#btn-dismiss');
     await expect(dismissBtn).toBeVisible();
     await dismissBtn.click();
 
-    const dismissDialog = page.locator('#dismiss-dialog');
-    await expect(dismissDialog).toBeVisible();
-
-    const confirmDismissBtn = page.locator('#btn-confirm-dismiss');
-    await confirmDismissBtn.click();
-
-    // View transitions to honest quiet state
-    await expect(dismissDialog).not.toBeVisible();
+    // View transitions to honest quiet state; dialog does not open
+    await expect(page.locator('#dismiss-dialog-backdrop')).toHaveCount(0);
     const quietCard = page.locator('.quiet-card');
     await expect(quietCard).toBeVisible();
     await expect(page.locator('.quiet-title')).toContainText('Nothing needs your attention right now.');

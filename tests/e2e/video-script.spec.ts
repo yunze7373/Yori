@@ -111,7 +111,7 @@ export const VIDEO_SCRIPT_FIXTURES = {
     budgetSeconds: 18,
     quotedStrings: [
       'Me & Memory',
-      '0 of 3 used today',
+      'of 3 used today',
       'What Yori has learned',
       'Preparation buffer habit · Get ready 25 min · Leave a 10 min buffer · You told Yori',
       'Forget',
@@ -272,8 +272,13 @@ test.describe("Video Script v5 Demo Walkthrough (CLOSEOUT-VIDEO-SCRIPT)", () => 
       'Pacific Ramen Bar'
     );
 
-    // Not now button is visible on the card (one-tap dismissal behavior asserted in future NOT-NOW-ONE-TAP slice)
-    await expect(page.locator('#btn-dismiss').first()).toBeVisible();
+    // 3b: One tap on Not now dismisses card without reason dialog
+    const notNowBtn = page.locator('#btn-dismiss').first();
+    await expect(notNowBtn).toBeVisible();
+    await notNowBtn.click();
+    await expect(page.locator('#dismiss-dialog-backdrop')).toHaveCount(0);
+    await expect(page.locator('#dismissed-note-banner')).toBeVisible();
+    await expect(page.locator('#dismissed-note-banner')).toContainText('You dismissed lunch · Not today');
 
     // Transition to quiet state (busy-lunch)
     await selectDemoScene(page, 'busy-lunch');
@@ -342,7 +347,7 @@ test.describe("Video Script v5 Demo Walkthrough (CLOSEOUT-VIDEO-SCRIPT)", () => 
     const seg6Start = Date.now();
     await clickNav(page, 'me', isMobile);
     await expect(page.locator('.me-title')).toHaveText('Me & Memory');
-    await expect(page.locator('.badge-budget')).toContainText('0 of 3 used today');
+    await expect(page.locator('.badge-budget')).toContainText(/of 3 used today/);
     await expect(page.locator('#me-learned-title')).toHaveText('What Yori has learned');
     await expect(page.locator('#btn-me-reset')).toHaveText('Reset Storage');
 

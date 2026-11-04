@@ -814,6 +814,21 @@ function renderLiveWeatherNow(vm: HomeCompositionVM): string {
           </div>`;
 }
 
+function renderDismissedNote(vm: HomeCompositionVM): string {
+  if (!vm.dismissedNote) return '';
+  return `
+    <div class="dismissed-note-banner card" id="dismissed-note-banner" role="status" aria-live="polite" data-slot="chrome" data-slot-reason="Dismissed plan note banner">
+      <div class="dismissed-note-content">
+        <span class="dismissed-note-icon" aria-hidden="true">✓</span>
+        <span class="dismissed-note-text" id="dismissed-note-text">${escapeHtml(vm.dismissedNote.note)}</span>
+      </div>
+      <button type="button" class="btn btn-outline btn-sm btn-undo-dismiss" id="btn-undo-dismiss" data-slot="chrome" data-slot-reason="Undo dismiss action">
+        ${escapeHtml(STRINGS.actions.undo)}
+      </button>
+    </div>
+  `;
+}
+
 export function renderV2Home(vm: HomeCompositionVM): string {
   // 1. Quiet State
   if (vm.layoutKind === 'quiet') {
@@ -822,6 +837,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
     return `
       <div class="v2-home-container quiet">
         ${renderStateNotices(vm)}
+        ${renderDismissedNote(vm)}
         <section class="card quiet-card ${vm.suppressedQuiet ? 'suppressed-quiet-card' : ''}" aria-label="Quiet State" data-provenance="${vm.isLive ? 'none' : 'fixture'}">
           <div class="quiet-icon" aria-hidden="true">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -864,6 +880,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
     return `
       <div class="v2-home-container journey">
         ${renderStateNotices(vm)}
+        ${renderDismissedNote(vm)}
         <!-- Weather / Insight Alert Banner (omitted when changeMoment is active to avoid duplicate cause markers) -->
         ${
           !vm.changeMoment && vm.isRain && vm.rainBanner
@@ -1155,6 +1172,7 @@ export function renderV2Home(vm: HomeCompositionVM): string {
   return `
     <div class="v2-home-container candidates">
       ${renderStateNotices(vm)}
+      ${renderDismissedNote(vm)}
       <section class="card now-card v2-candidates-hero" aria-label="${escapeHtml(STRINGS.sections.now)}" data-plan-id="${escapeHtml(vm.planId || '')}" data-provenance="${vm.isLive ? 'live' : 'fixture'}" ${vm.isLive ? 'data-source="live_pipeline"' : ''}>
         ${!vm.changeMoment ? renderPlanDiffBanner(vm.planDiff) : ''}
         <div class="v2-card-header">
@@ -1313,6 +1331,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
 
   return `
     <div class="v2-sectioned-feed" id="v2-sectioned-feed">
+      ${renderDismissedNote(vm)}
       <!-- Section 1: Now -->
       <section class="feed-section feed-section-now" id="feed-section-now" aria-label="Now">
         <div class="feed-section-header">

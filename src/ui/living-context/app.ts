@@ -1988,6 +1988,11 @@ export function renderApp(
   let modalCleanup: (() => void) | null = null;
 
   let actionFeedbackMessage: string | null = null;
+  let activeDismissedNote: {
+    plan: PreparedPlan;
+    note: string;
+    intentId: string;
+  } | null = null;
   const timingOverrides: Record<string, { prepMinutes: number; bufferMinutes: number }> = {};
 
   let coordinatedScene: string | null = null;
@@ -3946,6 +3951,13 @@ export function renderApp(
             isSimulated: contextMode !== 'live',
           },
           changeMoment: computedChangeMoment,
+          dismissedNote: activeDismissedNote
+            ? {
+                note: activeDismissedNote.note,
+                intentId: activeDismissedNote.intentId,
+                planId: activeDismissedNote.plan.id,
+              }
+            : undefined,
           suppressedQuiet:
             ((contextMode === 'live' && isLunchSuppressed) ||
              (activeTimelineBeat?.id === 'S1q' && isLunchSuppressed))
@@ -5205,6 +5217,7 @@ export function renderApp(
         currentScene = val;
         activeTimelineBeat = null;
         selectedCardState = null;
+        activeDismissedNote = null;
         previousComposedPlanByIntent.clear();
         actionStore.resetToIdle();
         actionStore.clearOverride();
@@ -5917,15 +5930,116 @@ export function renderApp(
       });
     }
 
-    // 7. Plan Review Actions: Dismiss
+    // 7. Plan Review Actions: Dismiss (NOT-NOW-ONE-TAP: one tap dismisses immediately with "Don't suggest this today" semantics)
     const dismissBtn = root.querySelector('#btn-dismiss') as HTMLButtonElement | null;
     if (dismissBtn && nowPlan) {
       dismissBtn.addEventListener('click', () => {
-        modalInvokingId = 'btn-dismiss';
-        modalInvokingSelector = '#btn-dismiss';
-        activeModal = { type: 'dismiss', plan: nowPlan };
+        const planToDismiss = nowPlan;
+        const intentLabel = planToDismiss.intentId === 'depart' ? 'departure' : planToDismiss.intentId;
+        const noteText = STRINGS.dismissDialog.noteDismissToday.replace('{intent}', intentLabel);
+        const reasonText = "User dismissed: Don't suggest this today";
+
+        const suppression: SuppressionReason = {
+          code: 'user_suppressed',
+          reason: reasonText,
+          scope: 'today',
+          recordedAt: snapshotAsOf,
+          targetIntent: planToDismiss.intentId,
+        };
+
+        const envelope = sharedStorage.load();
+        const existingSuppressions = envelope?.payload.suppressions ?? [];
+        const updatedSuppressions = existingSuppressions.filter(
+          s => !(s.code === 'user_suppressed' && s.targetIntent === planToDismiss.intentId)
+        );
+        updatedSuppressions.push(suppression);
+
+        const updatedProposals = envelope?.payload.proposals ?? [];
+        const currentBudgetCount = envelope?.payload.promptBudget?.count ?? 0;
+        const newBudgetCount = Math.max(1, currentBudgetCount);
+
+        const dismissAckSig = buildLiveAckSignature(planToDismiss, snapshotAsOf, snapshotTimezone);
+        sharedStorage.save(
+          {
+            memoryFacts: envelope?.payload.memoryFacts ?? [],
+            proposals: updatedProposals,
+            suppressions: updatedSuppressions,
+            promptBudget: { date: snapshotAsOf.slice(0, 10), count: newBudgetCount },
+            acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
+            liveAcknowledgedMoments: {
+              ...((envelope?.payload as any)?.liveAcknowledgedMoments ?? {}),
+              [planToDismiss.intentId]: dismissAckSig,
+              [planToDismiss.id]: dismissAckSig,
+            },
+          } as any,
+          snapshotAsOf
+        );
+
+        if (activeTimelineBeat && (activeTimelineBeat.id === 'S1' || planToDismiss.intentId === 'lunch')) {
+          activeTimelineBeat = timelineController.goTo('S1q');
+        }
+
+        if (activeLiveChangeMoment) {
+          activeLiveChangeMoment.acknowledged = true;
+          activeLiveChangeMoment = null;
+        }
+
+        actionStore.resetToIdle();
+        activeDismissedNote = {
+          plan: planToDismiss,
+          note: noteText,
+          intentId: planToDismiss.intentId,
+        };
         update();
       });
+    }
+
+    // 7b. Plan Review Actions: Undo Dismiss
+    const undoDismissBtn = root.querySelector('#btn-undo-dismiss') as HTMLButtonElement | null;
+    if (undoDismissBtn && activeDismissedNote) {
+      undoDismissBtn.addEventListener('click', () => {
+        const dismissedPlan = activeDismissedNote!.plan;
+        const envelope = sharedStorage.load();
+        const existingSuppressions = envelope?.payload.suppressions ?? [];
+        const updatedSuppressions = existingSuppressions.filter(
+          s => !(s.code === 'user_suppressed' && s.targetIntent === dismissedPlan.intentId)
+        );
+        sharedStorage.save(
+          {
+            memoryFacts: envelope?.payload.memoryFacts ?? [],
+            proposals: envelope?.payload.proposals ?? [],
+            suppressions: updatedSuppressions,
+            promptBudget: envelope?.payload.promptBudget ?? { date: snapshotAsOf.slice(0, 10), count: 0 },
+            acceptedPlanIds: envelope?.payload.acceptedPlanIds ?? [],
+            liveAcknowledgedMoments: (envelope?.payload as any)?.liveAcknowledgedMoments ?? {},
+          } as any,
+          snapshotAsOf
+        );
+
+        if (activeTimelineBeat && activeTimelineBeat.id === 'S1q' && dismissedPlan.intentId === 'lunch') {
+          activeTimelineBeat = timelineController.goTo('S1');
+        }
+
+        activeDismissedNote = null;
+        actionFeedbackMessage = 'Plan restored. Dismissal undone.';
+        update();
+      });
+    }
+
+    // Dev/test hook: allows opening the legacy dismiss dialog for a11y testing without altering #btn-dismiss one-tap behavior
+    if (isDevOrTest && typeof window !== 'undefined') {
+      window.addEventListener(
+        'yori:open-dismiss-dialog',
+        () => {
+          if (nowPlan) {
+            modalInvokingId = 'btn-dismiss';
+            modalInvokingSelector = '#btn-dismiss';
+            activeModal = { type: 'dismiss', plan: nowPlan };
+            update();
+          }
+        },
+        { once: true }
+      );
     }
 
     // -------------------------------------------------------------

@@ -209,7 +209,10 @@ test.describe('UI-A11Y: Modal Accessibility & Candidate Cards WCAG 2.1 AA', () =
 
     const dismissBtn = page.locator('#btn-dismiss');
     await expect(dismissBtn).toBeVisible();
-    await dismissBtn.click();
+
+    // Verify #btn-dismiss does NOT open dialog (one-tap dismiss behavior)
+    // To test dialog modal accessibility, open via dev event hook
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('yori:open-dismiss-dialog')));
 
     const backdrop = page.locator('#dismiss-dialog-backdrop');
     await expect(backdrop).toBeVisible();
@@ -242,7 +245,8 @@ test.describe('UI-A11Y: Modal Accessibility & Candidate Cards WCAG 2.1 AA', () =
     await page.waitForSelector('.app-layout');
 
     const dismissBtn = page.locator('#btn-dismiss');
-    await dismissBtn.click();
+    await expect(dismissBtn).toBeVisible();
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('yori:open-dismiss-dialog')));
 
     await page.locator('#btn-cancel-dismiss').click();
     await expect(page.locator('#dismiss-dialog-backdrop')).toHaveCount(0);
@@ -254,7 +258,8 @@ test.describe('UI-A11Y: Modal Accessibility & Candidate Cards WCAG 2.1 AA', () =
     await page.waitForSelector('.app-layout');
 
     const dismissBtn = page.locator('#btn-dismiss');
-    await dismissBtn.click();
+    await expect(dismissBtn).toBeVisible();
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('yori:open-dismiss-dialog')));
 
     await page.locator('#btn-close-dismiss').click();
     await expect(page.locator('#dismiss-dialog-backdrop')).toHaveCount(0);

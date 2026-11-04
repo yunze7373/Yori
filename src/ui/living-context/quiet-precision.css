@@ -3224,3 +3224,46 @@ body {
 .me-view-container .btn-forget-habit:hover {
   background: var(--qp-sage-wash);
 }
+
+/* NOT-NOW-ONE-TAP: quiet dismissed note banner replacing card */
+.dismissed-note-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qp-s3, 12px);
+  padding: 14px 18px;
+  background: var(--qp-surface, #ffffff);
+  border: 1px solid var(--qp-border, rgba(22, 40, 36, 0.12));
+  border-radius: var(--qp-r-card, 16px);
+  margin-bottom: var(--qp-s3, 12px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.dismissed-note-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--qp-font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  font-size: 0.875rem;
+  color: var(--qp-ink-soft, #52605c);
+}
+
+.dismissed-note-icon {
+  color: var(--qp-forest, #16382f);
+  font-weight: 700;
+}
+
+.dismissed-note-text {
+  font-weight: 550;
+  color: var(--qp-ink, #162824);
+}
+
+.btn-undo-dismiss {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-weight: 550;
+  border-radius: var(--qp-r-btn, 8px);
+  cursor: pointer;
+}

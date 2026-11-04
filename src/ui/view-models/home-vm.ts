@@ -65,6 +65,7 @@ export interface BuildHomeCompositionOptions {
   sceneClockIso?: string;
   changeMoment?: HomeCompositionVM['changeMoment'];
   suppressedQuiet?: HomeCompositionVM['suppressedQuiet'];
+  dismissedNote?: HomeCompositionVM['dismissedNote'];
   livingHeader?: HomeCompositionVM['livingHeader'];
   timelineControls?: HomeCompositionVM['timelineControls'];
   isLive?: boolean;
@@ -1074,6 +1075,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     isLoading: Boolean(options.isLoading),
     changeMoment: options.changeMoment ?? raw.changeMoment,
     suppressedQuiet: options.suppressedQuiet ?? raw.suppressedQuiet,
+    dismissedNote: options.dismissedNote,
     livingHeader: options.livingHeader ?? raw.livingHeader,
     timelineControls: options.timelineControls ?? raw.timelineControls,
     isLive: Boolean(options.isLive),
