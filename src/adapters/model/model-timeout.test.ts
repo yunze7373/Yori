@@ -188,5 +188,75 @@ describe('Shared Model Timeout Configuration (AC-LIVE-1)', () => {
       expect(res.intent).toBe('LEAVE_LATER');
       expect(res.engineStatus).toBe('offline_deterministic');
     });
+
+    it('defaults to 30000ms client timeout in live mode and respects env lowering', () => {
+      const savedEnv = process.env.MODEL_TIMEOUT_MS;
+      try {
+        delete process.env.MODEL_TIMEOUT_MS;
+        const defaultLiveInterpreter = new ModelCommandInterpreter({ mode: 'live' });
+        expect(defaultLiveInterpreter.getTimeoutMs()).toBe(30000);
+
+        process.env.MODEL_TIMEOUT_MS = '10000';
+        const loweredInterpreter = new ModelCommandInterpreter({ mode: 'live' });
+        expect(loweredInterpreter.getTimeoutMs()).toBe(10000);
+
+        // Env cannot raise timeout above 30000ms
+        process.env.MODEL_TIMEOUT_MS = '45000';
+        const clampedInterpreter = new ModelCommandInterpreter({ mode: 'live' });
+        expect(clampedInterpreter.getTimeoutMs()).toBe(30000);
+      } finally {
+        if (savedEnv !== undefined) {
+          process.env.MODEL_TIMEOUT_MS = savedEnv;
+        } else {
+          delete process.env.MODEL_TIMEOUT_MS;
+        }
+      }
+    });
+
+    it('waits up to 30000ms before timing out in live mode by default', async () => {
+      vi.useFakeTimers();
+      const savedEnv = process.env.MODEL_TIMEOUT_MS;
+      delete process.env.MODEL_TIMEOUT_MS;
+
+      try {
+        const interpreter = new ModelCommandInterpreter({
+          mode: 'live',
+          endpoint: '/api/model/command',
+        });
+        expect(interpreter.getTimeoutMs()).toBe(30000);
+
+        globalThis.fetch = vi.fn().mockImplementation((_url, options: { signal: AbortSignal }) => {
+          return new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => {
+              const err = new Error('This operation was aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
+          });
+        });
+
+        const promise = interpreter.interpretAsync('Can I leave later?', {
+          availableModes: ['drive', 'bus'],
+        });
+
+        expect(interpreter.isInFlight()).toBe(true);
+
+        // Advance 25 seconds: still in-flight, not timed out!
+        vi.advanceTimersByTime(25000);
+        expect(interpreter.isInFlight()).toBe(true);
+
+        // Advance past 30 seconds: now timed out
+        vi.advanceTimersByTime(5100);
+        const res = await promise;
+        expect(res.engineStatus).toBe('offline_deterministic');
+        expect(interpreter.isInFlight()).toBe(false);
+      } finally {
+        if (savedEnv !== undefined) {
+          process.env.MODEL_TIMEOUT_MS = savedEnv;
+        } else {
+          delete process.env.MODEL_TIMEOUT_MS;
+        }
+      }
+    });
   });
 });

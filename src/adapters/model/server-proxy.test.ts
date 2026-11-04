@@ -319,9 +319,8 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
     }
   });
 
-  // D4 rework (Reviewer ae9b0e30): the plan-reasoning path now defaults to 4096 (env can only lower it);
-  // refine and command keep their S1 budgets.
-  it('verifies max_tokens per endpoint: refine 150, reason 4096 (D4), command 300', async () => {
+  // D4 rework (Reviewer ae9b0e30) + ADDENDUM: all endpoints default to resolveD4MaxTokens (4096; env can lower).
+  it('verifies max_tokens per endpoint: refine 4096 (D4), reason 4096 (D4), command 4096 (D4)', async () => {
     process.env.MODEL_API_KEY = 'sk-test-token-cap-key';
     process.env.MODEL_LIVE_ENABLED = '1';
 
@@ -394,9 +393,9 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
       });
 
       expect(capturedBodies).toHaveLength(3);
-      expect(capturedBodies[0].max_tokens).toBe(150);
+      expect(capturedBodies[0].max_tokens).toBe(4096);
       expect(capturedBodies[1].max_tokens).toBe(4096);
-      expect(capturedBodies[2].max_tokens).toBe(300);
+      expect(capturedBodies[2].max_tokens).toBe(4096);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -765,6 +764,61 @@ describe('S1-PREP-PROVIDER: MODEL_MAX_TOKENS clamping & override', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it('decision_command sets max_tokens=4096 by default and MODEL_MAX_TOKENS lowers it', async () => {
+    process.env.MODEL_API_KEY = 'sk-mock-tokens-key';
+    process.env.MODEL_LIVE_ENABLED = '1';
+    delete process.env.MODEL_MAX_TOKENS;
+
+    let capturedBody: any;
+    const fetchSpy = vi.fn().mockImplementation(async (_url: string, init: any) => {
+      capturedBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: JSON.stringify({ wording: 'OK', reasonCode: 'ok', rationale: [] }) } }],
+        }),
+      };
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fetchSpy as any;
+
+    try {
+      const defaultProxy = new ModelDevProxy();
+      await defaultProxy.handleCommand({
+        knownFactKeys: ['habit_rain_transit'],
+      });
+      expect(capturedBody.max_tokens).toBe(4096);
+
+      // Env lowering to 1024
+      process.env.MODEL_MAX_TOKENS = '1024';
+      const loweredProxy = new ModelDevProxy();
+      await loweredProxy.handleCommand({
+        knownFactKeys: ['habit_rain_transit'],
+      });
+      expect(capturedBody.max_tokens).toBe(1024);
+    } finally {
+      globalThis.fetch = originalFetch;
+      delete process.env.MODEL_MAX_TOKENS;
+    }
+  });
+
+  it('decision_command server timeout defaults to 30000ms and MODEL_TIMEOUT_MS lowers it', async () => {
+    delete process.env.MODEL_TIMEOUT_MS;
+    const defaultProxy = new ModelDevProxy();
+    expect(defaultProxy.getConfig().commandTimeoutMs).toBe(30000);
+
+    process.env.MODEL_TIMEOUT_MS = '10000';
+    const loweredProxy = new ModelDevProxy();
+    expect(loweredProxy.getConfig().commandTimeoutMs).toBe(10000);
+
+    // Cannot raise above 30000ms via env
+    process.env.MODEL_TIMEOUT_MS = '45000';
+    const clampedProxy = new ModelDevProxy();
+    expect(clampedProxy.getConfig().commandTimeoutMs).toBe(30000);
+
+    delete process.env.MODEL_TIMEOUT_MS;
   });
 });
 
@@ -1894,7 +1948,7 @@ describe('S1-DIAG: output extraction, shape handling, and diagnostic metadata te
     });
 
     expect(capturedBody.reasoning_effort).toBeUndefined();
-    expect(capturedBody.max_tokens).toBe(150); // endpoint default preserved
+    expect(capturedBody.max_tokens).toBe(4096); // endpoint default preserved (resolveD4MaxTokens)
   });
 
   it('parseMessageContent correctly distinguishes truncation, extraction_fault, and ok', () => {

@@ -138,6 +138,8 @@ export interface ModelProxyConfig {
   readonly timeoutMs: number;
   /** D4: server timeout for /api/model/candidates (30 s; MODEL_TIMEOUT_MS can only lower it). */
   readonly candidatesTimeoutMs?: number;
+  /** Server timeout for /api/model/command (30 s; MODEL_TIMEOUT_MS can only lower it). */
+  readonly commandTimeoutMs?: number;
   readonly maxTokensOverride?: number;
   readonly reasoningEffort?: ReasoningEffort;
   readonly ledgerPath: string;
@@ -795,6 +797,7 @@ export function resolveModelConfig(
     lifetimeMaxCalls,
     timeoutMs,
     candidatesTimeoutMs: resolveCandidatesTimeoutMs(process.env['MODEL_TIMEOUT_MS']),
+    commandTimeoutMs: resolveCandidatesTimeoutMs(process.env['MODEL_TIMEOUT_MS']),
     maxTokensOverride,
     reasoningEffort,
     ledgerPath,
@@ -1096,6 +1099,12 @@ export class ModelDevProxy {
           customConfig.candidatesTimeoutMs !== undefined
             ? Math.max(MIN_MODEL_TIMEOUT_MS, Math.min(resolved.candidatesTimeoutMs ?? MAX_MODEL_TIMEOUT_MS, customConfig.candidatesTimeoutMs))
             : resolved.candidatesTimeoutMs,
+        commandTimeoutMs:
+          customConfig.commandTimeoutMs !== undefined
+            ? Math.max(MIN_MODEL_TIMEOUT_MS, Math.min(resolved.commandTimeoutMs ?? MAX_MODEL_TIMEOUT_MS, customConfig.commandTimeoutMs))
+            : customConfig.timeoutMs !== undefined
+            ? Math.max(MIN_MODEL_TIMEOUT_MS, Math.min(resolved.commandTimeoutMs ?? MAX_MODEL_TIMEOUT_MS, customConfig.timeoutMs))
+            : resolved.commandTimeoutMs,
         maxTokensOverride,
         reasoningEffort,
         ledgerPath,
@@ -1753,7 +1762,7 @@ export class ModelDevProxy {
         },
         body: JSON.stringify({
           model: this.config.modelName,
-          max_tokens: this.config.maxTokensOverride ?? 150,
+          max_tokens: resolveD4MaxTokens(this.config.maxTokensOverride),
           ...(this.config.reasoningEffort ? { reasoning_effort: this.config.reasoningEffort } : {}),
           messages: [
             {
@@ -2369,9 +2378,11 @@ export class ModelDevProxy {
     processLiveCallCount += 1;
     processLiveReplyCallCount += 1;
 
+    const timeoutMs = this.config.commandTimeoutMs ?? this.config.candidatesTimeoutMs ?? MAX_MODEL_TIMEOUT_MS;
+
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.config.timeoutMs);
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       const userMessageContent = JSON.stringify({
         templateId: tmpl.id,
@@ -2387,7 +2398,7 @@ export class ModelDevProxy {
         },
         body: JSON.stringify({
           model: this.config.modelName,
-          max_tokens: this.config.maxTokensOverride !== undefined ? Math.min(this.config.maxTokensOverride, 4096) : 300,
+          max_tokens: resolveD4MaxTokens(this.config.maxTokensOverride),
           ...(this.config.reasoningEffort ? { reasoning_effort: this.config.reasoningEffort } : {}),
           messages: [
             {

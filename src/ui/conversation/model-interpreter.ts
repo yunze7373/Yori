@@ -41,6 +41,7 @@ import {
   MIN_MODEL_TIMEOUT_MS,
   MAX_MODEL_TIMEOUT_MS,
   resolveModelTimeoutMs,
+  resolveCandidatesTimeoutMs,
 } from '../../adapters/model/timeout-config.js';
 
 export {
@@ -48,6 +49,7 @@ export {
   MIN_MODEL_TIMEOUT_MS,
   MAX_MODEL_TIMEOUT_MS,
   resolveModelTimeoutMs,
+  resolveCandidatesTimeoutMs,
 };
 import {
   type ModelCommandDecisionOutput,
@@ -150,8 +152,8 @@ export class ModelCommandInterpreter implements CommandInterpreter {
         ? process.env.MODEL_TIMEOUT_MS
         : undefined;
     this.timeoutMs = options.timeoutMs !== undefined
-      ? resolveModelTimeoutMs(options.timeoutMs)
-      : resolveModelTimeoutMs(envVal);
+      ? resolveModelTimeoutMs(options.timeoutMs, MAX_MODEL_TIMEOUT_MS)
+      : resolveCandidatesTimeoutMs(envVal);
   }
 
   public isLiveMode(): boolean {
