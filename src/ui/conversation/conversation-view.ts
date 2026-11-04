@@ -148,23 +148,22 @@ export function renderTranscriptItems(
           </div>
           <div class="chat-bubble chat-bubble-trace">
             <div class="trace-inflight-header">
-              <div class="trace-header-title">
-                <span class="trace-spinner" aria-hidden="true"></span>
-                <span class="trace-title-text" id="inflight-status-text">Working on your request</span>
+              <div class="trace-timeline trace-compact-lines" role="log" aria-live="polite" aria-label="Agent activity trace">
+                ${
+                  hasTrace && msg.traceRun!.steps.length > 0
+                    ? renderTraceStepsHtml(msg.traceRun!.steps, true)
+                    : `
+                  <div class="trace-compact-line trace-step-item is-running">
+                    <span class="trace-compact-icon trace-step-marker"><span class="trace-compact-dot" aria-hidden="true"></span></span>
+                    <span class="trace-compact-text trace-shimmer" id="inflight-status-text">Working on your request…</span>
+                  </div>
+                `
+                }
               </div>
               <button type="button" class="btn btn-outline btn-xs btn-cancel-inflight" id="btn-cancel-inflight" aria-label="Cancel live model request">
                 Cancel
               </button>
             </div>
-            ${
-              hasTrace
-                ? `
-              <div class="trace-timeline" role="log" aria-live="polite" aria-label="Agent activity trace">
-                ${renderTraceStepsHtml(msg.traceRun!.steps)}
-              </div>
-            `
-                : `<p class="chat-text chat-inflight-text">${escapeHtml(msg.text)}</p>`
-            }
           </div>
         </article>
         `;

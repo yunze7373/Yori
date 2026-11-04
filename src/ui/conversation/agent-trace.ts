@@ -87,13 +87,54 @@ export function formatStepDuration(durationMs?: number): string {
   return `${(durationMs / 1000).toFixed(1)} s`;
 }
 
+export function formatCompactRunSummary(run: AgentTraceRun): string {
+  if (run.status === 'cancelled') {
+    return 'Request cancelled';
+  }
+
+  // Check if places search was performed
+  const placesStep = run.steps.find((s) => s.kind === 'places' && s.status === 'finished');
+  let placesPart: string | null = null;
+  if (placesStep) {
+    const match = placesStep.summary.match(/(\d+)\s+places/i);
+    placesPart = match ? `Searched ${match[1]} places` : 'Searched nearby places';
+  }
+
+  // Check if model reasoning was live and successful
+  const modelSteps = run.steps.filter((s) => s.kind === 'model');
+  const liveModelStep = modelSteps.find(
+    (s) =>
+      s.status === 'finished' &&
+      (s.badge === 'live' || s.badge === 'Meta Muse Spark' || s.summary.includes('live') || s.summary.includes('Muse Spark')) &&
+      !s.summary.toLowerCase().includes('fallback') &&
+      !s.summary.toLowerCase().includes('offline') &&
+      !s.summary.toLowerCase().includes('locally')
+  );
+  const engineLabelLower = (run.engineLabel || '').toLowerCase();
+  const engineIsLive =
+    (engineLabelLower.includes('muse spark') || engineLabelLower.includes('live')) &&
+    !engineLabelLower.includes('fallback') &&
+    !engineLabelLower.includes('offline') &&
+    !engineLabelLower.includes('locally');
+
+  const modelIsLive = Boolean(liveModelStep || engineIsLive);
+
+  if (placesPart) {
+    if (modelIsLive) {
+      return `${placesPart} · ranked by Meta Muse Spark`;
+    }
+    return `${placesPart} · planned locally`;
+  }
+
+  if (modelIsLive) {
+    return 'Ranked by Meta Muse Spark';
+  }
+
+  return 'Planned locally';
+}
+
 export function formatRunSummary(run: AgentTraceRun): string {
-  const count = run.steps.length;
-  const stepWord = count === 1 ? '1 step' : `${count} steps`;
-  const dur = formatStepDuration(run.totalDurationMs ?? 0);
-  const durPart = dur ? ` · ${dur}` : '';
-  const engine = run.engineLabel || (run.status === 'cancelled' ? 'Cancelled' : 'Local plan · deterministic');
-  return `${stepWord}${durPart} · ${engine}`;
+  return formatCompactRunSummary(run);
 }
 
 export class AgentTraceBus {
@@ -305,33 +346,137 @@ export function renderTraceStepMarker(status: TraceStatus): string {
     return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="4.5" stroke="#8A9992" stroke-width="1.6" stroke-dasharray="2 2"/></svg>`;
   }
   // status === 'started'
-  return `<span class="trace-step-dot" aria-hidden="true"></span>`;
+  return `<span class="trace-compact-dot" aria-hidden="true"></span>`;
 }
 
-export function renderTraceStepsHtml(steps: readonly AgentTraceStep[]): string {
+export function getCompactStepIcon(kind: TracePhaseKind, status: TraceStatus): string {
+  if (status === 'started') {
+    return `<span class="trace-compact-dot" aria-hidden="true"></span>`;
+  }
+  if (status === 'failed') {
+    return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="#C53030" stroke-width="1.6"/><path d="M5.5 8h5" stroke="#C53030" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+  }
+  if (status === 'cancelled') {
+    return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 8H12" stroke="#586B64" stroke-width="2" stroke-linecap="round"/></svg>`;
+  }
+  if (status === 'skipped') {
+    return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="4.5" stroke="#8A9992" stroke-width="1.6" stroke-dasharray="2 2"/></svg>`;
+  }
+  switch (kind) {
+    case 'permission':
+      return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5l5.5 2.5v4c0 3.5-2.5 6-5.5 7-3-1-5.5-3.5-5.5-7V4l5.5-2.5z" stroke="currentColor" stroke-width="1.5"/></svg>`;
+    case 'location':
+      return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="currentColor"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2" stroke="currentColor" stroke-width="1.5"/></svg>`;
+    case 'places':
+      return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2.5 5.5l1.5-3.5h8l1.5 3.5v7.5H2.5V5.5zM2.5 5.5h11M6 13V9h4v4" stroke="currentColor" stroke-width="1.5"/></svg>`;
+    case 'model':
+      return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 1.5l1.6 4.4 4.4 1.6-4.4 1.6L8 13.5l-1.6-4.4L2 7.5l4.4-1.6L8 1.5z" stroke="currentColor" stroke-width="1.5"/></svg>`;
+    case 'fact_check':
+      return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.5 8.5L6.5 11.5L12.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'render':
+      return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4h10M3 8h7M3 12h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`;
+    case 'local':
+    default:
+      return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="currentColor"/></svg>`;
+  }
+}
+
+export function getCompactStepText(step: AgentTraceStep): string {
+  const isStarted = step.status === 'started';
+  const isFailed = step.status === 'failed';
+  const isSkipped = step.status === 'skipped';
+  const summaryLower = (step.summary || '').toLowerCase();
+
+  switch (step.kind) {
+    case 'permission': {
+      if (isStarted) return 'Asking for your location…';
+      if (isFailed) return 'Location permission denied';
+      if (isSkipped) return 'Location permission skipped';
+      return 'Location permission granted';
+    }
+    case 'location': {
+      if (isStarted) return 'Acquiring location…';
+      if (isFailed) return "Couldn't acquire location";
+      if (isSkipped) return 'Location skipped';
+      return step.summary || 'Location acquired';
+    }
+    case 'places': {
+      if (isStarted) return 'Searching places near you…';
+      if (isSkipped) {
+        if (summaryLower.includes('disabled')) return 'Places search skipped (service disabled)';
+        if (summaryLower.includes('unavailable')) return 'Places search skipped (location unavailable)';
+        return 'Places search skipped';
+      }
+      if (isFailed) return "Couldn't reach places service";
+      const match = step.summary.match(/(\d+)\s+places\s+found\s+via\s+(.+)/i);
+      if (match) {
+        return `Found ${match[1]} places via ${match[2]}`;
+      }
+      const matchSimple = step.summary.match(/(\d+)\s+places\s+found/i);
+      if (matchSimple) {
+        return `Found ${matchSimple[1]} places near you`;
+      }
+      if (summaryLower.includes('cached')) {
+        return 'Found places from cache';
+      }
+      return step.summary || 'Found places near you';
+    }
+    case 'model': {
+      const isCandidatePhase = step.phase.toLowerCase().includes('candidate');
+      if (isStarted) {
+        return isCandidatePhase ? 'Ranking with Meta Muse Spark…' : 'Reasoning with Meta Muse Spark…';
+      }
+      const isFallback = isFailed || summaryLower.includes('fallback') || step.badge === 'offline';
+      if (isFallback) {
+        if (summaryLower.includes('timeout')) {
+          return "Muse Spark didn't answer in time, used local ranking";
+        }
+        if (summaryLower.includes('offline') || step.badge === 'offline' || summaryLower.includes('local')) {
+          return 'Planned locally';
+        }
+        return "Couldn't reach Muse Spark, used local ranking";
+      }
+      return isCandidatePhase ? 'Ranked by Meta Muse Spark' : 'Reasoned with Meta Muse Spark';
+    }
+    case 'fact_check': {
+      if (isStarted) return 'Checking the reply against the facts…';
+      if (isFailed) return 'Fact check adjusted reply';
+      return 'Checked against the facts';
+    }
+    case 'render': {
+      if (isStarted) return 'Preparing answer…';
+      return step.phase || 'Answer presentation';
+    }
+    case 'local':
+    default: {
+      if (isStarted) return 'Planning locally…';
+      if (step.phase.toLowerCase().includes('grammar')) {
+        return 'Grammar match';
+      }
+      return step.summary || 'Planned locally';
+    }
+  }
+}
+
+export function renderTraceStepsHtml(steps: readonly AgentTraceStep[], isRunning: boolean = false): string {
   if (!steps || steps.length === 0) return '';
   return steps
     .map((step) => {
-      const isOffline = step.badge?.toLowerCase().includes('offline') || step.badge?.toLowerCase().includes('simulated');
-      const badgeHtml = step.badge
-        ? `<span class="trace-badge ${isOffline ? 'trace-badge-offline' : ''}">${escapeHtml(step.badge)}</span>`
-        : '';
-      const durText = step.durationMs != null ? formatStepDuration(step.durationMs) : (step.status === 'started' ? 'running…' : '');
-      const durationHtml = durText ? `<span class="trace-step-duration">${durText}</span>` : '';
+      const isCurrentRunning = isRunning && step.status === 'started';
+      const icon = getCompactStepIcon(step.kind, step.status);
+      const text = getCompactStepText(step);
+      // Durations appear only in the expanded view, small and muted
+      const durText = !isRunning && step.durationMs != null ? formatStepDuration(step.durationMs) : '';
+      const durationHtml = durText ? `<span class="trace-compact-duration trace-step-duration">${durText}</span>` : '';
+      const runningClass = isCurrentRunning ? 'is-running' : '';
+      const textIdAttr = isCurrentRunning ? 'id="inflight-status-text"' : '';
+      const textClass = isCurrentRunning ? 'trace-compact-text trace-shimmer' : 'trace-compact-text';
 
       return `
-      <div class="trace-step-item is-${step.status}" data-kind="${step.kind}">
-        <span class="trace-step-marker" aria-hidden="true">
-          ${renderTraceStepMarker(step.status)}
-        </span>
-        <div class="trace-step-body">
-          <div class="trace-step-top">
-            <span class="trace-step-phase">${escapeHtml(step.phase)}</span>
-            ${badgeHtml}
-            ${durationHtml}
-          </div>
-          <div class="trace-step-summary">${escapeHtml(step.summary)}</div>
-        </div>
+      <div class="trace-compact-line trace-step-item is-${step.status} ${runningClass}" data-kind="${step.kind}">
+        <span class="trace-compact-icon trace-step-marker" aria-hidden="true">${icon}</span>
+        <span class="${textClass}" ${textIdAttr}>${escapeHtml(text)}</span>
+        ${durationHtml}
       </div>
     `;
     })
@@ -341,28 +486,28 @@ export function renderTraceStepsHtml(steps: readonly AgentTraceStep[]): string {
 export function renderTraceSummaryToggleHtml(arg1: string | AgentTraceRun, arg2?: AgentTraceRun): string {
   const msgId = typeof arg1 === 'string' ? arg1 : 'msg-1';
   const run = typeof arg1 === 'string' ? arg2! : arg1;
-  const summaryText = formatRunSummary(run);
+  const summaryText = formatCompactRunSummary(run);
   return `
-    <div class="trace-summary-container">
+    <div class="trace-summary-container trace-compact-container">
       <button
         type="button"
-        class="trace-summary-toggle"
+        class="trace-summary-toggle trace-compact-summary-toggle"
         id="btn-trace-toggle-${escapeHtml(msgId)}"
         data-trace-toggle="${escapeHtml(msgId)}"
         aria-expanded="false"
         aria-controls="trace-details-${escapeHtml(msgId)}"
       >
-        <span class="trace-summary-icon" aria-hidden="true">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5V14.5M1.5 8H14.5M3.4 3.4L12.6 12.6M12.6 3.4L3.4 12.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <span class="trace-summary-icon trace-compact-summary-icon" aria-hidden="true">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 4.5v7M4.5 8h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
         </span>
-        <span class="trace-summary-text">${escapeHtml(summaryText)}</span>
-        <span class="trace-summary-chevron" aria-hidden="true">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="trace-summary-text trace-compact-summary-text">${escapeHtml(summaryText)}</span>
+        <span class="trace-summary-chevron trace-compact-chevron" aria-hidden="true">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </span>
       </button>
-      <div class="trace-details" id="trace-details-${escapeHtml(msgId)}" hidden>
-        <div class="trace-timeline" role="region" aria-label="Agent execution trace">
-          ${renderTraceStepsHtml(run.steps)}
+      <div class="trace-details trace-compact-details" id="trace-details-${escapeHtml(msgId)}" hidden>
+        <div class="trace-timeline trace-compact-lines" role="region" aria-label="Agent execution trace">
+          ${renderTraceStepsHtml(run.steps, false)}
         </div>
       </div>
     </div>

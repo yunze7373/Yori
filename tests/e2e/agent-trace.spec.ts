@@ -208,11 +208,11 @@ test.describe('ASK-AGENT-TRACE: Real Activity Timeline & Top Pick Presentation',
     await expect(transcript).toContainText('somewhere quieter');
     await expect(transcript).toContainText('Near Cafe is open now and 45m away.');
 
-    // Agent activity toggle button
+    // Agent activity toggle button (collapsed to one subtle line)
     const toggleBtn = page.locator('.trace-summary-toggle').first();
     await expect(toggleBtn).toBeVisible();
     await expect(toggleBtn).toHaveAttribute('aria-expanded', 'false');
-    await expect(toggleBtn).toContainText('Meta Muse Spark · live');
+    await expect(toggleBtn).toContainText(/ranked by Meta Muse Spark/i);
 
     // Top Pick result card
     const resultCard = page.locator('.chat-result-card').first();
@@ -289,15 +289,15 @@ test.describe('ASK-AGENT-TRACE: Real Activity Timeline & Top Pick Presentation',
     // Verify trace toggle reflects deterministic offline execution
     const toggleBtn = page.locator('.trace-summary-toggle').first();
     await expect(toggleBtn).toBeVisible();
-    await expect(toggleBtn).toContainText('Local plan · deterministic');
+    await expect(toggleBtn).toContainText('Planned locally');
 
-    // Expand and verify offline badges
+    // Expand and verify compact trace lines
     await toggleBtn.click();
     const traceDetails = page.locator('.trace-details').first();
     await expect(traceDetails).toBeVisible();
 
-    const offlineBadges = traceDetails.locator('.trace-badge-offline');
-    expect(await offlineBadges.count()).toBeGreaterThanOrEqual(1);
+    const compactLines = traceDetails.locator('.trace-compact-line');
+    expect(await compactLines.count()).toBeGreaterThanOrEqual(1);
 
     // Verify steps include Grammar match, Answer presentation (and no false Grounding check)
     const traceText = await traceDetails.innerText();
@@ -365,10 +365,10 @@ test.describe('ASK-AGENT-TRACE: Real Activity Timeline & Top Pick Presentation',
     await input.fill('somewhere quieter');
     await page.locator('#conversation-send-btn').click();
 
-    // Verify in-flight bubble with spinner and cancel button
+    // Verify in-flight bubble with spinner/pulse and cancel button
     const inflightBubble = page.locator('.chat-bubble-assistant.is-inflight');
     await expect(inflightBubble).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('#inflight-status-text')).toContainText('Working on your request');
+    await expect(page.locator('#inflight-status-text')).toContainText('Ranking with Meta Muse Spark');
     const cancelBtn = page.locator('#btn-cancel-inflight');
     await expect(cancelBtn).toBeVisible();
 

@@ -185,7 +185,7 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       setupFiles: ['./tests/setup-netguard.ts'],
-      exclude: ['**/node_modules/**', '**/dist/**', '**/.progress/**'],
+      exclude: ['**/node_modules/**', '**/dist/**', '**/.progress/**', '**/.yori-runtime/**'],
     },
   } as any;
 });

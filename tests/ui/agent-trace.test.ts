@@ -145,7 +145,7 @@ describe('Top Pick Lunch Card Extraction', () => {
 });
 
 describe('HTML Trace & Card Rendering', () => {
-  it('renders trace steps with status indicators and badges', () => {
+  it('renders compact trace steps with semantic icons and natural text', () => {
     const steps = [
       {
         id: 's1',
@@ -174,15 +174,15 @@ describe('HTML Trace & Card Rendering', () => {
     ];
 
     const html = renderTraceStepsHtml(steps);
+    expect(html).toContain('trace-compact-line');
     expect(html).toContain('trace-step-item');
     expect(html).toContain('Grammar match');
-    expect(html).toContain('Matched rule FIND_LUNCH');
-    expect(html).toContain('offline');
+    expect(html).toContain('Checked against the facts');
     expect(html).toContain('10 ms');
-    expect(html).toContain('Grounding check');
+    expect(html).toContain('8 ms');
   });
 
-  it('renders expandable trace summary toggle button', () => {
+  it('renders expandable compact trace summary toggle button', () => {
     const run: AgentTraceRun = {
       id: 'r2',
       status: 'completed',
@@ -194,24 +194,23 @@ describe('HTML Trace & Card Rendering', () => {
         {
           id: 'st1',
           runId: 'r2',
-          phase: 'Model reasoning',
+          phase: 'Candidate reasoning',
           kind: 'model',
           status: 'finished',
           startedAt: 1000,
           endedAt: 1200,
           durationMs: 200,
           summary: 'Ranked candidates',
-          badge: 'Meta Muse Spark · live',
+          badge: 'live',
         },
       ],
     };
 
     const toggleHtml = renderTraceSummaryToggleHtml(run);
     expect(toggleHtml).toContain('trace-summary-toggle');
+    expect(toggleHtml).toContain('trace-compact-summary-toggle');
     expect(toggleHtml).toContain('aria-expanded="false"');
-    expect(toggleHtml).toContain('1 step');
-    expect(toggleHtml).toContain('240 ms');
-    expect(toggleHtml).toContain('Meta Muse Spark · live');
+    expect(toggleHtml).toContain('Ranked by Meta Muse Spark');
   });
 
   it('renders lunch result card with valid semantic fields', () => {

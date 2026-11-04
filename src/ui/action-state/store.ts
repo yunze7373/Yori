@@ -330,17 +330,6 @@ export class DefaultActionStateStore implements ActionStateStore {
       const locStatus = await this.requestLocationPermission();
       if (locStatus.status === 'available' && locStatus.coords) {
         this.traceBus.finishStep(permStep.id, 'Permission granted', 'Browser');
-        const locStep = this.traceBus.startStep(
-          run.id,
-          'location',
-          'Geolocation fix',
-          'Acquiring location…'
-        );
-        const locLabel =
-          typeof (locStatus as any).areaLabel === 'string'
-            ? (locStatus as any).areaLabel
-            : 'Location fix obtained';
-        this.traceBus.finishStep(locStep.id, locLabel);
         if (pendingText) {
           this.notify();
           if (typeof this.submitMessageAsync === 'function') {
@@ -1905,12 +1894,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       // on-demand nearby search as "Nearby now"; results land on Home when the provider answers.
       const hasLunchPlan = Boolean(ctx?.plan && ctx.plan.intentId === 'lunch' && ctx.candidate && ctx.snapshot && ctx.memory);
       if (isDynamicLunch && this.nearbyRequestHandler && (filters.length === 0 || !hasLunchPlan)) {
-        this.beginCommand(trimmed, 'Searching nearby · OpenStreetMap via Overpass', 'comparing');
+        this.beginCommand(trimmed, 'Searching nearby', 'comparing');
         this.nearbyRequestHandler('ask');
         const defaultAskMsg =
           filters.length > 0
-            ? `Searching restaurants near you now (OpenStreetMap via Overpass). Ask for ${filtersDesc} again once they show on Home.`
-            : 'Searching restaurants near you now (OpenStreetMap via Overpass). They will show on Home in a moment.';
+            ? `Looking for restaurants near you… Ask for ${filtersDesc} again once they show on Home.`
+            : 'Looking for restaurants near you… They will show on Home in a moment.';
         const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'FIND_LUNCH') : { valid: false };
         const askMsg = check.valid && cmd.reply ? cmd.reply : defaultAskMsg;
         this.resolveExecutable(askMsg);

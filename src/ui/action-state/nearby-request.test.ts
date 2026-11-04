@@ -58,7 +58,7 @@ describe('D2 store: Ask triggers the on-demand nearby search in Live', () => {
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler).toHaveBeenCalledWith('ask');
     expect(res.rule).toBe('executable_determinate');
-    expect(res.response).toContain('OpenStreetMap via Overpass');
+    expect(res.response).toContain('Looking for restaurants near you…');
     expect(res.response).not.toMatch(/simulated|no active lunch/i);
   });
 
