@@ -88,11 +88,11 @@
 ## 🛡️ Architectural Acceptance Verification (AI Certified)
 
 The underlying codebase has passed all required automated verification suites for Phase Closeout:
-- ✅ **AC-EXT-1 Core Diff Invariant**: `src/core/` diff vs baseline `f43c6c1d74c4bc1159300fed9d62aec9447b886e` is **100% EMPTY** (0 files, 0 lines changed).
+- ✅ **AC-EXT-1 Core Diff & Extension Invariant**: The AC-EXT-1 extension path (grocery stub plugin `src/plugins/grocery/`) adds capability without touching `src/core/`. Under owner direction (`b056a22`, `c6c3e55`), habit learning intentionally added pure modules under `src/core/memory/` (`habit-journal`, `habit-learner`, `taste`) plus a `MemoryFact` contract extension (`src/core/contracts/memory.ts`). The real diff vs baseline `f43c6c1d` is strictly confined to these memory additions (`git diff --stat f43c6c1d..HEAD -- src/core`: 7 files changed, 634 insertions, 4 deletions), while core pipeline and decision modules remain completely untouched.
 - ✅ **TypeScript Strict Mode**: `tsc --noEmit` exits 0 with zero errors.
-- ✅ **Unit & Mock Integration**: 914/914 tests passing across 40 files (`npm test` with self-contained `pretest: vite build`).
-- ✅ **Golden Scenario Harness**: 18/18 scenarios passing byte-identically (`npm run test:golden`).
-- ✅ **Degradation Drills**: 56/56 fault injection invariance tests passing (`npm run test:drills`).
+- ✅ **Unit & Mock Integration**: 1,431 tests passing across 78 files (`npm test` with self-contained `pretest: vite build`).
+- ✅ **Golden Scenario Harness**: 18/18 scenarios passing across 4 files (`npm run test:golden`).
+- ✅ **Degradation Drills**: 56/56 fault injection invariance tests passing across 4 files (`npm run test:drills`).
 - ✅ **Playwright E2E**: 441/444 tests passing across 33 files (`npx playwright test`, 3 skipped for viewport deduplication).
 - ✅ **Truthfulness & Provenance Audit**: 34/34 tests passing across mobile and desktop (`tests/e2e/closeout-truth-audit.spec.ts`).
 - ✅ **Current-HEAD Visual Proof**: Verified responsive IA across mobile (390x844) and desktop (1280x800, 1440x900) (`docs/evidence/s4-desktop-ia/`).

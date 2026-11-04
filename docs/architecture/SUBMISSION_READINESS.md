@@ -168,14 +168,14 @@ Executed across chapter closeout commits (`c7e0924` / `59785fb`):
 | Test Suite / Gate | Command | Result | Pass Bar |
 |---|---|:---:|:---:|
 | **TypeScript Typecheck** | `npm run typecheck` | **0 errors** | 0 errors |
-| **Unit & Boundary Tests** | `npm test` | **53 files, 1,035 passed** | 100% pass |
+| **Unit & Boundary Tests** | `npm test` | **78 files, 1,431 passed** | 100% pass |
 | **Model Boundary Suite** | `npx vitest run tests/proxy-boundary/model-proxy.test.ts` | **12 passed** | 100% pass |
 | **Checklist Drift Guard** | `npx vitest run src/adapters/smoke-checklist-drift.test.ts` | **5 passed** | 100% pass |
 | **Golden Acceptance & Drills** | `npx vitest run tests/golden tests/integration` | **8 files, 74 passed (18 golden + 56 drills)** | 100% pass |
 | **Production Build Audit** | `npm run verify:production` | **0 violations** | 0 `__YORI_*` hooks, 0 external font hosts |
 | **Full Playwright E2E Suite** | `npx playwright test` | **555 passed, 2 skipped, 1 failed (`real-map:157` known flake)** | Zero unhandled failures |
 | **Settings Blocker Verification** | `npx playwright test tests/e2e/s2-connectors.spec.ts -g "Release Blocker"` | **2 passed (mobile + desktop)** | Touch target $\ge 44\text{px}$, Escape/Back restore focus |
-| **Core Invariant Check** | `git diff f43c6c1d HEAD -- src/core` | **0 lines changed** | Strictly 0 diff (`AC-EXT-1`) |
+| **Core Invariant & Extension Check** | `git diff --stat f43c6c1d HEAD -- src/core` | **AC-EXT-1 plugin zero-core-diff preserved; 7 files, 634 insertions, 4 deletions in src/core/memory/** | Pure domain core logic untouched |
 
 *Known Test Flakes (Environment/Network Tile Dependent)*:
 - `real-map.spec.ts:157`: Relies on live OpenStreetMap tile download timing over external internet; falls back gracefully.

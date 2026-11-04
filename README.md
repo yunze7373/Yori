@@ -19,6 +19,9 @@ Most AI assistants today are either **reactive chatbots** waiting for prompts or
 - **Honest Quiet State**: When you are busy or everything is handled, Yori stays completely quiet: *"Nothing needs your attention right now."*
 - **Explainable Review Loop**: Tap **Why** on any card to see its full factual derivation in plain language without engineering jargon.
 - **Confirm-Only Memory (INV-107)**: Yori never silently modifies your preferences or habits. Unconfirmed observations stay as pending proposals until you explicitly tap **Confirm**.
+- **Live Model Grounding & Fact Checking**: Ask replies written live by Meta Muse Spark and fact-checked against the card, template fallback.
+- **In-Conversation Location Permission**: In-conversation location permission with Allow / Not now.
+- **Autonomous Lunch-Habit Learning**: Autonomous lunch-habit learning with Forget, no sensitive-trait inference.
 
 ---
 
@@ -29,7 +32,19 @@ Yori is engineered with strict invariants governed by formal specifications:
 1. **Pure Domain Core (`src/core/`)**:
    - Zero framework dependencies, zero network imports, and zero ambient clocks (`Date.now()`).
    - 100% frozen inputs and deterministic composition.
-   - **Zero-Core-Diff Extensibility (AC-EXT-1)**: Plugins add new capabilities (such as the grocery stub plugin) without altering a single line of core domain code.
+   - **Zero-Core-Diff Extensibility (AC-EXT-1)**: Scenario plugins add new capabilities (proven by the grocery stub plugin `src/plugins/grocery/`) without touching `src/core`.
+   - **Targeted Pure Memory Core Additions**: Under owner direction (`b056a22`, `c6c3e55`), habit learning intentionally added pure modules under `src/core/memory/` (`habit-journal`, `habit-learner`, `taste`) plus a `MemoryFact` contract extension (`src/core/contracts/memory.ts`). The real diff from baseline anchor `f43c6c1d` to HEAD is strictly confined to these memory additions:
+     ```text
+      src/core/contracts/memory.ts          |  20 +++-
+      src/core/memory/habit-journal.test.ts |  54 ++++++++++
+      src/core/memory/habit-journal.ts      |  88 ++++++++++++++++
+      src/core/memory/habit-learner.test.ts | 145 +++++++++++++++++++++++++++
+      src/core/memory/habit-learner.ts      | 183 ++++++++++++++++++++++++++++++++++
+      src/core/memory/taste.test.ts         |  61 ++++++++++++
+      src/core/memory/taste.ts              |  87 ++++++++++++++++
+      7 files changed, 634 insertions(+), 4 deletions(-)
+     ```
+     All core pipeline scheduling and decision modules remain completely untouched.
 2. **Shared Policy (`src/core/policy/`)**:
    - Centralized enforcement of proactive prompt budgets (strictly capped at 3 per day), candidate ranking, and quiet-state suppression.
 3. **Degradable Extension Ports**:
@@ -74,16 +89,16 @@ Yori includes a multi-tier test harness ensuring zero regressions, deterministic
 # 1. Typecheck (TypeScript strict mode)
 npm run typecheck
 
-# 2. Unit and mock integration tests (454 tests across 24 test files)
+# 2. Unit and mock integration tests (78 files / 1,431 passed)
 npm test
 
-# 3. Deterministic Golden Scenarios (D1–D6 + AC-EXT-1 grocery proof)
+# 3. Deterministic Golden Scenarios (4 files / 18 passed, D1–D6 + AC-EXT-1 grocery proof)
 npm run test:golden
 
-# 4. Degradation Drills (NFR-102/103 fault-injection invariance)
+# 4. Degradation Drills (4 files / 56 passed fault-injection invariance)
 npm run test:drills
 
-# 5. Playwright End-to-End Tests (128 tests across mobile 390x844 & desktop 1280x800)
+# 5. Playwright End-to-End Tests (mobile 390x844 & desktop 1280x800)
 npm run test:e2e
 ```
 
