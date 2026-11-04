@@ -86,7 +86,7 @@ Yori is built as a static TypeScript Single Page Application backed by a modular
 1. **Pure Domain Core (`src/core/`)**:
    - Zero framework dependencies, zero network imports, and zero ambient system clocks (`Date.now()`).
    - All state derives from injected frozen snapshots, enabling 100% deterministic replay and testing.
-   - **Zero-Core-Diff Extensibility (AC-EXT-1)**: Scenario plugins add new capabilities (proven by the grocery stub plugin `src/plugins/grocery/`) without touching `src/core/`.
+   - **Zero-Core-Diff Extensibility (AC-EXT-1)**: Scenario plugins add new capabilities (proven by the grocery stub plugin `src/plugins/grocery-stub/`) without touching `src/core/`.
    - **Targeted Pure Memory Core Additions**: Under owner direction (`b056a22`, `c6c3e55`), habit learning intentionally introduced pure modules under `src/core/memory/` (`habit-journal`, `habit-learner`, `taste`) and a `MemoryFact` contract extension (`src/core/contracts/memory.ts`). The real diff vs baseline `f43c6c1d` is strictly confined to these memory additions (`git diff --stat f43c6c1d..HEAD -- src/core`: 7 files changed, 634 insertions, 4 deletions), while all core pipeline scheduling and decision code remains untouched.
 2. **Shared Policy (`src/core/policy/`)**:
    - Enforces business rules: budget caps, suppressed intents, and candidate qualification.

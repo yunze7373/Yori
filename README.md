@@ -32,7 +32,7 @@ Yori is engineered with strict invariants governed by formal specifications:
 1. **Pure Domain Core (`src/core/`)**:
    - Zero framework dependencies, zero network imports, and zero ambient clocks (`Date.now()`).
    - 100% frozen inputs and deterministic composition.
-   - **Zero-Core-Diff Extensibility (AC-EXT-1)**: Scenario plugins add new capabilities (proven by the grocery stub plugin `src/plugins/grocery/`) without touching `src/core`.
+   - **Zero-Core-Diff Extensibility (AC-EXT-1)**: Scenario plugins add new capabilities (proven by the grocery stub plugin `src/plugins/grocery-stub/`) without touching `src/core`.
    - **Targeted Pure Memory Core Additions**: Under owner direction (`b056a22`, `c6c3e55`), habit learning intentionally added pure modules under `src/core/memory/` (`habit-journal`, `habit-learner`, `taste`) plus a `MemoryFact` contract extension (`src/core/contracts/memory.ts`). The real diff from baseline anchor `f43c6c1d` to HEAD is strictly confined to these memory additions:
      ```text
       src/core/contracts/memory.ts          |  20 +++-

@@ -88,7 +88,7 @@
 ## 🛡️ Architectural Acceptance Verification (AI Certified)
 
 The underlying codebase has passed all required automated verification suites for Phase Closeout:
-- ✅ **AC-EXT-1 Core Diff & Extension Invariant**: The AC-EXT-1 extension path (grocery stub plugin `src/plugins/grocery/`) adds capability without touching `src/core/`. Under owner direction (`b056a22`, `c6c3e55`), habit learning intentionally added pure modules under `src/core/memory/` (`habit-journal`, `habit-learner`, `taste`) plus a `MemoryFact` contract extension (`src/core/contracts/memory.ts`). The real diff vs baseline `f43c6c1d` is strictly confined to these memory additions (`git diff --stat f43c6c1d..HEAD -- src/core`: 7 files changed, 634 insertions, 4 deletions), while core pipeline and decision modules remain completely untouched.
+- ✅ **AC-EXT-1 Core Diff & Extension Invariant**: The AC-EXT-1 extension path (grocery stub plugin `src/plugins/grocery-stub/`) adds capability without touching `src/core/`. Under owner direction (`b056a22`, `c6c3e55`), habit learning intentionally added pure modules under `src/core/memory/` (`habit-journal`, `habit-learner`, `taste`) plus a `MemoryFact` contract extension (`src/core/contracts/memory.ts`). The real diff vs baseline `f43c6c1d` is strictly confined to these memory additions (`git diff --stat f43c6c1d..HEAD -- src/core`: 7 files changed, 634 insertions, 4 deletions), while core pipeline and decision modules remain completely untouched.
 - ✅ **TypeScript Strict Mode**: `tsc --noEmit` exits 0 with zero errors.
 - ✅ **Unit & Mock Integration**: 1,431 tests passing across 78 files (`npm test` with self-contained `pretest: vite build`).
 - ✅ **Golden Scenario Harness**: 18/18 scenarios passing across 4 files (`npm run test:golden`).

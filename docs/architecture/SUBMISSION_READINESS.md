@@ -175,7 +175,7 @@ Executed across chapter closeout commits (`c7e0924` / `59785fb`):
 | **Production Build Audit** | `npm run verify:production` | **0 violations** | 0 `__YORI_*` hooks, 0 external font hosts |
 | **Full Playwright E2E Suite** | `npx playwright test` | **555 passed, 2 skipped, 1 failed (`real-map:157` known flake)** | Zero unhandled failures |
 | **Settings Blocker Verification** | `npx playwright test tests/e2e/s2-connectors.spec.ts -g "Release Blocker"` | **2 passed (mobile + desktop)** | Touch target $\ge 44\text{px}$, Escape/Back restore focus |
-| **Core Invariant & Extension Check** | `git diff --stat f43c6c1d HEAD -- src/core` | **AC-EXT-1 plugin zero-core-diff preserved; 7 files, 634 insertions, 4 deletions in src/core/memory/** | Pure domain core logic untouched |
+| **Core Invariant & Extension Check** | `git diff --stat f43c6c1d HEAD -- src/core` | **AC-EXT-1 plugin zero-core-diff preserved; 7 files, 634 insertions, 4 deletions in src/core/memory/** | core pipeline and decision modules untouched; additions limited to src/core/memory and the MemoryFact contract |
 
 *Known Test Flakes (Environment/Network Tile Dependent)*:
 - `real-map.spec.ts:157`: Relies on live OpenStreetMap tile download timing over external internet; falls back gracefully.
