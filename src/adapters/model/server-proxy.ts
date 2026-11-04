@@ -145,9 +145,20 @@ export interface ModelProxyConfig {
   readonly allowExtendedVerificationTimeout?: boolean;
   /** D8: the labelled Baseten fallback (used only on a proven Muse Spark timeout). */
   readonly baseten?: BasetenConfig;
+  readonly replyMaxCalls?: number;
+}
+
+export const MODEL_REPLY_PER_PROCESS_CAP = 20;
+
+export function resolveReplyProcessCap(env: Record<string, string | undefined> = process.env): number {
+  const raw = env['MODEL_REPLY_PER_PROCESS_CAP'];
+  if (!raw) return MODEL_REPLY_PER_PROCESS_CAP;
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : MODEL_REPLY_PER_PROCESS_CAP;
 }
 
 let processLiveCallCount = 0;
+let processLiveReplyCallCount = 0;
 
 export function getProcessLiveCallCount(): number {
   return processLiveCallCount;
@@ -155,6 +166,14 @@ export function getProcessLiveCallCount(): number {
 
 export function resetProcessLiveCallCount(): void {
   processLiveCallCount = 0;
+}
+
+export function getProcessLiveReplyCallCount(): number {
+  return processLiveReplyCallCount;
+}
+
+export function resetProcessLiveReplyCallCount(): void {
+  processLiveReplyCallCount = 0;
 }
 
 /**
@@ -781,6 +800,7 @@ export function resolveModelConfig(
     ledgerPath,
     reasoningBudgetCeiling: resolveReasoningBudgetCeiling(process.env),
     baseten: resolveBasetenConfig(process.env),
+    replyMaxCalls: resolveReplyProcessCap(process.env),
   };
 }
 
@@ -1082,6 +1102,7 @@ export class ModelDevProxy {
         reasoningBudgetCeiling,
         allowExtendedVerificationTimeout: customConfig.allowExtendedVerificationTimeout,
         baseten: customConfig.baseten ?? resolved.baseten,
+        replyMaxCalls: customConfig.replyMaxCalls !== undefined ? customConfig.replyMaxCalls : resolved.replyMaxCalls,
       };
     } else {
       this.config = resolved;
@@ -1099,6 +1120,7 @@ export class ModelDevProxy {
 
   public resetCallCount(): void {
     processLiveCallCount = 0;
+    processLiveReplyCallCount = 0;
     this.runStartLedgerCount = undefined;
   }
 
@@ -2283,6 +2305,19 @@ export class ModelDevProxy {
       };
     }
 
+    const replyCap = this.config.replyMaxCalls ?? resolveReplyProcessCap(process.env);
+    if (processLiveReplyCallCount >= replyCap) {
+      this.logger(
+        `[ModelProxy] Reply call cap reached (${processLiveReplyCallCount}/${replyCap}): falling back to deterministic`
+      );
+      return {
+        result: null,
+        usedFallback: true,
+        fallbackReason: 'disabled',
+        engineStatus: 'offline_deterministic',
+      };
+    }
+
     const preState = readLedgerState(this.config.ledgerPath);
     const effectiveCeiling = Math.min(
       this.config.lifetimeMaxCalls,
@@ -2324,6 +2359,7 @@ export class ModelDevProxy {
       };
     }
     processLiveCallCount += 1;
+    processLiveReplyCallCount += 1;
 
     try {
       const controller = new AbortController();
@@ -2343,7 +2379,7 @@ export class ModelDevProxy {
         },
         body: JSON.stringify({
           model: this.config.modelName,
-          max_tokens: this.config.maxTokensOverride ?? 300,
+          max_tokens: resolveD4MaxTokens(this.config.maxTokensOverride),
           ...(this.config.reasoningEffort ? { reasoning_effort: this.config.reasoningEffort } : {}),
           messages: [
             {
@@ -2425,8 +2461,25 @@ export class ModelDevProxy {
         availableSignalIds: Array.isArray(facts.availableSignalIds) ? (facts.availableSignalIds as string[]) : undefined,
         knownFactKeys: Array.isArray(facts.knownFactKeys) ? (facts.knownFactKeys as string[]) : undefined,
         confirmedFactKeys: Array.isArray(facts.confirmedFactKeys) ? (facts.confirmedFactKeys as string[]) : undefined,
-        validTimes: Array.isArray(facts.validTimes) ? (facts.validTimes as string[]) : undefined,
-        validPlaces: Array.isArray(facts.validPlaces) ? (facts.validPlaces as string[]) : undefined,
+        validTimes: Array.isArray(facts.validTimes)
+          ? (facts.validTimes as string[])
+          : (Array.isArray(facts.suppliedTimes) ? (facts.suppliedTimes as string[]) : undefined),
+        validPlaces: Array.isArray(facts.validPlaces)
+          ? (facts.validPlaces as string[])
+          : (Array.isArray(facts.suppliedPlaces) ? (facts.suppliedPlaces as string[]) : undefined),
+        suppliedDistances: Array.isArray(facts.suppliedDistances)
+          ? (facts.suppliedDistances as string[])
+          : (Array.isArray(facts.distances) ? (facts.distances as string[]) : undefined),
+        suppliedRatings: Array.isArray(facts.suppliedRatings)
+          ? (facts.suppliedRatings as string[])
+          : (Array.isArray(facts.ratings) ? (facts.ratings as string[]) : undefined),
+        suppliedPrices: Array.isArray(facts.suppliedPrices)
+          ? (facts.suppliedPrices as string[])
+          : (Array.isArray(facts.prices) ? (facts.prices as string[]) : undefined),
+        suppliedWeather:
+          typeof facts.suppliedWeather === 'string'
+            ? facts.suppliedWeather
+            : (typeof facts.weather === 'string' ? facts.weather : undefined),
       });
 
       if (!validation.valid) {

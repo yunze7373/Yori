@@ -21,7 +21,7 @@ import type {
   MemoryFact,
   IntentCandidate,
 } from '../../core/contracts/index.js';
-import { validateFactsInWording, parseTimeToMinutes } from './fact-checker.js';
+import { validateFactsInWording, parseTimeToMinutes, validateAssistantReply } from './fact-checker.js';
 import type { RejectedReasonCodeTelemetry } from './types.js';
 
 export { type RejectedReasonCodeTelemetry };
@@ -867,6 +867,7 @@ export interface DecisionCommandOutput {
     readonly mode?: 'drive' | 'bus';
     readonly filters?: readonly string[];
   };
+  readonly reply?: string;
   readonly situationAttribution?: {
     readonly signalId: string;
     readonly reasonCode: ReasoningReasonCode;
@@ -887,6 +888,10 @@ export interface DecisionCommandValidationContext {
   readonly confirmedFactKeys?: readonly string[];
   readonly validTimes?: readonly string[];
   readonly validPlaces?: readonly string[];
+  readonly suppliedDistances?: readonly string[];
+  readonly suppliedRatings?: readonly string[];
+  readonly suppliedPrices?: readonly string[];
+  readonly suppliedWeather?: string;
   readonly evidenceBundle?: { getRecord(id: string): unknown; hasRecord?(id: string): boolean } | null;
 }
 
@@ -899,6 +904,7 @@ export const ALLOWED_DECISION_COMMAND_TOP_KEYS: ReadonlySet<string> = new Set([
   'citedFactKeys',
   'reasonCodes',
   'explanation',
+  'reply',
 ]);
 
 export const ALLOWED_DECISION_COMMAND_SLOT_KEYS: ReadonlySet<string> = new Set([
@@ -983,6 +989,9 @@ export function validateDecisionCommandOutput(
     }
   }
   if (slots.filters !== undefined) {
+    if (typeof slots.filters === 'string') {
+      slots.filters = [slots.filters];
+    }
     if (!Array.isArray(slots.filters)) {
       return { valid: false, reason: 'schema_invalid', error: "'filters' must be an array" };
     }
@@ -1313,6 +1322,28 @@ export function validateDecisionCommandOutput(
           error: `situationAttribution signalId '${saRec.signalId}' not found in evidenceBundle`,
         };
       }
+    }
+  }
+
+  // 11. Validate assistant reply (if present)
+  if (obj.reply !== undefined) {
+    const replyValidation = validateAssistantReply(
+      obj.reply as string,
+      {
+        times: context?.validTimes ?? [],
+        places: context?.validPlaces ?? [],
+        distances: context?.suppliedDistances ?? [],
+        ratings: context?.suppliedRatings ?? [],
+        prices: context?.suppliedPrices ?? [],
+      },
+      typeof obj.intent === 'string' ? obj.intent : undefined
+    );
+    if (!replyValidation.valid) {
+      return {
+        valid: false,
+        reason: replyValidation.reason || 'unlisted_fact_token',
+        error: replyValidation.error || 'Invalid assistant reply',
+      };
     }
   }
 

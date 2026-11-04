@@ -35,7 +35,7 @@ import {
 } from '../../adapters/model/reasoning.js';
 
 export { CLOSED_DECISION_INTENTS, CLOSED_DECISION_INTENTS as CLOSED_INTENTS } from '../../adapters/model/reasoning.js';
-import { validateFactsInWording } from '../../adapters/model/fact-checker.js';
+import { validateFactsInWording, validateAssistantReply } from '../../adapters/model/fact-checker.js';
 import {
   DEFAULT_LIVE_MODEL_TIMEOUT_MS,
   MIN_MODEL_TIMEOUT_MS,
@@ -591,6 +591,28 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       }
     }
 
+    // 11. Validate assistant reply (if present)
+    if (obj.reply !== undefined) {
+      const replyValidation = validateAssistantReply(
+        obj.reply as string,
+        {
+          times: context?.validTimes ?? [],
+          places: context?.validPlaces ?? [],
+          distances: context?.suppliedFacts?.distances ?? [],
+          ratings: context?.suppliedFacts?.ratings ?? [],
+          prices: [],
+        },
+        typeof obj.intent === 'string' ? (obj.intent as string) : undefined
+      );
+      if (!replyValidation.valid) {
+        return {
+          valid: false,
+          reason: (replyValidation.reason as any) || 'unlisted_fact_token',
+          error: replyValidation.error || 'Invalid assistant reply',
+        };
+      }
+    }
+
     return {
       valid: true,
       output: obj as unknown as ModelCommandDecisionOutput,
@@ -720,6 +742,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       rawText,
       slots: out.slots,
       explanation: out.explanation,
+      reply: out.reply,
       situationAttribution,
       recommendedOptionDelta: out.recommendedOptionDelta,
       reasonCodes: out.reasonCodes,
@@ -770,6 +793,19 @@ export class ModelCommandInterpreter implements CommandInterpreter {
             validTimes: context?.validTimes ?? [],
             validPlaces: context?.validPlaces ?? [],
             currentPlanIntent: context?.currentPlanIntent,
+            cardType: context?.suppliedFacts?.cardType,
+            suppliedPlaces: context?.suppliedFacts?.places ?? context?.validPlaces ?? [],
+            suppliedTimes: context?.suppliedFacts?.times ?? context?.validTimes ?? [],
+            suppliedDistances: context?.suppliedFacts?.distances ?? [],
+            suppliedRatings: context?.suppliedFacts?.ratings ?? [],
+            suppliedOpenStatuses: context?.suppliedFacts?.openStatuses ?? [],
+            suppliedWeather: context?.suppliedFacts?.weather,
+            suppliedHabits: context?.suppliedFacts?.habits ?? [],
+            distances: context?.suppliedFacts?.distances ?? [],
+            ratings: context?.suppliedFacts?.ratings ?? [],
+            openStatuses: context?.suppliedFacts?.openStatuses ?? [],
+            weather: context?.suppliedFacts?.weather,
+            habits: context?.suppliedFacts?.habits ?? [],
           },
         }),
         signal: controller.signal,
@@ -824,6 +860,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
         rawText: input,
         slots: out.slots,
         explanation: out.explanation,
+        reply: out.reply,
         situationAttribution,
         recommendedOptionDelta: out.recommendedOptionDelta,
         reasonCodes: out.reasonCodes,

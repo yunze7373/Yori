@@ -51,6 +51,7 @@ export interface InterpretedCommand {
   readonly rawText: string;
   readonly slots: CommandSlotValues;
   readonly explanation?: string;
+  readonly reply?: string;
   readonly honestAnswer?: string;
   readonly situationAttribution?: SituationAttribution;
   readonly recommendedOptionDelta?: number;
@@ -58,6 +59,18 @@ export interface InterpretedCommand {
   readonly citedSignalIds?: readonly string[];
   readonly citedFactKeys?: readonly string[];
   readonly engineStatus?: EngineStatus;
+}
+
+export interface CommandSuppliedFacts {
+  readonly cardType?: string;
+  readonly places?: readonly string[];
+  readonly times?: readonly string[];
+  readonly distances?: readonly string[];
+  readonly ratings?: readonly string[];
+  readonly openStatuses?: readonly string[];
+  readonly weather?: string;
+  readonly routes?: readonly string[];
+  readonly habits?: readonly string[];
 }
 
 export interface CommandInterpretationContext {
@@ -70,6 +83,7 @@ export interface CommandInterpretationContext {
   readonly validPlaces?: readonly string[];
   readonly sceneId?: string;
   readonly evidenceBundle?: { getRecord(id: string): unknown; hasRecord?(id: string): boolean } | null;
+  readonly suppliedFacts?: CommandSuppliedFacts;
 }
 
 export interface CommandInterpreter {

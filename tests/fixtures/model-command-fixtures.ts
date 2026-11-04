@@ -27,6 +27,7 @@ export interface ModelCommandDecisionOutput {
   readonly citedFactKeys: readonly string[];
   readonly reasonCodes: readonly ReasoningReasonCode[];
   readonly explanation?: string;
+  readonly reply?: string;
 }
 
 /**

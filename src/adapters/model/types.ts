@@ -15,6 +15,10 @@ export interface SuppliedFacts {
   readonly times: readonly string[];
   readonly places: readonly string[];
   readonly contextSummary?: string;
+  readonly prices?: readonly string[];
+  readonly ratings?: readonly string[];
+  readonly distances?: readonly string[];
+  readonly weather?: readonly string[];
 }
 
 export interface ModelPortRequest {
