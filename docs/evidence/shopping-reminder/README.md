@@ -2,7 +2,16 @@
 
 **Task ID**: `INBOX-20261104-9C01AA` (`SHOPPING-REMINDER`)  
 **Environment**: **Mocked Only** (Zero live paid API calls, isolated port 4289)  
-**Date**: 2026-11-05  
+**Date**: 2026-11-05 (Updated for Reviewer Revision)  
+
+## Reviewer Feedback Addressed
+
+1. **(P1) Fictional Demo Store**:
+   - `DEMO_SHOPPING_STORE` updated from real brand to fictional store name `Market Square Grocery` (`100 Market St, San Francisco, CA`).
+2. **(P1) Live Essentials Badge**:
+   - Live `'Nearby essentials'` proposal updated to `provenance: 'live'`, rendering `Live` badge instead of `"You confirmed"`.
+3. **(P2) Shopping Card Rendered Once**:
+   - Removed duplicate shopping reminder from Section 1: Now. The proactive card is rendered exactly once in the dedicated **"Nearby now"** section (`#feed-section-nearbynow`).
 
 ## Verified Deliverables
 
@@ -21,12 +30,12 @@
    - Includes `"Got it"` action to mark items completed and dismiss the reminder.
    - Includes `"Not now"` quiet one-tap snooze.
 
-4. **Dedicated "Nearby now" Section (Reviewer Addendum)**:
+4. **Dedicated "Nearby now" Section**:
    - Separates real places and nearby reminders (`#feed-section-nearbynow`) from learned user preferences.
    - Preserves dedicated action buttons on nearby cards.
 
 5. **Demo Mode (Scene "shopping")**:
-   - `?scene=shopping` uses fixture store (`Whole Foods Market`) and displays `SIMULATED` pill.
+   - `?scene=shopping` uses fixture store (`Market Square Grocery`) and displays `SIMULATED` pill.
    - Forget from Me tab clears the fixture habit.
 
 ## Evidence Artifacts
@@ -43,7 +52,7 @@
 | `04-home-after-forget-desktop-1280x800.png` | Home view after shopping list forgotten (card dismissed) | Desktop (1280×800) |
 | `05-ask-add-shopping-items-mobile-390x844.png` | Ask conversation storing shopping items | Mobile (390×844) |
 | `05-ask-add-shopping-items-desktop-1280x800.png` | Ask conversation storing shopping items | Desktop (1280×800) |
-| `06-live-proactive-card-mobile-390x844.png` | Proactive card with real store and Nearby now section | Mobile (390×844) |
-| `06-live-proactive-card-desktop-1280x800.png` | Proactive card with real store and Nearby now section | Desktop (1280×800) |
+| `06-live-proactive-card-mobile-390x844.png` | Proactive card with real store and Nearby now section (shown once) | Mobile (390×844) |
+| `06-live-proactive-card-desktop-1280x800.png` | Proactive card with real store and Nearby now section (shown once) | Desktop (1280×800) |
 | `07-after-got-it-cleared-mobile-390x844.png` | Home view after tapping "Got it" (shopping card cleared) | Mobile (390×844) |
 | `07-after-got-it-cleared-desktop-1280x800.png` | Home view after tapping "Got it" (shopping card cleared) | Desktop (1280×800) |

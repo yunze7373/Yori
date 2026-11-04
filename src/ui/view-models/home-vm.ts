@@ -945,7 +945,7 @@ function compileAheadItems(aheadPlans: readonly PreparedPlan[]): readonly AheadI
 }
 
 function compileProposals(
-  proposals: readonly { key: string; value?: unknown; status?: string; title?: string; basis?: string; provenance?: 'user' | 'fixture' | 'none'; actions?: readonly any[] }[]
+  proposals: readonly { key: string; value?: unknown; status?: string; title?: string; basis?: string; provenance?: 'user' | 'fixture' | 'none' | 'live'; actions?: readonly any[] }[]
 ): readonly ProposalItemVM[] {
   return Object.freeze(
     proposals.map(prop => ({

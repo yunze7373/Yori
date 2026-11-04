@@ -160,7 +160,7 @@ export interface ProposalItemVM {
   readonly key: string;
   readonly title: string;
   readonly basis?: string;
-  readonly provenance?: 'user' | 'fixture' | 'none';
+  readonly provenance?: 'user' | 'fixture' | 'none' | 'live';
   readonly value?: unknown;
   readonly actions?: readonly ProposalActionVM[];
 }

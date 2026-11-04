@@ -106,11 +106,12 @@ test.describe('SHOPPING-REMINDER: Demo Mode & Live Context', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForSelector('.app-layout');
 
-    // 2. Verify Now card shopping reminder
+    // 2. Verify shopping reminder card is shown exactly once in "Nearby now"
+    await expect(page.locator('.shopping-reminder-card')).toHaveCount(1);
     const shoppingCard = page.locator('#card-shopping-now, .shopping-reminder-card').first();
     await expect(shoppingCard).toBeVisible();
-    await expect(shoppingCard).toContainText('Pick up milk, eggs at Whole Foods Market');
-    await expect(shoppingCard).toContainText('SIMULATED');
+    await expect(shoppingCard).toContainText('Pick up milk, eggs at Market Square Grocery');
+    await expect(shoppingCard).toContainText(/simulated/i);
     await expect(shoppingCard.locator('.btn-shopping-directions')).toBeVisible();
     await expect(shoppingCard.locator('.btn-shopping-got-it')).toBeVisible();
     await expect(shoppingCard.locator('.btn-shopping-not-now')).toBeVisible();
@@ -210,7 +211,8 @@ test.describe('SHOPPING-REMINDER: Demo Mode & Live Context', () => {
     await closeBtn.click();
     await expect(overlay).toBeHidden();
 
-    // 5. Verify proactive shopping card with real store 'Seijo Ishii Shinjuku'
+    // 5. Verify proactive shopping card with real store 'Seijo Ishii Shinjuku' (shown once)
+    await expect(page.locator('.shopping-reminder-card')).toHaveCount(1);
     const liveCard = page.locator('#card-shopping-now, .shopping-reminder-card').first();
     await expect(liveCard).toBeVisible({ timeout: 10000 });
     await expect(liveCard).toContainText('Pick up milk, eggs at Seijo Ishii Shinjuku · 145m · Open now');
@@ -222,6 +224,12 @@ test.describe('SHOPPING-REMINDER: Demo Mode & Live Context', () => {
     const nearbyNowSection = page.locator('#feed-section-nearbynow');
     await expect(nearbyNowSection).toBeVisible();
     await expect(nearbyNowSection).toContainText('Nearby now');
+
+    // Verify live Nearby essentials shows Live badge (not "You confirmed")
+    const essentialsItem = nearbyNowSection.locator('[data-proposal-key="nearby_essentials"]');
+    await expect(essentialsItem).toBeVisible();
+    await expect(essentialsItem).toContainText('Live');
+    await expect(essentialsItem).not.toContainText('You confirmed');
 
     // Verify Directions link URL
     const directionsHref = await liveCard.locator('.btn-shopping-directions').getAttribute('href');

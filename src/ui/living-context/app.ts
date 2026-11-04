@@ -178,15 +178,15 @@ import type { HomeCompositionVM } from '../view-models/index.js';
 
 export const DEMO_SHOPPING_STORE: PlaceItem = {
   placeId: 'demo-supermarket-1',
-  name: 'Whole Foods Market',
+  name: 'Market Square Grocery',
   category: 'supermarket',
   coords: { lat: 37.7749, lng: -122.4194 },
   source: 'simulated',
   fetchedAt: '2026-10-28T19:10:00.000Z',
   straightLineDistanceLabel: '350m',
   openingStatus: 'open',
-  address: '399 4th St, San Francisco, CA',
-  provenance: 'google',
+  address: '100 Market St, San Francisco, CA',
+  provenance: 'osm',
 };
 
 export const DEMO_SHOPPING_FACT: MemoryFact<readonly string[]> = createMemoryFact(
@@ -3648,7 +3648,7 @@ export function renderApp(
       title: 'Nearby essentials',
       basis: liveEssentialsSummary,
       value: liveEssentialsSummary,
-      provenance: 'user' as const,
+      provenance: 'live' as const,
     }] : [];
 
     // SHOPPING-REMINDER: Proactive card

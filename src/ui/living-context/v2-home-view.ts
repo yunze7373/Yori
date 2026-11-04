@@ -749,6 +749,7 @@ function renderPhotoCredit(c: NonNullable<HomeCompositionVM['candidateCards']>[n
  * comes from: live sensing, the user's own confirmation, or (dev-only Demo) a simulation.
  */
 function renderProvenanceChip(provenance: string | undefined): string {
+  if (!provenance || provenance === 'none') return '';
   const kind = provenance === 'user' ? 'user' : provenance === 'fixture' ? 'fixture' : 'live';
   const text = kind === 'user' ? 'You confirmed' : kind === 'fixture' ? 'Simulated' : 'Live';
   // A label, not data: it must not carry data-provenance (that attribute marks data elements, which
@@ -1351,41 +1352,6 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
             <span class="feed-section-subtitle">What's happening right now.</span>
           </div>
         </div>
-        ${
-          vm.shoppingReminder
-            ? `
-        <div class="card feed-now-card shopping-now-card" id="card-shopping-now" data-provenance="${vm.shoppingReminder.isSimulated ? 'fixture' : (vm.isLive ? 'live' : 'fixture')}">
-          <div class="feed-now-body">
-            <div class="feed-now-text">
-              <div class="hero-thought-header" style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
-                <span class="hero-thought-badge">
-                  <span class="qp-eyebrow-label">Shopping</span>
-                </span>
-                <div class="hero-header-meta">
-                  ${
-                    vm.shoppingReminder.isSimulated
-                      ? `<span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>`
-                      : (vm.isLive
-                          ? `<span class="card-badge live-badge" data-provenance="live">Live</span>`
-                          : `<span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>`)
-                  }
-                </div>
-              </div>
-              <h3 class="feed-now-title" style="font-size: 1.15rem; font-weight: 600; line-height: 1.35; margin: 4px 0 8px;">${escapeHtml(vm.shoppingReminder.text)}</h3>
-            </div>
-          </div>
-          <div class="shopping-actions-row" style="display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
-            ${
-              vm.shoppingReminder.directionsUrl
-                ? `<a href="${escapeHtml(vm.shoppingReminder.directionsUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline btn-shopping-directions">Directions</a>`
-                : ''
-            }
-            <button type="button" class="btn btn-sm btn-primary btn-shopping-got-it">Got it</button>
-            <button type="button" class="btn btn-sm btn-quiet btn-shopping-not-now">Not now</button>
-          </div>
-        </div>
-        `
-            : `
         <div class="card feed-now-card" data-provenance="${vm.isLive ? 'live' : 'fixture'}">
           <div class="feed-now-body">
             <div class="feed-now-text">
@@ -1396,8 +1362,6 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
           </div>
           ${renderProvenanceChip(vm.isLive ? 'live' : 'fixture')}
         </div>
-        `
-        }
       </section>
 
       <!-- Section 2: Ahead -->
@@ -1448,8 +1412,8 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
           ${vm.nearbyItems
             .map(
               item => `
-            <div class="card proposal-card learned-card ${item.key === 'shopping_reminder' ? 'shopping-reminder-card' : 'nearby-item-card'}" data-proposal-key="${escapeHtml(item.key)}" data-provenance="${item.provenance || 'user'}" data-slot="chrome" data-slot-reason="Nearby card">
-              ${renderProvenanceChip(item.provenance === 'fixture' ? 'fixture' : 'user')}
+            <div class="card proposal-card learned-card ${item.key === 'shopping_reminder' ? 'shopping-reminder-card' : 'nearby-item-card'}" ${item.key === 'shopping_reminder' ? 'id="card-shopping-now"' : ''} data-proposal-key="${escapeHtml(item.key)}" data-provenance="${item.provenance || 'none'}" data-slot="chrome" data-slot-reason="Nearby card">
+              ${renderProvenanceChip(item.provenance)}
               <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Nearby title">${escapeHtml(item.title)}</h3>
               ${item.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Nearby basis">${escapeHtml(item.basis)}</p>` : ''}
               ${

@@ -82,17 +82,33 @@ describe('SHOPPING-REMINDER: Proactive card composition rules', () => {
   };
 
   it('renders card when list is non-empty and store is known', () => {
+    const reminderText = 'Pick up milk, eggs at Maruetsu · 350m · Open now';
+    const directionsUrl = 'https://www.google.com/maps/dir/?api=1&destination=Maruetsu';
     const homeVM = buildHomeComposition({
       plan: null,
       spatialEvidence: null,
       snapshot: dummySnapshot,
       isLive: true,
+      nearbyItems: [
+        {
+          key: 'shopping_reminder',
+          title: reminderText,
+          basis: 'From your shopping list',
+          value: ['milk', 'eggs'],
+          provenance: 'user',
+          actions: [
+            { id: 'btn-shopping-directions', label: 'Directions', href: directionsUrl, variant: 'outline' },
+            { id: 'btn-shopping-got-it', label: 'Got it', variant: 'primary' },
+            { id: 'btn-shopping-not-now', label: 'Not now', variant: 'quiet' },
+          ],
+        },
+      ],
       shoppingReminder: {
-        text: 'Pick up milk, eggs at Maruetsu · 350m · Open now',
+        text: reminderText,
         storeName: 'Maruetsu',
         distanceLabel: '350m',
         openStatus: 'open',
-        directionsUrl: 'https://www.google.com/maps/dir/?api=1&destination=Maruetsu',
+        directionsUrl,
         items: ['milk', 'eggs'],
         isSimulated: false,
       },
@@ -106,7 +122,7 @@ describe('SHOPPING-REMINDER: Proactive card composition rules', () => {
     expect(html).toContain('Got it');
     expect(html).toContain('btn-shopping-not-now');
     expect(html).toContain('Not now');
-    expect(html).toContain('Live');
+    expect(html).toContain('You confirmed');
   });
 
   it('does NOT render card when shopping list is empty or undefined', () => {
@@ -115,6 +131,7 @@ describe('SHOPPING-REMINDER: Proactive card composition rules', () => {
       spatialEvidence: null,
       snapshot: dummySnapshot,
       isLive: true,
+      nearbyItems: [],
       shoppingReminder: undefined,
     });
 
@@ -123,26 +140,42 @@ describe('SHOPPING-REMINDER: Proactive card composition rules', () => {
     expect(html).not.toContain('btn-shopping-got-it');
   });
 
-  it('renders SIMULATED pill in demo shopping scene', () => {
+  it('renders SIMULATED pill in demo shopping scene with fictional store name', () => {
+    const reminderText = `Pick up milk, eggs at ${DEMO_SHOPPING_STORE.name} · 350m · Open now`;
+    const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(DEMO_SHOPPING_STORE.name)}`;
     const homeVM = buildHomeComposition({
       plan: null,
       spatialEvidence: null,
       snapshot: dummySnapshot,
       isLive: false,
+      nearbyItems: [
+        {
+          key: 'shopping_reminder',
+          title: reminderText,
+          basis: 'From your shopping list',
+          value: ['milk', 'eggs'],
+          provenance: 'fixture',
+          actions: [
+            { id: 'btn-shopping-directions', label: 'Directions', href: directionsUrl, variant: 'outline' },
+            { id: 'btn-shopping-got-it', label: 'Got it', variant: 'primary' },
+            { id: 'btn-shopping-not-now', label: 'Not now', variant: 'quiet' },
+          ],
+        },
+      ],
       shoppingReminder: {
-        text: 'Pick up milk, eggs at Whole Foods Market · 350m · Open now',
+        text: reminderText,
         storeName: DEMO_SHOPPING_STORE.name,
         distanceLabel: DEMO_SHOPPING_STORE.straightLineDistanceLabel,
         openStatus: DEMO_SHOPPING_STORE.openingStatus,
-        directionsUrl: 'https://www.google.com/maps/dir/?api=1&destination=Whole%20Foods%20Market',
+        directionsUrl,
         items: ['milk', 'eggs'],
         isSimulated: true,
       },
     });
 
     const html = renderV2Home(homeVM);
-    expect(html).toContain('SIMULATED');
-    expect(html).toContain('Pick up milk, eggs at Whole Foods Market · 350m · Open now');
+    expect(html).toContain('Simulated');
+    expect(html).toContain(`Pick up milk, eggs at ${DEMO_SHOPPING_STORE.name} · 350m · Open now`);
     expect(html).toContain('Directions');
     expect(html).toContain('Got it');
     expect(html).toContain('Not now');
