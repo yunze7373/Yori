@@ -1287,7 +1287,7 @@ describe('Slice A2: Proxy Guard Regression Suite & Prompt-Injection Fixtures (AC
   });
 
   describe('Part 3: Upstream Request Shape & Secret Hygiene (AC-201-3)', () => {
-    it('upstream request shape enforces capped max_tokens', async () => {
+    it('upstream request shape enforces capped max_tokens and can be lowered by override', async () => {
       let capturedBody: any = null;
       const originalFetch = globalThis.fetch;
       globalThis.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
@@ -1310,8 +1310,16 @@ describe('Slice A2: Proxy Guard Regression Suite & Prompt-Injection Fixtures (AC
         });
 
         expect(capturedBody).not.toBeNull();
-        expect(capturedBody.max_tokens).toBe(150);
-        expect(capturedBody.max_tokens).toBeLessThanOrEqual(250);
+        expect(capturedBody.max_tokens).toBe(4096);
+        expect(capturedBody.max_tokens).toBeLessThanOrEqual(4096);
+
+        // Lowered via override
+        const loweredProxy = new ModelDevProxy({ apiKey: 'mock-test-key', maxTokensOverride: 256 });
+        await loweredProxy.handleRefine({
+          templateId: 'depart',
+          facts: { prepareTime: '2:05 PM' },
+        });
+        expect(capturedBody.max_tokens).toBe(256);
       } finally {
         globalThis.fetch = originalFetch;
       }
