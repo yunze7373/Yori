@@ -12,6 +12,7 @@ import type {
 import type { UserRequestOverride } from '../../plugins/depart/request-override.js';
 import type { EngineStatus } from '../../adapters/model/decision-log.js';
 import type { CommandInterpreter, SituationAttribution } from '../conversation/grammar.js';
+import type { AgentTraceRun, AgentTraceLunchCard } from '../conversation/agent-trace.js';
 
 export interface ActionCommandContext {
   readonly plan: PreparedPlan | null;
@@ -88,6 +89,8 @@ export interface MessageItem {
   suggestions?: readonly string[];
   actions?: readonly MessageAction[];
   pendingUtterance?: string;
+  traceRun?: AgentTraceRun;
+  lunchCard?: AgentTraceLunchCard;
 }
 
 export interface ActionHistorySnapshot {
@@ -114,6 +117,7 @@ export interface ActionStateStoreOptions {
   reducedMotion?: boolean;
   interpreter?: CommandInterpreter;
   locationRequestHandler?: () => Promise<import('../../adapters/providers/location-port.js').LocationStatus>;
+  traceBus?: import('../conversation/agent-trace.js').AgentTraceBus;
 }
 
 export interface ActionStateStore {
@@ -128,6 +132,7 @@ export interface ActionStateStore {
   clearOverride(): void;
   getActiveEvidenceBundle(): any;
   getActiveSnapshot(): ContextSnapshot | undefined;
+  getTraceBus?(): import('../conversation/agent-trace.js').AgentTraceBus;
 
   getEngineStatus(): EngineStatus;
   getEngineStatusLabel(): string;

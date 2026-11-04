@@ -57,6 +57,37 @@ import {
   createLunchPlacesEvidenceBundle,
   createFuelEvidenceBundle,
 } from '../view-models/grounding.js';
+import {
+  agentTrace,
+  AgentTraceBus,
+  type AgentTraceRun,
+  type AgentTraceStep,
+  type AgentTraceLunchCard,
+} from '../conversation/agent-trace.js';
+
+export function extractLunchCard(opt: unknown): AgentTraceLunchCard | undefined {
+  if (!opt || typeof opt !== 'object') return undefined;
+  const o = opt as any;
+  const name = o.name || o.label;
+  if (!name || typeof name !== 'string') return undefined;
+  return {
+    name,
+    straightLineDistanceLabel: typeof o.straightLineDistanceLabel === 'string' ? o.straightLineDistanceLabel : undefined,
+    openingStatus: typeof o.openingStatus === 'string' ? o.openingStatus : (o.openNow === true ? 'open' : o.openNow === false ? 'closed' : undefined),
+    rating: typeof o.rating === 'number' ? o.rating : undefined,
+    userRatingCount: typeof o.userRatingCount === 'number' ? o.userRatingCount : undefined,
+    priceLevel: typeof o.priceLevel === 'number' || typeof o.priceLevel === 'string' ? o.priceLevel : undefined,
+    cuisine: typeof o.cuisine === 'string' ? o.cuisine : undefined,
+    attribution: typeof o.attribution === 'string'
+      ? o.attribution
+      : (o.provenance === 'google' ? 'Powered by Google' : o.provenance === 'osm' ? 'OpenStreetMap' : undefined),
+    photoUrl: o.photo?.uri && typeof o.photo.uri === 'string' && /^https?:\/\//i.test(o.photo.uri) ? o.photo.uri : undefined,
+    photoAttribution: Array.isArray(o.photo?.authorAttributions) && o.photo.authorAttributions[0]?.displayName
+      ? o.photo.authorAttributions[0].displayName
+      : undefined,
+    noiseLevel: typeof o.noiseLevel === 'string' ? o.noiseLevel : undefined,
+  };
+}
 
 function checkSystemReducedMotion(): boolean {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -86,6 +117,8 @@ export class DefaultActionStateStore implements ActionStateStore {
   private activeEvidenceBundle?: any = undefined;
   private activeSnapshot?: ContextSnapshot = undefined;
   private locationRequestHandler: (() => Promise<LocationStatus>) | null = null;
+  private traceBus: AgentTraceBus;
+  private activeTraceRunId: string | null = null;
 
   constructor(options: ActionStateStoreOptions = {}) {
     this.actionState = {
@@ -97,6 +130,21 @@ export class DefaultActionStateStore implements ActionStateStore {
     this.reducedMotionOption = options.reducedMotion;
     this.interpreter = options.interpreter ?? defaultModelCommandInterpreter;
     this.locationRequestHandler = options.locationRequestHandler ?? null;
+    this.traceBus = options.traceBus ?? agentTrace;
+
+    this.traceBus.subscribe((run) => {
+      if (this.activeTraceRunId === run.id) {
+        const idx = this.transcriptList.findIndex((m) => m.inFlight);
+        if (idx !== -1) {
+          this.transcriptList[idx] = { ...this.transcriptList[idx]!, traceRun: run };
+          this.notify();
+        }
+      }
+    });
+  }
+
+  public getTraceBus(): AgentTraceBus {
+    return this.traceBus;
   }
 
   public getActionState(): ActionStateRecord {
@@ -167,8 +215,26 @@ export class DefaultActionStateStore implements ActionStateStore {
   }
 
   public cancelInFlight(): void {
+    const runToCancel = this.activeTraceRunId ?? this.traceBus.getActiveRun()?.id;
+    if (runToCancel) {
+      this.traceBus.cancelRun(runToCancel, 'Request cancelled');
+    }
     (this.interpreter as any)?.cancelInFlight?.();
-    this.transcriptList = this.transcriptList.filter(m => !m.inFlight);
+    const inflightMsg = this.transcriptList.find((m) => m.inFlight);
+    if (inflightMsg) {
+      const run = runToCancel ? this.traceBus.getRun(runToCancel) : undefined;
+      this.transcriptList = this.transcriptList.map((m) =>
+        m.id === inflightMsg.id
+          ? {
+              ...m,
+              inFlight: false,
+              text: 'Request cancelled.',
+              traceRun: run ?? m.traceRun,
+            }
+          : m
+      );
+    }
+    this.activeTraceRunId = null;
     this.notify();
   }
 
@@ -253,29 +319,57 @@ export class DefaultActionStateStore implements ActionStateStore {
     }
 
     if (action === 'allow_location') {
+      const run = this.traceBus.startRun();
+      this.activeTraceRunId = run.id;
+      const permStep = this.traceBus.startStep(
+        run.id,
+        'permission',
+        'Location permission',
+        'Requesting browser location…'
+      );
       const locStatus = await this.requestLocationPermission();
       if (locStatus.status === 'available' && locStatus.coords) {
+        this.traceBus.finishStep(permStep.id, 'Permission granted', 'Browser');
+        const locStep = this.traceBus.startStep(
+          run.id,
+          'location',
+          'Geolocation fix',
+          'Acquiring location…'
+        );
+        const locLabel =
+          typeof (locStatus as any).areaLabel === 'string'
+            ? (locStatus as any).areaLabel
+            : 'Location fix obtained';
+        this.traceBus.finishStep(locStep.id, locLabel);
         if (pendingText) {
           this.notify();
           if (typeof this.submitMessageAsync === 'function') {
-            await this.submitMessageAsync(pendingText);
+            await this.submitMessageAsync(pendingText, undefined, run);
           } else {
-            this.submitMessage(pendingText);
+            this.submitMessage(pendingText, undefined, run);
           }
           return;
         }
       } else {
+        this.traceBus.failStep(permStep.id, 'Permission denied', 'Browser');
+        this.traceBus.completeRun(run.id, 'offline');
         const denyLine = "No problem — I'll work with what I have.";
         this.transcriptList.push({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: denyLine,
           timestamp: new Date().toISOString(),
+          traceRun: run,
         });
+        this.activeTraceRunId = null;
         this.notify();
         return;
       }
     } else if (action === 'not_now') {
+      if (this.activeTraceRunId) {
+        this.traceBus.cancelRun(this.activeTraceRunId, 'Not now');
+        this.activeTraceRunId = null;
+      }
       const notNowLine = "No problem — I'll work with what I have.";
       this.transcriptList.push({
         id: `msg-${Date.now()}-a`,
@@ -621,7 +715,8 @@ export class DefaultActionStateStore implements ActionStateStore {
 
   public submitMessage(
     text: string,
-    contextOverride?: ActionCommandContext
+    contextOverride?: ActionCommandContext,
+    existingRun?: AgentTraceRun
   ): { collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan } {
     if (this.isInFlight()) {
       return { collapsed: false, rule: 'unsupported_ask', response: '' };
@@ -646,14 +741,27 @@ export class DefaultActionStateStore implements ActionStateStore {
       this.commandContext = contextOverride;
     }
 
+    const run = existingRun ?? this.traceBus.startRun();
+    this.activeTraceRunId = run.id;
+
+    const localStep = this.traceBus.startStep(
+      run.id,
+      'local',
+      'Grammar match',
+      'Interpreting command…',
+      'offline'
+    );
     const { ctx, interpCtx } = this.buildInterpretationContext(contextOverride);
     const cmd = this.interpreter.interpret(trimmed, interpCtx);
-    return this.applyCommand(trimmed, cmd, ctx, now);
+    this.traceBus.finishStep(localStep.id, 'Grammar match', 'offline');
+
+    return this.applyCommand(trimmed, cmd, ctx, now, run, 'Local plan · deterministic');
   }
 
   public async submitMessageAsync(
     text: string,
-    contextOverride?: ActionCommandContext
+    contextOverride?: ActionCommandContext,
+    existingRun?: AgentTraceRun
   ): Promise<{ collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan }> {
     if (this.isInFlight()) {
       return { collapsed: false, rule: 'unsupported_ask', response: '' };
@@ -689,18 +797,57 @@ export class DefaultActionStateStore implements ActionStateStore {
     const quick = this.interpreter.interpret(trimmed, interpCtx);
     const quickNeedsLoc = quick.intent === 'FIND_LUNCH' || quick.intent === 'FIND_FUEL';
     if (isLive && quickNeedsLoc && (locStatus.status === 'prompt' || locStatus.status === 'denied')) {
-      return this.applyCommand(trimmed, quick, ctx, now);
+      const run = existingRun ?? this.traceBus.startRun();
+      this.activeTraceRunId = run.id;
+      const permStep = this.traceBus.startStep(
+        run.id,
+        'permission',
+        'Location permission',
+        'Checking browser location permission…'
+      );
+      if (locStatus.status === 'prompt') {
+        this.traceBus.finishStep(permStep.id, 'Location permission required', 'Browser');
+      } else {
+        this.traceBus.failStep(permStep.id, 'Location access blocked in browser settings', 'Browser');
+        this.traceBus.completeRun(run.id, 'offline');
+      }
+      return this.applyCommand(trimmed, quick, ctx, now, run);
+    }
+
+    const run = existingRun ?? this.traceBus.startRun();
+    this.activeTraceRunId = run.id;
+
+    if (isLive && quickNeedsLoc && !run.steps.some(s => s.kind === 'location')) {
+      const locStep = this.traceBus.startStep(
+        run.id,
+        'location',
+        'Geolocation fix',
+        'Acquiring location…'
+      );
+      const locLabel =
+        typeof (locStatus as any).areaLabel === 'string'
+          ? (locStatus as any).areaLabel
+          : 'Location fix obtained';
+      this.traceBus.finishStep(locStep.id, locLabel);
     }
 
     const inflightId = `msg-${Date.now()}-inflight`;
     this.transcriptList.push({
       id: inflightId,
       sender: 'assistant',
-      text: 'Thinking… live model',
+      text: 'Working on your request',
       timestamp: now,
       inFlight: true,
+      traceRun: run,
     });
     this.notify();
+
+    const modelStep = this.traceBus.startStep(
+      run.id,
+      'model',
+      'Model reasoning',
+      'Reasoning with live model…'
+    );
 
     let cmd: InterpretedCommand;
     try {
@@ -720,7 +867,27 @@ export class DefaultActionStateStore implements ActionStateStore {
       }
     }
 
-    return this.applyCommand(trimmed, cmd, ctx, now);
+    const engine = cmd.engineStatus;
+    const isLiveEngine = engine === 'meta_model_live';
+    const isBaseten = engine === 'baseten_fallback';
+    const engineLabel = isLiveEngine
+      ? 'Meta Muse Spark · live'
+      : isBaseten
+      ? 'Baseten fallback'
+      : 'Local deterministic';
+    const badge = isLiveEngine
+      ? 'Meta Muse Spark'
+      : isBaseten
+      ? 'Baseten fallback'
+      : 'offline';
+
+    if (cmd.engineStatus === 'offline_deterministic' && (this.interpreter as any).isLiveMode?.()) {
+      this.traceBus.failStep(modelStep.id, 'Model timeout · fell back to local', 'offline');
+    } else {
+      this.traceBus.finishStep(modelStep.id, engineLabel, badge);
+    }
+
+    return this.applyCommand(trimmed, cmd, ctx, now, run, engineLabel);
   }
 
   private buildInterpretationContext(contextOverride?: ActionCommandContext): {
@@ -970,11 +1137,82 @@ export class DefaultActionStateStore implements ActionStateStore {
     };
   }
 
+  private pushAssistantMessage(
+    item: MessageItem,
+    run?: AgentTraceRun,
+    planForCard?: PreparedPlan,
+    engineLabel?: string,
+    factCheckPassed: boolean = true
+  ): void {
+    if (run) {
+      const isOffline = run.steps.some((s) => s.kind === 'local') || !this.isLiveMode();
+
+      // Ensure fact_check step
+      if (!run.steps.some((s) => s.kind === 'fact_check') && !item.actions) {
+        const factStep = this.traceBus.startStep(
+          run.id,
+          'fact_check',
+          'Grounding check',
+          'Validating reply against facts…',
+          isOffline ? 'offline' : undefined
+        );
+        this.traceBus.finishStep(
+          factStep.id,
+          factCheckPassed ? 'Passed grounded check' : 'Template grounded',
+          isOffline ? 'offline' : undefined
+        );
+      }
+
+      // Ensure render step
+      if (!run.steps.some((s) => s.kind === 'render') && !item.actions) {
+        const renderStep = this.traceBus.startStep(
+          run.id,
+          'render',
+          'Answer presentation',
+          'Rendering answer…',
+          isOffline ? 'offline' : undefined
+        );
+        this.traceBus.finishStep(
+          renderStep.id,
+          isOffline ? 'Local plan · deterministic' : 'Answer ready',
+          isOffline ? 'offline' : undefined
+        );
+      }
+
+      // Extract lunch card if this is a lunch plan
+      const effectivePlan = planForCard ?? this.commandContext?.plan ?? this.actionState.plan;
+      let lunchCard: AgentTraceLunchCard | undefined;
+      if (effectivePlan?.intentId === 'lunch' && effectivePlan.optionsOrSteps) {
+        const top = effectivePlan.optionsOrSteps.find((o) => o && typeof o === 'object');
+        if (top) {
+          lunchCard = extractLunchCard(top);
+        }
+      }
+
+      const finalEngine =
+        engineLabel ??
+        (run.steps.find((s) => s.kind === 'model')?.badge || (isOffline ? 'Local plan · deterministic' : 'Meta Muse Spark · live'));
+      if (!item.actions) {
+        this.traceBus.completeRun(run.id, finalEngine, lunchCard);
+      }
+      item.traceRun = run;
+      if (lunchCard && !item.actions) {
+        item.lunchCard = lunchCard;
+      }
+      if (this.activeTraceRunId === run.id && !item.actions) {
+        this.activeTraceRunId = null;
+      }
+    }
+    this.transcriptList.push(item);
+  }
+
   private applyCommand(
     trimmed: string,
     cmd: InterpretedCommand,
     ctx?: ActionCommandContext,
-    now: string = new Date().toISOString()
+    now: string = new Date().toISOString(),
+    run?: AgentTraceRun,
+    engineLabel?: string
   ): { collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan } {
     const suppliedFacts = this.extractSuppliedFacts(ctx);
 
@@ -994,7 +1232,7 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (locStatus.status === 'prompt') {
         const promptMsg = 'I need your location to find places near you.';
         this.resolveDegraded('Location permission required.');
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: promptMsg,
@@ -1014,7 +1252,7 @@ export class DefaultActionStateStore implements ActionStateStore {
             },
           ],
           pendingUtterance: trimmed,
-        });
+        }, run, undefined, 'offline');
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: promptMsg };
       }
@@ -1022,12 +1260,12 @@ export class DefaultActionStateStore implements ActionStateStore {
         const deniedMsg =
           'Location access is blocked in your browser settings. Please enable location in your browser to find places near you.';
         this.resolveDegraded(deniedMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: deniedMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, 'offline');
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: deniedMsg };
       }
@@ -1050,28 +1288,59 @@ export class DefaultActionStateStore implements ActionStateStore {
       ctx.plan?.intentId === 'lunch'
     ) {
       const msgId = `msg-${Date.now()}-a`;
+      const candRun = run ?? this.traceBus.startRun();
+      this.activeTraceRunId = candRun.id;
+      const modelStep = this.traceBus.startStep(
+        candRun.id,
+        'model',
+        'Candidate reasoning',
+        'Evaluating candidates…'
+      );
       this.transcriptList.push({
         id: msgId,
         sender: 'assistant',
-        text: 'Thinking about these places…',
+        text: 'Working on your request',
         timestamp: new Date().toISOString(),
         inFlight: true,
+        traceRun: candRun,
       });
       this.notify();
       void this.candidateReasoner(candidateRequest)
         .then(r => {
+          this.traceBus.finishStep(modelStep.id, r.statusLabel, r.statusLabel.includes('live') ? 'Meta Muse Spark' : 'offline');
           const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, cmd.intent) : { valid: false };
-          return { text: check.valid && cmd.reply ? cmd.reply : `${r.reason} · ${r.statusLabel}` };
+          return { text: check.valid && cmd.reply ? cmd.reply : `${r.reason} · ${r.statusLabel}`, statusLabel: r.statusLabel, checkValid: check.valid };
         })
         .catch(() => {
+          this.traceBus.failStep(modelStep.id, 'Candidate reasoning unavailable', 'offline');
           const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, cmd.intent) : { valid: false };
-          return { text: check.valid && cmd.reply ? cmd.reply : 'I could not reason about these places right now.' };
+          return { text: check.valid && cmd.reply ? cmd.reply : 'I could not reason about these places right now.', statusLabel: 'offline', checkValid: check.valid };
         })
-        .then(({ text }) => {
+        .then(({ text, statusLabel, checkValid }) => {
+          if (candRun.status === 'cancelled') {
+            return;
+          }
+          const factStep = this.traceBus.startStep(candRun.id, 'fact_check', 'Grounding check', 'Validating reply against facts…');
+          this.traceBus.finishStep(factStep.id, checkValid ? 'Passed grounded check' : 'Template grounded');
+          const renderStep = this.traceBus.startStep(candRun.id, 'render', 'Answer presentation', 'Rendering answer…');
+          this.traceBus.finishStep(renderStep.id, 'Answer ready');
+          const topCard = extractLunchCard(ctx?.plan?.optionsOrSteps?.[0]);
+          this.traceBus.completeRun(candRun.id, statusLabel, topCard);
+
           const idx = this.transcriptList.findIndex(m => m.id === msgId);
           if (idx !== -1) {
-            this.transcriptList[idx] = { ...this.transcriptList[idx]!, text, inFlight: false };
+            if (!this.transcriptList[idx]!.inFlight && this.transcriptList[idx]!.text === 'Request cancelled.') {
+              return;
+            }
+            this.transcriptList[idx] = {
+              ...this.transcriptList[idx]!,
+              text,
+              inFlight: false,
+              traceRun: candRun,
+              lunchCard: topCard,
+            };
           }
+          this.activeTraceRunId = null;
           this.notify();
         });
       return { collapsed: false, rule: 'long_form_discussion', response: 'Thinking about these places…' };
@@ -1109,12 +1378,12 @@ export class DefaultActionStateStore implements ActionStateStore {
         this.confirmPending('Plan confirmed for this time only', confirmedPlan);
         const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'ACCEPT') : { valid: false };
         const response = check.valid && cmd.reply ? cmd.reply : 'Confirmed for this time only. Your departure plan is updated.';
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: response,
           timestamp: new Date().toISOString(),
-        });
+        }, run, confirmedPlan, engineLabel, check.valid);
         const collapsed = this.evaluateAutoCollapse('executable_determinate');
         this.notify();
         return { collapsed, rule: 'executable_determinate', response, plan: confirmedPlan };
@@ -1123,12 +1392,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       this.settle();
       const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'ACCEPT') : { valid: false };
       const response = check.valid && cmd.reply ? cmd.reply : 'Plan accepted.';
-      this.transcriptList.push({
+      this.pushAssistantMessage({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
         text: response,
         timestamp: new Date().toISOString(),
-      });
+      }, run, undefined, engineLabel, check.valid);
       const collapsed = this.evaluateAutoCollapse('executable_determinate');
       this.notify();
       return { collapsed, rule: 'executable_determinate', response };
@@ -1141,12 +1410,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       const response = check.valid && cmd.reply ? cmd.reply : (restored
         ? 'Restored prior plan. Changes have been undone.'
         : 'Nothing to undo.');
-      this.transcriptList.push({
+      this.pushAssistantMessage({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
         text: response,
         timestamp: new Date().toISOString(),
-      });
+      }, run, restored?.planState ?? undefined, engineLabel, check.valid);
       const collapsed = this.evaluateAutoCollapse('executable_determinate');
       this.notify();
       return {
@@ -1188,12 +1457,12 @@ export class DefaultActionStateStore implements ActionStateStore {
         }
       }
 
-      this.transcriptList.push({
+      this.pushAssistantMessage({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
         text: explanation,
         timestamp: new Date().toISOString(),
-      });
+      }, run, activePlan ?? undefined, engineLabel);
       this.resolveLongForm(explanation);
       this.notify();
       return { collapsed: false, rule: 'long_form_discussion', response: explanation };
@@ -1204,12 +1473,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (!ctx || !ctx.plan || ctx.plan.intentId !== 'depart' || !ctx.candidate || !ctx.snapshot || !ctx.memory) {
         const noPlanMsg = "There's no departure plan to adjust right now.";
         this.resolveDegraded(noPlanMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: noPlanMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: noPlanMsg };
       }
@@ -1310,7 +1579,7 @@ export class DefaultActionStateStore implements ActionStateStore {
 
         this.resolveNeedsConfirmation(comparisonText, safePlan ?? undefined);
 
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: comparisonText,
@@ -1318,7 +1587,7 @@ export class DefaultActionStateStore implements ActionStateStore {
           needsConfirmation: true,
           pendingPlan: safePlan ?? undefined,
           comparisonOptions,
-        });
+        }, run, safePlan ?? undefined, engineLabel);
 
         this.notify();
         return {
@@ -1353,12 +1622,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (!newPlan) {
         const errorMsg = 'Could not calculate departure with the requested time shift.';
         this.resolveDegraded(errorMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: errorMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
       }
@@ -1371,14 +1640,14 @@ export class DefaultActionStateStore implements ActionStateStore {
           newPlan
         );
         const lateMsg = `Leaving ${deltaMinutes} minutes later moves your departure to ${newPlan.headline}. You will arrive late for ${newPlan.subjectTitle}. Would you like to confirm this plan for this time only?`;
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: lateMsg,
           timestamp: new Date().toISOString(),
           needsConfirmation: true,
           pendingPlan: newPlan,
-        });
+        }, run, newPlan, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'needs_confirmation', response: lateMsg, plan: newPlan };
       }
@@ -1424,12 +1693,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       };
       const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'LEAVE_LATER', appliedAction) : { valid: false };
       const successMsg = check.valid && cmd.reply ? cmd.reply : `Updated your plan to leave ${deltaMinutes} minutes later: ${newPlan.headline}.`;
-      this.transcriptList.push({
+      this.pushAssistantMessage({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
         text: successMsg,
         timestamp: new Date().toISOString(),
-      });
+      }, run, newPlan, engineLabel, check.valid);
 
       const collapsed = this.evaluateAutoCollapse('executable_determinate');
       this.notify();
@@ -1447,12 +1716,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (!ctx || !ctx.plan || ctx.plan.intentId !== 'depart' || !ctx.candidate || !ctx.snapshot || !ctx.memory) {
         const noPlanMsg = "There's no departure plan to adjust right now.";
         this.resolveDegraded(noPlanMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: noPlanMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: noPlanMsg };
       }
@@ -1479,12 +1748,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (!newPlan) {
         const errorMsg = `Could not switch route to ${mode}.`;
         this.resolveDegraded(errorMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: errorMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
       }
@@ -1524,12 +1793,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       };
       const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'CHANGE_ROUTE', appliedAction) : { valid: false };
       const successMsg = check.valid && cmd.reply ? cmd.reply : `Switched primary route to ${mode}: ${newPlan.headline}.`;
-      this.transcriptList.push({
+      this.pushAssistantMessage({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
         text: successMsg,
         timestamp: new Date().toISOString(),
-      });
+      }, run, newPlan, engineLabel, check.valid);
 
       const collapsed = this.evaluateAutoCollapse('executable_determinate');
       this.notify();
@@ -1553,7 +1822,7 @@ export class DefaultActionStateStore implements ActionStateStore {
         if (locStatus.status === 'prompt') {
           const promptMsg = 'I need your location to find places near you.';
           this.resolveDegraded('Location permission required.');
-          this.transcriptList.push({
+          this.pushAssistantMessage({
             id: `msg-${Date.now()}-a`,
             sender: 'assistant',
             text: promptMsg,
@@ -1573,7 +1842,7 @@ export class DefaultActionStateStore implements ActionStateStore {
               },
             ],
             pendingUtterance: trimmed,
-          });
+          }, run, undefined, engineLabel);
           this.notify();
           return { collapsed: false, rule: 'degraded_failure', response: promptMsg };
         }
@@ -1581,42 +1850,54 @@ export class DefaultActionStateStore implements ActionStateStore {
           const deniedMsg =
             'Location access is blocked in your browser settings. Please enable location in your browser to find places near you.';
           this.resolveDegraded(deniedMsg);
-          this.transcriptList.push({
+          this.pushAssistantMessage({
             id: `msg-${Date.now()}-a`,
             sender: 'assistant',
             text: deniedMsg,
             timestamp: new Date().toISOString(),
-          });
+          }, run, undefined, engineLabel);
           this.notify();
           return { collapsed: false, rule: 'degraded_failure', response: deniedMsg };
         }
         if (locStatus.status === 'unavailable' || !locStatus.coords) {
           const degradedMsg = 'Location is currently unavailable. Please enter coordinates manually.';
           this.resolveDegraded(degradedMsg);
-          this.transcriptList.push({
+          this.pushAssistantMessage({
             id: `msg-${Date.now()}-a`,
             sender: 'assistant',
             text: degradedMsg,
             timestamp: new Date().toISOString(),
-          });
+          }, run, undefined, engineLabel);
           this.notify();
           return { collapsed: false, rule: 'degraded_failure', response: degradedMsg };
         }
 
+        let placesStep: AgentTraceStep | undefined;
+        if (run) {
+          placesStep = this.traceBus.startStep(run.id, 'places', 'Places search', 'Searching nearby restaurants…', 'live');
+        }
         try {
           const provider = mockLunchAdapter.getProvider();
+          let count = 0;
           if (provider.searchNearbySync) {
-            provider.searchNearbySync({ location: locStatus.coords, category: 'restaurant', radiusMeters: 10000 });
+            const res = provider.searchNearbySync({ location: locStatus.coords, category: 'restaurant', radiusMeters: 10000 });
+            count = Array.isArray(res) ? res.length : 0;
+          }
+          if (placesStep) {
+            this.traceBus.finishStep(placesStep.id, `${count} places found`, 'live');
           }
         } catch {
+          if (placesStep) {
+            this.traceBus.failStep(placesStep.id, 'Places provider failure');
+          }
           const errorMsg = 'Unable to search for lunch places: places provider failure. Fails closed.';
           this.resolveDegraded(errorMsg);
-          this.transcriptList.push({
+          this.pushAssistantMessage({
             id: `msg-${Date.now()}-a`,
             sender: 'assistant',
             text: errorMsg,
             timestamp: new Date().toISOString(),
-          });
+          }, run, undefined, engineLabel);
           this.notify();
           return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
         }
@@ -1635,12 +1916,12 @@ export class DefaultActionStateStore implements ActionStateStore {
         const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'FIND_LUNCH') : { valid: false };
         const askMsg = check.valid && cmd.reply ? cmd.reply : defaultAskMsg;
         this.resolveExecutable(askMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: askMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel, check.valid);
         const collapsed = this.evaluateAutoCollapse('executable_determinate');
         this.notify();
         return { collapsed, rule: 'executable_determinate', response: askMsg };
@@ -1649,12 +1930,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (!ctx || !ctx.plan || ctx.plan.intentId !== 'lunch' || !ctx.candidate || !ctx.snapshot || !ctx.memory) {
         const noPlanMsg = "There's no active lunch recommendation to filter right now.";
         this.resolveDegraded(noPlanMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: noPlanMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: noPlanMsg };
       }
@@ -1681,12 +1962,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (!newPlan) {
         const errorMsg = 'Could not find lunch options matching your requested filter.';
         this.resolveDegraded(errorMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: errorMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
       }
@@ -1733,12 +2014,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       };
       const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'FIND_LUNCH', appliedAction) : { valid: false };
       const successMsg = check.valid && cmd.reply ? cmd.reply : `Updated lunch options based on your request (${filtersDesc}): ${topName} is now your top recommendation.`;
-      this.transcriptList.push({
+      this.pushAssistantMessage({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
         text: successMsg,
         timestamp: new Date().toISOString(),
-      });
+      }, run, newPlan, engineLabel, check.valid);
 
       const collapsed = this.evaluateAutoCollapse('executable_determinate');
       this.notify();
@@ -1756,12 +2037,12 @@ export class DefaultActionStateStore implements ActionStateStore {
         this.pendingFuelDisambiguation = true;
         this.beginCommand(trimmed);
         const question = cmd.honestAnswer ?? 'Did you mean: find a gas station?';
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: question,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.resolveNeedsConfirmation(question);
         this.notify();
         return { collapsed: false, rule: 'needs_confirmation', response: question };
@@ -1774,7 +2055,7 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (locStatus.status === 'prompt') {
         const promptMsg = 'I need your location to find places near you.';
         this.resolveDegraded('Location permission required.');
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: promptMsg,
@@ -1794,7 +2075,7 @@ export class DefaultActionStateStore implements ActionStateStore {
             },
           ],
           pendingUtterance: trimmed,
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: promptMsg };
       }
@@ -1802,12 +2083,12 @@ export class DefaultActionStateStore implements ActionStateStore {
         const deniedMsg =
           'Location access is blocked in your browser settings. Please enable location in your browser to find places near you.';
         this.resolveDegraded(deniedMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: deniedMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: deniedMsg };
       }
@@ -1815,12 +2096,12 @@ export class DefaultActionStateStore implements ActionStateStore {
         const degradedMsg =
           'Cannot search for gas stations: location is unavailable or denied. Location is required to find nearby fuel.';
         this.resolveDegraded(degradedMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: degradedMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: degradedMsg };
       }
@@ -1840,27 +2121,38 @@ export class DefaultActionStateStore implements ActionStateStore {
       let placesStatus: 'ok' | 'empty' | 'error' = 'ok';
       let placesError: string | undefined;
 
+      let placesStep: AgentTraceStep | undefined;
+      if (run) {
+        placesStep = this.traceBus.startStep(run.id, 'places', 'Gas stations search', 'Searching nearby fuel stations…', 'live');
+      }
+
       try {
         const provider = mockFuelAdapter.getProvider();
         places = provider.searchNearbySync
           ? provider.searchNearbySync({ location: locStatus.coords, category: 'gas_station', radiusMeters: 10000 })
           : [];
         placesStatus = places.length > 0 ? 'ok' : 'empty';
+        if (placesStep) {
+          this.traceBus.finishStep(placesStep.id, `${places.length} stations found`, 'live');
+        }
       } catch (err: unknown) {
         placesStatus = 'error';
         placesError = err instanceof Error ? err.message : 'Places provider failure';
         places = [];
+        if (placesStep) {
+          this.traceBus.failStep(placesStep.id, 'Fuel stations lookup failed');
+        }
       }
 
       if (placesStatus === 'error') {
         const errorMsg = 'Unable to search for gas stations: places provider failure. Fails closed.';
         this.resolveDegraded(errorMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: errorMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
       }
@@ -1901,12 +2193,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       if (!newPlan) {
         const errorMsg = 'No gas stations found nearby in fixture data.';
         this.resolveDegraded(errorMsg);
-        this.transcriptList.push({
+        this.pushAssistantMessage({
           id: `msg-${Date.now()}-a`,
           sender: 'assistant',
           text: errorMsg,
           timestamp: new Date().toISOString(),
-        });
+        }, run, undefined, engineLabel);
         this.notify();
         return { collapsed: false, rule: 'degraded_failure', response: errorMsg };
       }
@@ -1939,12 +2231,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       };
       const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'FIND_FUEL', appliedAction) : { valid: false };
       const successMsg = check.valid && cmd.reply ? cmd.reply : `Found nearby gas stations: ${topName} is the closest.`;
-      this.transcriptList.push({
+      this.pushAssistantMessage({
         id: `msg-${Date.now()}-a`,
         sender: 'assistant',
         text: successMsg,
         timestamp: new Date().toISOString(),
-      });
+      }, run, newPlan, engineLabel, check.valid);
 
       this.resolveExecutable(
         'Nearby gas stations found.',
@@ -1982,12 +2274,12 @@ export class DefaultActionStateStore implements ActionStateStore {
     const check = cmd.reply ? validateAssistantReply(cmd.reply, suppliedFacts, 'UNSUPPORTED', appliedAction) : { valid: false };
     const responseText = check.valid && cmd.reply ? cmd.reply : (cmd.honestAnswer ?? fallbackText);
 
-    this.transcriptList.push({
+    this.pushAssistantMessage({
       id: `msg-${Date.now()}-a`,
       sender: 'assistant',
       text: responseText,
       timestamp: new Date().toISOString(),
-    });
+    }, run, undefined, engineLabel, check.valid);
 
     this.resolveDegraded(responseText);
     const rule: AutoCollapseRule = this.pinned ? 'pinned' : 'unsupported_ask';

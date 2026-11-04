@@ -105,6 +105,8 @@ import {
   attachAskBarEvents,
   renderConversationOverlay,
   attachConversationEvents,
+  agentTrace,
+  type AgentTraceStep,
 } from '../conversation/index.js';
 import {
   defaultModelCommandInterpreter,
@@ -2605,7 +2607,22 @@ export function renderApp(
 
   async function refreshLivePlacesOnce(opts: { fresh?: boolean } = {}) {
     if (contextMode !== 'live') return;
+    const activeRun = agentTrace.getActiveRun();
+    let traceStep: AgentTraceStep | undefined;
+    if (activeRun && !activeRun.steps.some(s => s.phase === 'Places search')) {
+      traceStep = agentTrace.startStep(
+        activeRun.id,
+        'places',
+        'Places search',
+        'Searching nearby dining options…',
+        'live'
+      );
+    }
+
     if (!livePlacesStatus.enabled) {
+      if (traceStep) {
+        agentTrace.finishStep(traceStep.id, 'Places service disabled', 'live');
+      }
       livePlacesList = [];
       update();
       return;
@@ -2623,6 +2640,9 @@ export function renderApp(
       : null;
 
     if (!hasLocation || !locCoords) {
+      if (traceStep) {
+        agentTrace.finishStep(traceStep.id, 'Location unavailable', 'live');
+      }
       livePlacesList = [];
       update();
       return;
@@ -2638,6 +2658,9 @@ export function renderApp(
       !livePlacesError &&
       nowMonotonicMs() - lastPlacesFetch.atMs < PLACES_CLIENT_MIN_INTERVAL_MS
     ) {
+      if (traceStep) {
+        agentTrace.finishStep(traceStep.id, 'Using cached places (searched moments ago)', 'live');
+      }
       // Same spot within the provider's 10 s interval: keep the results just fetched.
       nearbyNowNote = { kind: 'info', title: 'Up to date', desc: 'Searched moments ago.' };
       update();
@@ -2653,6 +2676,9 @@ export function renderApp(
         { cache: 'no-store' }
       );
       if (resp.status === 429) {
+        if (traceStep) {
+          agentTrace.finishStep(traceStep.id, 'Searched moments ago', 'live');
+        }
         // Provider fair-use interval: keep what is shown, never flip to an error state.
         nearbyNowNote = { kind: 'info', title: 'Searched moments ago', desc: 'Try again in a few seconds.' };
         return;
@@ -2674,6 +2700,10 @@ export function renderApp(
             discovery: data.discovery === 'google' ? 'google' : 'osm',
             failover: data.failover && typeof data.failover.reason === 'string' ? { reason: data.failover.reason } : null,
           };
+          if (traceStep) {
+            const providerLabel = data.discovery === 'google' ? 'Google Places' : 'OpenStreetMap';
+            agentTrace.finishStep(traceStep.id, `${data.places.length} places found via ${providerLabel}`, 'live');
+          }
           // D1b: say so when the provider answered with nothing (instead of a silent quiet card).
           nearbyNowNote =
             livePlacesList.length === 0
@@ -2687,15 +2717,24 @@ export function renderApp(
             };
           }
         } else {
+          if (traceStep) {
+            agentTrace.finishStep(traceStep.id, 'No places returned', 'live');
+          }
           livePlacesList = [];
           livePlacesError = false;
         }
       } else {
+        if (traceStep) {
+          agentTrace.failStep(traceStep.id, 'Nearby places failed to load');
+        }
         livePlacesList = [];
         livePlacesError = true;
         nearbyNowNote = { kind: 'error', title: "Nearby places didn't load.", desc: '' };
       }
     } catch {
+      if (traceStep) {
+        agentTrace.failStep(traceStep.id, 'Nearby places network error');
+      }
       livePlacesList = [];
       livePlacesError = true;
       nearbyNowNote = { kind: 'error', title: "Nearby places didn't load.", desc: '' };

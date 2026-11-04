@@ -8,6 +8,11 @@ import { STRINGS } from '../living-context/strings.js';
 import { renderModelStatusPill } from '../living-context/components/model-status-pill.js';
 import type { ActionStateStore, MessageItem } from '../action-state/types.js';
 import { globalDecisionLogger } from '../../adapters/model/decision-log.js';
+import {
+  renderTraceStepsHtml,
+  renderTraceSummaryToggleHtml,
+  renderLunchCardHtml,
+} from './agent-trace.js';
 
 /**
  * D3 (DEMO_RESCUE): consumer Live shows exactly ONE status line (the engine status pill) and no
@@ -131,6 +136,7 @@ export function renderTranscriptItems(
       const canInteract = isInteractive && isLatestMessage;
 
       if (msg.inFlight) {
+        const hasTrace = Boolean(msg.traceRun && msg.traceRun.steps.length > 0);
         return `
         <article class="chat-bubble-wrapper chat-bubble-assistant is-inflight" id="${escapeHtml(msg.id)}">
           <div class="chat-avatar-mark" aria-hidden="true">
@@ -140,14 +146,25 @@ export function renderTranscriptItems(
               <path d="M16 12.5v10.5" stroke="#E7EFE8" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
           </div>
-          <div class="chat-bubble">
-            <div class="chat-inflight-row">
-              <span class="chat-inflight-spinner" aria-hidden="true"></span>
-              <p class="chat-text chat-inflight-text" id="inflight-status-text">${escapeHtml(msg.text)}</p>
+          <div class="chat-bubble chat-bubble-trace">
+            <div class="trace-inflight-header">
+              <div class="trace-header-title">
+                <span class="trace-spinner" aria-hidden="true"></span>
+                <span class="trace-title-text" id="inflight-status-text">Working on your request</span>
+              </div>
               <button type="button" class="btn btn-outline btn-xs btn-cancel-inflight" id="btn-cancel-inflight" aria-label="Cancel live model request">
                 Cancel
               </button>
             </div>
+            ${
+              hasTrace
+                ? `
+              <div class="trace-timeline" role="log" aria-live="polite" aria-label="Agent activity trace">
+                ${renderTraceStepsHtml(msg.traceRun!.steps)}
+              </div>
+            `
+                : `<p class="chat-text chat-inflight-text">${escapeHtml(msg.text)}</p>`
+            }
           </div>
         </article>
         `;
@@ -170,6 +187,8 @@ export function renderTranscriptItems(
           }
           <div class="chat-bubble">
             <p class="chat-text">${escapeHtml(msg.text)}</p>
+            ${!isUser && msg.traceRun ? renderTraceSummaryToggleHtml(msg.id, msg.traceRun) : ''}
+            ${!isUser && msg.lunchCard ? renderLunchCardHtml(msg.lunchCard) : ''}
             ${
               msg.actions && msg.actions.length > 0
                 ? `
@@ -483,6 +502,26 @@ export function attachConversationEvents(
         store.cancelInFlight();
       });
     }
+
+    const traceToggles = transcriptEl.querySelectorAll<HTMLButtonElement>(
+      '.trace-summary-toggle'
+    );
+    traceToggles.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const msgId = btn.dataset.traceToggle;
+        if (!msgId) return;
+        const details = transcriptEl.querySelector<HTMLElement>(`#trace-details-${msgId}`);
+        if (!details) return;
+        const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', isExpanded ? 'false' : 'true');
+        if (isExpanded) {
+          details.setAttribute('hidden', '');
+        } else {
+          details.removeAttribute('hidden');
+        }
+      });
+    });
 
     const confirmBtn = transcriptEl.querySelector<HTMLButtonElement>(
       '#btn-chat-confirm:not([disabled]):not(.is-stale)'
