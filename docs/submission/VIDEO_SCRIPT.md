@@ -1,241 +1,179 @@
-# Yori (ヨリ) — 3-Minute Video Demonstration Script
+# Yori (ヨリ) — Demo Video Script v5 · Director's Cut (≤3:00, phone 390×844, English VO)
 
-> **Governed by Plan:** `YORI_PRE_S1` (Slice `PRE-S1-D`, AC-205-2, G-205)  
-> **Core Base Duration:** Exactly 3:00 (180 seconds)  
-> **Optional V5 Extension:** At most 20s (+20s), clearly labelled as simulated/manual location with straight-line distances (explicitly added to the 3:00 base)  
-> **Pacing:** ~140 words per minute (~419 spoken words for core base)  
-> **Resolution:** 1280×800 Desktop or 390×844 Mobile portrait  
-> **Recording Candidate Build:** V2 Living Context UI (`/?ui=v2` or `VITE_YORI_UI=v2`)  
-> **Guaranteed Path:** Zero owner credentials; all demo scenes run deterministically with external model off (`MODEL_API_KEY` unset), cloud memory off (`XMEMO_OAUTH_ENABLED=false`), live weather off (`WEATHER_LIVE_ENABLED=false`), and scripted/recorded fixtures.
-
----
-
-> [!TIP]
-> ### Recording Preparation Checklist
-> - **Storage Reset**: Always start from a clean slate. Either run on a fresh browser profile or execute a storage reset between takes: navigate to the **Me** tab, click **Reset Storage** (`Reset Storage`), and confirm in the 2-step verification modal (or run `localStorage.clear()` in DevTools console).
-> - **Environment & Server**:
->   - **Recommended Primary**: Use the **Test Preview Build** (`npm run build:test && npm run preview:test` on port `:4173`). This production-like bundled build matches the verified Playwright E2E environment (`tests/e2e/video-script.spec.ts`), serving optimized assets while retaining verified test hooks and URL forcing (`?ui=v2`, `?scene=fuel&test=1`).
->   - **Alternative**: The local development server (`npm run dev` on port `:5173`) also supports interactive hot-reloading and test hooks.
->   - Target URL: `http://127.0.0.1:4173/?ui=v2` (recommended primary) or `http://127.0.0.1:5173/?ui=v2`.
->   - *Note*: The production bundle (`npm run preview` on `:4174`) strips all URL test hooks and forcing flags for security and is not intended for scripted video recording.
-> - **Offline & Hermetic Guarantee**:
->   - Zero external hosts: self-hosted fonts (`@font-face` WOFF2 fonts served locally from `/fonts/`, zero Google Fonts / external CDN requests).
->   - Deterministic fixtures: leave `MODEL_API_KEY` unset, `XMEMO_OAUTH_ENABLED=false`, and `WEATHER_LIVE_ENABLED=false`. All scenes run deterministically with zero network calls and zero model billing.
-> - **Display & Zoom**:
->   - Browser zoom: **exactly 100%** (no browser zoom or CSS scaling distortion).
->   - Viewport dimensions: **1280×800** (Desktop recording) or **390×844** (Mobile portrait recording).
+> **Governed by Plan:** `DEMO_RESCUE` (Rev 14, Closeout)  
+> **Target Duration:** Exactly 2:58 (178s: 2:56 content + 2s tail, ≤ 3:00, 7 segments)  
+> **Format:** Single canvas, Mobile portrait (390×844), 60 fps, DPR 3  
+> **Voiceover (VO):** ElevenLabs Morgan Vox (`en-US`, Live VO variant B, `vo_el_v5/yori_vo_el_v5_full.wav`)  
+> **Background Audio:** Soft felt-piano bed at -24 LUFS (`assets_el/music_bed_3min.mp3`); subtle rain foley in Segment 2  
+> **Theme:** Build for Your World  
+> **Track:** Indie Developer Track  
+> **Team Name:** Yonro  
+> **Repository:** https://github.com/yunze7373/Yori  
+> **License:** MIT License  
 
 ---
 
-## Storyboard Per-Segment Breakdown Table
+## 🎬 Director's Thesis & Core Narrative
 
-The core storyboard timings sum to **exactly 3:00 (180 seconds)** across approved V4 owner loops (Rain D2 and Lunch D3/D4). An optional V5 segment is provided as an appendix (+20s extension, max 20s) and is explicitly noted as added to the 3:00 base.
-
-| Segment | Start | End | Duration | Scene / Screen | On-Screen Action |
-|---|---|---|---|---|---|
-| **1. Hook & The Calm Philosophy** | `0:00` | `0:25` | `25s` | Scene D1: Clear (`/?ui=v2`) | Open browser to `/?ui=v2` with Scene D1 selected. Inspect glanceable Living Context: single NOW card with calm departure time (`Piano lesson at 3:00 PM`, `Get ready at 2:05 PM, leave by 2:25 PM`, `SIMULATED`, `Demo · simulated context`), spatial route map (`Spatial Context Map` / `Route Map`), and docked Ask Bar (`Ask Yori about your day...` / `Ask Yori...`, `Tap to chat`). |
-| **2. Thinking Ahead & Environmental Adaptation** | `0:25` | `0:50` | `25s` | Scene D2: Rain Re-Plan | Switch scenario to Rain Re-Plan (D2). NOW card updates with alert banner (`What changed: rain forecast`), dynamic umbrella chip (`Umbrella`), route map weather callout (`Rain forecast · simulated`, `Issued 1:35 PM`), and habit-ranked transit options (`Drive · leave 2:30 PM`, `Recommended`, `25 min drive + 5m margin`, `Ranked by habit: Rain travel habit (Demo profile · sample)`, `Bus · leave 2:15 PM`, `Alternative`, `40 min bus + 5m margin`). |
-| **3. Away Dining & Honest Quiet State** | `0:50` | `1:15` | `25s` | Scene D3 & D4: Away / Busy | Switch to Away Lunch (D3): view Candidates Hero (`Lunch options near you`, `Places matching what you like, within walking distance`, `Details →`), labelled venue cards (`Demo Place A · Ramen`, `Demo Place B · Salad`, `Demo Place C · Sushi`), and mock disclosure (`Mock places for this demo; real listings come from a place provider.`). Switch to Busy Lunch (D4): screen transitions into quiet state (`Nothing needs your attention right now.`, `You're all caught up. We'll let you know when something comes up.`). |
-| **4. Yori Learns You** | `1:15` | `1:45` | `30s` | Live lunch (Nearby now) + Rain Adjust | In Live, pick ramen twice (Directions on the ramen place, on two searches). The next search puts ramen first even though a cafe is closer; nothing asks a question and the card states no reason (`Lunch options near you`, the ramen place first). Return to D2 and tap Adjust (`Adjust Departure Timing`): choose `Remember as preference`, prep 25m, buffer 10m; it is remembered at once and shows under For You (`Get ready 25 min · Leave a 10 min buffer`). |
-| **5. User Sovereignty & The Me Tab** | `1:45` | `2:18` | `33s` | For You & Me Tab (`/?ui=v2`) | Inspect the remembered routine under For You (`Get ready 25 min · Leave a 10 min buffer`, no confirm step). Navigate to Me tab (`Me & Memory`): verify daily proactive budget (`0 of 3 used today`), reset control (`Reset Storage`), and **What Yori has learned** (`What Yori has learned`) listing `Preparation buffer habit` tagged `You told Yori` with a Forget. Return to Home: schedule recomputed to `Get ready at 2:00 PM, leave by 2:25 PM`. |
-| **6. Conversational Shell & Reasoning Demo** | `2:18` | `2:46` | `28s` | Ask Yori & Multi-Candidate | Return to Home; tap docked Ask Bar to open conversation overlay (`Ask Yori`, `Offline demo · simulated`, `Offline fallback · deterministic`). Send natural language shift query (`Can I leave later?`); observe status chip update (`Scripted model fixture · not a live model call`). Close conversation overlay. Select multi-candidate reasoning demo scene: demonstrate deterministic conflict resolution with model off (Piano lesson prioritized as NOW, Lunch placed in AHEAD), backed by 1,431 unit tests across 78 files, 18 goldens, 56 drills, and AC-EXT-1 zero-core-diff plugin extensibility with habit learning pure modules in `src/core/memory/`. |
-| **7. Honest Disclosure & Closing** | `2:46` | `3:00` | `14s` | Scene D1: Clear (Home / Closing) | Return to clean Home view; camera pauses on calm UI during honest closing disclosure (model off; Muse Spark refine and reasoning verified live separately; conversational commands, XMemo sync, and weather owner-gated) and spoken tagline. |
-| **Core Total** | `0:00` | `3:00` | **`180s`** | **Full V4 Approved Loops** | **Exact 3:00 Duration (Sum = 25s + 25s + 25s + 30s + 33s + 28s + 14s = 180s)** |
-| **[Optional V5 Extension]** | `+0:00` (`3:00`) | `+0:20` (`3:20`) | `20s` (max 20s) | Scene V5-Fuel: `Fuel (Low Fuel Warning)` | **[ADDED TO 3:00 — OPTIONAL EXTENSION]** Clearly labelled as simulated/manual location with straight-line distances (selected via `Fuel (Low Fuel Warning)` in `#scene-select`, or dev/test preview URL `?ui=v2&scene=fuel&test=1`). Proactive low-fuel card (`Low Fuel Warning`, `Nearby gas stations from simulated fixture · straight-line distances shown`, `SIMULATED`) displays candidate card (`Metro Gas & Go`, `Gas Station`, `(straight-line)`) and verified external navigation modal handoff with zero real GPS calls. |
+- **「提前准备好而不等人问」 (Prepares before you ask)**: The film opens on a phone where the afternoon plan is already laid out. Zero chat box or prompt input in the opening moments.
+- **「打开即有现成所需」 (Ready at first glance)**: 3-second comprehension. Frame 1 opens on Living Context (Now / Ahead / For You) with a persistent corner badge `Demo · simulated data`.
+- **"Always thinking ahead, not always interrupting"**: Explicit **Not now** beat and calm **Quiet State** (*"Nothing needs your attention right now."*).
+- **"Memory follows the user, not the place"**: Habit learning (Segment 4) is introduced before Live mode (Segment 5). The Me tab demonstrates that memory is designed to follow you, not the venue.
+- **"Build for Your World"**: Hirosaki is our own city in northern Japan—not a tourist excursion. Yori is built to understand you in your own world.
+- **The Six-Stage Intelligence Loop**: Perceive · Understand · Predict · Prepare · Present · **Confirm & learn**. Culminates in: *"Yori. It thinks ahead for you."*
 
 ---
 
-## Detailed Script & On-Screen Actions
+## 🎨 Visual & Motion Style
 
-### Part 1: Hook & The Calm Philosophy (`0:00 – 0:25` · 25s)
-
-**[ON SCREEN]**:  
-Browser open to `http://127.0.0.1:5173/?ui=v2`. Scene D1 (Clear Departure) is selected. Clean, uncluttered UI visible with warm editorial morning greeting. Exactly one NOW card is prominently visible: *"Piano lesson at 3:00 PM"*, *"Get ready at 2:05 PM, leave by 2:25 PM"*. Explicit header chip reads: *"Demo · simulated context"*; V2 preview badge reads: *"V2 Preview"*; card badge displays: `SIMULATED`. Route map section displays *"Spatial Context Map"* (desktop) / *"Route Map"* (mobile), schematic map with origin and destination markers. Docked bottom Ask Bar displays: *"Ask Yori about your day..."* (desktop) / *"Ask Yori..."* (mobile) with chip *"Tap to chat"*.
-
-**[VOICEOVER / NARRATION]**:  
-*(0:00)* "Most AI assistants today are either passive chat boxes you have to prompt, or noisy notification feeds that interrupt your day.  
-*(0:10)* Meet **Yori**—a calm, proactive context-aware assistant designed to help you plan ahead and act at the right moment.  
-*(0:18)* Instead of waiting for prompts, Yori synthesizes your schedule, weather, and transit into a Living Context: at most one actionable NOW card, followed by what's ahead."
+- **Single Canvas Presentation**: The phone viewport (390×844) floats on a warm ivory background (`#F8F8F5`). Camera transitions utilize smooth glide, push-in, and pull-back motions.
+- **Climax Pull-Back (2:26)**: At 2:26, the camera smoothly pulls back to reveal the seven pivotal moments across the canvas, sequencing the six-stage loop words.
+- **Editorial Typography**: Warm serif display typography paired with clean, accessible geometric sans body copy. Quiet Precision tokens: touch targets ≥ 44 px, WCAG AAA contrast.
+- **Uncompromised Honesty**: Every `SIMULATED` badge, `Demo · simulated ›` header chip, and schematic disclosure remains unclipped and visible. Only Segment 5 is live.
 
 ---
 
-### Part 2: Thinking Ahead & Environmental Adaptation (`0:25 – 0:50` · 25s)
+## 🧭 Truth Map: Demo vs. Live Modes
 
-**[ON SCREEN]**:  
-Cursor moves to top-right scenario picker and switches to **Rain Re-Plan (D2)**. The NOW card smoothly updates: alert banner reads *"What changed: rain forecast"*, an **Umbrella** checklist chip appears (*"Umbrella"*), and the Route Map displays an organic weather callout: *"Rain forecast · simulated"* (*"Issued 1:35 PM"*). Two transit options are ranked: Drive first (*"Drive · leave 2:30 PM"*, badge *"Recommended"*, *"25 min drive + 5m margin"*, ranked by habit: *"Ranked by habit: Rain travel habit (Demo profile · sample)"*), then Bus (*"Bus · leave 2:15 PM"*, badge *"Alternative"*, *"40 min bus + 5m margin"*).
-
-**[VOICEOVER / NARRATION]**:  
-*(0:25)* "Watch what happens when conditions change.  
-*(0:29)* A sudden rain forecast arrives for our departure window.  
-*(0:33)* Yori adapts proactively: it reminds us to grab an umbrella, illustrates the weather on our route map, and re-ranks transit options—placing driving first based on our rainy-day habit.  
-*(0:43)* Times and buffers are calculated deterministically—no hallucinated departures, no invented delays."
-
----
-
-### Part 3: Away Dining & Honest Quiet State (`0:50 – 1:15` · 25s)
-
-**[ON SCREEN]**:  
-Switch to **Away Lunch (D3)**. Shows Candidates Hero (*"Lunch options near you"*, *"Places matching what you like, within walking distance"*, *"Details →"*) with curated dining venues matching taste preferences, featuring local labelled SVG illustrations (rendered truthful names: *"Demo Place A · Ramen"*, *"Demo Place B · Salad"*, *"Demo Place C · Sushi"*) with clear mock venue disclosure: *"Mock places for this demo; real listings come from a place provider."* Then switch to **Busy Lunch (D4)**: the screen gently falls into a quiet state: *"Nothing needs your attention right now."* (*"You're all caught up. We'll let you know when something comes up."*).
-
-**[VOICEOVER / NARRATION]**:  
-*(0:50)* "At lunch time, when you're away from home, Yori suggests nearby dining that matches your taste preferences, illustrated with local artwork and clear mock disclosure.  
-*(1:01)* But if you're in back-to-back meetings or have already logged lunch?  
-*(1:06)* Yori stays completely quiet: *'Nothing needs your attention right now.'* It respects your focus and never creates noise."
-
----
-
-### Part 4: Yori Learns You (`1:15 – 1:45` · 30s)
-
-**[ON SCREEN]**:  
-In Live, tap **Nearby now** and pick the ramen place (**Directions**). Search again later and pick ramen again. On the next search a cafe is closer, but the ramen place comes first. No question is asked, and the card states no reason; it simply leads with what you like (*"Lunch options near you"*). Return to D2 and tap **Adjust** (*"Adjust Departure Timing"*): set prep to 25 min and buffer to 10 min, then **Remember as preference** (`#btn-adjust-remember`). It is remembered at once and appears under **For You** (*"Get ready 25 min · Leave a 10 min buffer"*).
-
-**[VOICEOVER / NARRATION]**:  
-*(1:15)* "Yori doesn't ask you to explain yourself, and it doesn't explain itself either.  
-*(1:21)* It just notices. Pick ramen a couple of times, and next time ramen comes first.  
-*(1:30)* No pop-up, no 'is this correct?'. It simply understands you a little better.  
-*(1:38)* And when you tell it something, like your usual prep time, it remembers right away."
-
----
-
-### Part 5: User Sovereignty & The Me Tab (`1:45 – 2:18` · 33s)
-
-**[ON SCREEN]**:  
-Navigate to the **For You** tab (`#tab-for-you` / `#desktop-nav-for-you`): the routine just remembered in Adjust is already there (*"Get ready 25 min · Leave a 10 min buffer"*, tagged *"You told Yori"*); nothing asks for a confirmation. Then open the **Me** tab (`#tab-me` / `#desktop-nav-me`, *"Me & Memory"*). Proactive budget meter shows *"0 of 3 used today"*. Under **What Yori has learned**, the item *"Preparation buffer habit"* shows its basis and a quiet **Forget**; learned habits (for example *"You often pick ramen · 3 of your last 4 lunches"* in the lunch scene) appear here the same way.  
-Return to the Home tab on Scene D2: the NOW card already uses the new routine, *"Get ready at 2:00 PM, leave by 2:25 PM"*. Point out data export/reset (`Reset Storage`) and the XMemo Sync section, noting local storage sovereignty.
-
-**[VOICEOVER / NARRATION]**:  
-*(1:45)* "Under the 'Me' tab, you have total sovereignty.  
-*(1:49)* Yori strictly caps proactive prompts to three per day.  
-*(1:53)* It learns from what you actually do, and remembers what you tell it, without asking you to confirm.  
-*(2:01)* Everything it has learned is listed here with its reason, and one tap on Forget removes it.  
-*(2:07)* Back on Home, the plan already uses your routine.  
-*(2:14)* Local storage is sovereign; remote sync remains safely owner-gated."
-
----
-
-### Part 6: Conversational Shell & Reasoning Demo (`2:18 – 2:46` · 28s)
-
-**[ON SCREEN]**:  
-Return to the Home tab. Tap docked Ask Bar: full-page conversation overlay opens with title *"Ask Yori"*, status badge *"Offline demo · simulated"*, and engine status chip *"Offline fallback · deterministic"*. Type conversational query: *"Can I leave later?"* and tap send. Model interpreter executes the scripted model fixture command and status chip updates to *"Scripted model fixture · not a live model call"*. Close conversation overlay. Select **Reasoning demo** scene: show that even with external AI model turned off (`MODEL_API_KEY` unset), Yori handles competing candidates deterministically—keeping the time-critical Piano lesson as NOW and placing Lunch in AHEAD. Briefly highlight the terminal showing 1,431 passing unit tests across 78 files, 18 golden fixtures, 56 drills, and the AC-EXT-1 zero-core-diff plugin architecture.
-
-**[VOICEOVER / NARRATION]**:  
-*(2:18)* "Whenever you want to chat, the Ask Yori conversation shell opens instantly.  
-*(2:23)* You can ask natural questions like 'Can I leave later?'—running on deterministic fixtures with transparent engine disclosure.  
-*(2:30)* When multiple intents compete, Yori prioritizes time-critical commitments deterministically.  
-*(2:36)* Backed by 1,431 unit tests across 78 files, 18 goldens, 56 drills, and our pure domain architecture, Yori adapts to you calmly and predictably."
-
----
-
-### Part 7: Honest Disclosure & Closing (`2:46 – 3:00` · 14s)
-
-**[ON SCREEN]**:  
-Return to app home screen. Camera pauses on the clean, calm UI.
-
-**[VOICEOVER / NARRATION]**:  
-*(2:46)* "This demo runs offline with the model off. Muse Spark refine and reasoning were verified live separately; conversational commands, XMemo live sync and live weather remain owner-gated.  
-*(2:54)* Yori: A calm, proactive assistant. A little ahead. By your side."
-
----
-
-### Optional V5 Extension: Dynamic Fuel & Manual Geolocation (`+0:00 – +0:20` / `3:00 – 3:20` · 20s max · Added to 3:00)
-
-> ⚠️ **Status**: Optional 20-second demonstration extension (added to the 3:00 base). Clearly labelled as simulated/manual location with straight-line distances.  
-> ℹ️ **URL Forcing & Preview Note**: URL forcing parameters (`?scene=`, `?geo=`, `?geo_consent=`) work only on the development server (`:5173`) or the test preview (`:4173`, via `npm run preview:test`) with `?test=1`. In the shipping production build (`npm run preview` on `:4174`), all URL forcing parameters and dev/test window hooks are completely inert and stripped.
-
-**[ON SCREEN]**:  
-Select **Fuel (Low Fuel Warning)** from the `#scene-select` scenario dropdown (or navigate to `?ui=v2&scene=fuel&test=1` on the development server `:5173` or test preview `:4173`). Proactive hero card prominently surfaces: *"Low Fuel Warning"*, *"SIMULATED"*, *"Nearby gas stations from simulated fixture · straight-line distances shown"*. Candidate list renders top station *"Metro Gas & Go"*, category *"Gas Station"*, and straight-line distance chip *"(straight-line)"*. Zero star ratings, prices, or fabricated review counts are shown. Tap Directions on Metro Gas & Go: safe external navigation modal opens with verified handoff URL. Transparent location permission notice displays honest flag-off disclosure and manual coordinate entry, with zero real device GPS tracking.
-
-**[VOICEOVER / NARRATION]**:  
-*(3:00)* "Beyond scheduled travel, Yori's V5 extensions handle contextual needs like a low fuel warning.  
-*(3:06)* Stations are fetched from local simulated fixtures with honest straight-line distances—never fabricated reviews or fake ratings.  
-*(3:14)* Real GPS is never tapped; location consent is transparent, with verified external navigation handoff."
-
----
-
-## Honest Verification & Integration Claims (INV-102)
-
-To preserve total transparency and intellectual honesty, every capability shown in this video demonstration is grounded strictly in demonstrable code and verified test evidence:
-
-| Capability / Seam | Video Status | Live Verification Reality | Grounding Evidence File(s) |
+| Subsystem / Feature | Demo Scenes (Segments 1–4, 6) | Live Mode (Segment 5) | Verification & Grounding Rule |
 |---|---|---|---|
-| **Pure Domain Core** | **Active** (Deterministic Replay) | Verified deterministic: zero ambient clock calls, zero network imports, AC-EXT-1 zero-core-diff plugin extensibility, and pure memory additions under `src/core/memory/` vs baseline anchor `f43c6c1d`. | 1,431 unit tests across 78 files (`npm test`), 18 golden scenarios (`npm run test:golden`), 56 drills (`npm run test:drills`), `git diff --stat f43c6c1d HEAD -- src/core` (7 files in memory, core pipeline logic untouched). |
-| **Meta Muse Spark (`muse-spark-1.3`)** | **Offline Fallback** (`MODEL_API_KEY` unset, engine chip `'Scripted model fixture · not a live model call'`) | **Live Billed Accepted** under owner authorizations S1-LIVE-2 and S1-LIVE-3 (lifetime ledger strictly locked at 22/50 calls, SHA256 `5a65c5fc...`). Phrasing refinement (`[REFINE]`) and candidate ranking rationale (`[REASON]`) passed live fact-checking. S1-LIVE-3 command verification run completed with reports (`742ea65`, `c8a1c47`: 3 accepted, 1 timeout hard stop); completion of ≤4 calls per runbook §2.2 remains owner-gated (AUDIT §4 f). | [`docs/evidence/s1-live-2/S1_LIVE_2_REPORT.md`](../evidence/s1-live-2/S1_LIVE_2_REPORT.md)<br>[`docs/evidence/s1-live-3/S1_LIVE_3_COMMAND_REPORT.md`](../evidence/s1-live-3/S1_LIVE_3_COMMAND_REPORT.md)<br>`.yori-runtime/model-live-ledger.json` |
-| **XMemo Cloud Memory (`https://xmemo.dev/mcp`)** | **Disabled** (`XMEMO_OAUTH_ENABLED=false`) | **Live Sync NOT Verified**. Owner-key read-only integration harness is implemented and verified offline with mock server tests (`docs/evidence/s2-ro/S2_RO_REPORT.md`). Live remote vault connection against owner's personal XMemo account via real PKCE flow remains owner-gated (S2-LIVE). All memory demonstrated is sovereign to local browser storage with the learn-and-correct invariant (INV-107): learned from in-app choices, applied without asking, forgettable on Me. | [`docs/evidence/s2-ro/S2_RO_REPORT.md`](../evidence/s2-ro/S2_RO_REPORT.md)<br>`src/adapters/xmemo/server-proxy.ts` |
-| **Ambient Weather (Open-Meteo)** | **Simulated Fixture** (`WEATHER_LIVE_ENABLED=false`, `SIMULATED` badge) | **Live Seam Implemented & Offline-Verified**. Live Open-Meteo REST API toggle is fully implemented and tested offline in dual viewports, with visual proof in evidence directory. Demo scenes run on deterministic mock fixtures to guarantee reproducible departures. | [`docs/evidence/ph2-d1/live-weather-desktop-1280x800.png`](../evidence/ph2-d1/live-weather-desktop-1280x800.png)<br>[`tests/e2e/live-weather-ui.spec.ts`](../../tests/e2e/live-weather-ui.spec.ts) |
-| **Device Geolocation & POI** | **Simulated Fixture** (Straight-line distance) | **Zero Device GPS Calls**. Transparent consent gating with explicit flag-off notice; manual coordinate input supported with straight-line distance calculations only. Zero real geotracking or live place network calls. | [`tests/e2e/v5-geo.spec.ts`](../../tests/e2e/v5-geo.spec.ts)<br>[`tests/e2e/v5-fuel.spec.ts`](../../tests/e2e/v5-fuel.spec.ts) |
-| **Routing Engine (G-ROUTE)** | **Recorded Fixture / Fail-Closed** | Real in-session route computation offline with recorded fallback; displays "No Route" fail-closed notice when destination unconfigured; provider selection (OSRM / OpenRouteService / GraphHopper) is owner-gated (a). | [`tests/e2e/closeout-truth-audit.spec.ts`](../../tests/e2e/closeout-truth-audit.spec.ts)<br>[`docs/evidence/closeout-rev3ui/AUDIT.md`](../evidence/closeout-rev3ui/AUDIT.md) |
-| **Nearby Places & Tiles** | **Loopback Seam / Owner-Gated** | Loopback proxy seam (`/api/places`) implements coordinate rounding and caching; external live Overpass instance selection and tile policy (vector tile host) are owner-gated (b, c). Displays "Owner Gated" notice when unconfigured. | [`tests/e2e/closeout-truth-audit.spec.ts`](../../tests/e2e/closeout-truth-audit.spec.ts)<br>[`docs/evidence/closeout-rev3ui/AUDIT.md`](../evidence/closeout-rev3ui/AUDIT.md) |
-| **Calendar Connector** | **Honestly Unavailable** | Calendar row truthfully reads "Not available yet" with zero connect affordances; out of hackathon scope with no adapter. | [`tests/e2e/closeout-truth-audit.spec.ts`](../../tests/e2e/closeout-truth-audit.spec.ts) |
-| **Live Default Mode** | **Demo by Default** | Application defaults to Demo mode unless explicitly set via `?mode=live` or `VITE_YORI_DEFAULT_MODE=live`; flipping live default is owner-gated (d). | [`src/ui/living-context/app.ts`](../../src/ui/living-context/app.ts)<br>[`docs/evidence/closeout-rev3ui/AUDIT.md`](../evidence/closeout-rev3ui/AUDIT.md) |
-| **Desktop Three-Zone IA** | **Active (≥1024px)** | Desktop viewports (1280×800, 1440×900) display three-zone responsive IA: 240px nav sidebar, ≤680px main column, and 380px contextual right panel. | [`tests/e2e/s4-desktop-ia.spec.ts`](../../tests/e2e/s4-desktop-ia.spec.ts)<br>[`docs/evidence/s4-desktop-ia/`](../evidence/s4-desktop-ia/) |
+| **Schedule / Calendar** | Simulated appointment fixture (`Piano lesson at 3:00 PM`) | User calendar or simulated appointment | Time-bounded, never fabricates commitments |
+| **Ambient Weather** | Simulated rain forecast (`issued 1:35 PM`) | Real Open-Meteo hourly forecast | Consented, fail-closed to current conditions if stale |
+| **Route & Travel Time** | Schematic travel simulation (20m prep, 25m drive) | Pre-computed driving / transit duration | Explicitly labelled `Schematic · simulated`; no fake GPS |
+| **Nearby Places** | Curated mock listings (`Pacific Ramen Bar`, etc.) | Real venues via OpenStreetMap / Overpass / Google Places | Real places around the set coordinate; no fake venues |
+| **Location Coordinate** | Selected City (simulated) | Placed coordinate (`40.6075 N, 140.4640 E` at Hirosaki Castle) | Truthful caption: *"Location set to Hirosaki Castle"* |
+| **Location Permission** | N/A (simulated scene) | In-conversation permission prompt with `[Allow location]` | Native browser geolocation API; Allow / Not now chips |
+| **Ranking & Reasoning** | Deterministic habit rule (`Rain travel habit`) | **Meta Muse Spark 1.3 (`muse-spark-1.3`)** live API ranking | Hero card labelled `Meta Muse Spark · live` |
+| **Conversational Reply** | N/A | **Meta Muse Spark 1.3** live model reply | Ask header chip labelled `Meta model · live` |
+| **Habit Learning** | Pure domain memory (`src/core/memory/`) | Pure domain memory | Visible under *"What Yori has learned"*; one-tap Forget |
+| **Proactive Budget** | Capped at 3 prompts/day (`0 of 3 used today`) | Capped at 3 prompts/day (`0 of 3 used today`) | Hard rate limit invariant; eliminates notification spam |
 
 ---
 
-## Verbatim UI Quotes & E2E Assertion Map
+## ⏱️ Storyboard & Segment Timeline (178s Total · ≤3:00)
 
-Every on-screen string and step sequence quoted in this script is verified verbatim against the rendered UI by the automated, executable video script Playwright walkthrough ([`tests/e2e/video-script.spec.ts`](../../tests/e2e/video-script.spec.ts)) across dual viewports under `/?ui=v2`:
+All demo scene URLs require `&test=1` alongside `?scene=<id>` to activate scene switching:  
+`http://localhost:4173/?mode=demo&ui=v2&test=1&scene=<clear|rain|lunch|busy-lunch>`
 
-| Script Section | Quoted UI Text | Rendered UI Selector | Test Spec Reference | Test Suite / Title |
-|---|---|---|---|---|
-| Part 1 (Hook) | `Demo · simulated context` | `.demo-chip` | [`video-script.spec.ts:192`](../../tests/e2e/video-script.spec.ts#L192) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 1 (Hook) | `V2 Preview` | `#badge-ui-version` | [`video-script.spec.ts:193`](../../tests/e2e/video-script.spec.ts#L193) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 1 (Hook) | `Piano lesson at 3:00 PM` | `.now-card .now-subject` | [`video-script.spec.ts:194`](../../tests/e2e/video-script.spec.ts#L194) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 1 (Hook) | `Get ready at 2:05 PM, leave by 2:25 PM` | `.now-card #now-title` | [`video-script.spec.ts:195-197`](../../tests/e2e/video-script.spec.ts#L195-L197) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 1 (Hook) | `SIMULATED` | `.now-card .card-badge` | [`video-script.spec.ts:198`](../../tests/e2e/video-script.spec.ts#L198) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 1 (Hook) | `Spatial Context Map` | `.map-header .v2-heading-desktop` | [`video-script.spec.ts:205`](../../tests/e2e/video-script.spec.ts#L205) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 1 (Hook) | `Route Map` | `.map-header .v2-heading-mobile` | [`video-script.spec.ts:201`](../../tests/e2e/video-script.spec.ts#L201) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 1 (Hook) | `Ask Yori about your day...` | `#ask-bar .v2-ask-desktop` | [`video-script.spec.ts:206`](../../tests/e2e/video-script.spec.ts#L206) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 1 (Hook) | `Ask Yori...` | `#ask-bar .v2-ask-mobile` | [`video-script.spec.ts:202`](../../tests/e2e/video-script.spec.ts#L202) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 1 (Hook) | `Tap to chat` | `#ask-bar .ask-bar-hint` | [`video-script.spec.ts:208`](../../tests/e2e/video-script.spec.ts#L208) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `What changed: rain forecast` | `.v2-insight-title, .rain-banner` | [`video-script.spec.ts:227`](../../tests/e2e/video-script.spec.ts#L227) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `Umbrella` | `#chip-umbrella` | [`video-script.spec.ts:230`](../../tests/e2e/video-script.spec.ts#L230) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `Rain forecast · simulated` | `.v2-map-weather-callout` | [`video-script.spec.ts:233`](../../tests/e2e/video-script.spec.ts#L233) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `Issued 1:35 PM` | `.v2-map-weather-callout` | [`video-script.spec.ts:236`](../../tests/e2e/video-script.spec.ts#L236) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `Drive · leave 2:30 PM` | `.v2-option-card:first-child .v2-option-label` | [`video-script.spec.ts:243`](../../tests/e2e/video-script.spec.ts#L243) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `Recommended` | `.v2-option-card:first-child .v2-option-badge` | [`video-script.spec.ts:244`](../../tests/e2e/video-script.spec.ts#L244) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `25 min drive + 5m margin` | `.v2-option-card:first-child .v2-option-meta` | [`video-script.spec.ts:245`](../../tests/e2e/video-script.spec.ts#L245) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `Ranked by habit: Rain travel habit (Demo profile · sample)` | `.v2-option-card:first-child .v2-option-basis` | [`video-script.spec.ts:246-248`](../../tests/e2e/video-script.spec.ts#L246-L248) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `Bus · leave 2:15 PM` | `.v2-option-card:nth-child(2) .v2-option-label` | [`video-script.spec.ts:251`](../../tests/e2e/video-script.spec.ts#L251) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `Alternative` | `.v2-option-card:nth-child(2) .v2-option-badge` | [`video-script.spec.ts:252`](../../tests/e2e/video-script.spec.ts#L252) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 2 (D2 Rain) | `40 min bus + 5m margin` | `.v2-option-card:nth-child(2) .v2-option-meta` | [`video-script.spec.ts:253`](../../tests/e2e/video-script.spec.ts#L253) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 3 (D3 Away) | `Lunch options near you` | `.v2-candidates-hero .now-subject` | [`video-script.spec.ts:275`](../../tests/e2e/video-script.spec.ts#L275) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 3 (D3 Away) | `Places matching what you like, within walking distance` | `.v2-candidates-hero #now-title` | [`video-script.spec.ts:276-278`](../../tests/e2e/video-script.spec.ts#L276-L278) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 3 (D3 Away) | `Mock places for this demo; real listings come from a place provider.` | `.mock-places-notice` | [`video-script.spec.ts:288-290`](../../tests/e2e/video-script.spec.ts#L288-L290) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 3 (D3 Away) | `Details →` | `.v2-view-detail-link` | [`video-script.spec.ts:279`](../../tests/e2e/video-script.spec.ts#L279) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 3 (D3 Away) | `Demo Place A · Ramen` | `.v2-candidate-card:nth-child(1)` | [`video-script.spec.ts:283`](../../tests/e2e/video-script.spec.ts#L283) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 3 (D3 Away) | `Demo Place B · Salad` | `.v2-candidate-card:nth-child(2)` | [`video-script.spec.ts:284`](../../tests/e2e/video-script.spec.ts#L284) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 3 (D3 Away) | `Demo Place C · Sushi` | `.v2-candidate-card:nth-child(3)` | [`video-script.spec.ts:285`](../../tests/e2e/video-script.spec.ts#L285) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 3 (D4 Busy) | `Nothing needs your attention right now.` | `.quiet-title` | [`video-script.spec.ts:304`](../../tests/e2e/video-script.spec.ts#L304) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 3 (D4 Busy) | `You're all caught up. We'll let you know when something comes up.` | `.quiet-subtitle` | [`video-script.spec.ts:305-307`](../../tests/e2e/video-script.spec.ts#L305-L307) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 4 (Yori learns you) | `Lunch options near you` | `.now-card` (the ramen place first, no reason line) | [`habit-learn.spec.ts`](../../tests/e2e-live/habit-learn.spec.ts) | `Accept ramen on two lunches -> ramen leads …` |
-| Part 4 (Adjust) | `Adjust Departure Timing` | `#adjust-dialog-title` | [`video-script.spec.ts:362`](../../tests/e2e/video-script.spec.ts#L362) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 4 (Adjust) | `For this time only` | `#btn-adjust-for-today` | [`video-script.spec.ts:363`](../../tests/e2e/video-script.spec.ts#L363) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 4 (Adjust) | `Remember as preference` | `#btn-adjust-remember` | [`video-script.spec.ts:364`](../../tests/e2e/video-script.spec.ts#L364) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 5 (For You) | `Get ready 25 min · Leave a 10 min buffer` | `.v2-for-you-view .v2-proposal-title` | [`video-script.spec.ts:371-373`](../../tests/e2e/video-script.spec.ts#L371-L373) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 5 (Me Tab) | `Me & Memory` | `.me-title` | [`video-script.spec.ts:388`](../../tests/e2e/video-script.spec.ts#L388) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 5 (Me Tab) | `0 of 3 used today` | `.badge-budget` | [`video-script.spec.ts:389`](../../tests/e2e/video-script.spec.ts#L389) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 5 (Me Tab) | `What Yori has learned` | `#me-learned-title` | [`video-script.spec.ts:390-392`](../../tests/e2e/video-script.spec.ts#L390-L392) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 5 (Me Tab) | `Reset Storage` | `#btn-me-reset` | [`video-script.spec.ts:396`](../../tests/e2e/video-script.spec.ts#L396) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 5 (Me Tab) | `Preparation buffer habit` | `#proposal-prep_buffer_preference .memory-key` | [`video-script.spec.ts:401`](../../tests/e2e/video-script.spec.ts#L401) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 5 (Me Tab) | `You told Yori` | `#habit-prep_buffer_preference` | [`video-script.spec.ts:409`](../../tests/e2e/video-script.spec.ts#L409) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 5 (Recomputation) | `Get ready at 2:00 PM, leave by 2:25 PM` | `#now-title` (post-confirmation) | [`video-script.spec.ts:416`](../../tests/e2e/video-script.spec.ts#L416) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 6 (Conversational) | `Ask Yori` | `#conversation-title` | [`video-script.spec.ts:449`](../../tests/e2e/video-script.spec.ts#L449) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 6 (Conversational) | `Offline demo · simulated` | `#conversation-status-badge` | [`video-script.spec.ts:450`](../../tests/e2e/video-script.spec.ts#L450) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 6 (Conversational) | `Offline fallback · deterministic` | `#engine-status-chip` | [`video-script.spec.ts:451-453`](../../tests/e2e/video-script.spec.ts#L451-L453) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 6 (Conversational) | `Can I leave later?` | `.chat-bubble-user .chat-text` | [`video-script.spec.ts:456`](../../tests/e2e/video-script.spec.ts#L456) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Part 6 (Conversational) | `Scripted model fixture · not a live model call` | `#engine-status-chip` | [`video-script.spec.ts:458-460`](../../tests/e2e/video-script.spec.ts#L458-L460) | `Core 7 Segments Walkthrough in Order with Verbatim Assertions and Timing Budget` |
-| Optional V5 (Fuel) | `Fuel (Low Fuel Warning)` | `#scene-select option[value="fuel"]` | [`video-script.spec.ts:197, 553`](../../tests/e2e/video-script.spec.ts#L553) | `Optional V5 Extension: Dynamic Fuel & Straight-Line Distance Assertion` |
-| Optional V5 (Fuel) | `Low Fuel Warning` | `.now-card .now-subject` | [`video-script.spec.ts:555`](../../tests/e2e/video-script.spec.ts#L555) | `Optional V5 Extension: Dynamic Fuel & Straight-Line Distance Assertion` |
-| Optional V5 (Fuel) | `Nearby gas stations from simulated fixture · straight-line distances shown` | `.now-card .mock-places-notice` | [`video-script.spec.ts:557-559`](../../tests/e2e/video-script.spec.ts#L557-L559) | `Optional V5 Extension: Dynamic Fuel & Straight-Line Distance Assertion` |
-| Optional V5 (Fuel) | `Metro Gas & Go` | `.v2-candidate-card:first-child .v2-candidate-name` | [`video-script.spec.ts:562`](../../tests/e2e/video-script.spec.ts#L562) | `Optional V5 Extension: Dynamic Fuel & Straight-Line Distance Assertion` |
-| Optional V5 (Fuel) | `Gas Station` | `.v2-candidate-card:first-child .v2-cuisine-chip` | [`video-script.spec.ts:563`](../../tests/e2e/video-script.spec.ts#L563) | `Optional V5 Extension: Dynamic Fuel & Straight-Line Distance Assertion` |
-| Optional V5 (Fuel) | `(straight-line)` | `.v2-distance-chip` | [`video-script.spec.ts:564`](../../tests/e2e/video-script.spec.ts#L564) | `Optional V5 Extension: Dynamic Fuel & Straight-Line Distance Assertion` |
+| # | Time | Segment Name | Scene / URL | Screen & Camera Action | On-Screen Caption | Spoken Voiceover (Verbatim) |
+|---|---|---|---|---|---|---|
+| **1** | `0:00–0:15` (15s) | **Open — Already Prepared** | `scene=clear&test=1` | Phone open on Home. Living Context: Now / Ahead / For You. Push-in on NOW card: *"Piano lesson at 3:00 PM"*, *"Get ready at 2:05 PM, leave by 2:25 PM"*, `SIMULATED`, chip `Demo · simulated ›`. | **Already prepared** before you ask | "Most assistants wait for you to ask. Yori prepares before you do. Open it, and your afternoon is already laid out. No chat box. This is Yori." |
+| **2** | `0:15–0:41` (26s) | **Rain — Plan Changes** | `scene=rain&test=1` | 3s illustrative rain b-roll. Cut to rain card: *"What changed: rain forecast"*, Umbrella chip, *"Rain in the forecast for your travel window · simulated (issued 1:35 PM)"*. Departure moves later to 2:30 PM with drive buffer (*"Leave by 2:30 PM"*, *"Rain forecast · Drive"*). Tap Accept → toast. | Context changed → **plan changed** | "A simulated afternoon. Piano lesson at three. Then the forecast turns to rain. Yori doesn't just warn you. It proposes a new plan: drive instead, and leave at two thirty, not two twenty-five. It shows exactly what changed. One tap to accept." |
+| **3** | `0:41–1:02` (21s) | **Lunch → Not Now → Quiet** | `scene=lunch&test=1` → `scene=busy-lunch&test=1` | Noon lunch recommendations: *"Lunch options near you"*, *"Mock places for this demo"*, *"Pacific Ramen Bar"*. Tap `Not now`. 3s quiet café b-roll. Cut to busy-lunch: *"Nothing needs your attention right now."*, *"You're all caught up. We'll let you know when something comes up."*. | **Thinking ahead**, not interrupting | "Around noon, lunch is already lined up nearby. Not now? One tap, and Yori steps back. And when nothing needs you, it stays quiet. Always thinking ahead. Not always interrupting." |
+| **4** | `1:02–1:18` (16s) | **Learns — Preference** | `scene=clear&test=1` | Return to Demo Home. Tap Adjust on departure timing: set prep 25 min, buffer 10 min. Tap *"Remember as preference"*. Card updates to *"UPDATED Leave by 2:25 PM → 2:20 PM"*, *"Get ready at 1:55 PM, leave by 2:20 PM"*. | **You** stay in charge | "Adjust a plan, and choose to remember it as a preference. Yori learns from what you choose, and shows you exactly what it keeps." |
+| **5** | `1:18–2:08` (50s) | **LIVE: Hirosaki — My Own City** | Live Mode (`mode=live&ui=v2`) | Real Street View still of Hirosaki Castle cherry blossoms. Cut to Live phone (demo badge off). Tap *"Lunch nearby"* → inline permission prompt → tap `[Allow location]`. Real places load; hero card labelled **`Meta Muse Spark · live`** (hold ≥4s). Tap *"Somewhere quieter"*; live Muse reply loads with chip `Meta model · live` (hold ≥4s). Slow pull-back. | **Real places**, ranked live by **Meta Muse Spark** | "Yori is built for your world. This one is ours: Hirosaki, in northern Japan. Now, live. With our location set to Hirosaki Castle, tap Lunch nearby, and Meta Muse Spark ranks real places nearby, live. Want somewhere quieter? One tap, and Muse Spark writes the reply. Live is labeled live. Simulated stays simulated." |
+| **6** | `2:08–2:26` (18s) | **Me & Memory — See It, Forget It** | Me Tab (`#tab-me`) | Navigate to Me tab: *"Me & Memory"*, proactive budget *"0 of 3 used today"*. Under *"What Yori has learned"*, find *"Preparation buffer habit · Get ready 25 min · Leave a 10 min buffer · You told Yori"*. Tap `Forget` → item is cleared, displaying *"Nothing yet. As you pick places in Yori, it learns what you like and puts it first."*. | See it. **Forget it.** | "What Yori remembers lives in one place you control. It's designed to follow you, not the place. See it. Forget it. Anytime." |
+| **7** | `2:26–2:56` (30s + 2s tail) | **Close — The Loop & End Card** | Canvas Overview | Camera pulls back to reveal the 7 phone moments across the canvas. Six loop words appear: **Perceive · Understand · Predict · Prepare · Present · Confirm & learn**. End card appears at 2:38: *"Yori — thinks ahead for you"*, repo URL, *"Built with Meta Muse Spark"*, Team Yonro. Ring out on final piano chord to 2:58. | **Perceive · Understand · Predict · Prepare · Present · Confirm & learn** | "That's the loop Yori is built on. Perceive. Understand. Predict. Prepare. Present, at the right moment. Then you confirm, and it learns. Yori. It thinks ahead for you." |
 
 ---
 
-## Speaker Production Checklist
+## 📝 End-Card Small Print (Verbatim)
 
-- [ ] Speak in a calm, clear, unhurried conversational cadence (~140 wpm).
-- [ ] Align screen interactions tightly with spoken timestamps.
-- [ ] Avoid buzzwords like "supercharged" or "magical"; let the calm clarity of the UI speak for itself.
-- [ ] Verify audio levels are crisp with no background hum or clipping.
+```
+Live: Meta Muse Spark ranking and replies (Hirosaki segment). Everything else: simulated demo data. Location was set, not physical. Illustrative footage is not product UI.
+```
+
+---
+
+## 🎙️ Live VO Variants
+
+- **Variant B (Default, Master Track)**: Claims only verified facts: real places ranked live by Meta Muse Spark; Meta Muse Spark writes the quieter reply.
+- **Variant A (Preference Link — Not Supported)**: Connects live ranking back to learned departure preference. *Excluded because live ranking does not ingest departure buffers.*
+- **Variant C (No-Ask Fallback)**: Drops the quieter reply beat if live reply take cannot be completed live, extending card hold times.
+
+---
+
+## 🎬 Detailed Segment Specifications
+
+### Segment 1: Open — Already Prepared (`0:00 – 0:15` · 15s)
+- **URL**: `http://localhost:4173/?mode=demo&ui=v2&test=1&scene=clear`
+- **Viewport**: 390×844 (Mobile portrait)
+- **On-Screen Text**:
+  - Greeting: *"I've already looked ahead for you."*
+  - Timing: *"Leave by 2:25 PM"*
+  - Headline: *"Piano lesson at 3:00 PM"*
+  - Schedule: *"Get ready at 2:05 PM, leave by 2:25 PM"*
+  - Pill badge: `SIMULATED`
+  - Demo header chip: `Demo · simulated ›`
+  - Persistent badge: `Demo · simulated data`
+- **Camera**: Gentle push-in toward the NOW card; camera glides across Now → Ahead → For You without tapping.
+
+### Segment 2: Rain — Plan Changes (`0:15 – 0:41` · 26s)
+- **URL**: `http://localhost:4173/?mode=demo&ui=v2&test=1&scene=rain`
+- **On-Screen Text**:
+  - Alert banner: *"What changed: rain forecast"*
+  - Weather chip: `Umbrella`
+  - Forecast note: *"Rain in the forecast for your travel window · simulated (issued 1:35 PM)"*
+  - Updated timing: *"Leave by 2:30 PM"* (departure moves later to accommodate drive travel with buffer)
+  - Updated schedule: *"Get ready at 2:10 PM, leave by 2:30 PM"*
+  - Recommended transit chip: *"Rain forecast · Drive"*
+  - Action buttons: `Accept`, `Adjust`, `Details →`, `Not now`
+  - Route map: *"Schematic · simulated"*
+- **Sequence**:
+  1. 0:15–0:18: 3s illustrative rain on window (`assets_el/broll_B_rain_window_9x16.mp4`).
+  2. 0:18–0:34: Cut from clear card (2:25) to rain card (2:30) highlighting *"What changed"*.
+  3. 0:34–0:41: Tap `Accept` → confirmation toast appears.
+
+### Segment 3: Lunch → Not Now → Quiet (`0:41 – 1:02` · 21s)
+- **URL**: `http://localhost:4173/?mode=demo&ui=v2&test=1&scene=lunch` then `&scene=busy-lunch`
+- **On-Screen Text**:
+  - Headline: *"Lunch options near you"*
+  - Subtitle: *"Nearby places (straight-line distances)"*
+  - Mock notice: *"Mock places for this demo; real listings come from a place provider."*
+  - Location badge: *"Location: Selected City (simulated)"*
+  - Primary recommendation: *"Pacific Ramen Bar"*
+  - Action buttons: `Accept`, `Adjust`, `Details →`, `Not now`
+- **Sequence**:
+  1. 0:41–0:50: Lunch recommendations surface at noon.
+  2. 0:50–0:54: Tap `Not now` on the lunch card.
+  3. 0:54–0:57: 3s quiet café b-roll (`assets_el/broll_C_quiet_cafe_9x16.mp4`).
+  4. 0:57–1:02: Cut to `scene=busy-lunch`: *"Nothing needs your attention right now."*, *"You're all caught up. We'll let you know when something comes up."*.
+
+### Segment 4: Learns — Preference (`1:02 – 1:18` · 16s)
+- **URL**: `http://localhost:4173/?mode=demo&ui=v2&test=1&scene=clear`
+- **On-Screen Text**:
+  - Tap `Adjust` on departure timing.
+  - Modal title: *"Adjust Departure Timing"*
+  - Inputs: Prep 25m, Buffer 10m.
+  - Action button: *"Remember as preference"*
+  - Updated card: *"UPDATED Leave by 2:25 PM → 2:20 PM"*, *"Get ready at 1:55 PM, leave by 2:20 PM"*
+  - Context: *"You told Yori · Get ready 25 min · Leave a 10 min buffer"*
+
+### Segment 5: LIVE: Hirosaki — My Own City (`1:18 – 2:08` · 50s)
+- **Execution**: Live Mode (`/?mode=live&ui=v2`), Owner-recorded on local Mac
+- **Coordinate**: `40.6075 N, 140.4640 E` (Hirosaki Castle, Aomori Prefecture, Japan)
+- **Corner Card**: *"LIVE · Location set to Hirosaki Castle · 40.6075 N, 140.4640 E"* (Demo badge OFF)
+- **Sequence**:
+  1. 1:18–1:21: Real Google Street View still of Hirosaki Castle honmaru cherry blossoms (`assets_maps/sv_castle_h*.jpg`) with Google logo & © kumax aomori.
+  2. 1:21–1:28: Cut to phone in Live mode.
+  3. 1:28–1:44: Tap suggested chip *"Lunch nearby"*. Inline prompt *"I need your location to find places near you."* appears. Tap `[Allow location]`. Real venues around Hirosaki Castle load.
+  4. 1:44–1:48: Hold ≥4s on hero card rank label: **`Meta Muse Spark · live`**.
+  5. 1:48–2:00: Reopen Ask, tap follow-up chip *"Somewhere quieter"*. Live grounded reply authored by Meta Muse Spark appears with header chip **`Meta model · live`** (hold ≥4s).
+  6. 2:00–2:08: Slow pull-back with both live labels visible.
+
+### Segment 6: Me & Memory — See It, Forget It (`2:08 – 2:26` · 18s)
+- **URL**: Me Tab (`#tab-me`)
+- **On-Screen Text**:
+  - Title: *"Me & Memory"*
+  - Budget badge: *"0 of 3 used today"*
+  - Section: *"What Yori has learned"*
+  - Learned entry: *"Preparation buffer habit · Get ready 25 min · Leave a 10 min buffer · You told Yori"*
+  - Action: Tap `Forget` button.
+  - Cleared state: *"Nothing yet. As you pick places in Yori, it learns what you like and puts it first."*
+  - Sovereign action: *"Reset Storage"*
+
+### Segment 7: Close — The Loop & End Card (`2:26 – 2:56` (+2s tail) · 32s)
+- **Visual**: Camera smoothly pulls back from phone frame to reveal 7 phone states across the canvas.
+- **Six-Stage Intelligence Loop**:
+  1. **Perceive** (Calendar, Weather, Location)
+  2. **Understand** (User choices, stated constraints)
+  3. **Predict** (Delays, hunger windows, rain impact)
+  4. **Prepare** (At most one actionable plan)
+  5. **Present** (Calm glanceable Living Context)
+  6. **Confirm & learn** (User sovereignty and habit memory)
+- **End Card (2:38 – 2:58)**:
+  - Brand: `Yori — thinks ahead for you`
+  - Repository: `https://github.com/yunze7373/Yori`
+  - Attribution: `Built with Meta Muse Spark`
+  - Team: `Yonro`
+  - Small Print: `Live: Meta Muse Spark ranking and replies (Hirosaki segment). Everything else: simulated demo data. Location was set, not physical. Illustrative footage is not product UI.`

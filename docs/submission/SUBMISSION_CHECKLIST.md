@@ -31,7 +31,7 @@
 
 ### 2. Narrative & Description Review
 - [ ] **Review Project Description**: Inspect [`PROJECT_DESCRIPTION.md`](PROJECT_DESCRIPTION.md).
-- [ ] **Confirm Hackathon Details**: Verify Event (*Meta Global AI Developer Hackathon*), Theme (*Build for Your World*), and Track (*Startup Track*) marked `[OWNER TO CONFIRM]`.
+- [ ] **Confirm Hackathon Details**: Verify Event (*Meta Global AI Developer Hackathon*), Theme (*Build for Your World*), Track (*Indie Developer Track*), and Team Name (*Yonro*).
 - [ ] **Approve Public Copy**: Ensure all claims align with personal vision and branding.
 
 ### 3. Video Recording & Editing
@@ -63,17 +63,19 @@
   ```
 
 ### 5. Remote Repository Creation & Visibility
-- [ ] **Create Remote & Set Visibility**: Owner creates the remote repository, confirms the license, sets visibility (whether public repo is required: UNKNOWN — confirm on logged-in submit form: https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit), and submits. Nothing is published or made public by AI.
+- [ ] **Create Remote & Set Visibility**: Owner creates the remote repository (https://github.com/yunze7373/Yori), confirms the license (MIT License), sets visibility (whether public repo is required: UNKNOWN — confirm on logged-in submit form: https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit), and submits. Nothing is published or made public by AI.
 
 ### 6. Hackathon Submission Form
 - [ ] **Fill Submission Form**: Complete required fields on the hackathon submission portal (https://cerebralvalley.ai/e/meta-ai-developer-hackathon/hackathon/submit):
   - Event: `Meta Global AI Developer Hackathon`
   - Theme: `Build for Your World`
-  - Track: `Startup Track` [OWNER TO CONFIRM]
+  - Track: `Indie Developer Track`
+  - Team Name: `Yonro`
   - Project Title: `Yori`
   - Short Tagline: `A calm, proactive context-aware assistant. A little ahead. By your side.`
   - Video Demonstration Link: *(Insert recorded video URL — duration requirement: UNKNOWN — confirm on logged-in submit form)*
-  - Repository URL (Public vs Private: UNKNOWN — confirm on logged-in submit form): [OWNER TO CHOOSE]
+  - Repository URL: `https://github.com/yunze7373/Yori`
+  - License: `MIT License`
   - Description: *(Copy approved copy from `PROJECT_DESCRIPTION.md`)*
 - [ ] **Submit Form**: Owner submits before the official deadline: **2026-11-04 21:00 EST = 2026-11-05 11:00 JST**. Nothing is submitted by AI.
 

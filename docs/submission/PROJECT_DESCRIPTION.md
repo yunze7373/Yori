@@ -2,9 +2,11 @@
 
 > **Submission for the Meta Global AI Developer Hackathon**  
 > **Theme:** Build for Your World  
-> **Track:** Startup Track [OWNER TO CONFIRM]  
-> **Governed by Plan:** `yori_ph002_001` (Slice PH-002 E2, AC-205-2)  
-> **Author:** [OWNER TO CONFIRM]  
+> **Track:** Indie Developer Track  
+> **Team Name:** Yonro  
+> **Repository:** https://github.com/yunze7373/Yori  
+> **License:** MIT License  
+> **Author:** Yingze Han (Yonro)  
 
 ---
 
@@ -18,9 +20,9 @@ At any moment, Yori surfaces **at most one NOW Card** (what needs your attention
 
 ---
 
-## 2. Problem Statement
+## 2. Problem Statement: Build for Your World
 
-Modern smartphone and computer users suffer from two compounding assistant paradigms:
+Building for your world means designing technology that respects human attention rather than demanding human attention adapt to technology. Modern smartphone and computer users suffer from two compounding assistant paradigms:
 1. **The Chatbot Dilemma (Passive)**: Users must remember to ask, type out prompts, and formulate queries. In busy daily routines (running errands, catching trains, managing departures), typing prompts introduces friction.
 2. **The Notification Trap (Noisy & Interruptive)**: Existing proactive assistants spam users with uncoordinated, unexplainable notifications, often hallucinating recommendations or assuming unwanted preferences without verification.
 
