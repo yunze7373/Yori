@@ -159,11 +159,11 @@ describe('D4 budget, hard stop, security and spend math', () => {
     process.env = { ...savedEnv };
   });
 
-  it('ceiling 200 / operating cap 100, and the usage math stays inside USD 20', () => {
+  it('ceiling 200 / operating cap 200, and the usage math stays inside USD 20', () => {
     expect(MODEL_LIFETIME_MAX_CALLS).toBe(200);
-    expect(MODEL_OPERATING_CAP_DEFAULT).toBe(100);
-    expect(resolveOperatingCap({ MODEL_OPERATING_CAP: '500' })).toBe(100);
-    expect(estimateModelSpendUsd(MODEL_OPERATING_CAP_DEFAULT)).toBe(0.5);
+    expect(MODEL_OPERATING_CAP_DEFAULT).toBe(200);
+    expect(resolveOperatingCap({ MODEL_OPERATING_CAP: '500' })).toBe(200);
+    expect(estimateModelSpendUsd(MODEL_OPERATING_CAP_DEFAULT)).toBe(1.0);
     expect(estimateModelSpendUsd(MODEL_LIFETIME_MAX_CALLS)).toBeLessThanOrEqual(MODEL_USD_GUARDRAIL);
   });
 
@@ -188,7 +188,7 @@ describe('D4 budget, hard stop, security and spend math', () => {
     expect(readLedgerState(ledgerPath).callCount).toBe(22);
   });
 
-  it('live (mocked): post-checked answer, ledger 22 -> 23 of 100, tokens logged, no key anywhere', async () => {
+  it('live (mocked): post-checked answer, ledger 22 -> 23 of 200, tokens logged, no key anywhere', async () => {
     const fetchSpy = modelReply({ order: ['google-B', 'google-A'], reason: 'Mid Ramen matches your confirmed taste for ramen.', citedFactKeys: ['taste_preference'] });
     globalThis.fetch = fetchSpy as any;
     const proxy = new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath });
@@ -196,7 +196,7 @@ describe('D4 budget, hard stop, security and spend math', () => {
     expect(res.engineStatus).toBe('meta_model_live');
     expect(res.usedFallback).toBe(false);
     expect(res.result.order[0]).toBe('google-B');
-    expect(res.ledger).toEqual({ callCount: 23, cap: 100 });
+    expect(res.ledger).toEqual({ callCount: 23, cap: 200 });
     const body = JSON.parse(String((fetchSpy.mock.calls[0] as any)[1].body));
     expect(body.max_tokens).toBe(4096);
     expect(JSON.stringify(res)).not.toContain(FAKE_KEY);
@@ -216,17 +216,17 @@ describe('D4 budget, hard stop, security and spend math', () => {
   });
 
   it('hard stop: ledger at the operating cap -> labelled fallback, zero fetches, survives restart', async () => {
-    seed(100);
+    seed(200);
     const fetchSpy = modelReply({ order: ['google-B'], reason: 'unused reason text', citedFactKeys: [] });
     globalThis.fetch = fetchSpy as any;
     for (let restart = 0; restart < 2; restart++) {
       resetProcessLiveCallCount();
       const proxy = new ModelDevProxy({ apiKey: FAKE_KEY, liveEnabled: true, maxCalls: 10, ledgerPath, lifetimeMaxCalls: 200 });
       const res = await proxy.handleCandidates(INPUT);
-      expect(res).toMatchObject({ usedFallback: true, fallbackReason: 'budget_exhausted', ledger: { callCount: 100, cap: 100 } });
+      expect(res).toMatchObject({ usedFallback: true, fallbackReason: 'budget_exhausted', ledger: { callCount: 200, cap: 200 } });
     }
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(readLedgerState(ledgerPath).callCount).toBe(100);
+    expect(readLedgerState(ledgerPath).callCount).toBe(200);
   });
 
   it('owner can lower the cap at runtime (MODEL_OPERATING_CAP=23): one call then stop', async () => {

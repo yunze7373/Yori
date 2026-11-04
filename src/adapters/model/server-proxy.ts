@@ -180,13 +180,13 @@ export function resetProcessLiveReplyCallCount(): void {
  * Lifetime and per-run call budget limits for Meta Model API.
  * MODEL_LIFETIME_MAX_CALLS: code ceiling, 200 lifetime calls (DEMO_RESCUE D4, owner §9; was 50),
  *   enforced atomically in the persistent ledger; env can only LOWER it.
- * MODEL_OPERATING_CAP_DEFAULT: the operating cap (100) that is the actual hard stop; env
+ * MODEL_OPERATING_CAP_DEFAULT: the operating cap (200) that is the actual hard stop; env
  *   MODEL_OPERATING_CAP can only lower it, and never above the ceiling.
- * MODEL_PER_RUN_MAX_CALLS: 10 calls maximum per verification session.
+ * MODEL_PER_RUN_MAX_CALLS: 30 calls maximum per verification session.
  */
 export const MODEL_LIFETIME_MAX_CALLS = 200;
-export const MODEL_OPERATING_CAP_DEFAULT = 100;
-export const MODEL_PER_RUN_MAX_CALLS = 10;
+export const MODEL_OPERATING_CAP_DEFAULT = 200;
+export const MODEL_PER_RUN_MAX_CALLS = 30;
 /**
  * D4: completion budget for the live candidate and plan-reasoning calls. 300 and then 1024 both
  * truncated (finish_reason=length; Muse Spark spends the budget on reasoning first). S1-LIVE-2 finished
@@ -201,7 +201,7 @@ export function resolveD4MaxTokens(override?: number): number {
 /**
  * D4 usage math (plan: "dev ~40 plus smoke ~10 plus margin, about $0.50 expected, USD 20 ceiling").
  * A call is bounded by ~1.5k prompt + 300 completion tokens; at the planning estimate of USD 0.005
- * per call the operating cap (100) is ~USD 0.50 and even the code ceiling (200) stays ~USD 1.00,
+ * per call the operating cap (200) is ~USD 1.00 and even the code ceiling (200) stays ~USD 1.00,
  * far inside the USD 20 guardrail. Actual tokens per call are logged for the spend report.
  */
 export const MODEL_USD_GUARDRAIL = 20;
@@ -227,7 +227,7 @@ export function resolveModelLiveEnabled(env: Record<string, string | undefined> 
   return MODEL_LIVE_DEFAULT_ON;
 }
 
-/** D4: operating cap, lowering-only: min(env MODEL_OPERATING_CAP, 100, code ceiling). */
+/** D4: operating cap, lowering-only: min(env MODEL_OPERATING_CAP, 200, code ceiling). */
 export function resolveOperatingCap(env: Record<string, string | undefined> = process.env): number {
   const raw = env['MODEL_OPERATING_CAP'];
   if (raw === undefined || raw.trim() === '') return MODEL_OPERATING_CAP_DEFAULT;
@@ -238,8 +238,8 @@ export function resolveOperatingCap(env: Record<string, string | undefined> = pr
 
 /**
  * Resolves MODEL_LIVE_MAX_CALLS from environment with strict bounds [1, MODEL_PER_RUN_MAX_CALLS].
- * Defaults to MODEL_PER_RUN_MAX_CALLS (10) when unset or empty.
- * Values above MODEL_PER_RUN_MAX_CALLS are clamped to 10.
+ * Defaults to MODEL_PER_RUN_MAX_CALLS (30) when unset or empty.
+ * Values above MODEL_PER_RUN_MAX_CALLS are clamped to 30.
  */
 export function resolveMaxCalls(env: Record<string, string | undefined> = process.env): number {
   const raw = env['MODEL_LIVE_MAX_CALLS'];
@@ -265,7 +265,7 @@ export function resolveLifetimeMaxCalls(
 }
 
 /**
- * Reasoning budget ceiling (S5, now D4): defaults to the operating cap (100). Enforced across
+ * Reasoning budget ceiling (S5, now D4): defaults to the operating cap (200). Enforced across
  * process restarts from the ledger; env MODEL_REASONING_BUDGET_CEILING can only lower it.
  */
 export const MODEL_REASONING_BUDGET_CEILING = MODEL_OPERATING_CAP_DEFAULT;
@@ -778,7 +778,7 @@ export function resolveModelConfig(
   const modelName = process.env['MODEL_NAME'] || 'muse-spark-1.3';
   const liveEnabled = resolveModelLiveEnabled(process.env);
   const maxCalls = resolveMaxCalls(process.env);
-  // D4: the effective hard stop for every live path is min(code ceiling 200, operating cap 100).
+  // D4: the effective hard stop for every live path is min(code ceiling 200, operating cap 200).
   const lifetimeMaxCalls = Math.min(resolveLifetimeMaxCalls(process.env), resolveOperatingCap(process.env));
   const timeoutMs = resolveTimeoutMs(process.env);
   const maxTokensOverride = resolveMaxTokensOverride(process.env);

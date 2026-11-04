@@ -86,7 +86,7 @@ import {
 
 /**
  * D4: the effective hard stop the proxy enforces — min(code ceiling 200 lowered by
- * MODEL_LIFETIME_MAX_CALLS, operating cap 100 lowered by MODEL_OPERATING_CAP). Read per call so a
+ * MODEL_LIFETIME_MAX_CALLS, operating cap 200 lowered by MODEL_OPERATING_CAP). Read per call so a
  * test or owner env change applies immediately.
  */
 function effectiveLifetimeCap(): number {

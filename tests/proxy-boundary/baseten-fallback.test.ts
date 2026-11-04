@@ -160,7 +160,7 @@ describe('D8 proven-timeout-only fallback on /api/model/candidates', () => {
   });
 
   it('a budget refusal (Muse ledger at cap) never touches Baseten', async () => {
-    fs.writeFileSync(ledgerPath, JSON.stringify({ version: 1, call_count: 100, reservations: [] }));
+    fs.writeFileSync(ledgerPath, JSON.stringify({ version: 1, call_count: 200, reservations: [] }));
     const calls = routeFetch('hang');
     const r = await proxy().handleCandidates(INPUT);
     expect(r).toMatchObject({ fallbackReason: 'budget_exhausted', engineStatus: 'offline_deterministic' });

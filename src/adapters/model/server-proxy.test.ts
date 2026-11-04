@@ -247,18 +247,18 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
     resetLedger(suiteLedgerPath);
   });
 
-  it('defaults call cap to 10 and clamps any higher value to at most 10', () => {
-    expect(resolveMaxCalls({})).toBe(10);
-    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '' })).toBe(10);
+  it('defaults call cap to 30 and clamps any higher value to at most 30', () => {
+    expect(resolveMaxCalls({})).toBe(30);
+    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '' })).toBe(30);
     expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '5' })).toBe(5);
-    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '10' })).toBe(10);
-    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '100' })).toBe(10);
-    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '999' })).toBe(10);
+    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '30' })).toBe(30);
+    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '100' })).toBe(30);
+    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '999' })).toBe(30);
     expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '0' })).toBe(0);
-    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: 'invalid' })).toBe(10);
+    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: 'invalid' })).toBe(30);
   });
 
-  it('D4: code ceiling 200 (lowering-only) and operating cap 100 (lowering-only, never above 200)', () => {
+  it('D4: code ceiling 200 (lowering-only) and operating cap 200 (lowering-only, never above 200)', () => {
     expect(resolveLifetimeMaxCalls({})).toBe(200);
     expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '' })).toBe(200);
     expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '4' })).toBe(4);
@@ -267,13 +267,13 @@ describe('GATE-S1-PREP: Hard Call Cap (MODEL_LIVE_MAX_CALLS) & max_tokens <= 300
     expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '250' })).toBe(200);
     expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: '-1' })).toBe(200);
     expect(resolveLifetimeMaxCalls({ MODEL_LIFETIME_MAX_CALLS: 'invalid' })).toBe(200);
-    expect(resolveOperatingCap({})).toBe(100);
+    expect(resolveOperatingCap({})).toBe(200);
     expect(resolveOperatingCap({ MODEL_OPERATING_CAP: '40' })).toBe(40);
-    expect(resolveOperatingCap({ MODEL_OPERATING_CAP: '150' })).toBe(100);
-    expect(resolveOperatingCap({ MODEL_OPERATING_CAP: 'x' })).toBe(100);
-    expect(resolveReasoningBudgetCeiling({})).toBe(100);
+    expect(resolveOperatingCap({ MODEL_OPERATING_CAP: '250' })).toBe(200);
+    expect(resolveOperatingCap({ MODEL_OPERATING_CAP: 'x' })).toBe(200);
+    expect(resolveReasoningBudgetCeiling({})).toBe(200);
     expect(resolveReasoningBudgetCeiling({ MODEL_REASONING_BUDGET_CEILING: '32' })).toBe(32);
-    expect(resolveReasoningBudgetCeiling({ MODEL_REASONING_BUDGET_CEILING: '180' })).toBe(100);
+    expect(resolveReasoningBudgetCeiling({ MODEL_REASONING_BUDGET_CEILING: '250' })).toBe(200);
     expect(resolveReasoningBudgetCeiling({ MODEL_OPERATING_CAP: '30', MODEL_REASONING_BUDGET_CEILING: '60' })).toBe(30);
   });
 
@@ -2216,7 +2216,7 @@ describe('S1-DIAG: output extraction, shape handling, and diagnostic metadata te
 });
 
 describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safeguards', () => {
-  // D4 raised the code ceiling to 200 (operating cap 100); this block keeps proving the S1 mechanics
+  // D4 raised the code ceiling to 200 (operating cap 200); this block keeps proving the S1 mechanics
   // with an explicitly LOWERED lifetime cap of 50, which the lowering-only rule permits.
   const S1_LOWERED_CAP = 50;
   const cap50Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yori-cap50-'));
@@ -2279,21 +2279,21 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     expect(finalState.callCount).toBe(50);
   });
 
-  it('per-run cap 11 is refused (clamped in resolveMaxCalls, rejected in runLiveVerification)', async () => {
-    // resolveMaxCalls clamps any value above MODEL_PER_RUN_MAX_CALLS (10) to 10
-    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '11' })).toBe(10);
-    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '50' })).toBe(10);
+  it('per-run cap 31 is refused (clamped in resolveMaxCalls, rejected in runLiveVerification)', async () => {
+    // resolveMaxCalls clamps any value above MODEL_PER_RUN_MAX_CALLS (30) to 30
+    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '31' })).toBe(30);
+    expect(resolveMaxCalls({ MODEL_LIVE_MAX_CALLS: '50' })).toBe(30);
 
-    // runLiveVerification strictly refuses per-run cap > 10
+    // runLiveVerification strictly refuses per-run cap > 30
     process.env.MODEL_LIVE_ENABLED = '1';
-    process.env.MODEL_LIVE_MAX_CALLS = '11';
+    process.env.MODEL_LIVE_MAX_CALLS = '31';
     await expect(
       runLiveVerification({
         confirmBilled: true,
         skipPreconditions: true,
         tempLedgerPath: cap50Ledger,
       })
-    ).rejects.toThrow('MODEL_LIVE_MAX_CALLS must be between 1 and 10');
+    ).rejects.toThrow('MODEL_LIVE_MAX_CALLS must be between 1 and 30');
     delete process.env.MODEL_LIVE_ENABLED;
     delete process.env.MODEL_LIVE_MAX_CALLS;
   });
@@ -2702,14 +2702,14 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     delete process.env.MODEL_API_KEY;
   });
 
-  it('D4: env MODEL_LIFETIME_MAX_CALLS=250 / MODEL_OPERATING_CAP=150 cannot raise the hard stop above 100 (ledger at 100 blocks fetches)', async () => {
-    // Seed ledger with 50 calls
+  it('D4: env MODEL_LIFETIME_MAX_CALLS=250 / MODEL_OPERATING_CAP=250 cannot raise the hard stop above 200 (ledger at 200 blocks fetches)', async () => {
+    // Seed ledger with 200 calls
     fs.writeFileSync(
       cap50Ledger,
       JSON.stringify({
         version: 1,
-        call_count: 100,
-        reservations: Array.from({ length: 100 }, (_, i) => ({
+        call_count: 200,
+        reservations: Array.from({ length: 200 }, (_, i) => ({
           call_index: i + 1,
           endpoint: 'refine',
           timestamp: new Date().toISOString(),
@@ -2722,7 +2722,7 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     process.env.MODEL_LIVE_ENABLED = '1';
     process.env.MODEL_LIVE_MAX_CALLS = '10';
     process.env.MODEL_LIFETIME_MAX_CALLS = '250';
-    process.env.MODEL_OPERATING_CAP = '150';
+    process.env.MODEL_OPERATING_CAP = '250';
 
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
@@ -2743,7 +2743,7 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
       expect(fetchSpy).not.toHaveBeenCalled();
       expect(res.usedFallback).toBe(true);
       expect(res.fallbackReason).toBe('disabled');
-      expect(readLedgerState(cap50Ledger).callCount).toBe(100);
+      expect(readLedgerState(cap50Ledger).callCount).toBe(200);
     } finally {
       delete process.env.MODEL_API_KEY;
       delete process.env.MODEL_LIVE_ENABLED;
@@ -2753,14 +2753,14 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     }
   });
 
-  it('D4: customConfig.lifetimeMaxCalls=250 cannot raise the hard stop above the operating cap 100 (ledger at 100 -> blocked, 0 fetches)', async () => {
-    // Seed ledger with 50 calls
+  it('D4: customConfig.lifetimeMaxCalls=250 cannot raise the hard stop above the operating cap 200 (ledger at 200 -> blocked, 0 fetches)', async () => {
+    // Seed ledger with 200 calls
     fs.writeFileSync(
       cap50Ledger,
       JSON.stringify({
         version: 1,
-        call_count: 100,
-        reservations: Array.from({ length: 100 }, (_, i) => ({
+        call_count: 200,
+        reservations: Array.from({ length: 200 }, (_, i) => ({
           call_index: i + 1,
           endpoint: 'refine',
           timestamp: new Date().toISOString(),
@@ -2794,7 +2794,7 @@ describe('S1-CAP50: Lifetime allowance 50, per-run cap separation, and stop safe
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(res.usedFallback).toBe(true);
     expect(res.fallbackReason).toBe('disabled');
-    expect(readLedgerState(cap50Ledger).callCount).toBe(100);
+    expect(readLedgerState(cap50Ledger).callCount).toBe(200);
   });
 
   describe('S1-CMD-RC: handleCommand reason code telemetry & LiveVerification runner integration', () => {
