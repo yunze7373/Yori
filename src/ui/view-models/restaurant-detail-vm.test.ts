@@ -223,3 +223,40 @@ describe('UI-QUIET-PRECISION increment 2: cuisine basis reads as plain English',
     expect(formatCuisineLabel(undefined)).toBeUndefined();
   });
 });
+
+describe('UI-QUIET-PRECISION increment 3: the detail shows the place\'s own Google photo, credited', () => {
+  const photo = {
+    uri: 'https://lh3.googleusercontent.com/places/abc123=s800',
+    widthPx: 800,
+    heightPx: 600,
+    authorAttributions: [{ displayName: 'Aiko T.', uri: 'https://maps.google.com/maps/contrib/1' }],
+  };
+  const plan = (opt: Record<string, unknown>): PreparedPlan =>
+    ({
+      id: 'plan-lunch-g',
+      intentId: 'lunch',
+      headline: 'Lunch near you',
+      timezone: 'Asia/Tokyo',
+      requiresConfirmation: false,
+      createdAt: '2026-11-04T03:00:00.000Z',
+      why: { derivation: 'Nearby', evidenceSignals: [], memoryFactsUsed: [] },
+      optionsOrSteps: [
+        { id: 'google-B', label: 'Mid Ramen', name: 'Mid Ramen', cuisine: 'ramen', provenance: 'google', requiresConfirmation: false, ...opt },
+      ],
+    }) as unknown as PreparedPlan;
+  const derive = (opt: Record<string, unknown>, isLive = true) =>
+    deriveRestaurantDetailVM({ candidateId: 'google-B', plan: plan(opt), spatialEvidence: null, isLive });
+
+  it('Live Google candidate with a credited googleusercontent photo -> placePhoto', () => {
+    expect(derive({ photo }).placePhoto).toEqual(photo);
+  });
+
+  it('no photo without an author credit (Google policy), for OSM, in Demo, or on a non-Google host', () => {
+    expect(derive({ photo: { ...photo, authorAttributions: [] } }).placePhoto).toBeUndefined();
+    expect(derive({ photo, provenance: 'osm' }).placePhoto).toBeUndefined();
+    expect(derive({ photo }, false).placePhoto).toBeUndefined();
+    expect(derive({ photo: { ...photo, uri: 'https://evil.example.com/photo' } }).placePhoto).toBeUndefined();
+    expect(derive({ photo: { ...photo, uri: 'http://lh3.googleusercontent.com/x' } }).placePhoto).toBeUndefined();
+    expect(derive({ photo: { ...photo, uri: 'https://places.googleapis.com/v1/x/media?key=SECRET' } }).placePhoto).toBeUndefined();
+  });
+});

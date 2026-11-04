@@ -29,12 +29,17 @@ const JARGON: readonly (string | RegExp)[] = [
   'Nearby dining',
 ];
 
+const STAND_IN_PHOTO_URI = 'https://lh3.googleusercontent.com/places/recorded-mid-ramen=s800';
+const STAND_IN_PHOTO = fs.readFileSync(path.resolve('tests/fixtures/google-mock/place-photo-stand-in.svg'));
+
 function places() {
   const fetchedAt = new Date().toISOString();
   const base = { category: 'restaurant', source: 'live', provenance: 'google', fetchedAt, attribution: 'Powered by Google' };
   return [
     { ...base, placeId: 'google-A', coords: { lat: 35.6893, lng: 139.6921 }, name: 'Near Cafe', cuisine: 'cafe', straightLineDistanceMeters: 45, straightLineDistanceLabel: '45 m (straight-line)', openingStatus: 'open', rating: 4.6, userRatingCount: 1204, priceLevel: 2 },
-    { ...base, placeId: 'google-B', coords: { lat: 35.6905, lng: 139.6925 }, name: 'Mid Ramen', cuisine: 'ramen', straightLineDistanceMeters: 125, straightLineDistanceLabel: '125 m (straight-line)', openingStatus: 'open', rating: 4.2, userRatingCount: 310 },
+    { ...base, placeId: 'google-B', coords: { lat: 35.6905, lng: 139.6925 }, name: 'Mid Ramen', cuisine: 'ramen', straightLineDistanceMeters: 125, straightLineDistanceLabel: '125 m (straight-line)', openingStatus: 'open', rating: 4.2, userRatingCount: 310,
+      // A recorded keyless photo URI with its author credit; the test serves a local stand-in image for it.
+      photo: { uri: STAND_IN_PHOTO_URI, widthPx: 800, heightPx: 600, authorAttributions: [{ displayName: 'Recorded author', uri: 'https://maps.google.com/maps/contrib/0' }] } },
     { ...base, placeId: 'google-C', coords: { lat: 35.6915, lng: 139.6935 }, name: 'Soba Corner', cuisine: 'soba', straightLineDistanceMeters: 260, straightLineDistanceLabel: '260 m (straight-line)', openingStatus: 'open', rating: 4.4, userRatingCount: 512 },
   ];
 }
@@ -80,6 +85,8 @@ async function setup(page: Page, opts: MockOpts = {}) {
   await page.route(u => u.pathname === '/api/model/command', r => r.fulfill(json({ result: null, usedFallback: true, fallbackReason: 'disabled', engineStatus: 'offline_deterministic' })));
   await page.route(u => u.pathname === '/api/model/reason', r => r.fulfill(json({ usedFallback: true, fallbackReason: 'disabled', engineStatus: 'offline_deterministic' })));
   await page.route('https://lh3.googleusercontent.com/**', r => r.fulfill({ status: 404 }));
+  // Registered last, so it wins for the one recorded photo URI (no real photo is fetched in tests).
+  await page.route(STAND_IN_PHOTO_URI, r => r.fulfill({ status: 200, contentType: 'image/svg+xml', body: STAND_IN_PHOTO }));
 }
 
 async function device(browser: Browser, vp: { width: number; height: number }, geo = true) {
@@ -237,6 +244,13 @@ test.describe('UI-QUIET-PRECISION area 2: every remaining surface at the 04 bar'
       // The detail keeps the facts (the straight-line qualifier lives here), with no empty map box.
       await expect(page.locator('.v2-restaurant-detail')).toContainText('(straight-line)');
       expect(await page.locator('.v2-map-card:has(.map-unavailable-canvas)').evaluateAll(els => els.filter(e => (e as HTMLElement).offsetHeight > 0).length)).toBe(0);
+      // Increment 3: the place's own photo leads (loaded, credited); Save/Directions sit at the foot.
+      const photo = page.locator('.v2-restaurant-hero-photo img');
+      await expect(photo).toHaveAttribute('alt', 'Photo of Mid Ramen');
+      await expect.poll(() => photo.evaluate(img => (img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+      await expect(page.locator('.v2-restaurant-hero-photo .qp-photo-credit')).toHaveText('Photo: Recorded author');
+      await expect(page.locator('.v2-restaurant-hero-art')).toHaveCount(0);
+      expect(await visibleText(page, '.v2-restaurant-detail')).not.toMatch(/\bmin walk\b/);
       await shot(page, 'restaurant-detail', vp.name);
       await expectNoJargon(page, 'restaurant-detail', 'main');
       await page.goBack();
@@ -348,6 +362,11 @@ test.describe('UI-QUIET-PRECISION area 2: every remaining surface at the 04 bar'
       });
       expect(geometry.dock.right).toBeLessThanOrEqual(geometry.rail.left);
       expect(geometry.dock.left).toBeGreaterThanOrEqual(geometry.sideRight);
+
+      // Increment 3: the rail map says "schematic" once (the badge), like the Home strip.
+      const railMap = page.locator('.desktop-right-panel .desktop-map-card').first();
+      await expect(railMap.locator('.card-badge').first()).toHaveText('Schematic · simulated');
+      expect((await visibleText(page, '.desktop-right-panel .desktop-map-card')).match(/schematic/gi)?.length ?? 0).toBe(1);
 
       // Scrolled to the bottom of the rail, the eyebrow and the temperature are inside the card and
       // nothing covers them (hit-test at each box's corners and centre).

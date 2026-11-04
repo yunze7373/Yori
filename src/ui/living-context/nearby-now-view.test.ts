@@ -129,6 +129,7 @@ describe('UI-QUIET-PRECISION increment 2: Live consent and failure read plainly'
   it('failure: no "all caught up" beside it, one failure line, Retry, no trailing reminder line', () => {
     const html = renderV2Home({
       ...quiet,
+      title: 'Nothing needs your attention right now.',
       headline: "You're all caught up. We'll let you know when something comes up.",
       basis: 'No proactive reminders needed for your schedule right now.',
       nearbyNow: { state: 'ready', note: { kind: 'error', title: "Nearby places didn't load.", desc: '' } },
@@ -139,6 +140,9 @@ describe('UI-QUIET-PRECISION increment 2: Live consent and failure read plainly'
     expect(html).toMatch(/id="btn-nearby-now"[^>]*>Retry</);
     expect(text).toContain("Nearby places didn't load.");
     expect(html).not.toContain('class="nearby-state-desc"');
+    // Increment 3: "nothing needs you" is said once per screen (the header); the failure leads.
+    expect(text).not.toMatch(/Nothing needs your attention/);
+    expect(html).not.toContain('id="quiet-title"');
     // The failure is said first, then the action.
     expect(html.indexOf('id="nearby-now-note"')).toBeLessThan(html.indexOf('id="btn-nearby-now"'));
   });

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <!-- Test stand-in for a recorded Google place photo URI (no real photo is fetched in tests). -->
+  <defs>
+    <linearGradient id="table" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6B4A34"/>
+      <stop offset="1" stop-color="#3E2A1E"/>
+    </linearGradient>
+    <radialGradient id="light" cx="0.35" cy="0.25" r="0.9">
+      <stop offset="0" stop-color="#F4D9B0" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#F4D9B0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="broth" cx="0.5" cy="0.45" r="0.6">
+      <stop offset="0" stop-color="#E9B45E"/>
+      <stop offset="1" stop-color="#B9772E"/>
+    </radialGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#table)"/>
+  <rect width="800" height="600" fill="url(#light)"/>
+  <ellipse cx="410" cy="360" rx="290" ry="150" fill="#1E1612" opacity="0.35"/>
+  <ellipse cx="400" cy="320" rx="270" ry="140" fill="#2B2B2B"/>
+  <ellipse cx="400" cy="310" rx="240" ry="118" fill="url(#broth)"/>
+  <g fill="none" stroke="#F6E7C1" stroke-width="7" stroke-linecap="round" opacity="0.9">
+    <path d="M250 300c40-30 80 30 120 0s80 30 120 0 80 30 110 0"/>
+    <path d="M270 330c40-30 80 30 120 0s80 30 120 0 70 25 90 5"/>
+    <path d="M300 275c35-25 70 25 105 0s70 25 105 0"/>
+  </g>
+  <ellipse cx="500" cy="285" rx="44" ry="30" fill="#F7F1E3"/>
+  <ellipse cx="500" cy="285" rx="20" ry="14" fill="#F2A93B"/>
+  <rect x="290" y="250" width="70" height="56" rx="8" fill="#8A4B2C" transform="rotate(-12 325 278)"/>
+  <g fill="#5E8C4A">
+    <circle cx="430" cy="345" r="9"/><circle cx="452" cy="338" r="8"/><circle cx="418" cy="330" r="7"/><circle cx="445" cy="356" r="7"/>
+  </g>
+  <rect x="150" y="160" width="520" height="10" rx="5" fill="#C8A27A" transform="rotate(-8 410 165)"/>
+  <rect x="150" y="182" width="520" height="10" rx="5" fill="#B88F66" transform="rotate(-8 410 187)"/>
+</svg>

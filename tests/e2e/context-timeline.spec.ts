@@ -261,7 +261,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     // 3. Hero Cause-Effect sentence
     const heroCauseEffect = page.locator('#hero-cause-effect');
     await expect(heroCauseEffect).toBeVisible();
-    await expect(heroCauseEffect).toHaveText('Rain starts before your lesson. I moved your leave time to 2:30.');
+    await expect(heroCauseEffect).toHaveText("Rain starts before your lesson, so you'll drive, as you prefer in the rain. You can leave a little later, at 2:30.");
 
     // 4. Struck-through time difference: 2:25 PM -> 2:30 PM
     const timeDiffDisplay = page.locator('#time-diff-display');
@@ -333,7 +333,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
 
     // Assert: The hero cause-effect incorporates the dynamic new leave time
     const heroCauseEffect = page.locator('#hero-cause-effect');
-    await expect(heroCauseEffect).toHaveText('Rain starts before your lesson. I moved your leave time to 2:20.');
+    await expect(heroCauseEffect).toHaveText("Rain starts before your lesson, so you'll drive, as you prefer in the rain. You can leave a little later, at 2:20.");
   });
 
   // =========================================================================
@@ -513,7 +513,7 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     // Assert: Cause marker, microcopy, struck-through time, and status transition all preserved
     await expect(page.locator('#what-changed-marker')).toContainText('What changed: rain forecast');
     await expect(page.locator('#hero-cause-effect')).toHaveText(
-      'Rain starts before your lesson. I moved your leave time to 2:30.'
+      "Rain starts before your lesson, so you'll drive, as you prefer in the rain. You can leave a little later, at 2:30."
     );
     await expect(page.locator('#time-diff-display .prior-time-struck s')).toHaveText('2:25 PM');
     await expect(page.locator('#time-diff-display .new-time-highlight')).toHaveText('2:30 PM');

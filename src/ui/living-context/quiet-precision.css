@@ -3012,3 +3012,94 @@ body {
     margin: 0 auto;
   }
 }
+
+/* Restaurant detail (increment 3, reference 03 scenario 2): the place's own photo leads, credited
+   underneath; the facts, one basis line and the two actions follow in one calm column. */
+.v2-restaurant-hero-photo {
+  margin: 0;
+}
+
+.v2-restaurant-hero-photo img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--qp-r-card);
+  background: var(--qp-sage-wash);
+  box-shadow: var(--qp-shadow-card);
+}
+
+.v2-restaurant-hero-photo .qp-photo-credit {
+  margin-top: var(--qp-s1);
+  font-size: 0.6875rem;
+  color: var(--qp-ink-quiet);
+}
+
+.v2-restaurant-hero-photo .qp-photo-credit a {
+  color: inherit;
+}
+
+@media (min-width: 1024px) {
+  .v2-restaurant-hero-photo img {
+    aspect-ratio: 16 / 9;
+  }
+}
+
+/* The basis reads as a sentence under the facts, not another box. */
+.v2-restaurant-detail .v2-basis-card {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.v2-restaurant-detail .v2-basis-text {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--qp-ink);
+}
+
+/* Phone: the detail fills the screen and the two actions settle at its foot, like the reference,
+   instead of floating halfway down an empty page. */
+@media (max-width: 767px) {
+  .v2-restaurant-detail {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - 210px);
+  }
+
+  .v2-restaurant-detail .v2-restaurant-actions {
+    margin-top: auto;
+    padding-top: var(--qp-s4);
+  }
+}
+
+/* Desktop rail map (increment 3): the same quiet language as the Home strip. One caption row, a
+   soft canvas with no inner frame, the place as a quiet line. When tiles are off by configuration,
+   the header badge already says "Schematic · simulated", so the fallback note is not repeated. If
+   tiles were expected (data-tiles="osm") and failed, the note stays. */
+.v2-map-card.desktop-map-card {
+  padding: var(--qp-s4);
+}
+
+.v2-map-card.desktop-map-card .desktop-map-header {
+  margin-bottom: var(--qp-s3);
+}
+
+.v2-map-card.desktop-map-card .v2-map-canvas.prominent {
+  border: 0;
+  border-radius: var(--qp-r-tile);
+  background: #EEF1EA;
+  box-shadow: none;
+}
+
+.v2-map-card.desktop-map-card[data-tiles='off'] .map-fallback-banner {
+  display: none;
+}
+
+.v2-map-card.desktop-map-card .map-place-info {
+  margin-top: var(--qp-s3);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--qp-ink-soft);
+}

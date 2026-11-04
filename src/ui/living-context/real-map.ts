@@ -177,7 +177,7 @@ export function renderRealMapCard(
   const schematicHtml = renderSchematicSvg(map);
 
   return `
-    <section class="card v2-map-card${options?.isDesktopPanel ? ' desktop-map-card' : ''}${options?.isCompactStrip ? ' compact compact-map-strip' : ''} ${sizeClass}" aria-label="${escapeHtml(map.label)}" data-provenance="${options?.isLive ? 'live' : 'fixture'}">
+    <section class="card v2-map-card${options?.isDesktopPanel ? ' desktop-map-card' : ''}${options?.isCompactStrip ? ' compact compact-map-strip' : ''} ${sizeClass}" aria-label="${escapeHtml(map.label)}" data-provenance="${options?.isLive ? 'live' : 'fixture'}" data-tiles="${tilesConfig === 'osm' ? 'osm' : 'off'}">
       <div class="${options?.isDesktopPanel ? 'desktop-map-header' : `map-header${options?.isCompactStrip ? ' map-strip-header' : ''}`}">
         <span class="${options?.isCompactStrip ? 'map-strip-label ' : ''}section-label" data-slot="chrome" data-slot-reason="Map section heading">
           ${

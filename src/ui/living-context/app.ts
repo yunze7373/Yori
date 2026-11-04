@@ -77,6 +77,7 @@ import {
   formatAheadPlan,
   formatNoticeMessage,
   humanizeProposalTitle,
+  describeDemoReplan,
 } from './presentation.js';
 import { isWeatherStale } from '../view-models/provenance.js';
 import {
@@ -3634,13 +3635,17 @@ export function renderApp(
               const priorLeaveClean = (priorLeaveTimeStr || '').replace(/\s*[AaPp][Mm]$/, '').trim();
               const didDemoLeaveMove = Boolean(priorLeaveClean && newLeaveClean && priorLeaveClean !== newLeaveClean);
               const eventTitle = (nowPlan as any)?.subjectTitle || (nowPlan as any)?.title || 'your lesson';
-              const heroCauseEffect = isRain
-                ? didDemoLeaveMove
-                  ? `Rain starts before ${eventTitle.toLowerCase().includes('lesson') ? 'your lesson' : eventTitle}. I moved your leave time to ${newLeaveClean}.`
-                  : `Rain starts before ${eventTitle.toLowerCase().includes('lesson') ? 'your lesson' : eventTitle}. Take an umbrella; leave time unchanged (${newLeaveClean}).`
-                : didDemoLeaveMove
-                  ? `Travel estimate changed. I moved your leave time to ${newLeaveClean}.`
-                  : `Travel estimate updated · leave at ${newLeaveClean}.`;
+              const primaryOption = nowPlan.optionsOrSteps.find(o => typeof o !== 'string') as
+                | { mode?: string; rankedByFactKey?: string }
+                | undefined;
+              const heroCauseEffect = describeDemoReplan({
+                isRain,
+                eventTitle,
+                priorLeaveIso: didDemoLeaveMove ? priorPlan.leaveAt : undefined,
+                newLeaveIso: didDemoLeaveMove ? nowPlan.leaveAt : undefined,
+                newLeaveClean,
+                primary: primaryOption,
+              });
 
               computedChangeMoment = {
                 cause,

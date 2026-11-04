@@ -363,4 +363,11 @@ export interface RestaurantDetailVM {
   readonly coords?: { readonly lat: number; readonly lng: number };
   readonly fetchedAt?: string;
   readonly openingStatus?: 'open' | 'closed' | undefined;
+  /** UI-QUIET-PRECISION increment 3: the place's own Google photo (keyless, server-resolved), credited. */
+  readonly placePhoto?: {
+    readonly uri: string;
+    readonly widthPx?: number;
+    readonly heightPx?: number;
+    readonly authorAttributions: readonly { readonly displayName: string; readonly uri?: string }[];
+  };
 }

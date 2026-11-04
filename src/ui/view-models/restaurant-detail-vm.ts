@@ -56,6 +56,27 @@ export function formatCuisineBasis(raw: string | undefined): string {
   const label = formatCuisineLabel(raw);
   return label ? `${label} · close to you` : 'Close to you';
 }
+
+
+/**
+ * The Live detail photo: only a Google candidate's keyless googleusercontent HTTPS URI that carries
+ * at least one author credit (Google photo policy). Anything else falls back to the illustration.
+ */
+function pickPlacePhoto(opt: unknown, isLive: boolean): RestaurantDetailVM['placePhoto'] {
+  const o = opt as { provenance?: string; photo?: RestaurantDetailVM['placePhoto'] } | undefined;
+  const photo = o?.photo;
+  if (!isLive || o?.provenance !== 'google' || !photo || typeof photo.uri !== 'string') return undefined;
+  let url: URL;
+  try {
+    url = new URL(photo.uri);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== 'https:' || !/(^|\.)googleusercontent\.com$/.test(url.hostname)) return undefined;
+  const authors = Array.isArray(photo.authorAttributions) ? photo.authorAttributions.filter(a => a && typeof a.displayName === 'string' && a.displayName.trim()) : [];
+  if (authors.length === 0) return undefined;
+  return photo;
+}
 export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions): RestaurantDetailVM {
   const {
     candidateId,
@@ -302,6 +323,7 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     : undefined;
 
   return {
+    placePhoto: pickPlacePhoto(targetOpt, isLive),
     id: candidateId,
     name: verifiedName,
     cuisine,

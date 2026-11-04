@@ -306,6 +306,41 @@ export function formatConfirmedMemoryNote(key: string, value: unknown): string {
   return shown ? `${label} · ${shown} (you confirmed)` : `${label} (you confirmed)`;
 }
 
+/**
+ * The Demo timeline's change-moment sentence (UI-QUIET-PRECISION increment 3). It says which way
+ * the leave time moved and, when later, why: rain switches the trip to driving under the user's
+ * confirmed rain preference, which is quicker. A mode is named only when the plan's primary option
+ * is that mode and was ranked by the rain preference.
+ */
+export function describeDemoReplan(input: {
+  isRain: boolean;
+  eventTitle: string;
+  priorLeaveIso?: string;
+  newLeaveIso?: string;
+  newLeaveClean: string;
+  primary?: { mode?: string; rankedByFactKey?: string };
+}): string {
+  const { isRain, eventTitle, newLeaveClean, primary } = input;
+  const prior = input.priorLeaveIso ? Date.parse(input.priorLeaveIso) : NaN;
+  const next = input.newLeaveIso ? Date.parse(input.newLeaveIso) : NaN;
+  const moved = Number.isFinite(prior) && Number.isFinite(next) && prior !== next;
+  const later = moved && next > prior;
+  const subject = eventTitle.toLowerCase().includes('lesson') ? 'your lesson' : eventTitle;
+
+  if (isRain) {
+    if (!moved) return `Rain starts before ${subject}. Take an umbrella; leave time unchanged (${newLeaveClean}).`;
+    if (!later) return `Rain starts before ${subject}. I moved your leave time earlier, to ${newLeaveClean}.`;
+    if (primary?.mode === 'drive' && primary.rankedByFactKey === 'rain_transport_preference') {
+      return `Rain starts before ${subject}, so you'll drive, as you prefer in the rain. You can leave a little later, at ${newLeaveClean}.`;
+    }
+    return `Rain starts before ${subject}. The new route is quicker, so you can leave a little later, at ${newLeaveClean}.`;
+  }
+  if (!moved) return `Travel estimate updated · leave at ${newLeaveClean}.`;
+  return later
+    ? `Travel estimate changed. You can leave a little later, at ${newLeaveClean}.`
+    : `Travel estimate changed. I moved your leave time earlier, to ${newLeaveClean}.`;
+}
+
 export function humanizeProposalTitle(key: string): string {
   switch (key) {
     case 'suppress_lunch':

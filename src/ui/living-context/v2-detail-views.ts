@@ -238,11 +238,25 @@ export function renderRestaurantDetail(vm: RestaurantDetailVM): string {
         <span class="v2-detail-badge">${isLive ? 'Live' : escapeHtml(STRINGS.header.simulatedBadge)}</span>
       </div>
 
-      <!-- Local Labelled SVG Illustration (Zero Remote URLs) -->
+      ${
+        vm.placePhoto
+          ? `<!-- The place's own Google photo (keyless URI resolved on the server), credited -->
+      <figure class="v2-restaurant-hero-photo" data-attribution="google">
+        <img src="${escapeHtml(vm.placePhoto.uri)}" alt="Photo of ${escapeHtml(vm.name)}" loading="lazy" decoding="async" referrerpolicy="no-referrer">
+        <figcaption class="qp-photo-credit">Photo: ${vm.placePhoto.authorAttributions
+          .map(a =>
+            a.uri
+              ? `<a href="${escapeHtml(a.uri)}" target="_blank" rel="noopener noreferrer">${escapeHtml(a.displayName)}</a>`
+              : escapeHtml(a.displayName)
+          )
+          .join(', ')}</figcaption>
+      </figure>`
+          : `<!-- Local Labelled SVG Illustration (Zero Remote URLs) -->
       <div class="v2-restaurant-hero-art" role="img" aria-label="${escapeHtml(vm.photo.altText)}">
         ${vm.photo.svgMarkup}
         ${isLive ? '' : `<span class="v2-illustration-badge">${escapeHtml(vm.photo.simulatedBadge)}</span>`}
-      </div>
+      </div>`
+      }
 
       <header class="v2-detail-header">
         <h1 class="v2-detail-title" id="restaurant-detail-name">${escapeHtml(vm.name)}</h1>

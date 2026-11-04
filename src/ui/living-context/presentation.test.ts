@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatConfirmedMemoryNote,
+  describeDemoReplan,
   escapeHtml,
   getGreeting,
   formatNowPlan,
@@ -608,5 +609,83 @@ describe('UI-QUIET-PRECISION increment 2: the MEMORY row reads as a human fact',
       expect(note).not.toContain('_');
       expect(note).not.toContain('{');
     }
+  });
+});
+
+describe('UI-QUIET-PRECISION increment 3: the Demo re-plan says which way the leave time moved, and why', () => {
+  const base = { isRain: true, eventTitle: 'Piano lesson', newLeaveClean: '2:30' };
+  const drive = { mode: 'drive', rankedByFactKey: 'rain_transport_preference' };
+
+  it('later because the rain preference switched the trip to driving', () => {
+    expect(
+      describeDemoReplan({ ...base, priorLeaveIso: '2026-10-28T21:25:00Z', newLeaveIso: '2026-10-28T21:30:00Z', primary: drive })
+    ).toBe("Rain starts before your lesson, so you'll drive, as you prefer in the rain. You can leave a little later, at 2:30.");
+  });
+
+  it('later on another quicker route, without claiming a mode it does not have', () => {
+    const text = describeDemoReplan({ ...base, priorLeaveIso: '2026-10-28T21:25:00Z', newLeaveIso: '2026-10-28T21:30:00Z', primary: { mode: 'bus' } });
+    expect(text).toBe('Rain starts before your lesson. The new route is quicker, so you can leave a little later, at 2:30.');
+    expect(text).not.toContain('drive');
+  });
+
+  it('earlier says earlier', () => {
+    expect(
+      describeDemoReplan({ ...base, newLeaveClean: '2:20', priorLeaveIso: '2026-10-28T21:25:00Z', newLeaveIso: '2026-10-28T21:20:00Z', primary: drive })
+    ).toBe('Rain starts before your lesson. I moved your leave time earlier, to 2:20.');
+  });
+
+  it('never says "I moved your leave time to" for a later time', () => {
+    const text = describeDemoReplan({ ...base, priorLeaveIso: '2026-10-28T21:15:00Z', newLeaveIso: '2026-10-28T21:20:00Z', primary: drive });
+    expect(text).not.toContain('I moved your leave time to');
+    expect(text).toContain('later');
+  });
+
+  it('unchanged and non-rain keep their meaning', () => {
+    expect(describeDemoReplan({ ...base, priorLeaveIso: '2026-10-28T21:25:00Z', newLeaveIso: '2026-10-28T21:25:00Z', newLeaveClean: '2:25' })).toBe(
+      'Rain starts before your lesson. Take an umbrella; leave time unchanged (2:25).'
+    );
+    expect(describeDemoReplan({ ...base, isRain: false, priorLeaveIso: '2026-10-28T21:25:00Z', newLeaveIso: '2026-10-28T21:20:00Z', newLeaveClean: '2:20' })).toBe(
+      'Travel estimate changed. I moved your leave time earlier, to 2:20.'
+    );
+    expect(describeDemoReplan({ ...base, isRain: false, eventTitle: 'Review', priorLeaveIso: '2026-10-28T21:25:00Z', newLeaveIso: '2026-10-28T21:30:00Z', newLeaveClean: '2:30' })).toBe(
+      'Travel estimate changed. You can leave a little later, at 2:30.'
+    );
+  });
+
+  it('names a non-lesson event by its title', () => {
+    expect(
+      describeDemoReplan({ ...base, eventTitle: 'Product Review', priorLeaveIso: '2026-10-28T21:25:00Z', newLeaveIso: '2026-10-28T21:20:00Z', newLeaveClean: '2:20' })
+    ).toBe('Rain starts before Product Review. I moved your leave time earlier, to 2:20.');
+  });
+});
+
+describe('UI-QUIET-PRECISION increment 3: restaurant detail photo rendering', () => {
+  const planWith = (opt: Record<string, unknown>) =>
+    ({
+      id: 'plan-lunch-g', intentId: 'lunch', headline: 'Lunch near you', timezone: 'Asia/Tokyo', requiresConfirmation: false,
+      createdAt: '2026-11-04T03:00:00.000Z', why: { derivation: 'Nearby', evidenceSignals: [], memoryFactsUsed: [] },
+      optionsOrSteps: [{ id: 'google-B', label: 'Mid Ramen', name: 'Mid Ramen', cuisine: 'ramen', provenance: 'google', requiresConfirmation: false, ...opt }],
+    }) as unknown as PreparedPlan;
+  const render = async (opt: Record<string, unknown>) => {
+    const { renderRestaurantDetail } = await import('./v2-detail-views.js');
+    const { deriveRestaurantDetailVM } = await import('../view-models/restaurant-detail-vm.js');
+    return renderRestaurantDetail(deriveRestaurantDetailVM({ candidateId: 'google-B', plan: planWith(opt), spatialEvidence: null, isLive: true }));
+  };
+
+  it('renders the place photo with alt text and the escaped author credit, instead of the illustration', async () => {
+    const html = await render({
+      photo: { uri: 'https://lh3.googleusercontent.com/places/abc=s800', authorAttributions: [{ displayName: 'Aiko <T>', uri: 'https://maps.google.com/maps/contrib/1' }] },
+    });
+    expect(html).toContain('src="https://lh3.googleusercontent.com/places/abc=s800"');
+    expect(html).toContain('alt="Photo of Mid Ramen"');
+    expect(html).toContain('referrerpolicy="no-referrer"');
+    expect(html).toMatch(/Photo: <a href="https:\/\/maps\.google\.com\/maps\/contrib\/1"[^>]*>Aiko &lt;T&gt;<\/a>/);
+    expect(html).not.toContain('v2-restaurant-hero-art');
+  });
+
+  it('keeps the illustration when there is no credited place photo', async () => {
+    const html = await render({});
+    expect(html).toContain('v2-restaurant-hero-art');
+    expect(html).not.toContain('<img');
   });
 });

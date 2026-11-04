@@ -839,8 +839,12 @@ export function renderV2Home(vm: HomeCompositionVM): string {
             </svg>
           </div>
           ${vm.isLive ? renderProvenanceChip('live') : ''}
-          <h2 class="quiet-title" id="quiet-title">${escapeHtml(vm.suppressedQuiet?.message || vm.title)}</h2>
-          ${nearbyFailed ? '' : `<p class="quiet-subtitle" id="quiet-subtitle">${escapeHtml(vm.headline)}</p>`}
+          ${
+            nearbyFailed
+              ? '' /* the header already says "nothing needs you"; the failure line leads */
+              : `<h2 class="quiet-title" id="quiet-title">${escapeHtml(vm.suppressedQuiet?.message || vm.title)}</h2>
+          <p class="quiet-subtitle" id="quiet-subtitle">${escapeHtml(vm.headline)}</p>`
+          }
           ${renderLiveWeatherNow(vm)}
           ${vm.suppressedQuiet ? '' : renderNearbyNow(vm, 'quiet')}
           ${
