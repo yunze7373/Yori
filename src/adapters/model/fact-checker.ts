@@ -113,11 +113,12 @@ const KNOWN_GEO_TOKENS = [
 const COMMON_SENTENCE_STARTERS = new Set([
   'a', 'an', 'the', 'this', 'that', 'these', 'those', 'it', 'its',
   'i', 'we', 'you', 'your', 'my', 'our', 'he', 'she', 'they',
+  "you'll", "it's", "here's", "there's", "that's", "we'll", "they'll", "let's",
   'certainly', 'sure', 'here', 'there', 'please', 'sorry', 'no', 'not', 'yes',
   'got', 'understood', 'looking', 'searching', 'switching', 'shifting', 'moving',
   'updating', 'updated', 'switched', 'shifted', 'moved', 'changed', 'found',
-  'finding', 'heading', 'keeping', 'let', 'lets', "let's", 'all', 'as', 'at',
-  'in', 'on', 'for', 'to', 'from', 'with', 'without', 'by', 'since', 'because',
+  'finding', 'heading', 'keeping', 'let', 'lets', 'all', 'as', 'at',
+  'in', 'on', 'for', 'of', 'to', 'from', 'with', 'without', 'by', 'since', 'because',
   'although', 'even', 'while', 'when', 'where', 'how', 'why', 'what', 'who', 'which',
   'can', 'could', 'would', 'will', 'shall', 'should', 'may', 'might', 'must',
   'do', 'does', 'did', 'have', 'has', 'had', 'is', 'are', 'was', 'were', 'be',
@@ -125,7 +126,28 @@ const COMMON_SENTENCE_STARTERS = new Set([
   'definitely', 'nearby', 'next', 'current', 'alternate', 'route', 'plan',
   'departure', 'lunch', 'options', 'option', 'confirmed', 'restored', 'changes',
   'nothing', 'just', 'however', 'so', 'if', 'then', 'now', 'or', 'and', 'but',
-  'try', 'stop', 'check', 'view', 'see', 'take', 'walk', 'drive',
+  'try', 'stop', 'check', 'view', 'see', 'take', 'taking', 'walk', 'walking', 'drive', 'driving',
+  'happy', 'honestly', 'perfect', 'alright', 'unfortunately', 'go', 'head', 'heading',
+  'today', 'tonight', 'tomorrow', 'already', 'still', 'always', 'also', 'either',
+  'neither', 'both', 'another', 'any', 'some', 'several', 'every', 'each',
+  'first', 'second', 'third', 'last', 'only', 'simply', 'actually', 'indeed',
+  'basically', 'meanwhile', 'furthermore', 'moreover', 'otherwise', 'instead',
+  'besides', 'overall', 'clearly', 'obviously', 'hopefully', 'luckily', 'naturally',
+  'leave', 'leaving', 'look', 'looks', 'seem', 'seems', 'sound', 'sounds', 'well', 'thank', 'thanks', 'welcome', 'surely', 'glad',
+  'top', 'best', 'new', 'pick', 'choice', 'recommend', 'recommending', 'recommendation', 'recommendations', 'suggest', 'suggesting', 'suggestion', 'suggestions', 'choose', 'chosen',
+]);
+
+/**
+ * Common pronoun and auxiliary contractions that must never be treated as place entities.
+ */
+const CONTRACTION_WORDS = new Set([
+  "it's", "that's", "there's", "here's", "what's", "who's", "he's", "she's", "let's",
+  "you'll", "i'll", "we'll", "they'll", "he'll", "she'll", "it'll",
+  "you're", "we're", "they're",
+  "i've", "you've", "we've", "they've",
+  "i'd", "you'd", "he'd", "she'd", "we'd", "they'd",
+  "i'm", "don't", "didn't", "doesn't", "can't", "won't", "wouldn't", "shouldn't", "couldn't",
+  "isn't", "aren't", "wasn't", "weren't", "haven't", "hasn't", "hadn't",
 ]);
 
 /**
@@ -137,6 +159,7 @@ const NON_PLACE_PROPER_NOUNS = new Set([
   'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august',
   'september', 'october', 'november', 'december',
   'bus', 'drive', 'transit', 'walking', 'walk', 'route', 'routes', 'primary',
+  'train', 'subway', 'car', 'bicycle', 'bike',
   'google', 'openstreetmap', 'overpass', 'open-meteo',
 ]);
 
@@ -368,26 +391,41 @@ export function extractTopPickClaim(wording: string, places: readonly string[]):
   const cleanText = wording.replace(/[—–·]/g, ' ');
   for (const place of places) {
     const escaped = place.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Place is top pick / best choice
+
+    // 1. <place> is (now )?(your|the|our|a)? (new )?(top|best|first) (pick|choice|option|recommendation)
     const pattern1 = new RegExp(
-      `\\b${escaped}\\s+(?:is|would be)\\s+(?:your|the|our|a)?\\s*(?:top|best|first)\\s*(?:pick|choice|recommendation|option)\\b`,
+      `\\b${escaped}\\s+(?:is|would be)\\s+(?:now\\s+)?(?:your|the|our|a)?\\s*(?:new\\s+)?(?:top|best|first)?\\s*(?:pick|choice|recommendation|option)\\b`,
       'i'
     );
     if (pattern1.test(cleanText)) return place;
 
-    // Top pick / best choice is Place
+    // 2. (your|the|our|a)? (new )?(top|best|first) (pick|choice|option|recommendation) is (now )?<place>
     const pattern2 = new RegExp(
-      `\\b(?:your|the|our|a)?\\s*(?:top|best|first)\\s*(?:pick|choice|recommendation|option)\\s+(?:is|would be|:)\\s+${escaped}\\b`,
+      `\\b(?:your|the|our|a)?\\s*(?:new\\s+)?(?:top|best|first)\\s*(?:pick|choice|recommendation|option)(?:\\s+(?:is|would be)|:)\\s*(?:now\\s+)?${escaped}\\b`,
       'i'
     );
     if (pattern2.test(cleanText)) return place;
 
-    // Recommend Place as top pick
+    // 3. (I|I'd) (recommend|suggest|picked|choose) <place>
     const pattern3 = new RegExp(
-      `\\b(?:recommending|recommend|suggesting|suggest|chosen|chose)\\s+${escaped}\\s+as\\s+(?:your|the|our|a)?\\s*(?:top|best|first)\\s*(?:pick|choice|recommendation|option)\\b`,
+      `\\b(?:i|i'd)\\s+(?:recommend|suggest|picked|choose)\\s+${escaped}\\b`,
       'i'
     );
     if (pattern3.test(cleanText)) return place;
+
+    // 4. go with <place>
+    const pattern4 = new RegExp(
+      `\\bgo with\\s+${escaped}\\b`,
+      'i'
+    );
+    if (pattern4.test(cleanText)) return place;
+
+    // 5. (recommending|recommend|suggesting|suggest|chosen|chose) <place> as (top pick...)
+    const pattern5 = new RegExp(
+      `\\b(?:recommending|recommend|suggesting|suggest|chosen|chose)\\s+${escaped}\\s+as\\s+(?:your|the|our|a)?\\s*(?:new\\s+)?(?:top|best|first)?\\s*(?:pick|choice|recommendation|option)\\b`,
+      'i'
+    );
+    if (pattern5.test(cleanText)) return place;
   }
   return null;
 }
@@ -505,7 +543,7 @@ function buildNumericAllowlist(suppliedFacts: SuppliedFacts, appliedAction?: App
 /**
  * Extracts candidate proper noun phrases from wording.
  * Any capitalized word or phrase that is not a common sentence starter, not in non-place proper nouns,
- * and not part of supplied places/routes/weather/habits is returned as an unlisted candidate place.
+ * not a non-place contraction, and not part of supplied places/routes/weather/habits is returned as an unlisted candidate place.
  */
 function extractUnlistedProperNouns(wording: string, suppliedFacts: SuppliedFacts): readonly string[] {
   const unlisted: string[] = [];
@@ -524,42 +562,71 @@ function extractUnlistedProperNouns(wording: string, suppliedFacts: SuppliedFact
     return false;
   };
 
-  // Clean em-dashes and middle dots to spaces before splitting
-  const cleanedWording = wording.replace(/[—–·]/g, ' ');
-  const sentences = cleanedWording.split(/[.!?]+(?:\s+|$)/).filter(s => s.trim().length > 0);
+  // Split on clause boundaries: punctuation (. ! ? : ;) followed by whitespace/end, or dashes (— – ·)
+  const clauses = wording
+    .split(/(?:[.!?:]+|;)(?:\s+|$)|[—–·]+/)
+    .map(c => c.trim())
+    .filter(c => c.length > 0);
 
-  for (const sentence of sentences) {
-    const tokens = sentence.trim().split(/\s+/).map(t => t.replace(/^[^\w]+|[^\w]+$/g, '')).filter(t => t.length > 0);
+  for (const clause of clauses) {
+    // Split into tokens, stripping exterior punctuation while preserving internal apostrophes and hyphens
+    const tokens = clause
+      .split(/\s+/)
+      .map(t => t.replace(/^[^\w'’]+|[^\w'’]+$/g, ''))
+      .filter(t => t.length > 0);
+
     let i = 0;
-
     while (i < tokens.length) {
       const tok = tokens[i]!;
-      if (!tok) {
+      const normTok = tok.replace(/’/g, "'").toLowerCase();
+      const isStartOfClause = i === 0;
+      const isCapitalized = /^[A-Z][a-zA-Z0-9'’–-]*$/.test(tok);
+
+      // 1. Exclude contractions ('s, 'll, 're, 've, 'd, n't, 'm) not in supplied places
+      const isContraction =
+        CONTRACTION_WORDS.has(normTok) ||
+        /\b[a-z]+(?:['’](?:s|ll|re|ve|d|t|m)|n['’]t)\b/i.test(tok);
+      const isSuppliedPlacePart = lowerSuppliedPlaces.some(sp => sp.includes(normTok));
+
+      if (isContraction && !isSuppliedPlacePart) {
         i++;
         continue;
       }
 
-      const isCapitalized = /^[A-Z][a-zA-Z0-9'-]*$/.test(tok);
-      const isStartOfSentence = i === 0;
-      const lowerTok = tok.toLowerCase();
+      // 2. Exclude clause-initial capitalized words in common starters (unless start of a supplied place)
+      if (
+        isCapitalized &&
+        isStartOfClause &&
+        COMMON_SENTENCE_STARTERS.has(normTok) &&
+        !lowerSuppliedPlaces.some(sp => sp.startsWith(normTok + ' ') || sp === normTok)
+      ) {
+        i++;
+        continue;
+      }
 
+      // 3. Exclude non-place proper nouns anywhere (days, months, eta, transit types, etc.)
+      if (NON_PLACE_PROPER_NOUNS.has(normTok)) {
+        i++;
+        continue;
+      }
+
+      // 4. Candidate proper noun (single or multi-word)
       if (isCapitalized) {
-        if (isStartOfSentence && COMMON_SENTENCE_STARTERS.has(lowerTok)) {
-          i++;
-          continue;
-        }
-
-        if (NON_PLACE_PROPER_NOUNS.has(lowerTok)) {
-          i++;
-          continue;
-        }
-
-        // Collect consecutive capitalized tokens as a phrase (e.g. "Near Cafe", "Shake Shack")
         const phraseTokens: string[] = [tok];
         let j = i + 1;
         while (j < tokens.length) {
           const nextTok = tokens[j]!;
-          if (/^[A-Z][a-zA-Z0-9'-]*$/.test(nextTok) && !NON_PLACE_PROPER_NOUNS.has(nextTok.toLowerCase())) {
+          const nextNorm = nextTok.replace(/’/g, "'").toLowerCase();
+          const nextIsCapitalized = /^[A-Z][a-zA-Z0-9'’–-]*$/.test(nextTok);
+          const nextIsContraction =
+            CONTRACTION_WORDS.has(nextNorm) ||
+            /\b[a-z]+(?:['’](?:s|ll|re|ve|d|t|m)|n['’]t)\b/i.test(nextTok);
+
+          if (
+            nextIsCapitalized &&
+            !NON_PLACE_PROPER_NOUNS.has(nextNorm) &&
+            (!nextIsContraction || lowerSuppliedPlaces.some(sp => sp.includes(nextNorm)))
+          ) {
             phraseTokens.push(nextTok);
             j++;
           } else {

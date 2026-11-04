@@ -721,5 +721,289 @@ describe('LLM-REPLY-GROUNDED: Store Integration (submitMessageAsync)', () => {
       );
       expect(r2.valid).toBe(true);
     });
+
+    it('catches expanded top-pick claim variants and enforces alignment against applied top pick', () => {
+      // 1. <place> is (now )?(your|the|our|a)? (new )?(top|best|first) (pick|choice|option|recommendation)
+      const p1Variants = [
+        'Sora Ramen is now your top pick.',
+        'Sora Ramen is your new top pick.',
+        'Sora Ramen is now the top recommendation.',
+        'Sora Ramen is the best choice for lunch.',
+        'Sora Ramen is your top option.',
+      ];
+      for (const phrase of p1Variants) {
+        expect(extractTopPickClaim(phrase, reviewerSuppliedFacts.places)).toBe('Sora Ramen');
+        const res = validateAssistantReply(
+          phrase,
+          reviewerSuppliedFacts,
+          'FIND_LUNCH',
+          { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+        );
+        expect(res.valid).toBe(false);
+        expect(res.reason).toBe('action_mismatch');
+
+        // Positive: matches applied Kissa Hoshi
+        const posPhrase = phrase.replace('Sora Ramen', 'Kissa Hoshi');
+        const posRes = validateAssistantReply(
+          posPhrase,
+          reviewerSuppliedFacts,
+          'FIND_LUNCH',
+          { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+        );
+        expect(posRes.valid).toBe(true);
+      }
+
+      // 2. (your|the|our|a)? (new )?(top|best|first) (pick|choice|option|recommendation) is (now )?<place>
+      const p2Variants = [
+        'Your new top pick is now Sora Ramen.',
+        'The top recommendation is Sora Ramen.',
+        'Our best choice is Sora Ramen.',
+        'Top pick: Sora Ramen.',
+      ];
+      for (const phrase of p2Variants) {
+        expect(extractTopPickClaim(phrase, reviewerSuppliedFacts.places)).toBe('Sora Ramen');
+        const res = validateAssistantReply(
+          phrase,
+          reviewerSuppliedFacts,
+          'FIND_LUNCH',
+          { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+        );
+        expect(res.valid).toBe(false);
+        expect(res.reason).toBe('action_mismatch');
+
+        const posPhrase = phrase.replace('Sora Ramen', 'Kissa Hoshi');
+        const posRes = validateAssistantReply(
+          posPhrase,
+          reviewerSuppliedFacts,
+          'FIND_LUNCH',
+          { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+        );
+        expect(posRes.valid).toBe(true);
+      }
+
+      // 3. (I|I'd) (recommend|suggest|picked|choose) <place>
+      const p3Variants = [
+        'I recommend Sora Ramen.',
+        "I'd suggest Sora Ramen.",
+        'I picked Sora Ramen.',
+        'I choose Sora Ramen.',
+      ];
+      for (const phrase of p3Variants) {
+        expect(extractTopPickClaim(phrase, reviewerSuppliedFacts.places)).toBe('Sora Ramen');
+        const res = validateAssistantReply(
+          phrase,
+          reviewerSuppliedFacts,
+          'FIND_LUNCH',
+          { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+        );
+        expect(res.valid).toBe(false);
+        expect(res.reason).toBe('action_mismatch');
+
+        const posPhrase = phrase.replace('Sora Ramen', 'Kissa Hoshi');
+        const posRes = validateAssistantReply(
+          posPhrase,
+          reviewerSuppliedFacts,
+          'FIND_LUNCH',
+          { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+        );
+        expect(posRes.valid).toBe(true);
+      }
+
+      // 4. go with <place>
+      const p4Variants = [
+        'Go with Sora Ramen.',
+        'You can go with Sora Ramen.',
+      ];
+      for (const phrase of p4Variants) {
+        expect(extractTopPickClaim(phrase, reviewerSuppliedFacts.places)).toBe('Sora Ramen');
+        const res = validateAssistantReply(
+          phrase,
+          reviewerSuppliedFacts,
+          'FIND_LUNCH',
+          { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+        );
+        expect(res.valid).toBe(false);
+        expect(res.reason).toBe('action_mismatch');
+
+        const posPhrase = phrase.replace('Sora Ramen', 'Kissa Hoshi');
+        const posRes = validateAssistantReply(
+          posPhrase,
+          reviewerSuppliedFacts,
+          'FIND_LUNCH',
+          { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+        );
+        expect(posRes.valid).toBe(true);
+      }
+
+      // 5. (recommending|recommend|suggesting|suggest|chosen|chose) <place> as ...
+      const p5Variants = [
+        'Recommending Sora Ramen as your top pick.',
+        'Suggesting Sora Ramen as the best choice.',
+        'Chosen Sora Ramen as your top recommendation.',
+      ];
+      for (const phrase of p5Variants) {
+        expect(extractTopPickClaim(phrase, reviewerSuppliedFacts.places)).toBe('Sora Ramen');
+        const res = validateAssistantReply(
+          phrase,
+          reviewerSuppliedFacts,
+          'FIND_LUNCH',
+          { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+        );
+        expect(res.valid).toBe(false);
+        expect(res.reason).toBe('action_mismatch');
+
+        const posPhrase = phrase.replace('Sora Ramen', 'Kissa Hoshi');
+        const posRes = validateAssistantReply(
+          posPhrase,
+          reviewerSuppliedFacts,
+          'FIND_LUNCH',
+          { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+        );
+        expect(posRes.valid).toBe(true);
+      }
+    });
+
+    it('passes positive regression test suite of >=20 natural, grounded replies without false rejects', () => {
+      const naturalReplyFacts = {
+        times: ['14:15', '2:15 PM'],
+        places: ['Kissa Hoshi', 'Sora Ramen'],
+        distances: ['350 m', '350m', '5m'],
+        ratings: ['4.6', '4.5'],
+        durations: ['12 min', '12 minutes', '5 min', '5 minutes'],
+        prices: [],
+        weather: ['light rain', 'rain'],
+        routes: ['bus', 'train'],
+      };
+
+      const testCases: Array<{
+        reply: string;
+        intent: string;
+        action?: { intent: string; topPickName?: string; deltaMinutes?: number; leaveTime?: string; mode?: string };
+      }> = [
+        // 1. You'll contraction + em-dash + it's contraction
+        {
+          reply: "You'll love Kissa Hoshi — it's calm and close.",
+          intent: 'FIND_LUNCH',
+        },
+        // 2. It's sentence starter + top pick alignment
+        {
+          reply: "It's a calm spot, and Kissa Hoshi is your top pick.",
+          intent: 'FIND_LUNCH',
+          action: { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' },
+        },
+        // 3. Here's contraction + colon clause boundary
+        {
+          reply: "Here's a quieter option: Kissa Hoshi.",
+          intent: 'FIND_LUNCH',
+        },
+        // 4. That's contraction + you'll contraction + delta minutes
+        {
+          reply: "That's done — you'll head out 15 minutes later.",
+          intent: 'LEAVE_LATER',
+          action: { intent: 'LEAVE_LATER', deltaMinutes: 15 },
+        },
+        // 5. Happy sentence starter + light rain weather
+        {
+          reply: "Happy to help! It's light rain today.",
+          intent: 'FIND_LUNCH',
+        },
+        // 6. Honestly sentence starter + don't contraction on unsupported intent
+        {
+          reply: "Honestly, I don't have that information yet.",
+          intent: 'UNSUPPORTED',
+        },
+        // 7. There's contraction + rain weather
+        {
+          reply: "There's light rain today, so grab an umbrella.",
+          intent: 'FIND_LUNCH',
+        },
+        // 8. Of course starter + Taking clause starter + bus route
+        {
+          reply: "Of course. Taking the bus works too.",
+          intent: 'CHANGE_ROUTE',
+          action: { intent: 'CHANGE_ROUTE', mode: 'bus' },
+        },
+        // 9. Done clause starter + You'll contraction + 2:40 PM leave time
+        {
+          reply: "Done. You'll leave at 2:40 PM.",
+          intent: 'LEAVE_LATER',
+          action: { intent: 'LEAVE_LATER', deltaMinutes: 15, leaveTime: '2:40 PM' },
+        },
+        // 10. Sure starter + 350m distance
+        {
+          reply: "Sure thing! Kissa Hoshi is 350m away.",
+          intent: 'FIND_LUNCH',
+        },
+        // 11. Okay starter + we've contraction + 2:40 PM leave time
+        {
+          reply: "Okay, we've updated your departure to 2:40 PM.",
+          intent: 'LEAVE_LATER',
+          action: { intent: 'LEAVE_LATER', deltaMinutes: 15, leaveTime: '2:40 PM' },
+        },
+        // 12. Great starter + em-dash + 4.6 rating
+        {
+          reply: "Great choice — Kissa Hoshi is rated 4.6 stars.",
+          intent: 'FIND_LUNCH',
+        },
+        // 13. No problem starter + Taking clause starter + train route
+        {
+          reply: "No problem at all. Taking the train is an option.",
+          intent: 'CHANGE_ROUTE',
+        },
+        // 14. Alright starter + leaving verb + 15 minutes delta
+        {
+          reply: "Alright, leaving 15 minutes later gives you more time.",
+          intent: 'LEAVE_LATER',
+          action: { intent: 'LEAVE_LATER', deltaMinutes: 15 },
+        },
+        // 15. Certainly starter + It's contraction + 12 minute walk duration
+        {
+          reply: "Certainly! It's about a 12 minute walk.",
+          intent: 'FIND_LUNCH',
+        },
+        // 16. Perfect starter + 2:40 PM leave time
+        {
+          reply: "Perfect, your new departure time is 2:40 PM.",
+          intent: 'LEAVE_LATER',
+          action: { intent: 'LEAVE_LATER', deltaMinutes: 15, leaveTime: '2:40 PM' },
+        },
+        // 17. Let's contraction + colon clause boundary
+        {
+          reply: "Let's check: Kissa Hoshi is currently open.",
+          intent: 'FIND_LUNCH',
+        },
+        // 18. Unfortunately starter + I'm / don't contractions
+        {
+          reply: "Unfortunately, I don't see any other routes right now.",
+          intent: 'UNSUPPORTED',
+        },
+        // 19. Sorry starter + 2:40 PM leave time
+        {
+          reply: "Sorry about that, but 2:40 PM is the latest on-time departure.",
+          intent: 'LEAVE_LATER',
+          action: { intent: 'LEAVE_LATER', deltaMinutes: 15, leaveTime: '2:40 PM' },
+        },
+        // 20. Try starter + em-dash + it's contraction + 350m distance
+        {
+          reply: "Try Kissa Hoshi — it's open now and 350m away.",
+          intent: 'FIND_LUNCH',
+        },
+        // 21. Head starter + semicolon clause boundary + it's contraction + 350m distance
+        {
+          reply: "Head over to Kissa Hoshi; it's only 350m away.",
+          intent: 'FIND_LUNCH',
+        },
+      ];
+
+      expect(testCases.length).toBeGreaterThanOrEqual(20);
+
+      for (const tc of testCases) {
+        const res = validateAssistantReply(tc.reply, naturalReplyFacts, tc.intent, tc.action);
+        if (!res.valid) {
+          console.error(`Failed reply: "${tc.reply}"`, res);
+        }
+        expect(res.valid, `Expected valid for "${tc.reply}", got error: ${res.error}`).toBe(true);
+      }
+    });
   });
 });
