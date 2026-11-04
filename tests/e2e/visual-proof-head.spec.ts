@@ -173,7 +173,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await expect(page.locator('#btn-accept')).toBeVisible();
     await expect(page.locator('#btn-adjust')).toBeVisible();
     await expect(page.locator('#btn-dismiss')).toBeVisible();
-    await expect(page.locator('#btn-why')).toBeVisible();
+    await expect(page.locator('#btn-why')).toHaveCount(0); // HABIT-LEARN addendum 2: no Why action
     await expect(page.locator('#btn-view-trip-details')).toBeVisible();
     await expect(page.locator('#ask-bar')).toBeVisible();
 
@@ -185,39 +185,14 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     });
 
     // -------------------------------------------------------------------------
-    // Capture 02: Why Sheet with Provenance Labels (Rain Departure D2)
+    // Capture 02: HABIT-LEARN addendum 2: no Why sheet / evidence rows on the rain card
     // -------------------------------------------------------------------------
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whyModal = page.locator('.modal-card');
-    await expect(whyModal).toBeVisible();
-    await expect(page.locator('#why-sheet-title')).toContainText("Why you're seeing this");
-
-    const evidenceSection = page.locator('.why-section', { hasText: 'Evidence & Signals' });
-    await expect(evidenceSection).toContainText('Weather forecast');
-    await expect(evidenceSection).toContainText('Forecast conditions');
-    await expect(evidenceSection.locator('.card-badge:has-text("SIMULATED")').first()).toBeVisible();
-
-    const memorySection = page.locator('.why-section', { hasText: 'Memory & Habits' });
-    await expect(memorySection).toBeVisible();
-    await expect(memorySection).toContainText('Rain travel habit');
-    await expect(memorySection).toContainText('Buffer before leaving');
-    await expect(
-      memorySection.locator('.card-badge:has-text("Demo profile · sample preference")').first()
-    ).toBeVisible();
-    await expect(memorySection.locator('.badge-confirmed')).toHaveCount(0);
-
-    await checkNoHorizontalScroll(page);
-    await checkAxe(page);
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    await expect(page.locator('.signal-tile, .now-basis, .v2-candidate-basis')).toHaveCount(0);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `02-d2-rain-why-provenance-${viewName}.png`),
     });
-
-    await page.locator('#btn-close-why').click();
-    await expect(whyModal).not.toBeVisible();
-    await page.waitForTimeout(200);
 
     // -------------------------------------------------------------------------
     // Capture 03: Confirm Proposal -> Me Tab Shows Confirmed (Rain Departure D2)
@@ -331,7 +306,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     // Map canvas, actions, and Ask bar
     await expect(page.locator('.v2-map-canvas')).toBeVisible();
     await expect(page.locator('#btn-dismiss')).toBeVisible();
-    await expect(page.locator('#btn-why')).toBeVisible();
+    await expect(page.locator('#btn-why')).toHaveCount(0); // HABIT-LEARN addendum 2: no Why action
     await expect(page.locator('#ask-bar')).toBeVisible();
 
     await checkNoHorizontalScroll(page);
@@ -342,31 +317,16 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     });
 
     // -------------------------------------------------------------------------
-    // Capture 06: Why Sheet with Provenance Labels (Away Lunch D3)
+    // Capture 06: HABIT-LEARN addendum 2: no Why sheet on the lunch card; the sample profile is
+    // never presented as the user's own
     // -------------------------------------------------------------------------
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whyModal = page.locator('.modal-card');
-    await expect(whyModal).toBeVisible();
-    await expect(page.locator('#why-sheet-title')).toContainText("Why you're seeing this");
-
-    const d3MemorySection = page.locator('.why-section', { hasText: 'Memory & Habits' });
-    await expect(d3MemorySection).toBeVisible();
-    await expect(d3MemorySection).toContainText('Dining taste preferences');
-    await expect(d3MemorySection).toContainText('Demo profile · sample preference');
-    await expect(d3MemorySection.locator('.badge-confirmed')).toHaveCount(0);
-
-    await checkNoHorizontalScroll(page);
-    await checkAxe(page);
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    await expect(page.locator('.signal-tile, .now-basis, .v2-candidate-basis')).toHaveCount(0);
+    await expect(nowCardD3).not.toContainText('You confirmed');
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `06-d3-lunch-why-provenance-${viewName}.png`),
     });
-
-    await page.locator('#btn-close-why').click();
-    await expect(whyModal).not.toBeVisible();
-    await page.waitForTimeout(200);
 
     // -------------------------------------------------------------------------
     // Capture 07: Dismiss with Reason -> Dismissal Quiet State & Proposal in For You
@@ -411,7 +371,7 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     });
   });
 
-  test('Matrix 3: Synced from XMemo — Why Sheet Showing Truthful XMemo Vault Provenance', async ({
+  test('Matrix 3: Synced from XMemo — Me Shows Truthful XMemo Vault Provenance (no Why sheet)', async ({
     page,
   }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile';
@@ -460,28 +420,21 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await selectDemoScene(page, 'rain');
 
     // -------------------------------------------------------------------------
-    // Capture 09: Why Sheet with 'Synced from XMemo' Provenance Badges
+    // Capture 09: HABIT-LEARN addendum 2: no Why sheet; the synced facts are listed on Me
+    // ("What Yori has learned") with their truthful 'Synced from XMemo' provenance
     // -------------------------------------------------------------------------
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whyBackdrop = page.locator('#why-sheet-backdrop');
-    await expect(whyBackdrop).toBeVisible();
-
-    const memorySection = whyBackdrop.locator('section[aria-labelledby="why-memory-heading"]');
-    await expect(memorySection).toBeVisible();
-
-    const syncedBadges = memorySection.locator('.why-item-row .card-badge');
-    await expect(syncedBadges.first()).toBeVisible();
-    const count = await syncedBadges.count();
-    expect(count).toBeGreaterThan(0);
-
-    for (let i = 0; i < count; i++) {
-      const badgeText = await syncedBadges.nth(i).innerText();
-      expect(badgeText).not.toBe('Demo profile · sample preference');
-      expect(badgeText).not.toBe('Confirmed');
-      expect(badgeText).toBe('Synced from XMemo');
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    await expect(page.locator('.signal-tile, .now-basis, .v2-candidate-basis')).toHaveCount(0);
+    await navigateToMe(page, isMobile);
+    for (const key of ['prep_buffer_preference', 'rain_transport_preference']) {
+      const row = page.locator(`#habit-${key}`);
+      await expect(row).toBeVisible();
+      const tag = await row.locator('.memory-meta').innerText();
+      expect(tag).not.toBe('Demo profile · sample preference');
+      expect(tag).not.toBe('Confirmed');
+      expect(tag).not.toBe('You told Yori');
+      expect(tag).toBe('Synced from XMemo');
     }
 
     await checkNoHorizontalScroll(page);
@@ -489,8 +442,5 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `09-xmemo-synced-why-${viewName}.png`),
     });
-
-    await page.locator('#btn-why-sheet-done').click();
-    await expect(whyBackdrop).not.toBeVisible();
   });
 });

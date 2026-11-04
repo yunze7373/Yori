@@ -194,37 +194,30 @@ test.describe('CLOSEOUT_REV3UI: Truthfulness & Provenance Audit', () => {
         await expect(exactConnectedPills).toHaveCount(0);
       });
 
-      test('Live mode: Sources view truthfulness and zero leaks', async ({ page }) => {
+      test('Live mode: context pill opens Connectors (no Sources sheet) truthfully with zero leaks', async ({ page }) => {
         await page.goto('/?mode=live');
         await page.waitForSelector('.app-layout');
 
-        // Open Sources modal via context pill
+        // HABIT-LEARN addendum 2: the pill leads to where sources are managed, not to a Sources sheet
         const statusPill = page.locator('#pill-context-status');
         await expect(statusPill).toBeVisible();
         await statusPill.click();
-
-        const sourcesDialog = page.locator('.sources-modal-card');
-        await expect(sourcesDialog).toBeVisible();
+        await page.waitForSelector('#connectors-page');
+        await expect(page.locator('.sources-modal-card')).toHaveCount(0);
+        await expect(page.locator('#btn-why')).toHaveCount(0);
 
         // 1. No element has data-provenance='fixture'
         const fixtureElements = page.locator('[data-provenance="fixture"]');
         await expect(fixtureElements).toHaveCount(0);
 
         // 2. Forbidden demo strings absent
-        const sourcesText = await sourcesDialog.innerText();
+        const pageText = await page.locator('#connectors-page').innerText();
         for (const forbidden of FORBIDDEN_DEMO_STRINGS) {
-          expect(sourcesText).not.toContain(forbidden);
+          expect(pageText).not.toContain(forbidden);
         }
 
-        // 3. Calendar status in sources view is honest unavailable
-        const calSourceItem = sourcesDialog.locator('#source-item-calendar');
-        if (await calSourceItem.count() > 0) {
-          await expect(calSourceItem).toContainText('Not available yet');
-        }
-
-        // Close dialog
-        await page.locator('#btn-close-why').click();
-        await expect(sourcesDialog).toHaveCount(0);
+        // 3. Calendar status is honest unavailable
+        await expect(page.locator('#connector-row-calendar')).toContainText('Not available yet');
       });
 
       if (vp.width >= 1024) {
@@ -294,13 +287,9 @@ test.describe('CLOSEOUT_REV3UI: Truthfulness & Provenance Audit', () => {
         await expect(demoNowCard).toHaveAttribute('data-provenance', 'fixture');
         await expect(demoNowCard).toContainText('SIMULATED');
 
-        // Sources modal in Demo: labelled simulated
-        await page.locator('#pill-context-status').click();
-        const sourcesDialog = page.locator('.sources-modal-card');
-        await expect(sourcesDialog).toBeVisible();
-        await expect(sourcesDialog).toContainText('SIMULATED');
-        await expect(sourcesDialog.locator('.simulated-badge').first()).toBeVisible();
-        await page.locator('#btn-close-why').click();
+        // HABIT-LEARN addendum 2: no Why action and no Sources sheet on the Demo home either
+        await expect(page.locator('#btn-why')).toHaveCount(0);
+        await expect(page.locator('.sources-modal-card')).toHaveCount(0);
 
         // For You in Demo: labelled fixture and references sample demo profile
         if (vp.width >= 1024) {

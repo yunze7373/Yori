@@ -303,9 +303,11 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(page.locator('.v2-illustration-badge')).toHaveCount(3);
     await expect(page.locator('.v2-map-card.compact')).toBeVisible();
 
-    // Candidate basis displays honest Demo profile · sample and NEVER Confirmed
+    // HABIT-LEARN addendum 2: candidate cards state no taste basis (no 'Demo profile · sample'
+    // reason line) and never claim a confirmation.
     const candidateList = page.locator('.v2-candidate-list');
-    await expect(candidateList).toContainText('Demo profile · sample');
+    await expect(candidateList.locator('.v2-candidate-basis')).toHaveCount(0);
+    await expect(candidateList).not.toContainText('Based on taste');
     await expect(candidateList).not.toContainText('Confirmed');
 
     // Lunch axe check & screenshot
@@ -324,7 +326,7 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(page.locator('#ask-bar')).toHaveCount(0);
   });
 
-  test('V1b: TripDetail expanded view with mode tabs, schematic map, timing, why provenance, and back navigation', async ({ page }) => {
+  test('V1b: TripDetail expanded view with mode tabs, schematic map, timing, no Why section, and back navigation', async ({ page }) => {
     await page.goto('/?ui=v2');
     await page.waitForSelector('.app-layout');
     await selectDemoScene(page, 'rain');
@@ -393,17 +395,16 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(mapCard).toBeVisible();
     await expect(mapCard).toContainText('Rain forecast · simulated');
 
-    // "Why this plan?" section with honest provenance chips
-    const whySection = tripDetail.locator('.v2-why-plan-card');
-    await expect(whySection).toBeVisible();
-    await expect(whySection).toContainText('Why this plan?');
-    await expect(whySection).toContainText('Demo profile · sample');
+    // HABIT-LEARN addendum 2: no "Why this plan?" explanation section and no Why action
+    await expect(tripDetail.locator('.v2-why-plan-card')).toHaveCount(0);
+    await expect(tripDetail.locator('.habit-note')).toHaveCount(0);
+    await expect(page.locator('#btn-why')).toHaveCount(0);
     // Data honesty check: zero star ratings, review counts, or false "live" claims on simulated data
     const tripDetailText = await tripDetail.innerText();
     expect(tripDetailText).not.toContain('★');
     expect(tripDetailText).not.toContain('reviews');
     expect(tripDetailText).not.toContain('live route');
-    expect(tripDetailText).toContain('route estimate (simulated)');
+    expect(tripDetailText).not.toContain('Why this plan?');
 
     // Axe audit
     await checkAxe(page);
@@ -680,7 +681,8 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(busCard.locator('.v2-option-label')).toHaveText('Bus · leave 2:15 PM');
     await expect(busCard.locator('.v2-option-badge')).toHaveText('Alternative');
     await expect(busCard.locator('.v2-option-meta')).toHaveText('40 min bus + 5m margin');
-    await expect(page.locator('.habit-note')).toHaveText('You usually prefer driving when it rains.');
+    // HABIT-LEARN addendum 2: the trip detail no longer carries a "Why this plan?" habit note
+    await expect(page.locator('.habit-note')).toHaveCount(0);
 
     // Return to Home
     await page.locator('#trip-detail-back-btn').click();
@@ -756,11 +758,8 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(page.locator('.now-card')).toBeVisible();
     await expect(page.locator('#now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
 
-    // The Why sheet tags the remembered routine "You told Yori"
-    await page.locator('#btn-why').click();
-    await expect(page.locator('#why-sheet-backdrop')).toBeVisible();
-    await expect(page.locator('#why-sheet-backdrop .badge-confirmed').first()).toHaveText('You told Yori');
-    await page.locator('#btn-close-why').click();
+    // HABIT-LEARN addendum 2: no Why action or Why sheet; the plan simply uses the routine
+    await expect(page.locator('#btn-why')).toHaveCount(0);
     await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
 
     // --- Part 6 (Conversational Shell) Verbatim Quotes ---

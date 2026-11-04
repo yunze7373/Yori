@@ -179,37 +179,9 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
 
     await page.goto('/?ui=v1');
 
-    // 1. Why Sheet Truthful Provenance Verification (Reviewer Finding P2)
-    // Open Why sheet on Home view
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whyBackdrop = page.locator('#why-sheet-backdrop');
-    await expect(whyBackdrop).toBeVisible();
-
-    // Verify remote-only synced habits carry truthful 'Synced from XMemo' badges
-    const memorySection = whyBackdrop.locator('section[aria-labelledby="why-memory-heading"]');
-    await expect(memorySection).toBeVisible();
-
-    // Assert that badges for synced items strictly say 'Synced from XMemo'
-    const syncedBadges = memorySection.locator('.why-item-row .card-badge');
-    await expect(syncedBadges.first()).toBeVisible();
-    const count = await syncedBadges.count();
-    expect(count).toBeGreaterThan(0);
-
-    for (let i = 0; i < count; i++) {
-      const badgeText = await syncedBadges.nth(i).innerText();
-      // Must NOT be demo sample and must NOT claim user confirmation
-      expect(badgeText).not.toBe('Demo profile · sample preference');
-      expect(badgeText).not.toBe('Confirmed');
-      expect(badgeText).not.toBe('You told Yori');
-      expect(badgeText).toBe('Synced from XMemo');
-    }
-
-    // Close Why sheet
-    await page.locator('#btn-why-sheet-done').click();
-    await expect(whyBackdrop).not.toBeVisible();
+    // 1. HABIT-LEARN addendum 2: there is no Why sheet; truthful provenance is checked on Me below
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
 
     // 2. Me Tab Truthful Provenance Verification
     await goToMeTab(page, isMobile);

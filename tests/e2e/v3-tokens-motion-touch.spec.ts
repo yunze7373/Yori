@@ -213,18 +213,19 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     await page.locator('#conversation-close-btn').click();
     await expect(page.locator('#conversation-overlay')).toHaveCount(0);
 
-    // --- Screen 5: Why Sheet ---
-    const whyBtn = page.locator('#btn-why').first();
-    if (await whyBtn.isVisible()) {
-      await whyBtn.click();
-      await page.waitForSelector('#why-sheet-backdrop');
-      await page.waitForTimeout(300); // wait for entrance animation to settle to scale(1)
+    // --- Screen 5: Adjust dialog (HABIT-LEARN addendum 2: there is no Why sheet any more) ---
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    const adjustBtn = page.locator('#btn-adjust').first();
+    if (await adjustBtn.isVisible()) {
+      await adjustBtn.click();
+      await page.waitForSelector('#adjust-dialog-backdrop');
+      await page.waitForTimeout(300); // wait for entrance animation to settle
 
-      await assertTouchTarget('#btn-close-why', 'Why Sheet Top Close Button');
-      await assertTouchTarget('#btn-why-sheet-done', 'Why Sheet Done Button');
+      await assertTouchTarget('#btn-close-adjust', 'Adjust Dialog Close Button');
+      await assertTouchTarget('#btn-adjust-remember', 'Adjust Remember Button');
 
-      await page.locator('#btn-close-why').click();
-      await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+      await page.locator('#btn-close-adjust').click();
+      await expect(page.locator('#adjust-dialog-backdrop')).toHaveCount(0);
     }
   });
 
@@ -268,17 +269,17 @@ test.describe('V3: Style Tokens, Component Polish, Touch Targets & Micro-Motion 
     await page.locator('#conversation-close-btn').click();
     await expect(overlay).toHaveCount(0);
 
-    // 3. Switch scene and open Why sheet under reduced motion
+    // 3. Switch scene and open the Adjust dialog under reduced motion (no Why sheet exists now)
     await selectDemoScene(page, 'rain');
-    const whyBtn = page.locator('#btn-why').first();
-    await whyBtn.click();
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await page.locator('#btn-adjust').first().click();
 
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-    await expect(page.locator('#why-sheet-title')).toContainText("Why you're seeing this");
+    const adjustSheet = page.locator('#adjust-dialog-backdrop');
+    await expect(adjustSheet).toBeVisible();
+    await expect(page.locator('#adjust-dialog-title')).toContainText('Adjust Departure Timing');
 
-    await page.locator('#btn-close-why').click();
-    await expect(whySheet).toHaveCount(0);
+    await page.locator('#btn-close-adjust').click();
+    await expect(adjustSheet).toHaveCount(0);
 
     // Verify axe accessibility under reduced motion
     await checkAxe(page);

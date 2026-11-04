@@ -160,40 +160,7 @@ export function renderTripDetail(vm: TripDetailVM): string {
       <!-- Prominent Labelled Schematic Route Map -->
       ${vm.map ? renderMapCard(vm.map, { isLive }) : ''}
 
-      <!-- "Why this plan?" Provenance Section -->
-      <section class="card v2-why-plan-card" aria-label="Why this plan?">
-        <h2 class="v2-section-heading">Why this plan?</h2>
-        ${
-          vm.whyDerivation
-            ? `<p class="v2-why-derivation">${escapeHtml(vm.whyDerivation)}</p>`
-            : ''
-        }
-
-        ${
-          vm.whyHabits.length > 0
-            ? `
-          <div class="habit-note" data-source-ref="rain_transport_preference.habitNote" data-slot="domain">You usually prefer driving when it rains.</div>
-          <div class="v2-habits-provenance-list">
-            ${vm.whyHabits
-              .map(
-                habit => `
-              <div class="v2-habit-row">
-                <div class="v2-habit-info">
-                  <span class="v2-habit-name">${escapeHtml(habit.label)}</span>
-                  <span class="v2-habit-val">${escapeHtml(habit.value)}</span>
-                </div>
-                <span class="v2-provenance-chip ${habit.isConfirmed ? 'confirmed' : 'sample'}">
-                  ${escapeHtml(habit.provenanceText)}
-                </span>
-              </div>
-            `
-              )
-              .join('')}
-          </div>
-        `
-            : ''
-        }
-      </section>
+      <!-- HABIT-LEARN addendum 2: no "Why this plan?" explanation on the detail -->
 
       <!-- Action Row -->
       <div class="action-row v2-detail-actions" aria-label="Plan Actions">

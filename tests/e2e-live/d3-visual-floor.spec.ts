@@ -168,7 +168,7 @@ test.describe('D3-VISUAL-PASS floor', () => {
 
       // (f) at 390 the top candidate leads above the fold: name, distance, open status, reason, Directions
       if (vp.width === 390) {
-        for (const sel of ['.v2-candidate-name', '.v2-distance-chip', '.v2-open-chip', '.v2-candidate-basis', '.v2-directions-btn']) {
+        for (const sel of ['.v2-candidate-name', '.v2-distance-chip', '.v2-open-chip', '.v2-candidate-model-reason', '.v2-directions-btn']) {
           const box = await hero.locator(sel).first().boundingBox();
           expect.soft(box && box.y + box.height <= vp.height - 90, `(f) ${sel} above the fold (clear of the Ask bar)`).toBe(true);
         }

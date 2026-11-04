@@ -310,10 +310,6 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                     ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip">Quiet</span>` : ''}
                     ${c.vegetarian ? `<span class="v2-veg-chip">Vegetarian</span>` : ''}
                   </div>
-                  <div class="desktop-candidate-basis">
-                    <span class="sparkle-icon" aria-hidden="true">✨</span>
-                    <span>${escapeHtml(c.basis)}</span>
-                  </div>
                 </div>
               </div>
             `
@@ -453,7 +449,7 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                       ${typeof (c as any).rating === 'number' && (c as any).provenance === 'google' ? `<span class="v2-rating-chip">★ ${escapeHtml(((c as any).rating as number).toFixed(1))}</span>` : ''}
                       <span class="v2-source-chip">${(c as any).provenance === 'google' ? 'Powered by Google' : 'OpenStreetMap via Overpass (ODbL)'}</span>
                     </div>
-                    ${(c as any).rankingExplanation ? `<div class="desktop-candidate-basis">${escapeHtml((c as any).rankingExplanation)}</div>` : ''}
+
                   </div>
                 </div>
               `
@@ -585,10 +581,6 @@ export function renderDesktopRightPanel(opts: DesktopPanelRenderOptions): string
                     ${c.cuisine ? `<span class="v2-cuisine-chip">${escapeHtml(c.cuisine)}</span>` : ''}
                     ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip">Quiet</span>` : ''}
                     ${c.vegetarian ? `<span class="v2-veg-chip">Vegetarian</span>` : ''}
-                  </div>
-                  <div class="desktop-candidate-basis">
-                    <span class="sparkle-icon" aria-hidden="true">✨</span>
-                    <span>${escapeHtml(c.basis)}</span>
                   </div>
                 </div>
               </div>

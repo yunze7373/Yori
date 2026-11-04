@@ -8,7 +8,7 @@
  * 1. Hook & Clear Departure (D1)
  * 2. Rain Re-Plan (D2) with Umbrella & Habit-ranked Transit
  * 3. Away Dining (D3) with Mock Venue Disclosure & Busy Lunch (D4) Quiet State
- * 4. Explainable Review Loop (Why Sheet & Adjust Dialog proposal creation)
+ * 4. Adjust & Remember (HABIT-LEARN: no Why sheet; remembered at once)
  * 5. Sovereign Memory & The Me Tab (Confirm-only proposal promotion & budget meter)
  * 6. Reasoning Demo with Model Off (Deterministic multi-candidate fallback invariance)
  * 7. Closing View & Tagline
@@ -173,20 +173,12 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
       'Mock places for this demo; real listings come from a place provider.'
     );
 
-    // Verify D3 Why Sheet memory section shows sample-profile labelling
-    const d3WhyBtn = page.locator('#btn-why');
-    await d3WhyBtn.click();
-    const d3WhyModal = page.locator('.modal-card');
-    await expect(d3WhyModal).toBeVisible();
-    await page.waitForTimeout(300);
-    const d3MemorySection = page.locator('.why-section', { hasText: 'Memory & Habits' });
-    await expect(d3MemorySection).toBeVisible();
-    await expect(d3MemorySection).toContainText('Dining taste preferences');
-    await expect(d3MemorySection).toContainText('Demo profile · sample preference');
-    await expect(d3MemorySection.locator('.badge-confirmed')).toHaveCount(0);
-    await page.locator('#btn-close-why').click();
-    await expect(d3WhyModal).not.toBeVisible();
-    await page.waitForTimeout(200);
+    // HABIT-LEARN addendum 2: no Why action or explanation chrome on the lunch card; the card makes no
+    // claim that the sample profile is the user's own.
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    await expect(page.locator('.signal-tile, .now-basis, .v2-candidate-basis')).toHaveCount(0);
+    await expect(nowCardD3).not.toContainText('You confirmed');
 
     // P3: Ensure first lunch option tile is scrolled above bottom tab bar on mobile
     const firstLunchTile = nowCardD3.locator('.options-grid .option-tile').first();
@@ -233,53 +225,23 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await expect(page.locator('.card-badge:has-text("SIMULATED")')).toHaveCount(0);
 
     // -------------------------------------------------------------------------
-    // Step 4: The Explainable Review Loop (Why Sheet & Adjust Dialog)
+    // Step 4: Adjust Dialog (HABIT-LEARN addendum 2: no Why sheet)
     // -------------------------------------------------------------------------
-    // Return to Rain scene to inspect Why Sheet
+    // HABIT-LEARN addendum 2: the rain card recommends without a Why action or evidence rows
     await sceneSelect.selectOption('rain');
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whyModal = page.locator('.modal-card');
-    await expect(whyModal).toBeVisible();
-    await expect(page.locator('#why-sheet-title')).toContainText("Why you're seeing this");
-    // Wait for modal fade-in animation (0.2s) to settle for Axe color contrast check
-    await page.waitForTimeout(300);
-
-    // Verify Why explanation does not falsely claim "live route estimates" on simulated data
-    const whyModalText = await whyModal.innerText();
-    expect(whyModalText).not.toContain('live route');
-    expect(whyModalText).toContain('route estimate (simulated)');
-
-    // Verify weather evidence in Why Sheet has explicit simulated labelling
-    const evidenceSection = page.locator('.why-section', { hasText: 'Evidence & Signals' });
-    await expect(evidenceSection).toContainText('Weather forecast');
-    await expect(evidenceSection).toContainText('Forecast conditions');
-    await expect(evidenceSection).toContainText('Recorded at 1:35 PM');
-    await expect(evidenceSection).toContainText('SIMULATED');
-
-    // Verify Memory & Habits section in D2 shows sample-profile labelling
-    const d2MemorySection = page.locator('.why-section', { hasText: 'Memory & Habits' });
-    await expect(d2MemorySection).toBeVisible();
-    await expect(d2MemorySection).toContainText('Rain travel habit');
-    await expect(d2MemorySection).toContainText('Buffer before leaving');
-    await expect(d2MemorySection).toContainText('Time to get ready');
-    await expect(
-      d2MemorySection.locator('.card-badge:has-text("Demo profile · sample preference")')
-    ).toHaveCount(3);
-    await expect(d2MemorySection.locator('.badge-confirmed')).toHaveCount(0);
+    await expect(page.locator('#btn-accept')).toBeVisible();
+    await expect(page.locator('#btn-adjust')).toBeVisible();
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    await expect(page.locator('.signal-tile, .now-basis, .v2-candidate-basis')).toHaveCount(0);
+    const rainCardText = await page.locator('.now-card').innerText();
+    expect(rainCardText).not.toContain('live route');
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `05-why-sheet-${viewName}.png`),
     });
-
-    // Close Why Sheet
-    await page.locator('#btn-close-why').click();
-    await expect(whyModal).not.toBeVisible();
-    await page.waitForTimeout(200);
 
     // Open Adjust Dialog
     const adjustBtn = page.locator('#btn-adjust');
@@ -370,30 +332,13 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
       path: path.join(EVIDENCE_DIR, `08-me-confirmed-preference-${viewName}.png`),
     });
 
-    // Acceptance (1): Verify that returning to Why Sheet now shows user-confirmed facts
-    // with 'Confirmed' badge while unchanged sample facts still show 'Demo profile · sample preference'
+    // Acceptance (1): returning Home, the plan already uses the remembered routine (no Why sheet to inspect)
     await navigateToToday(page, isMobile);
     // Verifies the recomputed timing line reflects 25m prep & 10m buffer: 3:00 PM - 25m drive - 10m buffer = leave 2:25 PM; ready 2:00 PM
     await expect(page.locator('#now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
-
-    await page.locator('#btn-why').click();
-    const postWhyModal = page.locator('.modal-card');
-    await expect(postWhyModal).toBeVisible();
-    await page.waitForTimeout(300);
-    const postWhyMemory = page.locator('.why-section', { hasText: 'Memory & Habits' });
-    // Remembered facts show 'You told Yori'
-    await expect(postWhyMemory.locator('.badge-confirmed')).toHaveCount(2);
-    await expect(postWhyMemory.locator('.badge-confirmed').first()).toHaveText('You told Yori');
-    await expect(postWhyMemory).toContainText('Buffer before leaving');
-    await expect(postWhyMemory).toContainText('Time to get ready');
-    // Unchanged sample fact (rain habit) still shows 'Demo profile · sample preference'
-    await expect(
-      postWhyMemory.locator('.card-badge:has-text("Demo profile · sample preference")')
-    ).toHaveCount(1);
-    await expect(postWhyMemory).toContainText('Rain travel habit');
-    await page.locator('#btn-close-why').click();
-    await expect(postWhyModal).not.toBeVisible();
-    await page.waitForTimeout(200);
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    await expect(page.locator('.signal-tile, .now-basis, .v2-candidate-basis')).toHaveCount(0);
 
     // -------------------------------------------------------------------------
     // Step 6: Reasoning Demo (Model Off) & Deterministic Fallback Invariance

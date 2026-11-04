@@ -137,8 +137,12 @@ test.describe('V5-LUNCH: PlacesProvider Seam, Dynamic Recommendations, Grounding
     expect(bundleProbe.habitProvenance).toBe('sample');
     expect(bundleProbe.habitBasis).toContain('Demo profile · sample');
 
-    await expect(topCard).toContainText('Demo profile · sample');
+    // HABIT-LEARN addendum 2: the card states no taste reason (the sample provenance stays in the
+    // evidence bundle above); it never claims a confirmation and stays labelled simulated
+    await expect(topCard.locator('.v2-candidate-basis')).toHaveCount(0);
+    await expect(topCard).not.toContainText(/Based on taste|Demo profile/);
     await expect(topCard).not.toContainText('You confirmed');
+    await expect(topCard).toContainText('simulated');
 
     // Touch targets check: Directions button >= 44px
     const directionsBtn = topCard.locator('.v2-directions-btn');

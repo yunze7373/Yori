@@ -187,22 +187,15 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     );
     await page.waitForTimeout(2500);
 
-    // 4. Map & Why Provenance
-    await page.locator('#btn-why').click();
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-    await expect(page.locator('#why-sheet-title')).toContainText("Why you're seeing this");
-    await expect(whySheet).toContainText('Recorded at 1:35 PM');
-    await expect(whySheet).toContainText('Rain travel habit');
+    // 4. HABIT-LEARN addendum 2: no Why action or Why sheet; the map callout stays on the detail
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
     await recordStep(
-      'Map & Why Provenance',
-      'Open "Why you\'re seeing this" provenance sheet',
-      'Why sheet details weather signals (Recorded at 1:35 PM) and sample profile habit',
-      'Memory section titled "Memory & Habits", labelled "Demo profile · sample preference"'
+      'No Why, the plan just fits',
+      'Home shows the rain plan with Accept and Adjust only',
+      'No Why action, no evidence rows, no "Based on …" footer',
+      'HABIT-LEARN addendum 2 (owner 14:27 JST): users do not need Why'
     );
-    await page.waitForTimeout(2500);
-    await page.locator('#btn-close-why').click();
-    await expect(whySheet).toHaveCount(0);
     await page.waitForTimeout(1000);
 
     // 5. Chat 'leave later'
@@ -261,7 +254,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(nowCard).toBeVisible();
     await expect(nowCard).toContainText('2:45 PM');
     await expect(nowCard).toContainText('2:25 PM');
-    await expect(page.locator('#btn-why')).toContainText('Why');
+    await expect(page.locator('#btn-why')).toHaveCount(0); // HABIT-LEARN addendum 2: Accept + Adjust only
     await recordStep(
       'Collapse to Updated Home',
       'Conversation auto-collapses to refreshed Living Context',
@@ -511,24 +504,13 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
       'Re-ranked Candidates on Home',
       'Conversation collapses back to Home with re-ranked list',
       'Demo Place B · Salad moves to #1 position and is highlighted as selected',
-      'Why button cites: "Because you asked: quieter + vegetarian · this time only"'
+      'The re-ranked list simply shows the quieter vegetarian pick (no reason line)'
     );
     await page.waitForTimeout(2500);
 
-    // 6. Inspect Why Citation ('Because you asked: quieter, vegetarian')
-    await page.locator('#btn-why').click();
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-    await expect(whySheet).toContainText('Because you asked: quieter, vegetarian · this time only');
-    await recordStep(
-      'Inspect Why Citation',
-      'Open Why sheet on re-ranked lunch recommendation',
-      'Why sheet cites: "Because you asked: quieter, vegetarian · this time only" alongside taste basis',
-      'Provenance attribution visible for in-session conversational filter'
-    );
-    await page.waitForTimeout(2500);
-    await page.locator('#btn-close-why').click();
-    await expect(whySheet).toHaveCount(0);
+    // 6. HABIT-LEARN addendum 2: the re-ranked card states no reason and there is no Why sheet
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('.v2-candidate-basis')).toHaveCount(0);
     await page.waitForTimeout(1000);
 
     // 7. Quiet State & Sovereignty

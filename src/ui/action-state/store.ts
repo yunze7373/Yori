@@ -270,7 +270,7 @@ export class DefaultActionStateStore implements ActionStateStore {
         : isFuel
         ? "I can help find nearby gas stations: ask 'find gas', 'Why this station?', 'Looks good' to confirm, or 'Undo' to restore."
         : isLunch
-        ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Why this restaurant?', 'Looks good' to confirm, or 'Undo' to restore."
+        ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Looks good' to confirm, or 'Undo' to restore."
         : "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
       this.transcriptList.push({
         id: `msg-${Date.now()}-welcome`,
@@ -1581,7 +1581,7 @@ export class DefaultActionStateStore implements ActionStateStore {
     const fallbackText = isFuel
       ? "I can help find nearby gas stations: ask 'find gas', 'Why this station?', 'Looks good' to confirm, or 'Undo' to restore."
       : isLunch
-      ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Why this restaurant?', 'Looks good' to confirm, or 'Undo' to restore."
+      ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Looks good' to confirm, or 'Undo' to restore."
       : "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
     const responseText = cmd.honestAnswer ?? fallbackText;
 

@@ -168,7 +168,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
     await page.screenshot({ path: screenshotPath, fullPage: true });
   });
 
-  test('07. Surface: reasoning-demo (reordered + why-order sheet)', async ({ page }, testInfo) => {
+  test('07. Surface: reasoning-demo (reordered; no Why action)', async ({ page }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
 
@@ -224,41 +224,14 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
     await expect(nowCard).toBeVisible();
     await expect(nowCard).toHaveAttribute('data-plan-id', /^plan-lunch-/);
 
-    // Open Why Sheet to reveal "Why this order"
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-    await expect(page.locator('#why-order-section')).toBeVisible();
+    // HABIT-LEARN addendum 2: the reorder simply shows; there is no Why action or Why sheet.
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
 
     const screenshotPath = path.join(EVIDENCE_DIR, `reasoning-demo-${viewName}.png`);
-    await page.screenshot({ path: screenshotPath, fullPage: true });
-  });
-
-  test('08. Surface: why-sheet (rain)', async ({ page }, testInfo) => {
-    const isMobile = testInfo.project.name === 'mobile';
-    const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
-
-    await page.goto('/?ui=v1');
-    await page.locator('#scene-select').selectOption('rain');
-
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-    await expect(page.locator('#why-evidence-heading')).toBeVisible();
-
-    await checkNoHorizontalScroll(page);
-    await checkAxe(page);
-
-    const screenshotPath = path.join(EVIDENCE_DIR, `why-sheet-${viewName}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
   });
 

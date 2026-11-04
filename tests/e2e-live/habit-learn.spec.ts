@@ -101,6 +101,13 @@ async function expectNoConfirmControls(page: Page, where: string) {
   expect(text, `${where}: a "Remember …?" question is shown`).not.toMatch(/Remember (preference|departure|preferred)[^?]*\?/);
 }
 
+/** ADDENDUM 2: no Why action, no Why sheet, no evidence rows, no "Based on …" footer. */
+async function expectNoWhy(page: Page, where: string) {
+  await expect(page.locator('#btn-why'), `${where}: Why action`).toHaveCount(0);
+  await expect(page.locator('#why-sheet'), `${where}: Why sheet`).toHaveCount(0);
+  await expect(page.locator('.signal-tile, .now-basis, .v2-candidate-basis, .desktop-candidate-basis'), `${where}: evidence rows`).toHaveCount(0);
+}
+
 async function openMe(page: Page, isMobile: boolean) {
   if (isMobile) await page.locator('#tab-me').click();
   else await page.locator('#desktop-nav-me').click();
@@ -126,6 +133,7 @@ test.describe('HABIT-LEARN: Yori learns from your choices and applies it without
       await expect(heroName(page)).toHaveText('Mid Ramen');
       await expect(heroBasis(page)).not.toContainText('You often pick');
       await expectNoConfirmControls(page, 'Home lunch (before)');
+      await expectNoWhy(page, 'Home lunch (before)');
       await page.locator('#btn-accept').click();
       await expect(page.locator('#btn-undo-accept')).toBeVisible();
       // One lunch teaches nothing yet.
@@ -139,36 +147,38 @@ test.describe('HABIT-LEARN: Yori learns from your choices and applies it without
       await expect(page.locator('#btn-undo-accept')).toBeVisible();
       await expectNoConfirmControls(page, 'Home lunch (after learning)');
 
-      // Next search: a cafe is now closer, but ramen leads with the learned basis.
+      // Next search: a cafe is now closer, but ramen leads. ADDENDUM 2: the habit shows only as the
+      // choice itself; the card states no reason, has no Why action and no evidence rows.
       phase = 'cafe-nearest';
       await openLunch(page);
       await expect(heroName(page)).toHaveText('Mid Ramen');
-      await expect(heroBasis(page)).toContainText('You often pick ramen · 2 of your last 2 lunches');
-      // Visible, not only in the DOM: the card's reason line leads with the learned basis.
-      await expect(page.locator('#candidate-model-reason')).toContainText('Mid Ramen: you often pick ramen · 2 of your last 2 lunches.');
       await expect(page.locator('.v2-candidate-card').nth(1).locator('.v2-candidate-name')).toHaveText('Near Cafe');
+      // The lunch card itself (and its candidates) states no reason; the habit shows as the order.
+      const statedReasons = await page.locator('.now-card').first().evaluate(el =>
+        (el.textContent ?? '').match(/[^.\n]{0,60}(You often pick|Matches your confirmed taste|Based on (your|taste))[^.\n]{0,60}/g) ?? []
+      );
+      expect(statedReasons).toEqual([]);
+      await expectNoWhy(page, 'Home lunch (after learning)');
       await page.evaluate(() => window.scrollTo(0, 0));
       await shot(page, '01-home-lunch-learned', vp.name);
 
-      // Why: the same basis, tagged "Learned from your choices".
-      await page.locator('#btn-why').click();
-      const why = page.locator('#why-sheet');
-      await expect(why).toBeVisible();
-      await expect(why).toContainText('Lunch habit');
-      await expect(why).toContainText('You often pick ramen · 2 of your last 2 lunches');
-      await expect(why).toContainText('Learned from your choices');
-      await expect(why).not.toContainText('You confirmed');
-      await shot(page, '02-why-sheet-learned', vp.name);
-      await page.keyboard.press('Escape');
+      // The detail describes the place; no reason line, no Why.
+      await page.locator('.v2-candidate-card').first().locator('.v2-view-detail-link').click();
+      await expect(page.locator('.v2-restaurant-detail')).toBeVisible();
+      await expect(page.locator('.v2-restaurant-detail')).not.toContainText(/You often pick|Based on taste|Why/);
+      await expectNoWhy(page, 'Restaurant detail');
+      await shot(page, '02-detail-no-why', vp.name);
+      await page.locator('#restaurant-detail-back-btn').click();
 
-      // Ask "why this restaurant?": the same basis leads the answer; no confirm controls.
+      // Ask: no "Why this restaurant?" suggestion; asked anyway -> one short plain sentence.
       await page.locator('#ask-bar').click();
+      await expect(page.locator('#conversation-transcript')).not.toContainText('Why this restaurant?');
       const input = page.locator('#conversation-input');
       await input.fill('why this restaurant?');
       await input.press('Enter');
-      await expect(page.locator('#conversation-transcript')).toContainText('Mid Ramen is first because you often pick ramen · 2 of your last 2 lunches', { timeout: 10000 });
+      await expect(page.locator('#conversation-transcript')).toContainText('Mid Ramen, because you often pick ramen.', { timeout: 10000 });
       await expectNoConfirmControls(page, 'Ask');
-      await shot(page, '03-ask-why-learned', vp.name);
+      await shot(page, '03-ask-why-plain', vp.name);
       await page.keyboard.press('Escape');
 
       // Me: "What Yori has learned" lists the habit with its basis and a quiet Forget.
@@ -187,7 +197,6 @@ test.describe('HABIT-LEARN: Yori learns from your choices and applies it without
 
       await openLunch(page);
       await expect(heroName(page)).toHaveText('Near Cafe');
-      await expect(page.locator('.v2-candidate-list')).not.toContainText('You often pick');
       await page.evaluate(() => window.scrollTo(0, 0));
       await shot(page, '06-home-after-forget', vp.name);
       await openMe(page, isMobile);

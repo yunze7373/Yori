@@ -170,14 +170,16 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     const candidateCards = page.locator('.v2-candidate-card');
     expect(await candidateCards.count()).toBeGreaterThanOrEqual(2);
     await expect(candidateCards.first()).toContainText('Demo Place A · Ramen');
-    await expect(candidateCards.first().locator('.v2-candidate-basis')).toContainText('taste');
+    // HABIT-LEARN addendum 2: cards recommend without a taste-basis line
+    await expect(candidateCards.first().locator('.v2-candidate-basis')).toHaveCount(0);
+    await expect(candidateCards.first()).not.toContainText(/Based on taste|Matches your confirmed taste/);
     await expect(candidatesHero.locator('.mock-places-notice')).toBeVisible();
 
     // Action buttons visible
     await expect(candidatesHero.locator('#btn-accept')).toBeVisible();
     await expect(candidatesHero.locator('#btn-adjust')).toBeVisible();
     await expect(candidatesHero.locator('#btn-dismiss')).toHaveText('Not now');
-    await expect(candidatesHero.locator('#btn-why')).toBeVisible();
+    await expect(candidatesHero.locator('#btn-why')).toHaveCount(0);
 
     await captureTimelineScreenshot(page, `02-s1-lunch-away-${viewSuffix}.png`);
 
@@ -447,7 +449,8 @@ test.describe('CONTEXT-TIMELINE: One Continuous Simulated Day (P0 North-Star)', 
     await assertTouchTarget(page, '#btn-accept', 'Hero Accept Button');
     await assertTouchTarget(page, '#btn-adjust', 'Hero Adjust Button');
     await assertTouchTarget(page, '#btn-dismiss', 'Hero Not Now Button');
-    await assertTouchTarget(page, '#btn-why', 'Hero Why Button');
+    // HABIT-LEARN addendum 2: no Why action on the hero (Accept + Adjust only)
+    await expect(page.locator('#btn-why')).toHaveCount(0);
 
     // Wait for crossfade transition to settle before accessibility check
     await page.waitForTimeout(450);

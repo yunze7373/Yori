@@ -556,7 +556,8 @@ describe('V1b: TripDetailVM and RestaurantDetailVM Derivation (§8 D1/D4)', () =
       expect(restVM.simulatedNotice).toContain('simulated');
       expect(restVM.photo.simulatedBadge).toContain('simulated');
       expect(restVM.directions[0]!.durationText).toContain('simulated route');
-      expect(restVM.basis).toContain('Demo profile · sample');
+      // HABIT-LEARN addendum 2: the detail describes the place; it never states a taste reason.
+      expect(restVM.basis).not.toMatch(/Based on taste|Demo profile|You confirmed/);
 
       // 2. Trip Detail
       const tripVM = deriveTripDetailVM({
@@ -580,7 +581,7 @@ describe('V1b: TripDetailVM and RestaurantDetailVM Derivation (§8 D1/D4)', () =
         plan: d1LunchPlan,
         spatialEvidence: null,
       });
-      expect(unconfirmedVM.basis).toContain('Demo profile · sample');
+      expect(unconfirmedVM.basis).not.toMatch(/Based on taste|Demo profile/);
 
       const confirmedVM = deriveRestaurantDetailVM({
         candidateId: 'cand-1',
@@ -588,7 +589,9 @@ describe('V1b: TripDetailVM and RestaurantDetailVM Derivation (§8 D1/D4)', () =
         spatialEvidence: null,
         userConfirmedKeys: new Set(['lunch_cuisine_preference']),
       });
-      expect(confirmedVM.basis).toContain('You confirmed');
+      // Confirmation changes nothing on the detail: no reason line either way.
+      expect(confirmedVM.basis).toBe(unconfirmedVM.basis);
+      expect(confirmedVM.basis).not.toContain('You confirmed');
     });
   });
 });

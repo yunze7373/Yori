@@ -112,32 +112,16 @@ test.describe('DESKTOP-PARITY-1: Desktop Parity with Owner Reference Dashboard',
     const rationale = heroCard.locator('.now-rationale-line');
     await expect(rationale).toBeVisible();
 
-    // 4 Signal Tiles Grid
-    const signalsGrid = heroCard.locator('#hero-signals-grid');
-    await expect(signalsGrid).toBeVisible();
-
-    const weatherTile = heroCard.locator('#signal-tile-weather');
-    await expect(weatherTile).toBeVisible();
-    await expect(weatherTile).toContainText('WEATHER', { ignoreCase: true });
-
-    const calTile = heroCard.locator('#signal-tile-calendar');
-    await expect(calTile).toBeVisible();
-    await expect(calTile).toContainText('CALENDAR', { ignoreCase: true });
-
-    const transitTile = heroCard.locator('#signal-tile-transit');
-    await expect(transitTile).toBeVisible();
-    await expect(transitTile).toContainText('TRANSIT', { ignoreCase: true });
-
-    const memoryTile = heroCard.locator('#signal-tile-memory');
-    await expect(memoryTile).toBeVisible();
-    await expect(memoryTile).toContainText('MEMORY', { ignoreCase: true });
+    // HABIT-LEARN addendum 2: no evidence rows (WEATHER / CALENDAR / TRANSIT / MEMORY) and no
+    // "Based on …" footer on the hero; the card just recommends
+    await expect(heroCard.locator('#hero-signals-grid, .signal-tile, .now-basis')).toHaveCount(0);
 
     // Action buttons
     await expect(heroCard.locator('#btn-accept')).toBeVisible();
     await expect(heroCard.locator('#btn-adjust')).toBeVisible();
     await expect(heroCard.locator('#btn-dismiss')).toBeVisible();
     await expect(heroCard.locator('#btn-view-trip-details')).toBeVisible();
-    await expect(heroCard.locator('#btn-why')).toBeVisible();
+    await expect(heroCard.locator('#btn-why')).toHaveCount(0);
 
     await checkAxe(page, 'Hero Card at 1586x992');
   });

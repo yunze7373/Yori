@@ -2455,13 +2455,6 @@ export function renderApp(
     return { request, candidates, confirmedFacts };
   }
 
-  /** HABIT-LEARN: the local reason line says why a learned / told pick leads (same basis as the card). */
-  function habitLedReason(plan: PreparedPlan): string | null {
-    const top = (plan.optionsOrSteps as any[]).find(o => o && typeof o === 'object');
-    if (!top || typeof top.habitBasis !== 'string') return null;
-    return `${top.name}: ${top.habitBasis.charAt(0).toLowerCase()}${top.habitBasis.slice(1)}.`;
-  }
-
   async function requestCandidateReasoning(
     request: 'rank' | 'why' | 'closer' | 'quieter'
   ): Promise<{ reason: string; statusLabel: string } | null> {
@@ -2475,7 +2468,7 @@ export function renderApp(
     const keepLocalRank = () => {
       if (request !== 'rank') return;
       const local = deterministicCandidateReasoning(input);
-      candidateReasoning = { key, order: [...local.order], reason: habitLedReason(plan) ?? local.reason, live: false, engine: 'offline_deterministic', statusLabel: 'Reasoned locally' };
+      candidateReasoning = { key, order: [...local.order], reason: local.reason, live: false, engine: 'offline_deterministic', statusLabel: 'Reasoned locally' };
       update();
     };
     const started = Date.now();
@@ -2938,16 +2931,17 @@ export function renderApp(
   });
 
   const liveCandidateReasoner = async (request: 'why' | 'closer' | 'quieter') => {
-    // HABIT-LEARN: "why this restaurant?" leads with the same basis as the card and the Why sheet.
+    // HABIT-LEARN addendum 2: the card never states a reason; if the user asks why anyway, a
+    // learned / told pick is answered in one short plain sentence.
     const top = lastLiveLunchPlan ? (lastLiveLunchPlan.optionsOrSteps as any[]).find(o => o && typeof o === 'object') : null;
-    const habitLead =
-      request === 'why' && top && typeof top.habitBasis === 'string'
-        ? `${top.name} is first because ${top.habitBasis.charAt(0).toLowerCase()}${top.habitBasis.slice(1)}.`
-        : null;
-    const answer = await requestCandidateReasoning(request);
-    if (habitLead) {
-      return { reason: answer ? `${habitLead} ${answer.reason}` : habitLead, statusLabel: answer?.statusLabel ?? 'Reasoned locally' };
+    if (request === 'why' && top && typeof top.tasteSource === 'string' && typeof top.cuisine === 'string') {
+      const cuisine = String(top.cuisine).split(';')[0]!.replace(/_/g, ' ').toLowerCase();
+      return {
+        reason: top.tasteSource === 'learned' ? `${top.name}, because you often pick ${cuisine}.` : `${top.name}, because you like ${cuisine}.`,
+        statusLabel: 'Reasoned locally',
+      };
     }
+    const answer = await requestCandidateReasoning(request);
     return (
       answer ?? {
         reason: 'I could not reason about these places right now.',
@@ -3833,7 +3827,7 @@ export function renderApp(
             // D4: while the live answer is pending, show the labelled local answer (distance order
             // unchanged); only an accepted live answer replaces it.
             const local = deterministicCandidateReasoning(candidateReasoningInput(nowPlan, 'rank'));
-            candidateReasoningForVm = { order: [...local.order], reason: habitLedReason(nowPlan) ?? local.reason, statusLabel: 'Reasoned locally', engine: 'offline_deterministic' };
+            candidateReasoningForVm = { order: [...local.order], reason: local.reason, statusLabel: 'Reasoned locally', engine: 'offline_deterministic' };
           }
         } else if (contextMode === 'live') {
           lastLiveLunchPlan = null;
@@ -4099,9 +4093,6 @@ export function renderApp(
                   <button type="button" class="btn btn-outline" id="btn-undo-accept" data-plan-id="${escapeHtml(nowPlan.id)}">
                     ${escapeHtml(STRINGS.actions.undo)}
                   </button>
-                  <button type="button" class="btn btn-outline" id="btn-why" data-plan-id="${escapeHtml(nowPlan.id)}">
-                    ${escapeHtml(STRINGS.actions.why)}
-                  </button>
                 `
                     : `
                   <button type="button" class="btn btn-primary" id="btn-accept" data-plan-id="${escapeHtml(nowPlan.id)}">
@@ -4112,9 +4103,6 @@ export function renderApp(
                   </button>
                   <button type="button" class="btn btn-outline" id="btn-dismiss" data-plan-id="${escapeHtml(nowPlan.id)}">
                     ${escapeHtml(STRINGS.actions.dismiss)}
-                  </button>
-                  <button type="button" class="btn btn-outline" id="btn-why" data-plan-id="${escapeHtml(nowPlan.id)}">
-                    ${escapeHtml(STRINGS.actions.why)}
                   </button>
                 `
                 }
@@ -4160,9 +4148,6 @@ export function renderApp(
                     <div class="item-subtitle">${escapeHtml(aheadPres.subtitle)}</div>
                   </div>
                   <div style="display: flex; gap: 8px; align-items: center;">
-                    <button type="button" class="btn btn-sm btn-outline btn-ahead-why" data-plan-id="${escapeHtml(item.id)}">
-                      ${escapeHtml(STRINGS.actions.why)}
-                    </button>
                     <span class="card-badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>
                   </div>
                 </div>
@@ -5005,9 +4990,9 @@ export function renderApp(
     const pillStatusBtn = root.querySelector('#pill-context-status');
     if (pillStatusBtn) {
       pillStatusBtn.addEventListener('click', () => {
-        modalInvokingId = 'pill-context-status';
-        modalInvokingSelector = '#pill-context-status';
-        activeModal = { type: 'sources', mode: contextMode };
+        // HABIT-LEARN addendum 2: no Sources sheet on primary surfaces; the pill opens the place
+        // where sources are managed (Settings > Connectors).
+        activeDetail = { type: 'connectors' };
         update();
       });
     }

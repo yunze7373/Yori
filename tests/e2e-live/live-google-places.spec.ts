@@ -162,7 +162,9 @@ test.describe('D7-LICENSED-PLACES: Google-primary nearby restaurants', () => {
       await expect(hero.locator('.v2-rating-chip')).toHaveText('★ 4.6 (1,204)');
       await expect(hero.locator('.v2-price-chip')).toHaveText('$$');
       await expect(hero.locator('.v2-open-chip')).toHaveText('Open now');
-      await expect(hero.locator('.v2-candidate-basis')).toHaveText('Open now · from Google opening hours');
+      // HABIT-LEARN addendum 2: the card states no reason line; open status shows as its chip.
+      await expect(hero.locator('.v2-candidate-basis')).toHaveCount(0);
+      await expect(hero.locator('.v2-open-chip')).toHaveText('Open now');
       expect(await page.locator('body').innerText()).not.toContain('OpenStreetMap opening hours');
       await expect(hero.locator('.powered-by-google')).toHaveText('Powered by Google');
       await expect(hero.locator('.photo-credit a')).toHaveText('Ann');

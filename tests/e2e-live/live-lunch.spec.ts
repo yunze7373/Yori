@@ -287,9 +287,10 @@ test.describe('S3-LIVE-LUNCH: Full Live Verification Matrix', () => {
     await expect(openChip.first()).toBeVisible();
     await expect(openChip.first()).toContainText('Open now');
 
-    // Taste preference citation: You confirmed
-    const basis = page.locator('.v2-candidate-basis').first();
-    await expect(basis).toContainText('You confirmed');
+    // HABIT-LEARN addendum 2: the confirmed taste shapes the ranking (Hayes Valley Ramen first,
+    // above) but the card states no reason line
+    await expect(page.locator('.v2-candidate-basis')).toHaveCount(0);
+    await expect(heroCard).not.toContainText(/You confirmed|Based on taste|Matches your confirmed taste/);
 
     // Zero fixture provenance
     const fixtureElements = await page.locator('[data-provenance="fixture"]').count();
@@ -485,7 +486,7 @@ test.describe('S3-LIVE-LUNCH: Full Live Verification Matrix', () => {
   // D2 (DEMO_RESCUE) contract change: a cold user now gets Live candidates with an honest
   // non-taste reason (open now from OSM opening_hours, else nearest) instead of a quiet state.
   // No taste is ever claimed without a confirmed fact.
-  test('Cold user with no confirmed lunch memory gets candidates with an honest non-taste reason', async ({
+  test('Cold user with no confirmed lunch memory gets candidates with honest hours and no taste claim', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -502,9 +503,9 @@ test.describe('S3-LIVE-LUNCH: Full Live Verification Matrix', () => {
 
     const hero = page.locator('.v2-candidate-card').first();
     await expect(hero).toBeVisible({ timeout: 10000 });
-    await expect(hero.locator('.v2-candidate-basis')).toHaveText(
-      /^(Open now · from OpenStreetMap opening hours|Nearest to you · (hours unknown|closed now \(OpenStreetMap hours\)))$/
-    );
+    // HABIT-LEARN addendum 2: no reason line; the honest hours chip comes only from opening_hours
+    await expect(page.locator('.v2-candidate-basis')).toHaveCount(0);
+    await expect(hero.locator('.v2-open-chip')).toHaveText(/^(Open now|Closed|Hours unknown)$/);
     const body = await page.locator('body').innerText();
     expect(body).not.toMatch(/Based on taste|Demo profile|matching your tastes/i);
     expect(await page.locator('[data-provenance="fixture"]').count()).toBe(0);

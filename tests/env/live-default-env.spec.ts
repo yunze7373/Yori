@@ -298,13 +298,12 @@ test.describe('S2-LIVE-DEFAULT: Production Live Default and Dev Mode Gating', ()
     // Thorough label audit: every single visible fixture render carries an explicit simulated label
     await assertAllVisibleFixturesAreLabelled(page);
 
-    // Inspect Sources modal under ?dev=1
+    // HABIT-LEARN addendum 2: the pill opens Settings > Connectors (no Sources sheet). The page it
+    // opens still claims nothing live in Demo.
     await pill.click();
-    await page.waitForSelector('.sources-modal-card');
-    const derivationText = page.locator('#sources-derivation-text');
-    await expect(derivationText).toContainText('Demo fixtures · simulated context');
-    const simulatedBadges = page.locator('#sources-list .simulated-badge');
-    expect(await simulatedBadges.count()).toBeGreaterThan(0);
+    await expect(page.locator('#connectors-page')).toBeVisible();
+    await expect(page.locator('.sources-modal-card')).toHaveCount(0);
+    await assertAllVisibleFixturesAreLabelled(page);
   });
 
   test('Label audit: Live mode has exactly 0 unlabelled simulated renders and 0 fixture elements', async ({
@@ -319,22 +318,15 @@ test.describe('S2-LIVE-DEFAULT: Production Live Default and Dev Mode Gating', ()
     // Verify 0 simulated badges exist anywhere
     await expect(page.locator('.simulated-badge')).toHaveCount(0);
 
-    // Open Sources sheet in Live mode
+    // HABIT-LEARN addendum 2: the pill opens Settings > Connectors (no Sources sheet); that page
+    // has zero fixture provenance and zero simulated badges in Live.
     const pill = page.locator('#pill-context-status');
     await expect(pill).toBeVisible();
     await pill.click();
-    await page.waitForSelector('.sources-modal-card');
-
-    // In Live mode, derivation text is truthful
-    const derivationText = page.locator('#sources-derivation-text');
-    await expect(derivationText).toContainText('What feeds Home right now in Live mode');
-
-    // Sources list has live or none provenance, zero fixture provenance
-    const fixtureSources = page.locator('#sources-list [data-provenance="fixture"]');
-    await expect(fixtureSources).toHaveCount(0);
-
-    const simulatedBadgesInModal = page.locator('.sources-modal-card .simulated-badge');
-    await expect(simulatedBadgesInModal).toHaveCount(0);
+    await expect(page.locator('#connectors-page')).toBeVisible();
+    await expect(page.locator('.sources-modal-card')).toHaveCount(0);
+    await expect(page.locator('#connectors-page [data-provenance="fixture"]')).toHaveCount(0);
+    await expect(page.locator('#connectors-page .simulated-badge')).toHaveCount(0);
   });
 
   test('Dev/test build on port 4173 honours mode overrides and supports ?dev=1, ?mode=demo, and ?mode=live', async ({

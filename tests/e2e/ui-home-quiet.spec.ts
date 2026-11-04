@@ -133,7 +133,7 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await checkAxe(page, 'Consumer Home Header');
   });
 
-  test('2. A1 Context Pill: Honest active sources and opens dedicated Sources view (NOT demo controls)', async ({
+  test('2. A1 Context Pill: Honest active sources and opens Settings > Connectors (no Sources sheet, NOT demo controls)', async ({
     page,
   }) => {
     await page.goto('/');
@@ -144,26 +144,14 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await expect(contextPill).toContainText('Demo · simulated');
     await expect(contextPill.locator('.context-pill-subtitle')).toHaveText('Demo timeline · simulated time');
 
-    // Clicking #pill-context-status opens dedicated Sources view
+    // HABIT-LEARN addendum 2: the pill opens Settings > Connectors (where sources are managed),
+    // never a Sources / Why sheet
     await contextPill.click();
-
-    // Verify Why / Sources sheet opens
-    const whyDialog = page.locator('#why-sheet-backdrop');
-    await expect(whyDialog).toBeVisible();
-    await expect(page.locator('#why-sheet-title')).toHaveText('Sources & Provenance · Demo');
-
-    // In Demo mode: verify SIMULATED badges are present
-    const simulatedBadges = page.locator('.sources-modal-card .simulated-badge');
-    await expect(simulatedBadges.first()).toBeVisible();
-    await expect(page.locator('.sources-modal-card')).toContainText('SIMULATED');
+    await page.waitForSelector('#connectors-page');
+    await expect(page.locator('#why-sheet-backdrop, .sources-modal-card')).toHaveCount(0);
 
     // Verify demo controls panel did NOT open (A1 invariant)
     await expect(page.locator('#demo-panel')).toHaveCount(0);
-
-    // Close Why sheet
-    const closeBtn = page.locator('#btn-close-why');
-    await closeBtn.click();
-    await expect(whyDialog).toHaveCount(0);
 
     // In Live mode before consent: nothing is shared yet (no fabricated calendar or memories).
     // UI-QUIET-PRECISION: the pill names user-recognisable sources; the device clock is listed in
@@ -176,29 +164,14 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await expect(livePill.locator('.context-pill-subtitle')).not.toContainText('Calendar');
     await expect(livePill.locator('.context-pill-subtitle')).not.toContainText('Memories');
 
-    // Clicking pill in Live mode opens dedicated truthful sources view
+    // Clicking the pill in Live mode opens Connectors, truthful and without a Sources sheet
     await livePill.click();
-    await expect(whyDialog).toBeVisible();
-    await expect(page.locator('#why-sheet-title')).toHaveText('Active Sources · Live context');
-
-    // Verify truthful feeds and NO fabricated piano lesson or simulated badges
-    const sourcesCard = page.locator('.sources-modal-card');
-    await expect(sourcesCard).toBeVisible();
-    await expect(sourcesCard).not.toContainText('piano');
-    await expect(sourcesCard).not.toContainText('Piano lesson');
-    await expect(sourcesCard).not.toContainText('SIMULATED');
-
-    // Calendar row reads "Not connected"
-    const calSourceItem = page.locator('#source-item-calendar');
-    await expect(calSourceItem).toBeVisible();
-    await expect(calSourceItem).toContainText('Not connected');
-
-    // Clock reads "Live", Memory reads "Local only"
-    await expect(page.locator('#source-item-clock')).toContainText('Live');
-    await expect(page.locator('#source-item-memory')).toContainText('Local only');
-
-    await closeBtn.click();
-    await expect(whyDialog).toHaveCount(0);
+    await page.waitForSelector('#connectors-page');
+    await expect(page.locator('#why-sheet-backdrop, .sources-modal-card')).toHaveCount(0);
+    const connectors = page.locator('#connectors-page');
+    await expect(connectors).not.toContainText('Piano lesson');
+    await expect(connectors).not.toContainText('SIMULATED');
+    await expect(page.locator('#connector-row-calendar')).toBeVisible();
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page, 'Live Context Pill');
@@ -290,15 +263,12 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     const whyBtn = page.locator('#btn-why');
     await expect(acceptBtn).toBeVisible();
     await expect(adjustBtn).toBeVisible();
-    await expect(whyBtn).toBeVisible();
-    const [accBox, adjBox, whyB] = await Promise.all([
-      acceptBtn.boundingBox(),
-      adjustBtn.boundingBox(),
-      whyBtn.boundingBox(),
-    ]);
+    // HABIT-LEARN addendum 2: Accept + Adjust only, no Why action
+    await expect(whyBtn).toHaveCount(0);
+    const [accBox, adjBox] = await Promise.all([acceptBtn.boundingBox(), adjustBtn.boundingBox()]);
     expect(accBox?.height ?? 0).toBeGreaterThanOrEqual(44);
     expect(adjBox?.height ?? 0).toBeGreaterThanOrEqual(44);
-    expect(whyB?.height ?? 0).toBeGreaterThanOrEqual(44);
+    expect(Math.abs((accBox?.height ?? 0) - (adjBox?.height ?? 0))).toBeLessThanOrEqual(1);
 
     // Verify secondary actions (Details -> and Dismiss) with touch target >= 44px
     const detailsBtn = page.locator('#btn-view-trip-details');
@@ -322,11 +292,8 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await page.locator('#trip-detail-back-btn').click();
     await expect(tripDetail).toHaveCount(0);
 
-    // 5b. Open Why sheet via action button
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-    await expect(page.locator('#why-sheet-backdrop')).toBeVisible();
-    await page.locator('#btn-close-why').click();
+    // 5b. No Why sheet anywhere (HABIT-LEARN addendum 2)
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
 
     // 5c. Adjust dialog
     await expect(adjustBtn).toBeVisible();
@@ -393,10 +360,12 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
       { selector: '#btn-dev-demo-controls', label: 'Dev Controls Affordance' },
       { selector: '#btn-accept', label: 'Accept Button' },
       { selector: '#btn-adjust', label: 'Adjust Button' },
-      { selector: '#btn-why', label: 'Why Button' },
       { selector: '#btn-dismiss', label: 'Dismiss Button' },
       { selector: '#ask-bar', label: 'Ask Yori Bar' },
     ];
+
+    // HABIT-LEARN addendum 2: there is no Why action to size
+    await expect(page.locator('#btn-why')).toHaveCount(0);
 
     for (const t of targets) {
       const el = page.locator(t.selector).first();
@@ -475,21 +444,19 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     // 7e. Live Empty
     await saveEvidence(page, `after-live-empty-${vpName}.png`);
 
-    // 7f. Sources Open Demo
+    // 7f. Context pill -> Connectors, Demo (HABIT-LEARN addendum 2: no Sources sheet)
     await page.goto('/');
     await page.waitForSelector('.app-layout');
     await page.locator('#pill-context-status').click();
-    await page.waitForSelector('#why-sheet-backdrop');
-    await saveEvidence(page, `after-sources-open-demo-${vpName}.png`);
-    await page.locator('#btn-close-why').click();
+    await page.waitForSelector('#connectors-page');
+    await saveEvidence(page, `after-pill-connectors-demo-${vpName}.png`);
 
-    // 7g. Sources Open Live
+    // 7g. Context pill -> Connectors, Live
     await page.goto('/?mode=live');
     await page.waitForSelector('.app-layout');
     await page.locator('#pill-context-status').click();
-    await page.waitForSelector('#why-sheet-backdrop');
-    await saveEvidence(page, `after-sources-open-live-${vpName}.png`);
-    await page.locator('#btn-close-why').click();
+    await page.waitForSelector('#connectors-page');
+    await saveEvidence(page, `after-pill-connectors-live-${vpName}.png`);
 
     // 7h. Demo Panel Open (after only)
     await page.goto('/?dev=1');
@@ -573,30 +540,9 @@ test.describe('UI-HOME-QUIET: Consumer Home & Isolated Demo Panel Suite', () => 
     await expect(page.locator('.v2-candidate-compact-list .v2-candidate-card')).toHaveCount(1);
     await expect(page.locator('.v2-view-detail-link').first()).toContainText('+2 more options');
 
-    // Finding 4: click context status pill in away-lunch
+    // HABIT-LEARN addendum 2: no Sources sheet; the pill opens Connectors
     await page.locator('#pill-context-status').click();
-    await page.waitForSelector('#why-sheet-backdrop .sources-modal-card');
-    const sourcesCard = page.locator('#why-sheet-backdrop .sources-modal-card');
-    const sourcesText = await sourcesCard.innerText();
-
-    // In away-lunch, signals are location/away, schedule window, meal timing, and nearby places
-    expect(sourcesText).toContain('Sources & Provenance · Demo');
-    expect(sourcesText).not.toContain('Piano');
-    expect(sourcesText).not.toContain('Rain');
-
-    // Close sources view
-    await page.locator('#btn-close-why').click();
-    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
-
-    // In rain scene:
-    await openDemoPanel(page);
-    await page.locator('#scene-select').selectOption('rain');
-    await closeDemoPanel(page);
-
-    await page.locator('#pill-context-status').click();
-    await page.waitForSelector('#why-sheet-backdrop .sources-modal-card');
-    const rainSourcesText = await page.locator('#why-sheet-backdrop .sources-modal-card').innerText();
-    expect(rainSourcesText).toContain('Rain');
-    await page.locator('#btn-close-why').click();
+    await page.waitForSelector('#connectors-page');
+    await expect(page.locator('#why-sheet-backdrop, .sources-modal-card')).toHaveCount(0);
   });
 });

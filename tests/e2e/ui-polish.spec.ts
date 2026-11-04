@@ -142,42 +142,8 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
     await checkZeroHorizontalOverflow(page, 'desktop-ask-bar-clearance');
   });
 
-  test('(c) Why sheet Memory rows stack badge above title on mobile (390x844), no narrow squeeze', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/?ui=v2&scene=rain&test=1');
-    await page.waitForSelector('#btn-why');
-    await page.click('#btn-why');
-
-    await page.waitForSelector('#why-sheet-backdrop .modal-card');
-    await page.waitForTimeout(350); // wait for animation
-
-    const memoryRows = page.locator('.why-item-row:has(.badge-simulated, .badge-confirmed)');
-    const count = await memoryRows.count();
-    expect(count).toBeGreaterThan(0);
-
-    const firstRow = memoryRows.first();
-    const badge = firstRow.locator('.card-badge');
-    const label = firstRow.locator('.why-item-label');
-
-    const badgeBox = await badge.boundingBox();
-    const labelBox = await label.boundingBox();
-
-    expect(badgeBox).not.toBeNull();
-    expect(labelBox).not.toBeNull();
-
-    // Badge must be stacked ABOVE title on mobile
-    expect(
-      badgeBox!.y + badgeBox!.height,
-      'Badge must stack above the memory preference label under 480px'
-    ).toBeLessThanOrEqual(labelBox!.y + 4);
-
-    // Label must have generous width available (>= 200px) rather than being squeezed into < 100px
-    expect(labelBox!.width).toBeGreaterThanOrEqual(150);
-
-    await checkZeroHorizontalOverflow(page, 'why-sheet-mobile');
-    await checkAxeWcag(page, 'why-sheet-mobile');
-  });
-
+  // (c) 'Why sheet Memory rows stack badge above title' was removed with the Why sheet
+  // (HABIT-LEARN addendum 2: no Why action or sheet on any user surface).
   test('(d) lunch card distance chip "139 m (straight-line)" stays on a single line at 390x844', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/?ui=v2&scene=away-lunch&test=1');
@@ -278,22 +244,10 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
       fullPage: false,
     });
 
-    // (c) Why Sheet Memory Rows
-    for (const vp of [
-      { width: 390, height: 844, name: 'mobile' },
-      { width: 1440, height: 900, name: 'desktop' },
-    ]) {
-      await page.setViewportSize({ width: vp.width, height: vp.height });
-      await page.goto('/?ui=v2&scene=rain&test=1');
-      await page.waitForSelector('#btn-why');
-      await page.click('#btn-why');
-      await page.waitForSelector('#why-sheet-backdrop .modal-card');
-      await page.waitForTimeout(350);
-      await page.screenshot({
-        path: path.join(EVIDENCE_DIR, `c-why-sheet-memory-${vp.name}-${suffix}.png`),
-        fullPage: false,
-      });
-    }
+    // (c) No Why sheet any more (HABIT-LEARN addendum 2): assert the action is absent
+    await page.goto('/?ui=v2&scene=rain&test=1');
+    await page.waitForSelector('#btn-accept');
+    await expect(page.locator('#btn-why')).toHaveCount(0);
 
     // (d) Lunch Card Distance
     for (const vp of [

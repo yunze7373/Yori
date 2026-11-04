@@ -583,11 +583,12 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
     expect(rainContent).not.toContain('I moved your leave time');
     expect(await page.locator('#time-diff-display').count()).toBe(0);
 
-    // Calendar tile reflects event (never "Not connected")
-    const calTile = page.locator('#signal-tile-calendar');
-    await expect(calTile).toBeVisible();
-    await expect(calTile).toContainText('Product Review');
-    await expect(calTile).not.toContainText('Not connected');
+    // HABIT-LEARN addendum 2: no evidence tiles on the card; the calendar event shows in the plan
+    // itself (never "Not connected")
+    await expect(page.locator('#signal-tile-calendar')).toHaveCount(0);
+    const rainCard = page.locator('.now-card');
+    await expect(rainCard).toContainText('Product Review');
+    await expect(rainCard).not.toContainText('Not connected');
 
     // Capture Live Depart rain re-plan screenshot
     await page.screenshot({ path: path.join(EVIDENCE_DIR, '03-live-depart-rain-replan-390x844.png') });
@@ -686,10 +687,9 @@ test.describe('S4-LIVE-DEPART E2E Suite', () => {
       expect(text).toContain('3:00 PM');
       expect(text).toMatch(/leave by 2:\d\d\s*pm/i);
 
-      // Verify Calendar tile shows event in JST
-      const calTile = page.locator('#signal-tile-calendar');
-      await expect(calTile).toBeVisible();
-      await expect(calTile).toContainText('Tokyo Sync');
+      // The event shows in the plan in JST; no evidence tile renders (HABIT-LEARN addendum 2)
+      await expect(page.locator('#signal-tile-calendar')).toHaveCount(0);
+      await expect(nowCard).toContainText('Tokyo Sync');
     });
   });
 });

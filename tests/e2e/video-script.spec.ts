@@ -8,7 +8,7 @@
  * 1. Hook & The Calm Philosophy (Scene D1: Clear Departure) [25s budget]
  * 2. Thinking Ahead & Environmental Adaptation (Scene D2: Rain Re-Plan) [25s budget]
  * 3. Away Dining & Honest Quiet State (Scene D3: Away Lunch & D4: Busy Lunch) [25s budget]
- * 4. The Explainable Review Loop (Scene D2: Why Sheet & Adjust Dialog) [30s budget]
+ * 4. Yori Learns You (Nearby Now & Adjust Dialog) [30s budget]
  * 5. User Sovereignty & The Me Tab (For You Proposal, Me Confirmation & Recomputed Timing) [33s budget]
  * 6. Conversational Shell & Reasoning Demo (Ask Yori & Multi-Candidate Ordering) [28s budget]
  * 7. Honest Disclosure & Closing (Scene D1: Clean Return) [14s budget]
@@ -73,7 +73,6 @@ export const VIDEO_SCRIPT_FIXTURES = {
       'Bus · leave 2:15 PM',
       'Alternative',
       '40 min bus + 5m margin',
-      'You usually prefer driving when it rains.',
     ],
   },
   segment3: {
@@ -87,27 +86,14 @@ export const VIDEO_SCRIPT_FIXTURES = {
       'Demo Place B · Salad',
       'Demo Place C · Sushi',
       'Mock places for this demo; real listings come from a place provider.',
-      'Memory & Habits',
-      'Demo profile · sample preference',
       'Nothing needs your attention right now.',
       "You're all caught up. We'll let you know when something comes up.",
     ],
   },
   segment4: {
-    title: '4. The Explainable Review Loop',
+    title: '4. Yori Learns You',
     budgetSeconds: 30,
     quotedStrings: [
-      "Why you're seeing this",
-      'Evidence & Signals',
-      'Memory & Habits',
-      'Weather forecast',
-      'Forecast conditions',
-      'Recorded at 1:35 PM',
-      'SIMULATED',
-      'Rain travel habit',
-      'Buffer before leaving',
-      'Time to get ready',
-      'Demo profile · sample preference',
       'Adjust Departure Timing',
       'For this time only',
       'Remember as preference',
@@ -153,7 +139,6 @@ export const VIDEO_SCRIPT_FIXTURES = {
       'Metro Gas & Go',
       'Gas Station',
       '(straight-line)',
-      'Simulated fixture · Metro Gas',
     ],
   },
 };
@@ -260,8 +245,8 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await expect(busCard.locator('.v2-option-badge')).toHaveText('Alternative');
     await expect(busCard.locator('.v2-option-meta')).toHaveText('40 min bus + 5m margin');
 
-    // Habit citation
-    await expect(page.locator('.habit-note')).toHaveText('You usually prefer driving when it rains.');
+    // HABIT-LEARN addendum 2: no habit-note citation in trip detail
+    await expect(page.locator('.habit-note')).toHaveCount(0);
 
     // Return to Home for screenshot
     await page.locator('#trip-detail-back-btn').click();
@@ -300,15 +285,9 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
       'Mock places for this demo; real listings come from a place provider.'
     );
 
-    // Inspect Why sheet on D3 to show sample profile habit badge
-    await page.locator('#btn-why').click();
-    await expect(page.locator('#why-sheet-backdrop')).toBeVisible();
-    await expect(page.locator('.why-section h3').nth(1)).toContainText('Memory & Habits');
-    await expect(
-      page.locator('#why-sheet-backdrop').getByText('Demo profile · sample preference').first()
-    ).toBeVisible();
-    await page.locator('#btn-close-why').click();
-    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    // No Why sheet or button per owner steering (Addendum 2)
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet')).toHaveCount(0);
 
     // Switch to D4 Busy Lunch: quiet state
     await selectDemoScene(page, 'busy-lunch');
@@ -328,39 +307,15 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     });
 
     // =========================================================================
-    // Segment 4: The Explainable Review Loop (1:15 – 1:45 · 30s)
+    // Segment 4: Yori Learns You (1:15 – 1:45 · 30s)
     // =========================================================================
     const seg4Start = Date.now();
     await selectDemoScene(page, 'rain');
     await page.waitForTimeout(200);
 
-    // Open Why sheet
-    await page.locator('#btn-why').click();
-    await expect(page.locator('#why-sheet-title')).toHaveText("Why you're seeing this");
-
-    const evidenceH3 = page.locator('.why-section h3').first();
-    const memoryH3 = page.locator('.why-section h3').nth(1);
-    await expect(evidenceH3).toContainText('Evidence & Signals');
-    await expect(memoryH3).toContainText('Memory & Habits');
-
-    // Assert evidence signals
-    const evidenceSection = page.locator('.why-section', { hasText: 'Evidence & Signals' });
-    await expect(evidenceSection).toContainText('Weather forecast');
-    await expect(evidenceSection).toContainText('Forecast conditions');
-    await expect(evidenceSection).toContainText('Recorded at 1:35 PM');
-    await expect(evidenceSection).toContainText('SIMULATED');
-
-    // Assert memory items with sample preference badge
-    const memorySection = page.locator('.why-section', { hasText: 'Memory & Habits' });
-    await expect(memorySection).toContainText('Rain travel habit');
-    await expect(memorySection).toContainText('Buffer before leaving');
-    await expect(memorySection).toContainText('Time to get ready');
-    await expect(
-      page.locator('#why-sheet-backdrop').getByText('Demo profile · sample preference').first()
-    ).toBeVisible();
-
-    await page.locator('#btn-close-why').click();
-    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    // No Why action is present per owner steering (Addendum 2)
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet')).toHaveCount(0);
 
     // Open Adjust dialog and save buffer preference
     await page.locator('#btn-adjust').click();
@@ -380,7 +335,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
     await page.screenshot({
-      path: path.join(EVIDENCE_DIR, `04-explainable-review-loop-${viewName}.png`),
+      path: path.join(EVIDENCE_DIR, `04-yori-learns-you-${viewName}.png`),
     });
     timingSummary.push({
       segment: VIDEO_SCRIPT_FIXTURES.segment4.title,
@@ -412,19 +367,9 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await expect(page.locator('.now-card')).toBeVisible();
     await expect(page.locator('#now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
 
-    // Re-opened Why sheet tags prep & buffer "You told Yori" while the rain habit remains sample
-    await page.locator('#btn-why').click();
-    await expect(page.locator('#why-sheet-backdrop')).toBeVisible();
-    const postWhyMemory = page.locator('.why-section', { hasText: 'Memory & Habits' });
-    await expect(postWhyMemory.locator('.badge-confirmed').first()).toHaveText('You told Yori');
-    await expect(postWhyMemory).toContainText('Buffer before leaving');
-    await expect(postWhyMemory).toContainText('Time to get ready');
-    await expect(
-      postWhyMemory.locator('.card-badge:has-text("Demo profile · sample preference")')
-    ).toHaveCount(1);
-    await expect(postWhyMemory).toContainText('Rain travel habit');
-    await page.locator('#btn-close-why').click();
-    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    // No Why action is present per owner steering (Addendum 2)
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet')).toHaveCount(0);
 
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `05-user-sovereignty-me-tab-${viewName}.png`),
@@ -563,9 +508,7 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await expect(topCard.locator('.v2-candidate-name')).toHaveText('Metro Gas & Go');
     await expect(topCard.locator('.v2-cuisine-chip')).toHaveText('Gas Station');
     await expect(topCard.locator('.v2-distance-chip')).toContainText('(straight-line)');
-    await expect(topCard.locator('.v2-candidate-basis')).toHaveText(
-      'Simulated fixture · Metro Gas'
-    );
+    await expect(topCard.locator('.v2-candidate-basis')).toHaveCount(0);
 
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `08-optional-v5-fuel-${viewName}.png`),

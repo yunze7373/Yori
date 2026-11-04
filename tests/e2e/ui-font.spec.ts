@@ -6,7 +6,7 @@
  * 1. Zero requests to external hosts (specifically zero to fonts.googleapis.com or fonts.gstatic.com).
  * 2. Self-hosted font assets (/fonts/inter-*.woff2, /fonts/newsreader-*.woff2) load with 200 OK.
  * 3. Typography renders accurately using self-hosted Inter & Newsreader font families.
- * 4. Captures visual evidence for Home (clear, rain), Why sheet, and For You on mobile & desktop.
+ * 4. Captures visual evidence for Home (clear, rain) and For You on mobile & desktop (no Why sheet since HABIT-LEARN addendum 2).
  */
 
 import { test, expect } from '@playwright/test';
@@ -85,7 +85,7 @@ test.describe('UIFONT: Self-Hosted Font Integrity & Network Isolation', () => {
     expect(newsreaderReady).toBe(true);
   });
 
-  test('visual capture: Home (clear, rain), Why sheet, and For You', async ({
+  test('visual capture: Home (clear, rain), no Why action, and For You', async ({
     page,
   }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile';
@@ -121,23 +121,8 @@ test.describe('UIFONT: Self-Hosted Font Integrity & Network Isolation', () => {
       fullPage: false,
     });
 
-    // 3. Why Sheet (opened on rain)
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-    const whyBackdrop = page.locator('#why-sheet-backdrop');
-    await expect(whyBackdrop).toBeVisible();
-    await page.waitForSelector('#why-sheet-backdrop .modal-card');
-    await page.waitForTimeout(350);
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, `why-sheet-${viewName}-${suffix}.png`),
-      fullPage: false,
-    });
-
-    // Close Why Sheet
-    const closeBtn = page.locator('#btn-close-why');
-    await closeBtn.click();
-    await expect(whyBackdrop).toHaveCount(0);
+    // 3. HABIT-LEARN addendum 2: no Why action / Why sheet to capture
+    await expect(page.locator('#btn-why')).toHaveCount(0);
 
     // 4. For You (multi-candidate scene with populated proposals)
     await loadScene('multi-candidate');

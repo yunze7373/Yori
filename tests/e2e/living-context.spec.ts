@@ -162,53 +162,15 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     await expect(acceptedBadge).not.toBeVisible();
   });
 
-  test('Review Loop: Why Sheet displays human sentences and local timestamps', async ({
-    page,
-  }, testInfo) => {
-    const isMobile = testInfo.project.name === 'mobile';
-    const viewName = isMobile ? 'mobile-390x844' : 'desktop-1280x800';
-
+  // HABIT-LEARN addendum 2: the Why sheet test was removed with the Why sheet itself.
+  test('Review Loop: the NOW card has Accept and Adjust and no Why action (HABIT-LEARN addendum 2)', async ({ page }) => {
     await page.goto('/?ui=v1');
-    const select = page.locator('#scene-select');
-    await select.selectOption('rain');
-
-    // 1. Click Why button on NOW card
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    // 2. Verify modal appears
-    const modal = page.locator('.modal-card');
-    await expect(modal).toBeVisible();
-    const title = page.locator('#why-sheet-title');
-    await expect(title).toContainText("Why you're seeing this");
-
-    // 3. Verify evidence signals with SIMULATED badge and formatted issuedAt
-    const evidenceSection = page.locator('.why-section', { hasText: 'Evidence & Signals' });
-    await expect(evidenceSection).toContainText('Weather forecast');
-    await expect(evidenceSection).toContainText('SIMULATED');
-    await expect(evidenceSection).toContainText('1:35 PM');
-
-    // 4. Verify memory habit with sample profile badge
-    const memorySection = page.locator('.why-section', { hasText: 'Memory & Habits' });
-    await expect(memorySection).toContainText('Rain travel habit');
-    await expect(memorySection).toContainText('Demo profile · sample preference');
-
-    // 5. Verify derivation has no internal tokens
-    const derivation = page.locator('.why-derivation-text');
-    await expect(derivation).toBeVisible();
-    const text = await derivation.innerText();
-    expect(text).not.toContain('appt -');
-    expect(text).not.toContain('rain_transport_preference');
-
-    // 6. Screenshot evidence
-    const screenshotPath = path.join(EVIDENCE_DIR, `why-sheet-${viewName}.png`);
-    await page.screenshot({ path: screenshotPath, fullPage: true });
-
-    // 7. Close sheet
-    const closeBtn = page.locator('#btn-close-why');
-    await closeBtn.click();
-    await expect(modal).not.toBeVisible();
+    await page.locator('#scene-select').selectOption('rain');
+    await expect(page.locator('#btn-accept')).toBeVisible();
+    await expect(page.locator('#btn-adjust')).toBeVisible();
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('.btn-ahead-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
   });
 
   test('Review Loop: Adjust "Remember" saves the routine directly, no confirm step (INV-107 learn-and-correct)', async ({

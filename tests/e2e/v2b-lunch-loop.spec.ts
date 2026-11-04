@@ -153,48 +153,16 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
       expect(confirmedFacts.every((f: any) => f.key !== 'lunch_filter')).toBe(true);
     }
 
-    // 9. Verify Why Sheet carries user_request provenance & honest sample fact attribution
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-
-    const whyText = await page.locator('#why-order-text, .why-derivation-text').innerText();
-    expect(whyText).toContain('Because you asked: quieter, vegetarian · this time only');
-
-    // Situation Attribution: honest Schedule Fit attribution, zero "confirmed" or "travel"
-    const sitSection = page.locator('#why-situation-section');
-    await expect(sitSection).toBeVisible();
-    await expect(sitSection).toContainText('Schedule Fit');
-    await expect(sitSection).toContainText('Fits comfortably within your available schedule window');
-    const sitText = await sitSection.innerText();
-    expect(sitText.toLowerCase()).not.toContain('confirmed');
-    expect(sitText.toLowerCase()).not.toContain('travel');
-
-    // Derivation text: states sample taste preferences from the demo profile, zero "confirmed"
-    const derivLocator = page.locator('.why-derivation-text');
-    await expect(derivLocator).toContainText('sample taste preferences from the demo profile');
-    const derivText = await derivLocator.innerText();
-    expect(derivText.toLowerCase()).not.toContain('confirmed');
-
-    // Memory facts: clearly labeled Demo profile · sample preference
-    await expect(whySheet).toContainText('Demo profile · sample preference');
-
-    // Anti-jargon: no raw ISO strings, raw keys, or mock places jargon in Why sheet
-    expect(whyText).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
-    expect(whyText).not.toMatch(/mock_places:\d{4}/);
-    expect(whyText).not.toMatch(/taste_preference=/);
-    await expect(whySheet).toContainText('Nearby places');
-    await expect(whySheet).toContainText('Demo place list');
-    const whySheetFullText = await whySheet.innerText();
-    expect(whySheetFullText).not.toContain('mock places');
-    expect(whySheetFullText).not.toContain('mock_places');
-
-    // Close Why sheet
-    await page.locator('#btn-close-why').click();
-    await expect(whySheet).toHaveCount(0);
+    // 9. HABIT-LEARN addendum 2: no Why action or Why sheet; the re-ranked cards state no reason
+    // and the Home text stays free of engineering jargon.
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    await expect(page.locator('.v2-candidate-basis')).toHaveCount(0);
+    const homeText = await page.locator('main').innerText();
+    expect(homeText).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    expect(homeText).not.toMatch(/mock_places:\d{4}/);
+    expect(homeText).not.toMatch(/taste_preference=/);
+    expect(homeText).not.toContain('mock_places');
 
     // 10. Undo restores prior plan
     const undoBtn = page.locator('#btn-undo-accept');
@@ -301,12 +269,8 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     await page.locator('#restaurant-detail-back-btn').click();
     await page.waitForSelector('.now-card');
 
-    // (1c) Why sheet
-    await page.locator('#btn-why').click();
-    await page.waitForSelector('#why-sheet-backdrop');
-    text = await page.locator('#why-sheet-backdrop').innerText();
-    assertNoFalseConfirmedOrLive(text, 'away-lunch:why-sheet');
-    await page.locator('#btn-close-why').click();
+    // HABIT-LEARN addendum 2: there is no Why sheet surface to sweep
+    await expect(page.locator('#btn-why')).toHaveCount(0);
 
     // (1d) Chat Why
     await page.locator('#ask-bar').click();
@@ -326,11 +290,8 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     text = await page.locator('.app-layout').innerText();
     assertNoFalseConfirmedOrLive(text, 'away-lunch:after-filter:home');
 
-    await page.locator('#btn-why').click();
-    await page.waitForSelector('#why-sheet-backdrop');
-    text = await page.locator('#why-sheet-backdrop').innerText();
-    assertNoFalseConfirmedOrLive(text, 'away-lunch:after-filter:why-sheet');
-    await page.locator('#btn-close-why').click();
+    // HABIT-LEARN addendum 2: there is no Why sheet surface to sweep
+    await expect(page.locator('#btn-why')).toHaveCount(0);
 
     // (1f) After Undo
     await page.locator('#btn-undo-accept').click();
@@ -353,12 +314,8 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
     await page.locator('#trip-detail-back-btn').click();
     await page.waitForSelector('.now-card');
 
-    // (2c) Rain Why Sheet
-    await page.locator('#btn-why').click();
-    await page.waitForSelector('#why-sheet-backdrop');
-    text = await page.locator('#why-sheet-backdrop').innerText();
-    assertNoFalseConfirmedOrLive(text, 'rain:why-sheet');
-    await page.locator('#btn-close-why').click();
+    // HABIT-LEARN addendum 2: there is no Why sheet surface to sweep
+    await expect(page.locator('#btn-why')).toHaveCount(0);
 
     // (2d) Rain Chat Why
     await page.locator('#ask-bar').click();

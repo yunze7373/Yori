@@ -182,7 +182,8 @@ test.describe('D2-LUNCH-DEFAULT-ON: nearby restaurants visibly work once locatio
       await expect(hero.locator('.v2-candidate-name')).toHaveText('Shinjuku Soba Tei');
       await expect(hero.locator('.v2-distance-chip')).toHaveText('56 m (straight-line)');
       await expect(hero.locator('.v2-open-chip')).toHaveText('Open now');
-      await expect(hero.locator('.v2-candidate-basis')).toHaveText('Open now · from OpenStreetMap opening hours');
+      // HABIT-LEARN addendum 2: the card states no reason line; open status shows as its chip.
+      await expect(hero.locator('.v2-candidate-basis')).toHaveCount(0);
       await expect(page.locator('.v2-candidates-shelf .v2-open-chip.unknown')).toHaveText('Hours unknown');
       await expect(page.locator('.mock-places-notice').first()).toContainText('OpenStreetMap via Overpass (ODbL)');
       // Within the provider's 10 s interval the tap reused the results just fetched.

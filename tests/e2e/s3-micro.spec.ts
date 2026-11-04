@@ -17,7 +17,7 @@ import { getEvidenceDir } from './helpers/evidence-dir.js';
  * (b) Action Surfaces on approved action-state machine:
  *     - Accept: `#btn-accept` marks accepted with `.badge-accepted` and Undo.
  *     - Adjust: `#btn-adjust` opens dialog, adjusts prep/buffer, updates plan with `#plan-diff-banner`.
- *     - Why: `#btn-why` opens provenance sheet, Done/Esc restores invoking focus.
+ *     - Why: removed (HABIT-LEARN addendum 2); the action surface has no Why action.
  *     - Dismiss: `#btn-dismiss` suppresses intent, transitions to quiet state ('Nothing needs you right now.').
  * (c) Motion tokens: `--motion-fast: 120ms;`, `--motion-base: 200ms;`. In `prefers-reduced-motion: reduce`,
  *     all transitions collapse to instant `0s` swap without motion-only information.
@@ -178,7 +178,7 @@ test.describe('S3-MICRO: Microinteractions and Action Surfaces', () => {
     await expect(page.locator('.now-leave-time')).not.toHaveClass(/plan-diff-highlight/);
   });
 
-  test('2. Action Surfaces: Accept, Adjust (Dialog & Diff), Why (Provenance & Focus), Dismiss (Quiet State)', async ({
+  test('2. Action Surfaces: Accept, Adjust (Dialog & Diff), no Why action, Dismiss (Quiet State)', async ({
     page,
   }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile';
@@ -226,19 +226,9 @@ test.describe('S3-MICRO: Microinteractions and Action Surfaces', () => {
     await undoAcceptBtn.click();
     await expect(diffBanner).not.toBeVisible();
 
-    // (c) Why Provenance Sheet and Focus Restoration
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whySheet = page.locator('#why-sheet');
-    await expect(whySheet).toBeVisible();
-    await saveEvidence(page, `06-action-why-sheet-${suffix}.png`);
-
-    // Close Why Sheet via Esc key and assert focus returns to #btn-why
-    await page.keyboard.press('Escape');
-    await expect(whySheet).not.toBeVisible();
-    await expect(whyBtn).toBeFocused();
+    // (c) HABIT-LEARN addendum 2: no Why action or Why sheet on the action surface
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet')).toHaveCount(0);
 
     // (d) Dismiss Plan to Quiet Empty State
     const dismissBtn = page.locator('#btn-dismiss');
@@ -385,7 +375,8 @@ test.describe('S3-MICRO: Microinteractions and Action Surfaces', () => {
     await checkNoHorizontalScroll(page);
 
     // Touch target sizes >= 44x44px for primary buttons
-    const buttonsToCheck = ['#btn-accept', '#btn-adjust', '#btn-why', '#btn-dismiss', '#ask-bar'];
+    const buttonsToCheck = ['#btn-accept', '#btn-adjust', '#btn-dismiss', '#ask-bar'];
+    await expect(page.locator('#btn-why')).toHaveCount(0); // HABIT-LEARN addendum 2
     for (const selector of buttonsToCheck) {
       const btn = page.locator(selector);
       if (await btn.isVisible()) {

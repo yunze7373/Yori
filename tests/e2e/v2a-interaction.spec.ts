@@ -96,27 +96,10 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await expect(page.locator('.v2-options-grid .v2-option-card')).toHaveCount(2);
     await page.locator('#trip-detail-back-btn').click();
 
-    // 7. Verify Why sheet carries user_request provenance
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-    await expect(page.locator('#why-order-text, .why-derivation-text')).toContainText(
-      'Because you asked: leave 15 min later · this time only'
-    );
-
-    // C2: Distinct user request provenance without SIMULATED badge
-    const userReqRow = page.locator('.why-item-user-request');
-    await expect(userReqRow).toBeVisible();
-    await expect(userReqRow).toContainText('Your request · this time only');
-    await expect(userReqRow).toContainText('THIS SESSION');
-    await expect(userReqRow.locator('.badge-simulated')).toHaveCount(0);
-
-    // Close Why sheet
-    await page.locator('#btn-close-why').click();
-    await expect(whySheet).toHaveCount(0);
+    // 7. HABIT-LEARN addendum 2: no Why action or Why sheet; the shifted plan simply shows
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    await expect(nowCard).not.toContainText('Because you asked');
 
     // 8. Verify Undo button restores prior plan
     const undoBtn = page.locator('#btn-undo-accept');
@@ -273,35 +256,14 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     const nowCard = page.locator('.now-card');
     await expect(nowCard).toContainText('2:35 PM');
 
-    // Open Why sheet to verify model reason codes
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-    const situationSection = page.locator('#why-situation-section');
-    await expect(situationSection).toContainText('Situation Attribution');
-    await expect(situationSection).toContainText('Weather Adjusted');
-    await expect(situationSection).toContainText('Weather forecast · issued 1:35 PM');
-
-    // Anti-jargon & human provenance invariants on Why sheet (Finding 2)
-    const situationText = await situationSection.innerText();
-    expect(situationText).not.toContain('weather:2026-10-28');
-    expect(situationText).not.toContain('2026-10-28T20:35:00.000Z');
-    expect(situationText).not.toContain('Weather forecast updated to rain');
-    expect(situationText).toContain('Precipitation increased · travel buffer adjusted for rain');
-
-    // Full Why sheet scan for zero engineering jargon
-    const fullWhyText = await whySheet.innerText();
-    expect(fullWhyText).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
-    expect(fullWhyText).not.toContain('weather:2026');
-    expect(fullWhyText).not.toContain('rain_transport_preference');
-    expect(fullWhyText).not.toContain('fail-closed');
-
-    // Close Why sheet
-    await page.locator('#btn-close-why').click();
-    await expect(whySheet).toHaveCount(0);
+    // HABIT-LEARN addendum 2: no Why sheet; Home itself stays free of engineering jargon
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    const homeText = await page.locator('main').innerText();
+    expect(homeText).not.toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    expect(homeText).not.toContain('weather:2026');
+    expect(homeText).not.toContain('rain_transport_preference');
+    expect(homeText).not.toContain('fail-closed');
 
     // Verify Undo restores prior plan (2:30 PM)
     const undoBtn = page.locator('#btn-undo-accept');
@@ -444,7 +406,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
       await page.locator('#trip-detail-back-btn').click();
     });
 
-    test(`V2a Rain Details Why rows render 5 min / 20 min and zero unknown text across default, leave-later, and bus states (${viewport.name})`, async ({
+    test(`V2a Rain Details shows no Why section and zero unknown text across default, leave-later, and bus states (${viewport.name})`, async ({
       page,
     }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -462,12 +424,9 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
         const tripDetail = page.locator('.v2-trip-detail');
         await expect(tripDetail).toBeVisible();
 
-        const whyCard = tripDetail.locator('.v2-why-plan-card');
-        await expect(whyCard).toBeVisible();
-
-        // Assert Why rows show 5 min and 20 min
-        await expect(whyCard).toContainText('5 min');
-        await expect(whyCard).toContainText('20 min');
+        // HABIT-LEARN addendum 2: no "Why this plan?" section on the detail
+        await expect(tripDetail.locator('.v2-why-plan-card')).toHaveCount(0);
+        await expect(tripDetail).toContainText('Get ready');
 
         // Assert entire page contains zero 'unknown' text
         const pageText = await page.innerText('body');

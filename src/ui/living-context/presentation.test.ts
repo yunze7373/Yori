@@ -8,7 +8,7 @@ import {
   formatTime,
   humanizeProposalTitle,
 } from './presentation.js';
-import { renderV2Home } from './v2-home-view.js';
+import { renderV2Home, renderSignalTiles } from './v2-home-view.js';
 import { renderTripDetail } from './v2-detail-views.js';
 import type { HomeCompositionVM, TripDetailVM } from '../view-models/types.js';
 import { STRINGS } from './strings.js';
@@ -502,7 +502,7 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
     };
 
     it('renders real weather condition and temperature (e.g. Rain · 9°C), NEVER hardcoded 18°C', () => {
-      const html = renderV2Home(baseCandidateVM);
+      const html = renderSignalTiles(baseCandidateVM);
       expect(html).toContain('Rain · 9°C');
       expect(html).not.toContain('18°C');
     });
@@ -513,7 +513,7 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
         weatherEnabled: false,
         weatherSignalValue: undefined,
       };
-      const html = renderV2Home(disabledVM);
+      const html = renderSignalTiles(disabledVM);
       expect(html).toContain('Off (owner setting)');
       expect(html).not.toContain('18°C');
       expect(html).not.toContain('Rain');
@@ -531,7 +531,7 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
           isSimulated: false,
         },
       };
-      const html = renderV2Home(staleVM);
+      const html = renderSignalTiles(staleVM);
       const weatherVal = html.match(/id="signal-tile-weather"[\s\S]*?<div class="signal-value">([^<]*)<\/div>/)?.[1];
       expect(weatherVal).toBe('Unavailable');
       expect(weatherVal).not.toContain('21');
@@ -539,24 +539,24 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
     });
 
     it('renders calendar as "No calendar linked yet" in Live mode (UI-QUIET-PRECISION copy)', () => {
-      const html = renderV2Home(baseCandidateVM);
+      const html = renderSignalTiles(baseCandidateVM);
       expect(html).toContain('No calendar linked yet');
       expect(html).not.toContain('Lunch break · 12:15 PM');
     });
 
     it('A3 (UI-QUIET-PRECISION): a Live depart plan shows the route fact or no transit row, never a place label', () => {
       const departNoRoute = { ...baseCandidateVM, layoutKind: 'journey', options: [], topCandidateDistance: '125 m (straight-line)' } as unknown as HomeCompositionVM;
-      const noRoute = renderV2Home(departNoRoute);
+      const noRoute = renderSignalTiles(departNoRoute);
       expect(noRoute).not.toContain('id="signal-tile-transit"');
       expect(noRoute).not.toContain('Nearby dining');
       const withRoute = { ...departNoRoute, options: [{ id: 'o1', label: 'Drive', title: 'Drive', mode: 'drive', travelMinutes: 15, isSelected: true }] } as unknown as HomeCompositionVM;
-      const html = renderV2Home(withRoute);
+      const html = renderSignalTiles(withRoute);
       const transit = html.match(/id="signal-tile-transit"[\s\S]*?<div class="signal-value">([^<]*)<\/div>/)?.[1];
       expect(transit).toBe('Drive · 15 min');
     });
 
     it('omits memory signal tile in Live mode when no confirmed fact exists', () => {
-      const html = renderV2Home(baseCandidateVM);
+      const html = renderSignalTiles(baseCandidateVM);
       expect(html).not.toContain('id="signal-tile-memory"');
       expect(html).not.toContain('Confirmed taste preference');
     });
@@ -567,7 +567,7 @@ describe('Living Context Presentation Layer (NFR-105, AC-105-1)', () => {
         confirmedMemoryFact: 'taste',
         confirmedMemoryNote: 'Taste: udon (confirmed)',
       };
-      const html = renderV2Home(withMemoryVM);
+      const html = renderSignalTiles(withMemoryVM);
       expect(html).toContain('id="signal-tile-memory"');
       expect(html).toContain('Taste: udon (confirmed)');
     });
@@ -687,5 +687,21 @@ describe('UI-QUIET-PRECISION increment 3: restaurant detail photo rendering', ()
     const html = await render({});
     expect(html).toContain('v2-restaurant-hero-art');
     expect(html).not.toContain('<img');
+  });
+});
+
+describe('HABIT-LEARN addendum 2: cards recommend, they do not explain', () => {
+  it('Home renders no Why action, no evidence rows and no "Based on …" footer', () => {
+    const vm = {
+      layoutKind: 'journey', title: 'Leave by 2:25 PM', headline: 'Rain near your 3:00 PM review.', basis: 'Based on your calendar, the route, and how you usually get ready.',
+      isRain: true, options: [], isAccepted: false, actions: [], aheadItems: [], proposals: [], isLive: true, planId: 'p1',
+    } as unknown as HomeCompositionVM;
+    const html = renderV2Home(vm);
+    expect(html).not.toContain('id="btn-why"');
+    expect(html).not.toContain('signal-tile');
+    expect(html).not.toContain('now-basis');
+    expect(html).not.toContain('Based on your calendar');
+    expect(html).toContain('id="btn-accept"');
+    expect(html).toContain('id="btn-adjust"');
   });
 });

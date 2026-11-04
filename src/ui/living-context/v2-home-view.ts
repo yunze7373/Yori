@@ -269,9 +269,6 @@ function renderActionRow(vm: HomeCompositionVM): string {
           <button type="button" class="btn btn-outline btn-now-action" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Undo action button">
             ${escapeHtml(STRINGS.actions.undo)}
           </button>
-          <button type="button" class="btn btn-outline btn-now-action" id="btn-why" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Why provenance action button">
-            ${escapeHtml(STRINGS.actions.why)}
-          </button>
         </div>
         <div class="now-actions-secondary">
           <button type="button" class="btn-secondary-link v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Trip details action button">
@@ -294,9 +291,6 @@ function renderActionRow(vm: HomeCompositionVM): string {
           <button type="button" class="btn btn-outline btn-now-action" id="btn-undo-accept" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Undo action button">
             ${escapeHtml(STRINGS.actions.undo)}
           </button>
-          <button type="button" class="btn btn-outline btn-now-action" id="btn-why" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Why provenance action button">
-            ${escapeHtml(STRINGS.actions.why)}
-          </button>
         </div>
         <div class="now-actions-secondary">
           <button type="button" class="btn-secondary-link v2-trip-details-btn" id="btn-view-trip-details" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Trip details action button">
@@ -317,9 +311,6 @@ function renderActionRow(vm: HomeCompositionVM): string {
         </button>
         <button type="button" class="btn btn-outline btn-now-action" id="btn-adjust" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Adjust plan button">
           ${escapeHtml(STRINGS.actions.adjust)}
-        </button>
-        <button type="button" class="btn btn-outline btn-now-action" id="btn-why" data-plan-id="${escapeHtml(planId)}" data-slot="chrome" data-slot-reason="Why provenance action button">
-          ${escapeHtml(STRINGS.actions.why)}
         </button>
       </div>
       <div class="now-actions-secondary">
@@ -503,7 +494,8 @@ function renderPlanDiffBanner(diff?: HomeCompositionVM['planDiff']): string {
   `;
 }
 
-function renderSignalTiles(vm: HomeCompositionVM): string {
+/** Evidence rows (WEATHER / CALENDAR / MEMORY); not rendered on cards since HABIT-LEARN addendum 2. */
+export function renderSignalTiles(vm: HomeCompositionVM): string {
   // 1. Weather Value
   let weatherValue: string;
   if (vm.isLive) {
@@ -1032,17 +1024,10 @@ export function renderV2Home(vm: HomeCompositionVM): string {
               ${vm.forecastStatus ? `<div class="now-forecast-status" id="forecast-status" role="status">${escapeHtml(vm.forecastStatus)}</div>` : ''}
 
               ${renderActionRow(vm)}
-
-              <!-- Signal Tiles Grid -->
-              ${renderSignalTiles(vm)}
             </div>
 
             <!-- Compact Map Strip (<= 140px tall, Finding P2) -->
             ${vm.map ? `<div class="v2-card-inline-map now-inline-map now-map-strip">${renderCompactMapStrip(vm.map, vm.isLive)}</div>` : ''}
-
-            <div class="now-basis">
-              <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
-            </div>
           </section>
         </div>
 
@@ -1091,11 +1076,6 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                     ${topC.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
                     ${topC.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Dietary filter tag">Vegetarian</span>` : ''}
                   </div>
-                  <div class="v2-candidate-basis" ${
-                    topC.fieldSourceRefs?.basis
-                      ? `data-source-ref="${escapeHtml(topC.fieldSourceRefs.basis.recordId)}.${escapeHtml(topC.fieldSourceRefs.basis.field)}" data-slot="domain"`
-                      : `data-slot="chrome" data-slot-reason="Recommendation ranking basis label"`
-                  }>${escapeHtml(topC.basis)}</div>
                   ${
                     vm.isLive && vm.candidateReasonLine
                       ? `<div class="v2-candidate-model-reason" id="candidate-model-reason" data-engine="${escapeHtml(vm.candidateReasonLine.engine ?? (vm.candidateReasonLine.statusLabel.includes('live') ? 'meta_model_live' : 'offline_deterministic'))}"><span class="model-reason-status">${escapeHtml(vm.candidateReasonLine.statusLabel)}</span><span class="model-reason-text" title="${escapeHtml(vm.candidateReasonLine.text)}">${escapeHtml(vm.candidateReasonLine.text)}</span></div>`
@@ -1159,11 +1139,6 @@ export function renderV2Home(vm: HomeCompositionVM): string {
                       ${c.noiseLevel === 'quiet' ? `<span class="v2-noise-chip" data-slot="chrome" data-slot-reason="Noise filter tag">Quiet</span>` : ''}
                       ${c.vegetarian ? `<span class="v2-veg-chip" data-slot="chrome" data-slot-reason="Dietary filter tag">Vegetarian</span>` : ''}
                     </div>
-                    <div class="v2-candidate-basis" ${
-                      c.fieldSourceRefs?.basis
-                        ? `data-source-ref="${escapeHtml(c.fieldSourceRefs.basis.recordId)}.${escapeHtml(c.fieldSourceRefs.basis.field)}" data-slot="domain"`
-                        : `data-slot="chrome" data-slot-reason="Recommendation ranking basis label"`
-                    }>${escapeHtml(c.basis)}</div>
                     ${vm.isLive ? renderPhotoCredit(c) : ''}
                   </div>
                 </div>
@@ -1310,15 +1285,8 @@ export function renderV2Home(vm: HomeCompositionVM): string {
         <!-- Candidate Cards with Local Labelled SVG Illustrations (Demo order; Live renders them under the title) -->
         ${vm.isLive ? '' : candidateListHtml}
 
-        <!-- Signal Tiles Grid -->
-        ${renderSignalTiles(vm)}
-
         <!-- Compact Map Strip inside Candidates Card (Finding 5) -->
         ${vm.map ? `<div class="v2-card-inline-map now-inline-map now-map-strip">${renderCompactMapStrip(vm.map, vm.isLive)}</div>` : ''}
-
-        <div class="now-basis">
-          <p data-slot="chrome" data-slot-reason="Static basis template">${escapeHtml(vm.basis)}</p>
-        </div>
       </section>
 
       ${renderSectionedFeed(vm)}

@@ -3,12 +3,12 @@
  * Governed by BACKLOG-20261031-UIA11Y.
  *
  * Verifies:
- * 1. Why Sheet: focus inside dialog on open, Esc closes, focus restored to #btn-why / .btn-ahead-why, Tab/Shift+Tab cycles within dialog.
+ * 1. No Why action or Why sheet on user surfaces (HABIT-LEARN addendum 2).
  * 2. Adjust Dialog: focus inside on open, Tab cycles, Esc closes, focus restored to #btn-adjust.
  * 3. Dismiss Dialog: focus inside on open, Tab cycles, Esc closes, focus restored to #btn-dismiss.
  * 4. Navigate Modal: focus inside on open, Tab cycles, Esc closes, focus restored to invoking Directions button.
  * 5. Candidate Cards: no nested interactive elements; mouse click opens details; Details button opens details; Directions opens modal.
- * 6. Axe WCAG 2.0 Level A and AA audit: 0 violations across clear, rain, lunch, fuel, away-lunch, Why sheet open, For You, Plans, Me.
+ * 6. Axe WCAG 2.0 Level A and AA audit: 0 violations across clear, rain, lunch, fuel, away-lunch, For You, Plans, Me.
  * 7. Capture after screenshots of candidate cards into docs/evidence/ui-a11y/.
  */
 
@@ -117,123 +117,26 @@ test.describe('UI-A11Y: Modal Accessibility & Candidate Cards WCAG 2.1 AA', () =
   });
 
   // --------------------------------------------------------------------------
-  // 3. Why Sheet: Focus on Open, Focus Trap, Escape Key, Focus Restoration
+  // 3. No Why action (HABIT-LEARN addendum 2)
   // --------------------------------------------------------------------------
-  test('Why sheet: focus moves inside dialog on open, Esc closes, focus restored to #btn-why', async ({
-    page,
-  }) => {
-    await page.goto('/?ui=v2&test=1&scene=clear');
-    await page.waitForSelector('.app-layout');
-
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const whySheetBackdrop = page.locator('#why-sheet-backdrop');
-    await expect(whySheetBackdrop).toBeVisible();
-    const modalCard = page.locator('#why-sheet-backdrop .modal-card');
-    await expect(modalCard).toBeVisible();
-
-    // Verify document.activeElement is inside the dialog (not on BODY)
-    const insideDialogOnOpen = await page.evaluate(() => {
-      const card = document.querySelector('#why-sheet-backdrop [role="dialog"]');
-      return card ? card.contains(document.activeElement) && document.activeElement !== document.body : false;
-    });
-    expect(insideDialogOnOpen).toBe(true);
-
-    // Verify Tab and Shift+Tab cycling never leaves the dialog
-    for (let i = 0; i < 6; i++) {
-      await page.keyboard.press('Tab');
-      const inside = await page.evaluate(() => {
-        const card = document.querySelector('#why-sheet-backdrop [role="dialog"]');
-        return card ? card.contains(document.activeElement) && document.activeElement !== document.body : false;
-      });
-      expect(inside).toBe(true);
+  // HABIT-LEARN addendum 2: the Why action and Why sheet are gone from every user surface; the
+  // focus-management tests for that dialog were removed (see docs/evidence/habit-learn/README.md).
+  test('No Why action or Why sheet on Home, lunch candidates or restaurant detail', async ({ page }) => {
+    for (const scene of ['rain', 'away-lunch', 'clear']) {
+      await page.goto(`/?ui=v2&test=1&scene=${scene}`);
+      await page.waitForSelector('.app-layout');
+      await expect(page.locator('#btn-why')).toHaveCount(0);
+      await expect(page.locator('.btn-ahead-why')).toHaveCount(0);
+      await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+      await expect(page.locator('#btn-accept')).toBeVisible();
     }
-    for (let i = 0; i < 6; i++) {
-      await page.keyboard.press('Shift+Tab');
-      const inside = await page.evaluate(() => {
-        const card = document.querySelector('#why-sheet-backdrop [role="dialog"]');
-        return card ? card.contains(document.activeElement) && document.activeElement !== document.body : false;
-      });
-      expect(inside).toBe(true);
-    }
-
-    // Press Escape to close Why sheet
-    await page.keyboard.press('Escape');
-    await expect(whySheetBackdrop).toHaveCount(0);
-
-    // Focus restored to #btn-why
-    await expect(whyBtn).toBeFocused();
+    await page.goto('/?ui=v2&test=1&scene=away-lunch');
+    await page.waitForSelector('.v2-candidate-card');
+    await page.locator('.v2-candidate-card').first().click();
+    await expect(page.locator('.v2-restaurant-detail')).toBeVisible();
+    await expect(page.locator('#btn-why')).toHaveCount(0);
   });
 
-  test('Why sheet: close via Close button (X) restores focus to #btn-why', async ({ page }) => {
-    await page.goto('/?ui=v2&test=1&scene=clear');
-    await page.waitForSelector('.app-layout');
-
-    const whyBtn = page.locator('#btn-why');
-    await whyBtn.click();
-
-    const closeBtn = page.locator('#btn-close-why');
-    await expect(closeBtn).toBeVisible();
-    await closeBtn.click();
-
-    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
-    await expect(whyBtn).toBeFocused();
-  });
-
-  test('Why sheet: close via Done button restores focus to #btn-why', async ({ page }) => {
-    await page.goto('/?ui=v2&test=1&scene=clear');
-    await page.waitForSelector('.app-layout');
-
-    const whyBtn = page.locator('#btn-why');
-    await whyBtn.click();
-
-    const doneBtn = page.locator('#btn-why-sheet-done');
-    await expect(doneBtn).toBeVisible();
-    await doneBtn.click();
-
-    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
-    await expect(whyBtn).toBeFocused();
-  });
-
-  test('Why sheet: close via backdrop click restores focus to #btn-why', async ({ page }) => {
-    await page.goto('/?ui=v2&test=1&scene=clear');
-    await page.waitForSelector('.app-layout');
-
-    const whyBtn = page.locator('#btn-why');
-    await whyBtn.click();
-
-    const backdrop = page.locator('#why-sheet-backdrop');
-    await expect(backdrop).toBeVisible();
-
-    // Click on backdrop outside the modal card (top left corner)
-    await backdrop.click({ position: { x: 10, y: 10 } });
-
-    await expect(backdrop).toHaveCount(0);
-    await expect(whyBtn).toBeFocused();
-  });
-
-  test('Why sheet from Ahead items: focus restores to .btn-ahead-why', async ({ page }) => {
-    await page.goto('/?ui=v2&test=1&scene=rain');
-    await page.waitForSelector('.app-layout');
-
-    const aheadWhyBtn = page.locator('.btn-ahead-why').first();
-    if ((await aheadWhyBtn.count()) > 0) {
-      await aheadWhyBtn.click();
-
-      const backdrop = page.locator('#why-sheet-backdrop');
-      await expect(backdrop).toBeVisible();
-
-      await page.keyboard.press('Escape');
-      await expect(backdrop).toHaveCount(0);
-      await expect(aheadWhyBtn).toBeFocused();
-    }
-  });
-
-  // --------------------------------------------------------------------------
-  // 4. Adjust Dialog: Focus, Trap, Esc, Focus Restoration
-  // --------------------------------------------------------------------------
   test('Adjust dialog: focus moves inside on open, Tab cycles, Esc closes, restores focus to #btn-adjust', async ({
     page,
   }) => {
@@ -421,15 +324,6 @@ test.describe('UI-A11Y: Modal Accessibility & Candidate Cards WCAG 2.1 AA', () =
       await checkAxeWcag(page, `Home [scene=${scene}]`);
     });
   }
-
-  test('Axe WCAG 2.1 AA passes on Why Sheet open state with 0 violations', async ({ page }) => {
-    await page.goto('/?ui=v2&test=1&scene=clear');
-    await page.waitForSelector('.app-layout');
-    await page.locator('#btn-why').click();
-    await expect(page.locator('#why-sheet-backdrop')).toBeVisible();
-
-    await checkAxeWcag(page, 'Why Sheet Open State');
-  });
 
   test('Axe WCAG 2.1 AA passes on For You, Plans, and Me tabs with 0 violations', async ({
     page,

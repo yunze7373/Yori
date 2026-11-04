@@ -28,7 +28,7 @@ test.beforeAll(() => {
   }
 });
 
-test.describe('PH-002 B2: Constrained Reasoning UI & Why-Order Verification', () => {
+test.describe('PH-002 B2: Constrained Reasoning UI & Reorder Verification (no Why)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/?ui=v1');
     await page.evaluate(() => {
@@ -37,7 +37,7 @@ test.describe('PH-002 B2: Constrained Reasoning UI & Why-Order Verification', ()
     await page.reload();
   });
 
-  test('Accepted Reorder Fixture: asynchronously reorders candidates and displays Why This Order', async ({
+  test('Accepted Reorder Fixture: asynchronously reorders candidates (no Why sheet)', async ({
     page,
   }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile';
@@ -124,52 +124,22 @@ test.describe('PH-002 B2: Constrained Reasoning UI & Why-Order Verification', ()
     const mainScreenshotPath = path.join(EVIDENCE_DIR, `reasoning-reordered-${viewName}.png`);
     await page.screenshot({ path: mainScreenshotPath, fullPage: true });
 
-    // 8. Click Why button on the NOW card to open the Why Sheet
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
+    // 8. HABIT-LEARN addendum 2: the reorder simply shows; no Why action, no "Why this order" sheet
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
+    await expect(page.locator('#why-order-section')).toHaveCount(0);
 
-    // 9. Verify Why Sheet opened and contains "Why this order" section with reasonCode text
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-
-    const orderSection = page.locator('#why-order-section');
-    await expect(orderSection).toBeVisible();
-
-    const orderHeading = page.locator('#why-order-heading');
-    await expect(orderHeading).toHaveText('Why this order');
-
-    const orderText = page.locator('#why-order-text');
-    await expect(orderText).toBeVisible();
-    await expect(orderText).toHaveText(
-      'Prioritized because it matches your confirmed preferences.'
-    );
-
-    // 10. Humanized presentation check: Why sheet text contains clean copy and zero raw tokens
-    const sheetContent = await whySheet.innerText();
-    expect(sheetContent).toContain('You like ramen or salad');
-    expect(sheetContent).toContain('Japanese');
-    expect(sheetContent).toContain('Recorded at 12:10 PM');
-
-    // Invariant check: zero invented venues, zero raw tokens, zero engineering jargon
-    expect(sheetContent).not.toContain('Green Bowl');
-    expect(sheetContent).not.toContain('Blue Lotus');
-    expect(sheetContent).not.toContain('ramen_or_salad');
-    expect(sheetContent).not.toContain('signal evaluated at');
-    expect(sheetContent).not.toContain('INV-');
-    expect(sheetContent).not.toContain('AC-202');
-    expect(sheetContent).not.toContain('PH-002');
-    expect(sheetContent).not.toContain('depart-plan-');
-    expect(sheetContent).not.toContain('plan-lunch-');
-
-    // 11. Capture visual screenshot of Why Sheet with ordering rationale
-    const whyScreenshotPath = path.join(EVIDENCE_DIR, `why-order-sheet-${viewName}.png`);
-    await page.screenshot({ path: whyScreenshotPath, fullPage: true });
-
-    // 12. Close Why sheet
-    const closeBtn = page.locator('#btn-close-why');
-    await closeBtn.click();
-    await expect(whySheet).not.toBeVisible();
+    // 9. Invariant check on the visible Home: zero invented venues, zero raw tokens, zero jargon
+    const homeContent = await page.locator('main').innerText();
+    expect(homeContent).not.toContain('Green Bowl');
+    expect(homeContent).not.toContain('Blue Lotus');
+    expect(homeContent).not.toContain('ramen_or_salad');
+    expect(homeContent).not.toContain('signal evaluated at');
+    expect(homeContent).not.toContain('INV-');
+    expect(homeContent).not.toContain('AC-202');
+    expect(homeContent).not.toContain('PH-002');
+    expect(homeContent).not.toContain('depart-plan-');
+    expect(homeContent).not.toContain('plan-lunch-');
   });
 
   test('Fault Injection Invariance: 500 error falls back silently to deterministic ordering', async ({
@@ -203,16 +173,8 @@ test.describe('PH-002 B2: Constrained Reasoning UI & Why-Order Verification', ()
       'Places matching what you like, within walking distance'
     );
 
-    // 5. Open Why sheet and verify "Why this order" section is omitted
-    const whyBtn = page.locator('#btn-why');
-    await expect(whyBtn).toBeVisible();
-    await whyBtn.click();
-
-    const orderSection = page.locator('#why-order-section');
-    await expect(orderSection).not.toBeVisible();
-
-    // 6. Close Why sheet
-    const closeBtn = page.locator('#btn-close-why');
-    await closeBtn.click();
+    // 5. HABIT-LEARN addendum 2: no Why action and no "Why this order" section
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-order-section')).toHaveCount(0);
   });
 });

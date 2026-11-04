@@ -112,22 +112,18 @@ test.describe('DEMO-XMEMO-FREE: no XMemo anywhere on the demo-recording build', 
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))));
       const hero = page.locator('.v2-candidate-card').first();
-      for (const sel of ['.v2-candidate-name', '.v2-distance-chip', '.v2-open-chip', '.v2-candidate-basis', '.v2-directions-btn']) {
+      for (const sel of ['.v2-candidate-name', '.v2-distance-chip', '.v2-open-chip', '.v2-candidate-model-reason', '.v2-directions-btn']) {
         const box = await hero.locator(sel).first().boundingBox();
         expect(box && box.y + box.height <= vp.height - (vp.width < 768 ? 90 : 0), `D3: ${sel} above the fold`).toBe(true);
       }
-      // Sources sheet (memory source), then the Why sheet.
+      // HABIT-LEARN addendum 2: no Why action; the context pill opens Settings > Connectors (no
+      // Sources sheet). Both are checked for XMemo like every other surface.
+      await expect(page.locator('#btn-why')).toHaveCount(0);
       await page.locator('#pill-context-status').first().click();
-      await expect(page.locator('#source-item-memory')).toContainText('saved on this device');
-      await check('sources-sheet', true);
-      await page.keyboard.press('Escape');
-      const close = page.locator('#btn-close-why');
-      if (await close.isVisible().catch(() => false)) await close.click();
-      if (await page.locator('#btn-why').isVisible().catch(() => false)) {
-        await page.locator('#btn-why').click();
-        await check('why-sheet', true);
-        if (await close.isVisible().catch(() => false)) await close.click();
-      }
+      await expect(page.locator('#connectors-page')).toBeVisible();
+      await check('pill-connectors', true);
+      await page.goto(`${APP}/?mode=live`);
+      await page.waitForSelector('.app-layout[data-context-mode="live"]');
       // Ask panel.
       await page.locator('#ask-bar').click();
       await expect(page.locator('#conversation-input')).toBeVisible();
@@ -164,7 +160,7 @@ test.describe('DEMO-XMEMO-FREE: no XMemo anywhere on the demo-recording build', 
 
       expect(watch.xmemoRequests, 'zero /api/xmemo requests').toEqual([]);
       expect(visited).toEqual([
-        'live-consent', 'live-lunch', 'sources-sheet', 'why-sheet', 'ask-panel', 'plans', 'for-you',
+        'live-consent', 'live-lunch', 'pill-connectors', 'ask-panel', 'plans', 'for-you',
         'me-memories', 'connectors', 'demo-home', 'demo-rain', 'demo-lunch', 'decision-log',
       ]);
       await context.close();

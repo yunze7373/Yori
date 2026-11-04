@@ -26,8 +26,8 @@ Modern smartphone and computer users suffer from two compounding assistant parad
 
 Users need an assistant that is:
 - **Calm & Non-Intrusive**: Surfaces exactly what matters when it matters, and stays silent when nothing is needed.
-- **Explainable**: Clear plain-language derivations for every recommendation (no "black-box" magic).
-- **Privacy-Centric**: Respectful of user sovereignty; personal preferences must never be modified without explicit confirmation.
+- **Understanding**: Learns from what you actually do and simply gets it right next time, without asking you to explain or confirm anything.
+- **Privacy-Centric**: Respectful of user sovereignty; everything Yori has learned is visible on Me and can be forgotten in one tap.
 
 ---
 
@@ -39,11 +39,12 @@ Yori synthesizes structured context into an intuitive, glanceable card layout:
 - **Contextual Anticipation**: Adapts automatically to changing conditions (e.g. adding an **Umbrella** checklist chip and promoting driving over transit when rain is forecast).
 - **Proactive Budgeting**: Daily proactive prompts are strictly capped (default: 3 per day) to preserve peace of mind.
 
-### 2. Explainable Review Loop
-Every recommendation is fully transparent:
-- **Why Sheet**: Tap **Why** to inspect plain-language rationale (e.g. *"You usually prefer driving when it rains."*), citing scenario evidence signals alongside clearly labelled demo-profile and user-confirmed habits.
-- **Adjust Dialog**: Adjust buffer times for *"This time only"* or choose *"Remember as preference"* to create a proposal.
-- **Dismissals**: Dismissing a card silences it for the day and creates an explainable preference proposal.
+### 2. Yori Learns You
+Cards recommend; they don't explain themselves:
+- **Learning from choices**: Pick ramen a couple of times and the next search puts ramen first, with no question asked and no reason line on the card. Only plain cuisine labels are learned; diet, allergy, health or religion-related labels are never inferred, only saved when you state them.
+- **Adjust Dialog**: Adjust buffer times for *"This time only"* or choose *"Remember as preference"*, which is remembered at once.
+- **Dismissals**: Dismissing a card silences it for the day; nothing follows up asking you to confirm.
+- **Me > What Yori has learned**: every habit and everything you told Yori, each with a one-tap **Forget**.
 
 ### 3. User Sovereignty & The Me Tab
 - **Learn-and-Correct Memory (INV-107)**: Yori learns habits from what you do in the app (Accept a lunch pick, Directions, Save a restaurant) and applies them right away, with no Confirm prompt: a cuisine you pick on at least 2 of your recent lunches (last 14 days), more than any other, comes first, with its basis shown ("You often pick ramen · 3 of your last 4 lunches"). Things you tell Yori in Ask ("I'm vegetarian", "remember I like quiet places") are saved as stated. Me > **What Yori has learned** lists every habit with its basis and a quiet **Forget**; forgetting removes the habit and its recorded choices and keeps it from being re-learned for 30 days.
@@ -155,7 +156,7 @@ Every criterion is mapped strictly to demonstrable, recorded, and verifiable cod
 | **Impact** | **30%** | • Solves real-world cognitive overload: replaces passive chat prompting and noisy notification feeds with a proactive, calm Living Context.<br>• At most one actionable NOW card with clear travel and preparation windows.<br>• Calm Quiet State (*"Nothing needs your attention right now."*) respects user peace of mind.<br>• Proactive prompt budget (max 3/day) prevents notification fatigue.<br>• Accessibility-first: 0 Axe violations across WCAG contrast, touch targets (≥44px), and reduced-motion instant duration collapse. |
 | **Use of Meta AI Tooling** | **25%** | • Architecture designed around Meta Muse Spark 1.3 (`muse-spark-1.3`) for contextual ranking and conversational natural language command interpretation.<br>• Server-side dev proxy implements factual hallucination filtering, input schema validation, and closed decision intents.<br>• Strict fact-key parity (G3-PARITY): validates citations against confirmed memory keys, preventing synthetic fact invention.<br>• Live billed verification (S1-LIVE-2) accepted phrasing refinement and ranking rationale on 2026-10-31.<br>• Transparent UI engine badge: displays truthful `'Offline fallback · deterministic'` and `'Scripted model fixture · not a live model call'` when running in offline mode. |
 | **Technical Depth & Execution** | **20%** | • Layered architecture with pure domain core (`src/core/`) frozen with zero diffs (`git diff --stat f43c6c1d HEAD -- src/core` 100% empty).<br>• Test-driven rigor: 914 unit tests across 40 files, 18 golden acceptance fixtures, 56 degradation drills, and 441 Playwright E2E tests across 33 files.<br>• Deterministic replay: core domain has zero ambient clock calls (`Date.now()`) and zero network imports.<br>• Storage envelope with corruption detection, recovery reset, and raw JSON export.<br>• Strict design token system verified by Playwright pixel sampler (10/10 PASS). |
-| **Demo** | **25%** | • Fully synchronized video demonstration script ([`docs/submission/VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md)) with every on-screen string and flow sequence asserted verbatim by automated Playwright E2E walkthrough ([`tests/e2e/video-script.spec.ts`](../../tests/e2e/video-script.spec.ts)).<br>• Two comprehensive interactive user loops: Rain Re-Plan (transit adaptation + umbrella) and Away Lunch (candidate cards + local illustrations + dietary filters).<br>• Fully explainable review loop: Why Sheet displays plain-language evidence derivations without raw timestamps or technical jargon.<br>• Sovereign Me tab demonstrates explicit Confirm-Only memory (INV-107) and live timing recomputation. |
+| **Demo** | **25%** | • Fully synchronized video demonstration script ([`docs/submission/VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md)) with every on-screen string and flow sequence asserted verbatim by automated Playwright E2E walkthrough ([`tests/e2e/video-script.spec.ts`](../../tests/e2e/video-script.spec.ts)).<br>• Two comprehensive interactive user loops: Rain Re-Plan (transit adaptation + umbrella) and Away Lunch (candidate cards + local illustrations + dietary filters).<br>• Learns you: repeated lunch choices put that cuisine first next time with no question asked and no reason line; Me lists what was learned with a one-tap Forget<br>• Sovereign Me tab demonstrates explicit Confirm-Only memory (INV-107) and live timing recomputation. |
 
 ---
 

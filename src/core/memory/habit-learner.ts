@@ -49,9 +49,21 @@ export interface LearnedCuisineValue {
   readonly demo?: boolean;
 }
 
+/**
+ * Sensitive characteristics are NEVER learned from choices (reviewer addendum 13:55 JST): diet,
+ * allergy, health and religion-proxy labels. They are only saved when the user states them.
+ * Any place whose cuisine tags carry one of these is not recorded at all.
+ */
+const SENSITIVE_LABEL =
+  /\b(vegetarian|vegan|halal|kosher|gluten[\s-]?free|coeliac|celiac|allerg\w*|nut[\s-]?free|lactose\w*|dairy[\s-]?free|diabet\w*|low[\s-]?(salt|sodium|sugar|carb)|keto|organic|health\w*|medical|diet\w*|religio\w*)\b/;
+
+export function isSensitiveLabel(raw: unknown): boolean {
+  return typeof raw === 'string' && SENSITIVE_LABEL.test(raw.replace(/_/g, ' ').toLowerCase());
+}
+
 /** "ramen;japanese" -> "ramen", "Fast_Food" -> "fast food"; '' when there is nothing to learn. */
 export function normalizeCuisine(raw: unknown): string {
-  if (typeof raw !== 'string') return '';
+  if (typeof raw !== 'string' || isSensitiveLabel(raw)) return '';
   const first = (raw.split(';')[0] ?? '').replace(/_/g, ' ').trim().replace(/\s+/g, ' ').toLowerCase();
   return first.length > 0 && first.length <= 40 ? first : '';
 }
@@ -75,7 +87,7 @@ export function activeTombstones(tombstones: readonly HabitTombstone[], nowIso: 
 export function toChoices(observations: readonly HabitObservation[]): { cuisine: string; at: string; demo?: boolean }[] {
   const byKey = new Map<string, { cuisine: string; at: string; demo?: boolean }>();
   for (const o of observations) {
-    if (o.kind !== 'lunch_choice' || !o.cuisine || !Number.isFinite(ms(o.at))) continue;
+    if (o.kind !== 'lunch_choice' || !o.cuisine || isSensitiveLabel(o.cuisine) || !Number.isFinite(ms(o.at))) continue;
     const place = o.placeId || `cuisine:${o.cuisine}`;
     const key = o.planId ? `${o.planId}|${place}` : `noplan|${place}|${o.at.slice(0, 16)}`;
     const prev = byKey.get(key);

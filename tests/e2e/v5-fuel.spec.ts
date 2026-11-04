@@ -82,7 +82,9 @@ test.describe('V5-FUEL: PlacesProvider Seam, Fuel Recommendations & Verified Nav
     await expect(topCard).toContainText('Metro Gas & Go');
     await expect(topCard).toContainText('Gas Station');
     await expect(topCard).toContainText('(straight-line)');
-    await expect(topCard).toContainText('Simulated fixture · Metro Gas');
+    // HABIT-LEARN addendum 2: no basis line on cards; the card is still honestly labelled simulated
+    await expect(topCard.locator('.v2-candidate-basis')).toHaveCount(0);
+    await expect(topCard).toContainText('simulated');
 
     // Data honesty check: assert zero star ratings, prices or fabricated review counts
     const textContent = await nowCard.innerText();

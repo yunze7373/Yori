@@ -128,3 +128,18 @@ describe('HABIT-LEARN: deterministic lunch-habit learner', () => {
     expect(toLearnedFact(v).provenance.note).toBe('Demo profile · sample choices');
   });
 });
+
+describe('HABIT-LEARN addendum: sensitive characteristics are never learned from choices', () => {
+  it.each(['vegetarian', 'vegan', 'Halal', 'kosher', 'gluten_free', 'gluten-free', 'allergy_friendly', 'diabetic', 'low_salt', 'organic;vegan'])(
+    'repeated choices of %s places create no learned fact and are not even recorded',
+    label => {
+      expect(normalizeCuisine(label)).toBe('');
+      const many = [obs(normalizeCuisine(label) || label.toLowerCase(), daysAgo(1)), obs(normalizeCuisine(label) || label.toLowerCase(), daysAgo(2)), obs(normalizeCuisine(label) || label.toLowerCase(), daysAgo(3))];
+      expect(learnLunchCuisine(many, [], NOW)).toBeNull();
+    }
+  );
+
+  it('a plain cuisine on the same places is still learned', () => {
+    expect(learnLunchCuisine([obs('ramen', daysAgo(1)), obs('ramen', daysAgo(2))], [], NOW)?.cuisine).toBe('ramen');
+  });
+});

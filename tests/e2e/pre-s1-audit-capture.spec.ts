@@ -220,18 +220,9 @@ test.describe('PRE-S1-B: Slot-Aware Grounding Walkthrough Capture Suite', () => 
     allSlots.push(...(await extractRenderedSlots(page, scene, 'Route Options (Drive vs Bus)', vpSuffix)));
     await page.locator('#trip-detail-back-btn').click();
 
-    // Step 4: Why Provenance Sheet
-    const whyBtn = page.locator('#btn-why');
-    await whyBtn.click();
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-    steps.push('Why Provenance Sheet');
-    allSlots.push(...(await extractRenderedSlots(page, scene, 'Why Provenance Sheet', vpSuffix)));
-
-    // Close Why Sheet
-    const closeWhyBtn = page.locator('#btn-why-sheet-done');
-    await closeWhyBtn.click();
-    await expect(whySheet).not.toBeVisible();
+    // Step 4: HABIT-LEARN addendum 2: there is no Why sheet to capture
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
 
     // Step 5: Ask Yori late shift query (open conversation via Ask bar)
     const askBar = page.locator('#ask-bar');
@@ -290,18 +281,9 @@ test.describe('PRE-S1-B: Slot-Aware Grounding Walkthrough Capture Suite', () => 
     steps.push('Proactive Away Lunch Card');
     allSlots.push(...(await extractRenderedSlots(page, scene, 'Proactive Away Lunch Card', vpSuffix)));
 
-    // Step 2: Why Provenance Sheet
-    const whyBtn = page.locator('#btn-why');
-    await whyBtn.click();
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-    steps.push('Why Provenance Sheet');
-    allSlots.push(...(await extractRenderedSlots(page, scene, 'Why Provenance Sheet', vpSuffix)));
-
-    // Close Why Sheet
-    const closeWhyBtn = page.locator('#btn-why-sheet-done');
-    await closeWhyBtn.click();
-    await expect(whySheet).not.toBeVisible();
+    // Step 2: HABIT-LEARN addendum 2: there is no Why sheet to capture
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
 
     saveDump(scene, vpSuffix, steps, allSlots);
     expect(allSlots.length).toBeGreaterThan(0);
@@ -378,18 +360,9 @@ test.describe('PRE-S1-B: Slot-Aware Grounding Walkthrough Capture Suite', () => 
     await cancelBtn.click();
     await expect(navModal).not.toBeVisible();
 
-    // Step 3: Why Provenance Sheet
-    const whyBtn = page.locator('#btn-why');
-    await whyBtn.click();
-    const whySheet = page.locator('#why-sheet-backdrop');
-    await expect(whySheet).toBeVisible();
-    steps.push('Why Sheet');
-    allSlots.push(...(await extractRenderedSlots(page, scene, 'Why Sheet', vpSuffix)));
-
-    // Close Why Sheet
-    const closeWhyBtn = page.locator('#btn-why-sheet-done');
-    await closeWhyBtn.click();
-    await expect(whySheet).not.toBeVisible();
+    // Step 3: HABIT-LEARN addendum 2: there is no Why sheet to capture
+    await expect(page.locator('#btn-why')).toHaveCount(0);
+    await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
 
     saveDump(scene, vpSuffix, steps, allSlots);
     expect(allSlots.length).toBeGreaterThan(0);

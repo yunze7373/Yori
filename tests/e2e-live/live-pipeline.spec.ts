@@ -323,13 +323,13 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     await expect(heroCard).toBeVisible();
     await expect(heroCard).toContainText('Tokyo Soba Garden');
 
-    // Ranking citation: cites confirmed taste preference
-    const candidateBasis = page.locator('.v2-candidate-basis').first();
-    await expect(candidateBasis).toBeVisible();
-    await expect(candidateBasis).toContainText('Based on taste:');
-    await expect(candidateBasis).toContainText('You confirmed');
+    // HABIT-LEARN addendum 2: the confirmed taste shapes the pick (Tokyo Soba Garden, above) but the
+    // card states no reason line and offers no Why action
+    await expect(page.locator('.v2-candidate-basis')).toHaveCount(0);
+    await expect(heroCard).not.toContainText(/Based on taste|You confirmed/);
+    await expect(page.locator('#btn-why')).toHaveCount(0);
 
-    // Primary action buttons exist and are visible
+    // Primary action buttons exist and are visible (Accept + Adjust, Not now link)
     await expect(page.locator('#btn-accept')).toBeVisible();
     await expect(page.locator('#btn-adjust')).toBeVisible();
     await expect(page.locator('#btn-dismiss')).toBeVisible();
@@ -564,7 +564,7 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
   // =========================================================================
   // 7. Reviewer Probes: Signal Tiles, Details View Provenance, Tick Refresh, and Ack Persistence
   // =========================================================================
-  test('Reviewer Probe 1: Weather OFF & confirmed taste memory - Honest signal tiles and provenance on Home and Details', async ({
+  test('Reviewer Probe 1: Weather OFF & confirmed taste memory - Honest header, Me memory and provenance on Home and Details', async ({
     browser,
   }) => {
     const context = await browser.newContext({
@@ -586,16 +586,12 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     }
     await page.waitForSelector('#btn-accept', { timeout: 10000 });
 
-    // Signal tile honesty
-    const weatherTileVal = await page.locator('#signal-tile-weather .signal-value').innerText();
-    expect(weatherTileVal).toBe('Off (owner setting)');
-
-    const calendarTileVal = await page.locator('#signal-tile-calendar .signal-value').innerText();
-    expect(calendarTileVal).toBe('No calendar linked yet'); // UI-QUIET-PRECISION: human phrasing on Home
-
-    const memoryTile = page.locator('#signal-tile-memory');
-    await expect(memoryTile).toBeVisible();
-    await expect(memoryTile).toContainText('Taste · Japanese or Italian (you confirmed)');
+    // HABIT-LEARN addendum 2: no evidence tiles on the card. Weather honesty lives in the header
+    // line (no invented temperature while weather is off); the confirmed taste is listed on Me.
+    await expect(page.locator('#signal-tile-weather, #signal-tile-calendar, #signal-tile-memory')).toHaveCount(0);
+    const offHeader = await page.locator('[aria-label="Living Context Line"]').innerText();
+    expect(offHeader).not.toMatch(/°C|°F|Clear|Rain/);
+    expect(((await page.textContent('body')) ?? '')).not.toContain('Not connected');
 
     // Provenance honesty on Home
     const homeFixtureCount = await page.locator('[data-provenance="fixture"]').count();
@@ -624,10 +620,18 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     const detailBody = (await page.textContent('body')) ?? '';
     expect(detailBody).not.toMatch(/Selected City|fuel station|\(simulated\)|Demo/i);
 
+    // The confirmed taste is visible where memory lives: Me > What Yori has learned
+    await page.goBack();
+    const meNav = page.locator('#tab-me:visible, #desktop-nav-me:visible').first();
+    await meNav.click();
+    const tasteRow = page.locator('#learned-habits-list .learned-row').filter({ hasText: 'Japanese or Italian' });
+    await expect(tasteRow).toBeVisible();
+    await expect(tasteRow).not.toContainText(/Demo profile|sample/);
+
     await context.close();
   });
 
-  test('Reviewer Probe 2: Weather Rain 9°C derives honest signal tile (never hardcoded 18°C)', async ({
+  test('Reviewer Probe 2: Weather Rain 9°C derives honest header weather (never hardcoded 18°C)', async ({
     browser,
   }) => {
     const context = await browser.newContext({
@@ -663,9 +667,11 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     }
     await page.waitForSelector('#btn-accept', { timeout: 10000 });
 
-    const weatherTileVal = await page.locator('#signal-tile-weather .signal-value').innerText();
-    expect(weatherTileVal).toBe('Rain · 9°C');
-    expect(weatherTileVal).not.toContain('18°C');
+    // HABIT-LEARN addendum 2: no evidence tile; the header line carries the real reading
+    await expect(page.locator('#signal-tile-weather')).toHaveCount(0);
+    const rainHeader = await page.locator('[aria-label="Living Context Line"]').innerText();
+    expect(rainHeader).toContain('9°C');
+    expect(rainHeader).not.toContain('18°C');
 
     await context.close();
   });
@@ -971,7 +977,7 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     await context.close();
   });
 
-  test('Reviewer Probe 8: Stale weather -> tile and strip both show Unavailable, header shows Weather unavailable (P-C)', async ({
+  test('Reviewer Probe 8: Stale weather -> header shows Weather unavailable, no tile or strip invents a reading (P-C)', async ({
     browser,
   }) => {
     const context = await browser.newContext({
@@ -1014,11 +1020,11 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     expect(headerText).toContain('Weather unavailable');
     expect(headerText).not.toContain('Clear');
 
-    // 2. Weather Signal Tile: 'Unavailable' (NEVER '21°C' or 'Clear')
-    const weatherTileVal = await page.locator('#signal-tile-weather .signal-value').innerText();
-    expect(weatherTileVal).toBe('Unavailable');
-    expect(weatherTileVal).not.toContain('21');
-    expect(weatherTileVal).not.toContain('Clear');
+    // 2. HABIT-LEARN addendum 2: no evidence tile renders, and nothing on the card invents a reading
+    await expect(page.locator('#signal-tile-weather')).toHaveCount(0);
+    const staleCard = await page.locator('.now-card').innerText();
+    expect(staleCard).not.toContain('21°C');
+    expect(staleCard).not.toMatch(/\bClear\b/);
 
     // 3. UI-QUIET-PRECISION: no connector strip on Home (connector state lives in Settings).
     await expect(page.locator('#chip-status-weather')).toHaveCount(0);
@@ -1156,15 +1162,13 @@ test.describe('S1-LIVE-PIPELINE-CORE: Live Pipeline E2E Verification', () => {
     }
     await page.waitForSelector('#btn-accept', { timeout: 10000 });
 
-    const weatherTileVal = await page.locator('#signal-tile-weather .signal-value').innerText();
-    expect(weatherTileVal).toBe('18°C');
-    expect(weatherTileVal).not.toContain('Clear');
-    expect(weatherTileVal).not.toContain('65°F');
-    expect(weatherTileVal).not.toContain('San Francisco');
-
+    // HABIT-LEARN addendum 2: no evidence tile; the header renders only the present field
+    await expect(page.locator('#signal-tile-weather')).toHaveCount(0);
     const headerText = await page.locator('[aria-label="Living Context Line"]').innerText();
     expect(headerText).toContain('18°C');
     expect(headerText).not.toContain('Clear');
+    expect(headerText).not.toContain('65°F');
+    expect(headerText).not.toContain('San Francisco');
 
     await context.close();
   });

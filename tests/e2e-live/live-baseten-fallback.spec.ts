@@ -102,7 +102,9 @@ async function expectHeroAboveFold(page: Page, vp: { width: number; height: numb
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(null)))));
   const hero = page.locator('.v2-candidate-card').first();
-  for (const sel of ['.v2-candidate-name', '.v2-distance-chip', '.v2-open-chip', '.v2-candidate-basis', '#candidate-model-reason', '.v2-directions-btn']) {
+  // HABIT-LEARN addendum 2: no basis line on the card; the model reason is its one natural sentence.
+  await expect(hero.locator('.v2-candidate-basis')).toHaveCount(0);
+  for (const sel of ['.v2-candidate-name', '.v2-distance-chip', '.v2-open-chip', '#candidate-model-reason', '.v2-directions-btn']) {
     const box = await hero.locator(sel).first().boundingBox();
     expect(box && box.y + box.height <= vp.height - (vp.width < 768 ? 90 : 0), `${sel} above the fold`).toBe(true);
   }
@@ -134,15 +136,17 @@ test.describe('D8-BASETEN-FALLBACK: labelled fallback engine after a proven Muse
       expect(calls.clientWaits).toEqual(['40000']);
       await expectHeroAboveFold(page, vp);
       await page.screenshot({ path: path.join(EVIDENCE_DIR, `d8-baseten-fallback-${vp.name}.png`) });
-      // UI-QUIET-PRECISION: the engine status pill lives in the Sources sheet, one tap from Home.
-      await page.locator('#pill-context-status').click();
-      const pill = page.locator('#model-status-pill');
-      await expect(pill).toHaveAttribute('data-engine-status', 'baseten_fallback');
-      await expect(pill).toHaveAttribute('data-provenance', 'fallback_engine');
-      await expect(pill).toContainText('Baseten fallback');
-      // The pill stays within the viewport at every width (no clipped engine label).
-      const pillBox = await pill.boundingBox();
+      // HABIT-LEARN addendum 2: no Sources sheet; the engine is labelled on the card's reason line
+      // (one quiet label), which stays within the viewport at every width.
+      const reasonLine = page.locator('#candidate-model-reason');
+      await expect(reasonLine).toHaveAttribute('data-engine', 'baseten_fallback');
+      await expect(reasonLine.locator('.model-reason-status')).toHaveText(LABEL);
+      const pillBox = await reasonLine.locator('.model-reason-status').boundingBox();
       expect(pillBox && pillBox.x + pillBox.width <= vp.width).toBe(true);
+      // The context pill opens Settings > Connectors, not a Sources sheet.
+      await page.locator('#pill-context-status').first().click();
+      await expect(page.locator('#connectors-page')).toBeVisible();
+      await expect(page.locator('.sources-modal-card, #model-status-pill')).toHaveCount(0);
       await context.close();
     });
   }

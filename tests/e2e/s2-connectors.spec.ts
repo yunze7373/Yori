@@ -433,7 +433,7 @@ test.describe('S2-CONNECTORS: Settings > Connectors Screen', () => {
     await expect(xmemoRow.locator('#btn-connect-xmemo')).toHaveText('Connect');
   });
 
-  test('8. Live Sources Sheet Consistency with Connectors View', async ({ page }) => {
+  test('8. Live context pill opens Connectors, which states the same truthful sources (no Sources sheet)', async ({ page }) => {
     // Both views must read the exact same state and never disagree
     await page.route(url => url.pathname.includes('/api/weather/status'), async route => {
       await route.fulfill({
@@ -456,27 +456,26 @@ test.describe('S2-CONNECTORS: Settings > Connectors Screen', () => {
     await page.locator('#btn-mode-live').click();
     await page.locator('#btn-close-demo-panel').click();
 
-    // Click context pill to open Sources sheet
+    // HABIT-LEARN addendum 2: the context pill no longer opens a Sources sheet; it opens the place
+    // where sources are managed (Settings > Connectors).
     const pill = page.locator('#pill-context-status');
     await expect(pill).toBeVisible();
     await pill.click();
+    await expect(page.locator('.sources-modal-card')).toHaveCount(0);
+    await expect(page.locator('#connectors-page')).toBeVisible();
 
-    const sourcesDialog = page.locator('.sources-modal-card');
-    await expect(sourcesDialog).toBeVisible();
+    // Weather detail: D1 (DEMO_RESCUE) Live weather follows the shared fix, so the demo city must
+    // never appear in Live.
+    const weatherDetail = page.locator('#connector-detail-weather');
+    await expect(weatherDetail).toContainText('Open-Meteo · follows your shared location (rounded ~100 m)');
+    await expect(weatherDetail).not.toContainText('Kyoto, Japan');
 
-    // Verify Weather detail in Sources view matches Connectors description. D1 (DEMO_RESCUE):
-    // Live weather follows the shared fix, so the demo city must never appear in Live.
-    const weatherItem = sourcesDialog.locator('#source-item-weather');
-    await expect(weatherItem).toContainText('Open-Meteo · follows your shared location (rounded ~100 m)');
-    await expect(weatherItem).not.toContainText('Kyoto, Japan');
+    // Calendar is not connected (no fake connected state)
+    await expect(page.locator('#status-pill-calendar')).not.toContainText('Connected');
 
-    // Verify Calendar detail in Sources view states not connected
-    const calItem = sourcesDialog.locator('#source-item-calendar');
-    await expect(calItem).toContainText('Not connected');
-
-    // Close sources sheet
-    await page.locator('#btn-close-why').click();
-    await expect(sourcesDialog).toHaveCount(0);
+    // Back returns Home
+    await page.locator('#btn-connectors-back').click();
+    await expect(page.locator('#connectors-page')).toHaveCount(0);
   });
 
   test('9. Keyboard Navigation, Escape Dismissal, and Me Tab Navigation', async ({ page }) => {
@@ -554,22 +553,16 @@ test.describe('S2-CONNECTORS: Settings > Connectors Screen', () => {
     await expect(fuelNowCard).toBeVisible();
     await expect(fuelNowCard).toContainText('Low Fuel Warning');
 
-    // 10e. Verify Demo Sources sheet lists ONLY simulated fixtures
+    // 10e. Demo stays labelled simulated: the pill says so, and the pill opens Connectors (no Sources sheet)
     const contextPill = page.locator('#pill-context-status');
     await expect(contextPill).toBeVisible();
+    await expect(contextPill).toContainText(/simulated/i);
+    await expect(fuelNowCard).not.toContainText(/\bLive\b/);
     await contextPill.click();
-
-    const sourcesModal = page.locator('.sources-modal-card');
-    await expect(sourcesModal).toBeVisible();
-    await expect(sourcesModal.locator('#sources-derivation-text')).toContainText('Demo fixtures · simulated context');
-    // Ensure all badges are simulated
-    const liveBadges = sourcesModal.locator('.signal-badge.live-badge');
-    await expect(liveBadges).toHaveCount(0);
-    const simBadges = sourcesModal.locator('.signal-badge.simulated-badge');
-    expect(await simBadges.count()).toBeGreaterThan(0);
-
-    await page.locator('#btn-close-why').click();
-    await expect(sourcesModal).toHaveCount(0);
+    await expect(page.locator('.sources-modal-card')).toHaveCount(0);
+    await expect(page.locator('#connectors-page')).toBeVisible();
+    await page.locator('#btn-connectors-back').click();
+    await expect(page.locator('#connectors-page')).toHaveCount(0);
 
     // 10f. Switch to Live mode: fix is reflected in Sources as Shared this session and pill includes Location
     await page.locator('#btn-dev-demo-controls').click();
@@ -580,13 +573,11 @@ test.describe('S2-CONNECTORS: Settings > Connectors Screen', () => {
     const pillSubline = page.locator('#pill-subline');
     await expect(pillSubline).toContainText('Location');
 
-    // Live Sources sheet shows Location with Shared this session
+    // Live: the pill opens Connectors, which shows Location as Shared this session
     await contextPill.click();
-    await expect(sourcesModal).toBeVisible();
-    const liveLocItem = sourcesModal.locator('#source-item-location');
-    await expect(liveLocItem.locator('.signal-badge')).toContainText('Shared this session');
-
-    await page.locator('#btn-close-why').click();
+    await expect(page.locator('.sources-modal-card')).toHaveCount(0);
+    await expect(page.locator('#connector-detail-location')).toContainText('Shared this session');
+    await page.locator('#btn-connectors-back').click();
   });
 
   test('11. Release Blocker: No Dead Settings Controls on Desktop (1280) and Mobile (390)', async ({
