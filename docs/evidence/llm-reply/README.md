@@ -83,9 +83,26 @@ Executed on isolated port 4285 with mock model proxy:
 
 ## 5. Test Suite Verification
 - `npm run typecheck`: 0 errors.
-- `src/adapters/model/llm-reply.test.ts`: 31/31 passed (including all adversarial probes for distance, rating, numeric allowlist, unlisted proper nouns, action deltas, and sensitive traits).
+- `src/adapters/model/llm-reply.test.ts`: 37/37 passed (including all adversarial probes for distance, rating, numeric allowlist, unlisted proper nouns, action deltas, sensitive traits, top-pick alignment, number word normalisation, applied leave times, and km<->m conversions).
 - `src/adapters/model/model.test.ts`: 132/132 passed.
 - `src/adapters/model/server-proxy.test.ts`: 71/71 passed.
-- `npm test`: 77 test files passed (1,413 tests).
+- `npm test`: 77 test files passed (1,419 tests).
 - `npx vitest run tests/golden tests/integration`: All golden and integration suites passed (8 files, 74 tests).
 - `npx playwright test -c playwright.llm-reply.config.ts`: 4/4 passed.
+
+## 6. Hardening Iteration 2 (`[TID:INBOX-20261104-D46F15]`)
+Follow-up improvements addressing reviewer findings:
+1. **Top-Pick Alignment**:
+   - `extractTopPickClaim(wording, places)` identifies if a place is claimed as top/best/first pick.
+   - When `appliedAction.topPickName` is defined, any reply claiming another place as the top/best pick (e.g. `Sora Ramen is your top pick` or `Sora Ramen is the best choice` when top pick is `Kissa Hoshi` / `Near Cafe`) is strictly rejected with `action_mismatch`.
+2. **Number Word Normalisation**:
+   - `normaliseNumberWords(text)` normalises colloquial time idioms (`half an hour` -> `30 minutes`, `quarter of an hour` -> `15 minutes`, `three quarters of an hour` -> `45 minutes`, `an hour` -> `60 minutes`, `a minute` -> `1 minute`), compound numbers (`twenty-one`..`fifty-nine`), single number words (`zero`..`sixty`), and numerical `"one"`.
+   - Normalisation occurs prior to delta checks and numeric allowlist validation, correctly catching `'leave half an hour later'` vs delta 15 as `action_mismatch` and `'a twelve minute walk'` as `unlisted_fact_token: 12`.
+3. **Applied Leave Time & km<->m Distance Unit Conversion**:
+   - Time tokens from `appliedAction.leaveTime` (e.g. `2:40 PM` or `Depart for Piano lesson: prepare 2:20 PM, leave 2:40 PM`) are admitted into `suppliedMinutes` and `buildNumericAllowlist` for `LEAVE_LATER` actions.
+   - Distances convert bidirectionally between meters and kilometers without an artificial `>= 1000m` clamp, enabling `0.35 km` to match supplied `350 m` across both distance tolerance matching and the numeric allowlist.
+4. **Depart E2E Header Chip Parity**:
+   - Identified root cause in `tests/e2e/llm-reply.spec.ts`: LivingContext triggered `coordinateReasoning` for the depart plan, hitting unmocked `/api/model/reason` and resetting `engineStatus` to `offline_deterministic`.
+   - Added mock route for `/api/model/reason` with `engineStatus: 'meta_model_live'`.
+   - Updated `updateStatusChip` in `src/ui/conversation/conversation-view.ts` to actively update `#conversation-model-status-pill` and subscribed it to `globalDecisionLogger`.
+   - Recaptured `depart-reply-390x844.png` and `depart-reply-1280x800.png` displaying `Meta model · live` chip with zero live model calls or spend.

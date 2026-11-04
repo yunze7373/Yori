@@ -207,6 +207,22 @@ async function routeMockServices(page: Page, options?: { withDepartPlan?: boolea
     }))
   );
 
+  // Model reason route (for Live plan reasoner in living context / depart flow)
+  await page.route(u => u.pathname === '/api/model/reason', async route => {
+    const postData = route.request().postDataJSON();
+    const candidateIds = Array.isArray(postData?.candidates)
+      ? postData.candidates.map((c: any) => c.id)
+      : [];
+    await route.fulfill(json({
+      result: {
+        orderedPlanIds: candidateIds,
+        rationale: [],
+      },
+      usedFallback: false,
+      engineStatus: 'meta_model_live',
+    }));
+  });
+
   // Model Command Endpoint (dynamic live replies)
   await page.route(u => u.pathname === '/api/model/command', async route => {
     const postData = route.request().postDataJSON();
@@ -414,6 +430,13 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator('button:has-text("Why")')).toHaveCount(0);
       await expect(page.locator('button:has-text("Confirm")')).toHaveCount(0);
       await expect(page.locator('button:has-text("Looks good")')).toHaveCount(0);
+
+      // Check header chip reflects live model engine (not offline fallback)
+      const pill = page.locator('#conversation-model-status-pill');
+      await expect(pill).toBeVisible();
+      await expect(pill).toHaveAttribute('data-engine-status', 'meta_model_live');
+      await expect(pill).toContainText('Meta model · live');
+      await expect(pill).not.toContainText('Offline fallback');
 
       // Screenshot settled state 3 (Depart reply)
       await page.screenshot({

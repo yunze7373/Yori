@@ -255,6 +255,144 @@ export function isWithinLengthLimits(text: string, maxSentences: number = 2, max
 }
 
 /**
+ * Normalises spoken or written number idioms and number words (zero..sixty) to numeric digits.
+ * Converts:
+ * - "three quarters of an hour" -> "45 minutes"
+ * - "a quarter of an hour" / "quarter of an hour" -> "15 minutes"
+ * - "half an hour" / "half-an-hour" -> "30 minutes"
+ * - "an hour" / "one hour" -> "60 minutes"
+ * - "a minute" -> "1 minute"
+ * - Compound numbers: "twenty-one" -> "21", ..., "fifty-nine" -> "59"
+ * - Number words 0..60: "sixty" -> "60", ..., "zero" -> "0"
+ * - "one" when used numerically before units/measures -> "1"
+ */
+export function normaliseNumberWords(text: string): string {
+  let result = text;
+
+  // 1. Idiomatic time phrases
+  result = result.replace(/\bthree(?:\s+|-)?quarters?\s+of\s+an?\s+hour\b/gi, '45 minutes');
+  result = result.replace(/\b(?:a\s+)?quarter(?:\s+of\s+an?|\s*-\s*of\s+an?|\s+an?)\s+hour\b/gi, '15 minutes');
+  result = result.replace(/\b(?:a\s+)?half(?:\s+an?|\s*-\s*an?)\s+hour\b/gi, '30 minutes');
+  result = result.replace(/\b(?:an?|one)\s+hour\b/gi, '60 minutes');
+  result = result.replace(/\ba\s+minute\b/gi, '1 minute');
+
+  // 2. Compound numbers (21-59)
+  const compoundNumbers: [RegExp, string][] = [
+    [/\btwenty[- ]one\b/gi, '21'],
+    [/\btwenty[- ]two\b/gi, '22'],
+    [/\btwenty[- ]three\b/gi, '23'],
+    [/\btwenty[- ]four\b/gi, '24'],
+    [/\btwenty[- ]five\b/gi, '25'],
+    [/\btwenty[- ]six\b/gi, '26'],
+    [/\btwenty[- ]seven\b/gi, '27'],
+    [/\btwenty[- ]eight\b/gi, '28'],
+    [/\btwenty[- ]nine\b/gi, '29'],
+    [/\bthirty[- ]one\b/gi, '31'],
+    [/\bthirty[- ]two\b/gi, '32'],
+    [/\bthirty[- ]three\b/gi, '33'],
+    [/\bthirty[- ]four\b/gi, '34'],
+    [/\bthirty[- ]five\b/gi, '35'],
+    [/\bthirty[- ]six\b/gi, '36'],
+    [/\bthirty[- ]seven\b/gi, '37'],
+    [/\bthirty[- ]eight\b/gi, '38'],
+    [/\bthirty[- ]nine\b/gi, '39'],
+    [/\bforty[- ]one\b/gi, '41'],
+    [/\bforty[- ]two\b/gi, '42'],
+    [/\bforty[- ]three\b/gi, '43'],
+    [/\bforty[- ]four\b/gi, '44'],
+    [/\bforty[- ]five\b/gi, '45'],
+    [/\bforty[- ]six\b/gi, '46'],
+    [/\bforty[- ]seven\b/gi, '47'],
+    [/\bforty[- ]eight\b/gi, '48'],
+    [/\bforty[- ]nine\b/gi, '49'],
+    [/\bfifty[- ]one\b/gi, '51'],
+    [/\bfifty[- ]two\b/gi, '52'],
+    [/\bfifty[- ]three\b/gi, '53'],
+    [/\bfifty[- ]four\b/gi, '54'],
+    [/\bfifty[- ]five\b/gi, '55'],
+    [/\bfifty[- ]six\b/gi, '56'],
+    [/\bfifty[- ]seven\b/gi, '57'],
+    [/\bfifty[- ]eight\b/gi, '58'],
+    [/\bfifty[- ]nine\b/gi, '59'],
+  ];
+
+  for (const [regex, numStr] of compoundNumbers) {
+    result = result.replace(regex, numStr);
+  }
+
+  // 3. Tens, teens, and units (0-60)
+  const singleNumberWords: [RegExp, string][] = [
+    [/\bsixty\b/gi, '60'],
+    [/\bfifty\b/gi, '50'],
+    [/\bforty\b/gi, '40'],
+    [/\bthirty\b/gi, '30'],
+    [/\btwenty\b/gi, '20'],
+    [/\bnineteen\b/gi, '19'],
+    [/\beighteen\b/gi, '18'],
+    [/\bseventeen\b/gi, '17'],
+    [/\bsixteen\b/gi, '16'],
+    [/\bfifteen\b/gi, '15'],
+    [/\bfourteen\b/gi, '14'],
+    [/\bthirteen\b/gi, '13'],
+    [/\btwelve\b/gi, '12'],
+    [/\beleven\b/gi, '11'],
+    [/\bten\b/gi, '10'],
+    [/\bnine\b/gi, '9'],
+    [/\beight\b/gi, '8'],
+    [/\bseven\b/gi, '7'],
+    [/\bsix\b/gi, '6'],
+    [/\bfive\b/gi, '5'],
+    [/\bfour\b/gi, '4'],
+    [/\bthree\b/gi, '3'],
+    [/\btwo\b/gi, '2'],
+    [/\bzero\b/gi, '0'],
+  ];
+
+  for (const [regex, numStr] of singleNumberWords) {
+    result = result.replace(regex, numStr);
+  }
+
+  // 4. "one" when used numerically before units/nouns
+  result = result.replace(
+    /\b(?:leave|take|by|at|in|about|around)?\s*one\s+(min|minute|hour|km|kilometer|kilometre|mi|mile|meter|metre|m|block|stop|dollar|buck|euro|yen|star|second|sec)s?\b/gi,
+    (m) => m.replace(/\bone\b/i, '1')
+  );
+
+  return result;
+}
+
+/**
+ * Extracts a place name claimed as top/best/first pick from wording.
+ */
+export function extractTopPickClaim(wording: string, places: readonly string[]): string | null {
+  const cleanText = wording.replace(/[—–·]/g, ' ');
+  for (const place of places) {
+    const escaped = place.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Place is top pick / best choice
+    const pattern1 = new RegExp(
+      `\\b${escaped}\\s+(?:is|would be)\\s+(?:your|the|our|a)?\\s*(?:top|best|first)\\s*(?:pick|choice|recommendation|option)\\b`,
+      'i'
+    );
+    if (pattern1.test(cleanText)) return place;
+
+    // Top pick / best choice is Place
+    const pattern2 = new RegExp(
+      `\\b(?:your|the|our|a)?\\s*(?:top|best|first)\\s*(?:pick|choice|recommendation|option)\\s+(?:is|would be|:)\\s+${escaped}\\b`,
+      'i'
+    );
+    if (pattern2.test(cleanText)) return place;
+
+    // Recommend Place as top pick
+    const pattern3 = new RegExp(
+      `\\b(?:recommending|recommend|suggesting|suggest|chosen|chose)\\s+${escaped}\\s+as\\s+(?:your|the|our|a)?\\s*(?:top|best|first)\\s*(?:pick|choice|recommendation|option)\\b`,
+      'i'
+    );
+    if (pattern3.test(cleanText)) return place;
+  }
+  return null;
+}
+
+/**
  * Builds an allowlist of valid numerals and numbers from supplied facts.
  */
 function buildNumericAllowlist(suppliedFacts: SuppliedFacts, appliedAction?: AppliedAction): Set<string> {
@@ -297,9 +435,14 @@ function buildNumericAllowlist(suppliedFacts: SuppliedFacts, appliedAction?: App
     const m = parseDistanceToMeters(d);
     if (m !== null) {
       allowlist.add(String(m));
-      if (m >= 1000) {
-        const km = m / 1000;
-        allowlist.add(String(km));
+      const km = m / 1000;
+      allowlist.add(String(km));
+      if (km.toString().includes('.')) {
+        allowlist.add(km.toFixed(1));
+        allowlist.add(km.toFixed(2));
+      }
+      if (Number.isInteger(m)) {
+        allowlist.add(String(Math.round(m)));
       }
     }
   }
@@ -336,6 +479,23 @@ function buildNumericAllowlist(suppliedFacts: SuppliedFacts, appliedAction?: App
     }
     if (appliedAction.leaveTime) {
       addNumericValues(appliedAction.leaveTime);
+      const directMin = parseTimeToMinutes(appliedAction.leaveTime);
+      const timesToCheck: number[] = [];
+      if (directMin !== null) timesToCheck.push(directMin);
+      const extractedTimes = extractTimeTokens(appliedAction.leaveTime);
+      for (const lt of extractedTimes) {
+        const min = parseTimeToMinutes(lt);
+        if (min !== null) timesToCheck.push(min);
+      }
+      for (const min of timesToCheck) {
+        const h24 = Math.floor(min / 60);
+        const m = min % 60;
+        const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+        allowlist.add(String(h24));
+        allowlist.add(String(h12));
+        allowlist.add(String(m));
+        if (m < 10) allowlist.add(`0${m}`);
+      }
     }
   }
 
@@ -432,9 +592,10 @@ export function validateFactsInWording(
   options?: { readonly appliedAction?: AppliedAction; readonly isReply?: boolean }
 ): { readonly valid: boolean; readonly unlistedTokens: readonly string[] } {
   const unlistedTokens: string[] = [];
+  const normalised = normaliseNumberWords(wording);
 
   // 1. Validate Time Tokens
-  const wordingTimes = extractTimeTokens(wording);
+  const wordingTimes = extractTimeTokens(normalised);
   const suppliedMinutes = new Set<number>();
 
   for (const t of suppliedFacts.times) {
@@ -443,6 +604,24 @@ export function validateFactsInWording(
       suppliedMinutes.add(min);
       if (min < 720) {
         suppliedMinutes.add(min + 720);
+      }
+    }
+  }
+
+  // Include applied leaveTime if present
+  const appliedLeaveTime = options?.appliedAction?.leaveTime ?? suppliedFacts.appliedAction?.leaveTime;
+  if (appliedLeaveTime) {
+    const directMin = parseTimeToMinutes(appliedLeaveTime);
+    if (directMin !== null) {
+      suppliedMinutes.add(directMin);
+      if (directMin < 720) suppliedMinutes.add(directMin + 720);
+    }
+    const extractedLeaveTimes = extractTimeTokens(appliedLeaveTime);
+    for (const lt of extractedLeaveTimes) {
+      const min = parseTimeToMinutes(lt);
+      if (min !== null) {
+        suppliedMinutes.add(min);
+        if (min < 720) suppliedMinutes.add(min + 720);
       }
     }
   }
@@ -498,7 +677,7 @@ export function validateFactsInWording(
   }
 
   // 3. Validate Price Tokens
-  const priceTokens = extractPriceTokens(wording);
+  const priceTokens = extractPriceTokens(normalised);
   if (priceTokens.length > 0) {
     const suppliedPrices = (suppliedFacts.prices ?? []).map(p => p.toLowerCase().trim());
     for (const pt of priceTokens) {
@@ -513,7 +692,7 @@ export function validateFactsInWording(
   }
 
   // 4. Validate Rating Tokens (Exact Numeric Match)
-  const ratingTokens = extractRatingTokens(wording);
+  const ratingTokens = extractRatingTokens(normalised);
   if (ratingTokens.length > 0) {
     const suppliedRatings = (suppliedFacts.ratings ?? []).map(r => r.trim());
     for (const rt of ratingTokens) {
@@ -529,7 +708,7 @@ export function validateFactsInWording(
   }
 
   // 5. Validate Distance Tokens (Normalized Value + Unit Matching)
-  const distTokens = extractDistanceTokens(wording);
+  const distTokens = extractDistanceTokens(normalised);
   if (distTokens.length > 0) {
     const suppliedDistances = suppliedFacts.distances ?? [];
     const parsedSupplied = suppliedDistances.map(d => ({
@@ -567,7 +746,7 @@ export function validateFactsInWording(
   if (options?.isReply) {
     // 6. Numeric Allowlist (Every numeral in text must match a supplied fact)
     const numericAllowlist = buildNumericAllowlist(suppliedFacts, options?.appliedAction);
-    const numericTokens = wording.match(/\b\d+(?:\.\d+)?\b/g);
+    const numericTokens = normalised.match(/\b\d+(?:\.\d+)?\b/g);
     if (numericTokens) {
       for (const nt of numericTokens) {
         const parsed = parseFloat(nt);
@@ -644,6 +823,23 @@ export function validateAssistantReply(
 
   const effectiveAction = appliedAction ?? suppliedFacts.appliedAction;
   const effectiveIntent = intent ?? effectiveAction?.intent;
+  const normalisedReply = normaliseNumberWords(trimmed);
+
+  // Top-pick alignment check
+  if (effectiveAction?.topPickName) {
+    const claimedTopPick = extractTopPickClaim(normalisedReply, suppliedFacts.places);
+    if (claimedTopPick) {
+      const normClaimed = claimedTopPick.trim().toLowerCase();
+      const normApplied = effectiveAction.topPickName.trim().toLowerCase();
+      if (normClaimed !== normApplied && !normApplied.includes(normClaimed) && !normClaimed.includes(normApplied)) {
+        return {
+          valid: false,
+          reason: 'action_mismatch',
+          error: `Stated top pick (${claimedTopPick}) does not match applied top pick (${effectiveAction.topPickName})`,
+        };
+      }
+    }
+  }
 
   // Action alignment check BEFORE fact check so action discrepancies are reported accurately
   if (effectiveIntent === 'UNSUPPORTED' || effectiveIntent === 'WHY') {
@@ -665,7 +861,7 @@ export function validateAssistantReply(
     if (/\b(lunch options?|lunch recommendation|quieter spots?|vegetarian options?|switched (?:primary )?route)\b/i.test(trimmed)) {
       return { valid: false, reason: 'action_mismatch', error: 'Reply claims different action than LEAVE_LATER' };
     }
-    const deltaMatch = trimmed.match(/\b(\d+)\s*(?:min|minutes?)\s*(?:later|earlier)?\b/i);
+    const deltaMatch = normalisedReply.match(/\b(\d+)\s*(?:min|minutes?)\s*(?:later|earlier)?\b/i);
     if (deltaMatch && effectiveAction?.deltaMinutes !== undefined) {
       const statedDelta = parseInt(deltaMatch[1]!, 10);
       if (statedDelta !== effectiveAction.deltaMinutes) {

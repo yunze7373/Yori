@@ -295,6 +295,19 @@ export function attachConversationEvents(
     if (chip) {
       chip.textContent = store.getEngineStatusLabel();
     }
+    const pill = overlay?.querySelector<HTMLElement>('#conversation-model-status-pill');
+    if (pill) {
+      const status = store.getEngineStatus();
+      const label = store.getEngineStatusLabel();
+      pill.setAttribute('data-engine-status', status);
+      const isLive = status === 'meta_model_live';
+      const isReplay = status === 'recorded_model_replay';
+      pill.className = `model-status-pill ${isLive ? 'pill-engine-live' : isReplay ? 'pill-engine-replay' : 'pill-engine-fallback'}`;
+      const textSpan = pill.querySelector<HTMLElement>('.status-text');
+      if (textSpan) textSpan.textContent = label;
+      const dotSpan = pill.querySelector<HTMLElement>('.status-dot');
+      if (dotSpan) dotSpan.className = `status-dot ${isLive ? 'dot-live' : isReplay ? 'dot-replay' : 'dot-fallback'}`;
+    }
   };
 
   const updateDecisionLogDrawer = () => {
@@ -311,6 +324,8 @@ export function attachConversationEvents(
   const performClose = (reason?: string) => {
     if (isClosed) return;
     isClosed = true;
+    unsubscribeStore();
+    unsubscribeLogger();
     store.closeConversation(reason);
     onClose();
   };
@@ -335,6 +350,13 @@ export function attachConversationEvents(
       updateDecisionLogDrawer();
       transcriptEl.scrollTop = transcriptEl.scrollHeight;
       wireTranscriptButtons();
+    }
+  });
+
+  const unsubscribeLogger = globalDecisionLogger.subscribe(() => {
+    if (!isClosed) {
+      updateStatusChip();
+      updateDecisionLogDrawer();
     }
   });
 

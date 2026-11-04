@@ -11,6 +11,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {
   validateAssistantReply,
+  normaliseNumberWords,
+  extractTopPickClaim,
   extractPriceTokens,
   extractRatingTokens,
   extractDistanceTokens,
@@ -575,6 +577,149 @@ describe('LLM-REPLY-GROUNDED: Store Integration (submitMessageAsync)', () => {
       const r2 = validateAssistantReply("You are vegetarian, so I found Sora Ramen.", reviewerSuppliedFacts, 'FIND_LUNCH');
       expect(r2.valid).toBe(false);
       expect(r2.reason).toBe('sensitive_traits');
+    });
+
+    it('normalises number words and idioms to digits', () => {
+      expect(normaliseNumberWords('leave half an hour later')).toBe('leave 30 minutes later');
+      expect(normaliseNumberWords('leave a quarter of an hour later')).toBe('leave 15 minutes later');
+      expect(normaliseNumberWords('wait three quarters of an hour')).toBe('wait 45 minutes');
+      expect(normaliseNumberWords('in an hour')).toBe('in 60 minutes');
+      expect(normaliseNumberWords('in a minute')).toBe('in 1 minute');
+      expect(normaliseNumberWords('a twelve minute walk')).toBe('a 12 minute walk');
+      expect(normaliseNumberWords('twenty-five minutes')).toBe('25 minutes');
+    });
+
+    it('extracts top pick claims accurately', () => {
+      expect(extractTopPickClaim('Sora Ramen is your top pick.', ['Sora Ramen', 'Near Cafe'])).toBe('Sora Ramen');
+      expect(extractTopPickClaim('The best choice is Near Cafe.', ['Sora Ramen', 'Near Cafe'])).toBe('Near Cafe');
+      expect(extractTopPickClaim('Near Cafe is a quieter spot.', ['Sora Ramen', 'Near Cafe'])).toBe(null);
+    });
+
+    it('enforces top-pick alignment: rejects place contradiction and accepts matching top pick', () => {
+      // Sora Ramen is your top pick vs appliedAction.topPickName: Kissa Hoshi
+      const r1 = validateAssistantReply(
+        'Sora Ramen is your top pick.',
+        reviewerSuppliedFacts,
+        'FIND_LUNCH',
+        { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+      );
+      expect(r1.valid).toBe(false);
+      expect(r1.reason).toBe('action_mismatch');
+
+      // Sora Ramen is the best choice vs appliedAction.topPickName: Kissa Hoshi
+      const r2 = validateAssistantReply(
+        'Sora Ramen is the best choice for lunch.',
+        reviewerSuppliedFacts,
+        'FIND_LUNCH',
+        { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+      );
+      expect(r2.valid).toBe(false);
+      expect(r2.reason).toBe('action_mismatch');
+
+      // Top pick is Sora Ramen vs appliedAction.topPickName: Kissa Hoshi
+      const r3 = validateAssistantReply(
+        'Your top pick is Sora Ramen.',
+        reviewerSuppliedFacts,
+        'FIND_LUNCH',
+        { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+      );
+      expect(r3.valid).toBe(false);
+      expect(r3.reason).toBe('action_mismatch');
+
+      // Matching top pick: Kissa Hoshi
+      const r4 = validateAssistantReply(
+        'Kissa Hoshi is your top pick.',
+        reviewerSuppliedFacts,
+        'FIND_LUNCH',
+        { intent: 'FIND_LUNCH', topPickName: 'Kissa Hoshi' }
+      );
+      expect(r4.valid).toBe(true);
+    });
+
+    it('rejects spoken number words that contradict delta or introduce unlisted numbers', () => {
+      // "leave half an hour later" vs delta 15 -> normalised to 30 min -> action_mismatch
+      const r1 = validateAssistantReply(
+        'Updated your plan to leave half an hour later.',
+        reviewerSuppliedFacts,
+        'LEAVE_LATER',
+        { intent: 'LEAVE_LATER', deltaMinutes: 15 }
+      );
+      expect(r1.valid).toBe(false);
+      expect(r1.reason).toBe('action_mismatch');
+
+      // "leave a quarter of an hour later" vs delta 15 -> normalised to 15 min -> valid
+      const r2 = validateAssistantReply(
+        'Updated your plan to leave a quarter of an hour later.',
+        reviewerSuppliedFacts,
+        'LEAVE_LATER',
+        { intent: 'LEAVE_LATER', deltaMinutes: 15 }
+      );
+      expect(r2.valid).toBe(true);
+
+      // "a twelve minute walk" -> normalised to 12 min -> 12 is unlisted -> unlisted_fact_token
+      const r3 = validateAssistantReply(
+        'Kissa Hoshi is a twelve minute walk.',
+        reviewerSuppliedFacts,
+        'FIND_LUNCH'
+      );
+      expect(r3.valid).toBe(false);
+      expect(r3.reason).toBe('unlisted_fact_token');
+    });
+
+    it('accepts applied leave time (e.g. 2:40 PM) as valid grounded time', () => {
+      // 2:40 PM in appliedAction.leaveTime accepted
+      const r1 = validateAssistantReply(
+        'Updated your plan to leave by 2:40 PM.',
+        reviewerSuppliedFacts,
+        'LEAVE_LATER',
+        { intent: 'LEAVE_LATER', deltaMinutes: 15, leaveTime: '2:40 PM' }
+      );
+      expect(r1.valid).toBe(true);
+
+      // Complex headline format in appliedAction.leaveTime accepted
+      const r2 = validateAssistantReply(
+        'Plan updated to leave at 2:40 PM.',
+        reviewerSuppliedFacts,
+        'LEAVE_LATER',
+        {
+          intent: 'LEAVE_LATER',
+          deltaMinutes: 15,
+          leaveTime: 'Depart for Piano lesson: prepare 2:20 PM, leave 2:40 PM',
+        }
+      );
+      expect(r2.valid).toBe(true);
+
+      // Unlisted leave time 2:55 PM rejected
+      const r3 = validateAssistantReply(
+        'Updated your plan to leave by 2:55 PM.',
+        reviewerSuppliedFacts,
+        'LEAVE_LATER',
+        { intent: 'LEAVE_LATER', deltaMinutes: 15, leaveTime: '2:40 PM' }
+      );
+      expect(r3.valid).toBe(false);
+      expect(r3.reason).toBe('unlisted_fact_token');
+    });
+
+    it('accepts km <-> m distance unit conversion (0.35 km vs 350 m)', () => {
+      // 0.35 km matches supplied "350 m"
+      const r1 = validateAssistantReply(
+        'Kissa Hoshi is 0.35 km away.',
+        reviewerSuppliedFacts,
+        'FIND_LUNCH'
+      );
+      expect(r1.valid).toBe(true);
+
+      // 350 m matches supplied "0.35 km"
+      const kmSuppliedFacts = {
+        ...reviewerSuppliedFacts,
+        distances: ['0.35 km'],
+      };
+      const r2 = validateAssistantReply(
+        'Kissa Hoshi is 350 m away.',
+        kmSuppliedFacts,
+        'FIND_LUNCH'
+      );
+      expect(r2.valid).toBe(true);
     });
   });
 });
