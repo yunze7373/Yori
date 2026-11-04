@@ -265,17 +265,24 @@ export class DefaultActionStateStore implements ActionStateStore {
         this.commandContext?.plan?.intentId === 'fuel';
       // D3: Live with nothing on Home yet gets a greeting that matches what Live can do now.
       const isLiveIdle = this.commandContext?.sceneId === 'live' && !this.commandContext?.plan;
-      const welcomeText = isLiveIdle
-        ? "I can find restaurants near you: ask 'nearby restaurants' or '附近吃什么'. When a plan shows on Home, ask 'Why this?' or say 'Looks good' to confirm."
-        : isFuel
-        ? "I can help find nearby gas stations: ask 'find gas', 'Why this station?', 'Looks good' to confirm, or 'Undo' to restore."
-        : isLunch
-        ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Looks good' to confirm, or 'Undo' to restore."
-        : "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
+
+      let suggestions: readonly string[];
+      if (isLiveIdle) {
+        suggestions = ['Lunch nearby', 'Somewhere quiet', 'Closer to me'];
+      } else if (isFuel) {
+        suggestions = ['Find gas nearby'];
+      } else if (isLunch) {
+        suggestions = ['Somewhere quieter', 'Vegetarian options', 'Closer to me'];
+      } else {
+        suggestions = ['Leave 15 minutes later', 'Take the bus'];
+      }
+
+      const welcomeText = "Here's what I can look into for you.";
       this.transcriptList.push({
         id: `msg-${Date.now()}-welcome`,
         sender: 'assistant',
         text: welcomeText,
+        suggestions,
         timestamp: new Date().toISOString(),
       });
     }
@@ -1579,10 +1586,10 @@ export class DefaultActionStateStore implements ActionStateStore {
       this.commandContext?.sceneId === 'fuel' ||
       this.commandContext?.plan?.intentId === 'fuel';
     const fallbackText = isFuel
-      ? "I can help find nearby gas stations: ask 'find gas', 'Why this station?', 'Looks good' to confirm, or 'Undo' to restore."
+      ? "I can help find nearby gas stations."
       : isLunch
-      ? "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer', 'Looks good' to confirm, or 'Undo' to restore."
-      : "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?', 'Take the bus', 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
+      ? "I can help with lunch recommendations."
+      : "I can help adjust your departure plan.";
     const responseText = cmd.honestAnswer ?? fallbackText;
 
     this.transcriptList.push({

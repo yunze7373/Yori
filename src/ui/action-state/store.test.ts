@@ -164,34 +164,86 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       expect(store.getInteractionState()).toBe('CONVERSATION');
       expect(store.getTranscript().length).toBeGreaterThan(0);
       expect(store.getTranscript()[0]?.sender).toBe('assistant');
-      expect(store.getTranscript()[0]?.text).toContain('I can help adjust your departure plan');
+      expect(store.getTranscript()[0]?.text).toBe("Here's what I can look into for you.");
+      expect(store.getTranscript()[0]?.suggestions).toEqual(['Leave 15 minutes later', 'Take the bus']);
       expect(listener).toHaveBeenCalled();
 
       store.closeConversation();
       expect(store.getInteractionState()).toBe('HOME');
     });
 
-    it('opens conversation with scene-aware welcome text for lunch scene', () => {
-      const store = createActionStateStore();
-      store.setCommandContext({ sceneId: 'away-lunch', plan: null });
-      store.openConversation();
-      expect(store.getTranscript()[0]?.text).toContain('I can help with lunch recommendations');
-      expect(store.getTranscript()[0]?.text).toContain('quieter');
-      expect(store.getTranscript()[0]?.text).toContain('vegetarian');
-      expect(store.getTranscript()[0]?.text).toContain('closer');
+    it('opens conversation with scene-aware suggestion chips for all 4 contexts (ASK-PROMPTS-PREMIUM)', () => {
+      const cjkRegex = /[\u4e00-\u9fff\u3040-\u30ff]/;
+      const bannedHints = /why|looks good|undo|confirm|restore/i;
+
+      // 1. Live idle
+      const storeLive = createActionStateStore();
+      storeLive.setCommandContext({ sceneId: 'live', plan: null });
+      storeLive.openConversation();
+      const liveWelcome = storeLive.getTranscript()[0]!;
+      expect(liveWelcome.text).toBe("Here's what I can look into for you.");
+      expect(liveWelcome.suggestions).toEqual(['Lunch nearby', 'Somewhere quiet', 'Closer to me']);
+      expect(liveWelcome.text).not.toMatch(cjkRegex);
+      expect(liveWelcome.text).not.toMatch(bannedHints);
+      liveWelcome.suggestions?.forEach((s) => {
+        expect(s).not.toMatch(cjkRegex);
+        expect(s).not.toMatch(/why/i);
+      });
+
+      // 2. Lunch scene
+      const storeLunch = createActionStateStore();
+      storeLunch.setCommandContext({ sceneId: 'away-lunch', plan: null });
+      storeLunch.openConversation();
+      const lunchWelcome = storeLunch.getTranscript()[0]!;
+      expect(lunchWelcome.text).toBe("Here's what I can look into for you.");
+      expect(lunchWelcome.suggestions).toEqual(['Somewhere quieter', 'Vegetarian options', 'Closer to me']);
+      expect(lunchWelcome.text).not.toMatch(cjkRegex);
+      expect(lunchWelcome.text).not.toMatch(bannedHints);
+      lunchWelcome.suggestions?.forEach((s) => {
+        expect(s).not.toMatch(cjkRegex);
+        expect(s).not.toMatch(/why/i);
+      });
+
+      // 3. Depart scene
+      const storeDepart = createActionStateStore();
+      storeDepart.setCommandContext({ sceneId: 'rain', plan: null });
+      storeDepart.openConversation();
+      const departWelcome = storeDepart.getTranscript()[0]!;
+      expect(departWelcome.text).toBe("Here's what I can look into for you.");
+      expect(departWelcome.suggestions).toEqual(['Leave 15 minutes later', 'Take the bus']);
+      expect(departWelcome.text).not.toMatch(cjkRegex);
+      expect(departWelcome.text).not.toMatch(bannedHints);
+      departWelcome.suggestions?.forEach((s) => {
+        expect(s).not.toMatch(cjkRegex);
+        expect(s).not.toMatch(/why/i);
+      });
+
+      // 4. Fuel scene
+      const storeFuel = createActionStateStore();
+      storeFuel.setCommandContext({ sceneId: 'fuel', plan: null });
+      storeFuel.openConversation();
+      const fuelWelcome = storeFuel.getTranscript()[0]!;
+      expect(fuelWelcome.text).toBe("Here's what I can look into for you.");
+      expect(fuelWelcome.suggestions).toEqual(['Find gas nearby']);
+      expect(fuelWelcome.text).not.toMatch(cjkRegex);
+      expect(fuelWelcome.text).not.toMatch(bannedHints);
+      fuelWelcome.suggestions?.forEach((s) => {
+        expect(s).not.toMatch(cjkRegex);
+        expect(s).not.toMatch(/why/i);
+      });
     });
 
     it('resets transcript when switching scenes', () => {
       const store = createActionStateStore();
       store.setCommandContext({ sceneId: 'rain', plan: null });
       store.openConversation();
-      expect(store.getTranscript()[0]?.text).toContain('departure plan');
+      expect(store.getTranscript()[0]?.suggestions).toEqual(['Leave 15 minutes later', 'Take the bus']);
       store.closeConversation();
 
       // Switch to lunch
       store.setCommandContext({ sceneId: 'away-lunch', plan: null });
       store.openConversation();
-      expect(store.getTranscript()[0]?.text).toContain('lunch recommendations');
+      expect(store.getTranscript()[0]?.suggestions).toEqual(['Somewhere quieter', 'Vegetarian options', 'Closer to me']);
     });
 
     it('handles Esc key: closes conversation when open, ignores in HOME', () => {

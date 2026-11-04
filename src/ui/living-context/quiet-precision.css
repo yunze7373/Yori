@@ -2525,6 +2525,62 @@ body {
   height: 28px;
 }
 
+.chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--qp-s2);
+  margin-top: var(--qp-s3);
+}
+
+.chat-suggestion-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--qp-s2) var(--qp-s4);
+  border: 1px solid var(--qp-line-strong);
+  border-radius: 9999px;
+  background: var(--qp-surface);
+  color: var(--qp-forest);
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+  text-align: left;
+  white-space: normal;
+  transition: background-color 160ms var(--qp-ease),
+              border-color 160ms var(--qp-ease),
+              color 160ms var(--qp-ease),
+              transform 160ms var(--qp-ease),
+              box-shadow 160ms var(--qp-ease);
+  box-shadow: 0 1px 2px rgba(31, 41, 33, 0.04);
+}
+
+.chat-suggestion-chip:hover {
+  background: var(--qp-sage-wash);
+  border-color: var(--qp-sage);
+  color: var(--qp-forest-press);
+}
+
+.chat-suggestion-chip:active {
+  background: var(--qp-sage-wash);
+  border-color: var(--qp-forest);
+  transform: scale(0.98);
+}
+
+.chat-suggestion-chip:focus-visible {
+  outline: 2px solid var(--qp-forest);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-suggestion-chip {
+    transition: none;
+    transform: none;
+  }
+}
+
 .conversation-shell input,
 .conversation-shell textarea,
 #conversation-input {

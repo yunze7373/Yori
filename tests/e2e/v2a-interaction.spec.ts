@@ -65,7 +65,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await expect(overlay).toBeVisible();
     await expect(page.locator('#conversation-status-badge')).toContainText('Offline demo · simulated');
     await expect(page.locator('#conversation-transcript')).toContainText(
-      "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?'"
+      "Here's what I can look into for you."
     );
 
     // 3. Type "Can I leave 15 minutes later?" and submit
@@ -192,7 +192,7 @@ test.describe('V2a-1: Deterministic Grammar, Late Shift Flow & Before-You-Ask Re
     await expect(overlay).toBeVisible();
     await expect(page.locator('#conversation-status-badge')).toContainText('Offline demo · simulated');
     await expect(page.locator('#conversation-transcript')).toContainText(
-      "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?'"
+      "Here's what I can look into for you."
     );
     const statusChip = page.locator('#engine-status-chip');
     await expect(statusChip).toBeVisible();

@@ -252,4 +252,50 @@ describe('Closed Command Grammar & Total Parser (LIVING_CONTEXT_V2.md §3)', () 
       expect(res.intent).toBe('UNSUPPORTED');
     });
   });
+
+  describe('ASK-PROMPTS-PREMIUM Suggestion Chip Parsing', () => {
+    it('correctly interprets all Live idle suggestion chips', () => {
+      const lunchNearby = interpreter.interpret('Lunch nearby');
+      expect(lunchNearby.intent).toBe('FIND_LUNCH');
+      expect(lunchNearby.slots.filters).toContain('nearer');
+
+      const somewhereQuiet = interpreter.interpret('Somewhere quiet');
+      expect(somewhereQuiet.intent).toBe('FIND_LUNCH');
+      expect(somewhereQuiet.slots.filters).toContain('quieter');
+
+      const closerToMe = interpreter.interpret('Closer to me');
+      expect(closerToMe.intent).toBe('FIND_LUNCH');
+      expect(closerToMe.slots.filters).toContain('nearer');
+    });
+
+    it('correctly interprets all Lunch scene suggestion chips', () => {
+      const somewhereQuieter = interpreter.interpret('Somewhere quieter');
+      expect(somewhereQuieter.intent).toBe('FIND_LUNCH');
+      expect(somewhereQuieter.slots.filters).toContain('quieter');
+
+      const vegetarianOptions = interpreter.interpret('Vegetarian options');
+      expect(vegetarianOptions.intent).toBe('FIND_LUNCH');
+      expect(vegetarianOptions.slots.filters).toContain('vegetarian');
+
+      const closerToMe = interpreter.interpret('Closer to me');
+      expect(closerToMe.intent).toBe('FIND_LUNCH');
+      expect(closerToMe.slots.filters).toContain('nearer');
+    });
+
+    it('correctly interprets all Depart scene suggestion chips', () => {
+      const leaveLater = interpreter.interpret('Leave 15 minutes later');
+      expect(leaveLater.intent).toBe('LEAVE_LATER');
+      expect(leaveLater.slots.deltaMinutes).toBe(15);
+
+      const takeBus = interpreter.interpret('Take the bus');
+      expect(takeBus.intent).toBe('CHANGE_ROUTE');
+      expect(takeBus.slots.mode).toBe('bus');
+    });
+
+    it('correctly interprets all Fuel scene suggestion chips', () => {
+      const findGas = interpreter.interpret('Find gas nearby');
+      expect(findGas.intent).toBe('FIND_FUEL');
+      expect(findGas.slots.ambiguous).toBe(false);
+    });
+  });
 });

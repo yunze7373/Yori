@@ -171,6 +171,27 @@ export function renderTranscriptItems(
           <div class="chat-bubble">
             <p class="chat-text">${escapeHtml(msg.text)}</p>
             ${
+              msg.suggestions && msg.suggestions.length > 0
+                ? `
+              <div class="chat-suggestions" role="group" aria-label="Suggested prompts">
+                ${msg.suggestions
+                  .map(
+                    (s) => `
+                  <button
+                    type="button"
+                    class="chat-suggestion-chip"
+                    data-suggestion="${escapeHtml(s)}"
+                  >
+                    ${escapeHtml(s)}
+                  </button>
+                `
+                  )
+                  .join('')}
+              </div>
+            `
+                : ''
+            }
+            ${
               msg.comparisonOptions && msg.comparisonOptions.length > 0
                 ? `
               <div class="chat-comparison-box">
@@ -317,8 +338,79 @@ export function attachConversationEvents(
     }
   });
 
+  const submitUserText = async (text: string) => {
+    if (store.isInFlight()) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    if (input) {
+      input.value = '';
+    }
+
+    let result: { collapsed: boolean; rule: any; response: string; plan?: any };
+    const sendBtn = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+
+    if (store.isLiveMode() && typeof store.submitMessageAsync === 'function') {
+      if (input) input.disabled = true;
+      if (sendBtn) sendBtn.disabled = true;
+
+      const unsubscribe = store.subscribe(() => {
+        if (transcriptEl) {
+          transcriptEl.innerHTML = renderTranscriptItems(
+            store.getTranscript(),
+            store.getActionState().status === 'needs-confirmation'
+          );
+          updateStatusChip();
+          updateDecisionLogDrawer();
+          transcriptEl.scrollTop = transcriptEl.scrollHeight;
+          wireTranscriptButtons();
+        }
+      });
+
+      try {
+        result = await store.submitMessageAsync(trimmed);
+      } finally {
+        unsubscribe();
+        if (input) input.disabled = false;
+        if (sendBtn) sendBtn.disabled = false;
+      }
+    } else {
+      result = store.submitMessage(trimmed);
+    }
+
+    if (transcriptEl) {
+      transcriptEl.innerHTML = renderTranscriptItems(
+        store.getTranscript(),
+        store.getActionState().status === 'needs-confirmation'
+      );
+      updateStatusChip();
+      updateDecisionLogDrawer();
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+      wireTranscriptButtons();
+    }
+
+    if (result.collapsed) {
+      setTimeout(() => safeClose('auto_collapse'), 600);
+    } else if (input) {
+      input.focus();
+    }
+  };
+
   const wireTranscriptButtons = () => {
     if (!transcriptEl) return;
+
+    const suggestionButtons = transcriptEl.querySelectorAll<HTMLButtonElement>(
+      '.chat-suggestion-chip'
+    );
+    suggestionButtons.forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        if (store.isInFlight()) return;
+        const suggestion = btn.dataset.suggestion;
+        if (!suggestion) return;
+        await submitUserText(suggestion);
+      });
+    });
 
     const cancelBtn = transcriptEl.querySelector<HTMLButtonElement>(
       '#btn-cancel-inflight'
@@ -477,59 +569,7 @@ export function attachConversationEvents(
   if (form && input) {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (store.isInFlight()) return; // block double submit
-      const text = input.value.trim();
-      if (!text) return;
-
-      input.value = '';
-
-      let result: { collapsed: boolean; rule: any; response: string; plan?: any };
-      const sendBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-
-      if (store.isLiveMode() && typeof store.submitMessageAsync === 'function') {
-        input.disabled = true;
-        if (sendBtn) sendBtn.disabled = true;
-
-        const unsubscribe = store.subscribe(() => {
-          if (transcriptEl) {
-            transcriptEl.innerHTML = renderTranscriptItems(
-              store.getTranscript(),
-              store.getActionState().status === 'needs-confirmation'
-            );
-            updateStatusChip();
-            updateDecisionLogDrawer();
-            transcriptEl.scrollTop = transcriptEl.scrollHeight;
-            wireTranscriptButtons();
-          }
-        });
-
-        try {
-          result = await store.submitMessageAsync(text);
-        } finally {
-          unsubscribe();
-          input.disabled = false;
-          if (sendBtn) sendBtn.disabled = false;
-        }
-      } else {
-        result = store.submitMessage(text);
-      }
-
-      if (transcriptEl) {
-        transcriptEl.innerHTML = renderTranscriptItems(
-          store.getTranscript(),
-          store.getActionState().status === 'needs-confirmation'
-        );
-        updateStatusChip();
-        updateDecisionLogDrawer();
-        transcriptEl.scrollTop = transcriptEl.scrollHeight;
-        wireTranscriptButtons();
-      }
-
-      if (result.collapsed) {
-        setTimeout(() => safeClose('auto_collapse'), 600);
-      } else {
-        input.focus();
-      }
+      await submitUserText(input.value);
     });
   }
 

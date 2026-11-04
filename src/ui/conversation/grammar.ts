@@ -78,7 +78,7 @@ export interface CommandInterpreter {
 
 
 const HONEST_CAPABILITY_GENERAL =
-  "I can help adjust your departure plan ('Leave 15 minutes later', 'Take the bus'), find lunch spots ('Find a quieter vegetarian lunch spot'), or find nearby fuel ('Find gas'). You can also ask 'Why this plan?', 'Looks good' to confirm, or 'Undo' to restore.";
+  "I can help adjust your departure plan ('Leave 15 minutes later', 'Take the bus'), find lunch spots ('Find a quieter vegetarian lunch spot'), or find nearby fuel ('Find gas').";
 
 const LUNCH_STOP_WORDS: ReadonlySet<string> = new Set([
   'find', 'me', 'a', 'an', 'the', 'spot', 'spots', 'place', 'places',
@@ -234,11 +234,11 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
       };
     }
 
-    // 6b. D4: bare refinements of the lunch card ("closer", "quieter", 近一点, 安静一点)
-    if (/^(?:something\s+|somewhere\s+)?(?:closer|nearer)(?:\s+please)?$/i.test(normalized) || /^(?:近一点|更近|再近一点)/.test(rawText.trim())) {
+    // 6b. D4: bare refinements of the lunch card ("closer", "quieter", "somewhere quiet", "closer to me", 近一点, 安静一点)
+    if (/^(?:something\s+|somewhere\s+)?(?:closer|nearer)(?:\s+to\s+me)?(?:\s+please)?$/i.test(normalized) || /^(?:近一点|更近|再近一点)/.test(rawText.trim())) {
       return { intent: 'FIND_LUNCH', rawText, slots: { filters: ['nearer'] }, explanation: 'Finding lunch options matching nearer.' };
     }
-    if (/^(?:something\s+|somewhere\s+)?quieter(?:\s+please)?$/i.test(normalized) || /^(?:安静一点|更安静)/.test(rawText.trim())) {
+    if (/^(?:something\s+|somewhere\s+)?(?:quieter|quiet)(?:\s+please)?$/i.test(normalized) || /^(?:安静一点|更安静)/.test(rawText.trim())) {
       return { intent: 'FIND_LUNCH', rawText, slots: { filters: ['quieter'] }, explanation: 'Finding lunch options matching quieter.' };
     }
 

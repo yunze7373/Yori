@@ -75,7 +75,7 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
 
     // Scene-aware greeting for lunch scene
     await expect(page.locator('#conversation-transcript')).toContainText(
-      "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer'"
+      "Here's what I can look into for you."
     );
 
     // Truthful engine status: offline fallback initially before model call runs
@@ -198,7 +198,7 @@ test.describe('V2b: Lunch Loop, Fixture Attributes & Request Override Re-Rank', 
 
     // Scene-aware greeting for lunch scene
     await expect(page.locator('#conversation-transcript')).toContainText(
-      "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer'"
+      "Here's what I can look into for you."
     );
 
     const pinBtn = page.locator('#conversation-pin-btn');

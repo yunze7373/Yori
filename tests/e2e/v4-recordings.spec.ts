@@ -205,7 +205,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(page.locator('#conversation-status-badge')).toContainText('Offline demo · simulated');
     await expect(page.locator('#engine-status-chip')).toContainText('Offline fallback · deterministic');
     await expect(page.locator('#conversation-transcript')).toContainText(
-      "I can help adjust your departure plan: ask 'Can I leave 15 minutes later?'"
+      "Here's what I can look into for you."
     );
     await page.waitForTimeout(1500);
 
@@ -465,7 +465,7 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(page.locator('#conversation-status-badge')).toContainText('Offline demo · simulated');
     await expect(page.locator('#engine-status-chip')).toContainText('Offline fallback · deterministic');
     await expect(page.locator('#conversation-transcript')).toContainText(
-      "I can help with lunch recommendations: ask 'quieter', 'vegetarian', 'closer'"
+      "Here's what I can look into for you."
     );
     await recordStep(
       'Ask Yori & Scene-Aware Greeting',

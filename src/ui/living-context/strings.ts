@@ -63,8 +63,8 @@ export const STRINGS = Object.freeze({
     closeAriaLabel: 'Close conversation',
     pinAriaLabel: 'Pin conversation to stay open',
     pinnedActive: 'Pinned',
-    inputPlaceholder: 'Ask Yori or type a command...',
-    inputAriaLabel: 'Ask Yori a question or issue a command',
+    inputPlaceholder: 'Ask Yori anything',
+    inputAriaLabel: 'Ask Yori anything',
     sendAriaLabel: 'Send message',
     v0PlaceholderResponse:
       'Commands arrive in the next build (V2a). You can explore the full-page conversation shell, pin toggling, and Esc/close navigation.',

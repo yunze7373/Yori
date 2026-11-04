@@ -183,10 +183,12 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await expect(overlay).toBeVisible();
     await expect(composerInput).toBeFocused();
 
-    // Transcript displays honest welcome text
+    // Transcript displays warm opener and suggestion chips
     const transcript = page.locator('#conversation-transcript');
     await expect(transcript).toBeVisible();
-    await expect(transcript).toContainText('I can help adjust your departure plan');
+    await expect(transcript).toContainText("Here's what I can look into for you.");
+    await expect(page.locator('.chat-suggestion-chip')).toHaveCount(2);
+    await expect(page.locator('.chat-suggestion-chip').first()).toContainText('Leave 15 minutes later');
 
     // 6. Send message: composer accepts input and processes departure command
     await composerInput.fill('Can I leave 15 minutes later?');

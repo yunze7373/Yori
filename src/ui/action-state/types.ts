@@ -78,6 +78,7 @@ export interface MessageItem {
   pendingPlan?: PreparedPlan;
   workingDetail?: string;
   comparisonOptions?: readonly DepartureComparisonItem[];
+  suggestions?: readonly string[];
 }
 
 export interface ActionHistorySnapshot {
