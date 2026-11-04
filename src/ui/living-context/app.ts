@@ -176,6 +176,27 @@ import { resolveWeatherCurrentUrl, resolveWeatherForecastUrl, roundFixCoordinate
 import { renderDesktopRightPanel } from './desktop-panel.js';
 import type { HomeCompositionVM } from '../view-models/index.js';
 
+export const DEMO_SHOPPING_STORE: PlaceItem = {
+  placeId: 'demo-supermarket-1',
+  name: 'Whole Foods Market',
+  category: 'supermarket',
+  coords: { lat: 37.7749, lng: -122.4194 },
+  source: 'simulated',
+  fetchedAt: '2026-10-28T19:10:00.000Z',
+  straightLineDistanceLabel: '350m',
+  openingStatus: 'open',
+  address: '399 4th St, San Francisco, CA',
+  provenance: 'google',
+};
+
+export const DEMO_SHOPPING_FACT: MemoryFact<readonly string[]> = createMemoryFact(
+  'shopping_list',
+  ['milk', 'eggs'],
+  'confirmed',
+  { source: 'user_stated', recordedAt: '2026-10-28T19:10:00.000Z' },
+  '2026-10-28T19:10:00.000Z'
+);
+
 export type DemoSceneId =
   | 'clear'
   | 'rain'
@@ -185,7 +206,8 @@ export type DemoSceneId =
   | 'missing-weather'
   | 'corrupt-storage'
   | 'multi-candidate'
-  | 'fuel';
+  | 'fuel'
+  | 'shopping';
 
 export type UiVersion = 'v1' | 'v2';
 
@@ -1130,6 +1152,60 @@ export function computeSceneState(
         evidenceBundle: fuelBundle,
       };
     }
+
+    case 'shopping': {
+      const locSig = createSimulatedSignal({
+        kind: 'location_status',
+        value: {
+          status: 'available',
+          lat: 37.7749,
+          lng: -122.4194,
+          source: 'fixture',
+        },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+
+      const schedSig = createSimulatedSignal({
+        kind: 'schedule_window',
+        value: {
+          freeUntil: '2026-10-28T22:00:00.000Z',
+        },
+        issuedAt: '2026-10-28T19:10:00.000Z',
+        validFor: 3600000,
+        confidence: 1.0,
+        consentScope: 'device_only',
+      });
+
+      const snapshot: ContextSnapshot = {
+        id: 'snapshot-shopping-demo',
+        asOf: '2026-10-28T19:10:00.000Z',
+        timezone: 'America/Los_Angeles',
+        signals: [locSig, schedSig],
+      };
+
+      const result = runPipeline({
+        snapshot,
+        memory: storedConfirmedFacts,
+        clock: '2026-10-28T19:10:00.000Z',
+        plugins,
+        storage: effectiveStorage,
+        suppressions: storedSuppressions,
+      });
+
+      return {
+        pipelineResult: result,
+        spatialMapEvidence: null,
+        storageError: false,
+        storage: effectiveStorage,
+        snapshotAsOf: snapshot.asOf,
+        snapshotTimezone: snapshot.timezone || 'America/Los_Angeles',
+        snapshot,
+        combinedMemory: storedConfirmedFacts,
+      };
+    }
   }
 }
 
@@ -1744,7 +1820,7 @@ export function renderApp(
         typeof window.location?.search === 'string' &&
         new URLSearchParams(window.location.search).get('test') === '1'));
 
-  if (isDevOrTest && typeof window !== 'undefined' && window.location?.search) {
+  if ((isDevOrTest || testHooksEnabled) && typeof window !== 'undefined' && window.location?.search) {
     try {
       const params = new URLSearchParams(window.location.search);
       const urlScene = params.get('scene') as DemoSceneId | null;
@@ -2412,6 +2488,9 @@ export function renderApp(
   let livePlacesStatus: { enabled: boolean; provider?: string; attribution?: string } = { enabled: false };
   let livePlacesList: readonly RankedPlaceItem[] = [];
   let liveEssentialsSummary: string | null = null;
+  let liveNearestStore: PlaceItem | null = null;
+  let isShoppingSuppressed = false;
+  let demoShoppingForgotten = false;
   let livePlacesLoading = false;
   let livePlacesError = false;
   // D2 (DEMO_RESCUE): on-demand "Nearby now" / Ask path. The explicit request becomes a
@@ -2759,6 +2838,22 @@ export function renderApp(
           const first = data.places[0]!;
           const dist = first.straightLineDistanceLabel ? ` · ${first.straightLineDistanceLabel}` : '';
           liveEssentialsSummary = `${first.name}${dist}`;
+          liveNearestStore = first;
+          update();
+          return;
+        }
+      }
+      // Fallback to convenience store if no supermarket found
+      const convResp = await fetch(`/api/places?lat=${lat}&lng=${lng}&amenity=convenience&radius=1500`, {
+        cache: 'no-store',
+      });
+      if (convResp.ok) {
+        const convData = (await convResp.json()) as { enabled?: boolean; places?: readonly PlaceItem[] };
+        if (convData.enabled && Array.isArray(convData.places) && convData.places.length > 0) {
+          const first = convData.places[0]!;
+          const dist = first.straightLineDistanceLabel ? ` · ${first.straightLineDistanceLabel}` : '';
+          liveEssentialsSummary = `${first.name}${dist}`;
+          liveNearestStore = first;
           update();
         }
       }
@@ -2981,17 +3076,39 @@ export function renderApp(
     void (async () => {
       const at = new Date().toISOString();
       try {
-        await memoryPort.writeBack(
-          createMemoryFact(statement.key, statement.value, 'confirmed', { source: 'user_stated', recordedAt: at }, at)
-        );
-        if (statement.key === 'taste_preference') {
-          // A newer explicit statement overrides a Forget tombstone for that cuisine.
-          const j = habitJournal.load();
-          habitJournal.save({ observations: j.observations, tombstones: liftTombstone(j.tombstones, statement.value) });
+        if (statement.key === 'shopping_list') {
+          isShoppingSuppressed = false;
+          demoShoppingForgotten = false;
+          const existingFact = activeLoadedFacts.find(f => f.key === 'shopping_list' && isActiveMemoryFact(f));
+          let existingItems: string[] = [];
+          if (existingFact) {
+            if (Array.isArray(existingFact.value)) {
+              existingItems = existingFact.value.map(String);
+            } else if (typeof existingFact.value === 'string') {
+              existingItems = existingFact.value.split(',').map(s => s.trim()).filter(Boolean);
+            }
+          }
+          const incomingItems = statement.items || (Array.isArray(statement.value) ? statement.value.map(String) : [String(statement.value)]);
+          const merged = Array.from(new Set([...existingItems, ...incomingItems]));
+          await memoryPort.writeBack(
+            createMemoryFact('shopping_list', merged, 'confirmed', { source: 'user_stated', recordedAt: at }, at)
+          );
+        } else {
+          await memoryPort.writeBack(
+            createMemoryFact(statement.key, statement.value as any, 'confirmed', { source: 'user_stated', recordedAt: at }, at)
+          );
+          if (statement.key === 'taste_preference') {
+            // A newer explicit statement overrides a Forget tombstone for that cuisine.
+            const j = habitJournal.load();
+            habitJournal.save({ observations: j.observations, tombstones: liftTombstone(j.tombstones, statement.value as string) });
+          }
         }
         activeLoadedFacts = await memoryPort.loadFacts();
         if (livePlacesList.length > 0) {
           livePlacesList = rankPlacesByConfirmedPreferences(livePlacesList, activeLoadedFacts.filter(f => isActiveMemoryFact(f)));
+        }
+        if (statement.key === 'shopping_list' && contextMode === 'live' && !liveNearestStore) {
+          await refreshLivePlaces();
         }
       } catch {
         // stays unsaved; the reply already said what Yori heard
@@ -3533,7 +3650,63 @@ export function renderApp(
       value: liveEssentialsSummary,
       provenance: 'user' as const,
     }] : [];
-    const effectiveLearnedItems = [...learnedItems, ...essentialsProposal];
+
+    // SHOPPING-REMINDER: Proactive card
+    const activeShoppingFact = (activeLoadedFacts.length > 0 ? activeLoadedFacts : (storedEnvelope?.payload.memoryFacts ?? []))
+      .find(f => f.key === 'shopping_list' && isActiveMemoryFact(f))
+      ?? (contextMode === 'demo' && currentScene === 'shopping' && !demoShoppingForgotten ? DEMO_SHOPPING_FACT : undefined);
+
+    let shoppingItems: string[] = [];
+    if (activeShoppingFact) {
+      if (Array.isArray(activeShoppingFact.value)) {
+        shoppingItems = activeShoppingFact.value.map(String).filter(Boolean);
+      } else if (typeof activeShoppingFact.value === 'string') {
+        shoppingItems = activeShoppingFact.value.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    }
+
+    const currentStore = contextMode === 'live'
+      ? liveNearestStore
+      : (currentScene === 'shopping' ? DEMO_SHOPPING_STORE : null);
+
+    let shoppingReminderData: import('../view-models/types.js').ShoppingReminderVM | undefined = undefined;
+    let shoppingProposal: import('../view-models/types.js').ProposalItemVM[] = [];
+
+    if (shoppingItems.length > 0 && currentStore && !isShoppingSuppressed) {
+      const itemsListStr = shoppingItems.join(', ');
+      const distPart = currentStore.straightLineDistanceLabel ? ` · ${currentStore.straightLineDistanceLabel}` : '';
+      const openPart = currentStore.openingStatus === 'open' ? ' · Open now' : currentStore.openingStatus === 'closed' ? ' · Closed' : '';
+      const reminderText = `Pick up ${itemsListStr} at ${currentStore.name}${distPart}${openPart}`;
+      const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+        currentStore.address || currentStore.name || `${currentStore.coords.lat},${currentStore.coords.lng}`
+      )}`;
+
+      shoppingReminderData = {
+        text: reminderText,
+        storeName: currentStore.name,
+        distanceLabel: currentStore.straightLineDistanceLabel,
+        openStatus: currentStore.openingStatus,
+        directionsUrl,
+        items: shoppingItems,
+        isSimulated: contextMode !== 'live',
+      };
+
+      shoppingProposal = [{
+        key: 'shopping_reminder',
+        title: reminderText,
+        basis: 'From your shopping list',
+        value: shoppingItems,
+        provenance: contextMode === 'demo' ? ('fixture' as const) : ('user' as const),
+        actions: [
+          { id: 'btn-shopping-directions', label: 'Directions', href: directionsUrl, variant: 'outline' },
+          { id: 'btn-shopping-got-it', label: 'Got it', variant: 'primary' },
+          { id: 'btn-shopping-not-now', label: 'Not now', variant: 'quiet' },
+        ],
+      }];
+    }
+
+    const effectiveNearbyItems = [...shoppingProposal, ...essentialsProposal];
+    const effectiveLearnedItems = learnedItems;
 
     if (activeTab === 'me') {
       const storedFacts = activeLoadedFacts.length > 0
@@ -3543,6 +3716,9 @@ export function renderApp(
       const memoryFacts = contextMode === 'demo' && demoLearnedFact && !storedFacts.some(f => f.key === demoLearnedFact!.key)
         ? [...storedFacts, demoLearnedFact]
         : storedFacts;
+      const effectiveMemoryFacts = contextMode === 'demo' && currentScene === 'shopping' && !demoShoppingForgotten && !memoryFacts.some(f => f.key === 'shopping_list')
+        ? [...memoryFacts, DEMO_SHOPPING_FACT]
+        : memoryFacts;
       const storedProposals = storedEnvelope?.payload.proposals ?? [];
       const pendingFromMemory = combinedMemory.filter(
         m => m.status === 'pending' && !storedProposals.some(p => p.key === m.key)
@@ -3554,7 +3730,7 @@ export function renderApp(
       };
 
       mainContentHtml = renderMeView({
-        memoryFacts,
+        memoryFacts: effectiveMemoryFacts,
         proposals,
         promptBudget,
         maxDailyPrompts: DEFAULT_DAILY_PROMPT_BUDGET,
@@ -4042,6 +4218,8 @@ export function renderApp(
             simulatedTimeStr: derivedLivingHeader?.timeDisplay ?? '10:00 AM',
             timelineLabel: 'Demo timeline · simulated time',
           },
+          nearbyItems: effectiveNearbyItems,
+          shoppingReminder: (currentScene === 'shopping' || (contextMode === 'live' && !nowPlan)) ? shoppingReminderData : undefined,
         });
         currentV2Composition = v2Composition;
         v2BodyHtml = renderV2Home(v2Composition);
@@ -4300,7 +4478,7 @@ export function renderApp(
                 <div class="item-row learned-for-you-row" id="for-you-${escapeHtml(item.key)}">
                   <div style="flex: 1;">
                     <div class="item-title">${escapeHtml(item.title)}</div>
-                    <div class="item-subtitle">${escapeHtml(item.basis)}</div>
+                    <div class="item-subtitle">${escapeHtml(item.basis ?? '')}</div>
                   </div>
                 </div>
               `
@@ -4851,6 +5029,7 @@ export function renderApp(
                     <option value="corrupt-storage" ${currentScene === 'corrupt-storage' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.corruptStorage)}</option>
                     <option value="multi-candidate" ${currentScene === 'multi-candidate' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.multiCandidate)}</option>
                     <option value="fuel" ${currentScene === 'fuel' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.fuel)}</option>
+                    <option value="shopping" ${currentScene === 'shopping' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.shopping)}</option>
                   </select>
                 </div>
                 `
@@ -5049,6 +5228,7 @@ export function renderApp(
                       <option value="corrupt-storage" ${currentScene === 'corrupt-storage' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.corruptStorage)}</option>
                       <option value="multi-candidate" ${currentScene === 'multi-candidate' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.multiCandidate)}</option>
                       <option value="fuel" ${currentScene === 'fuel' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.fuel)}</option>
+                      <option value="shopping" ${currentScene === 'shopping' ? 'selected' : ''}>${escapeHtml(STRINGS.scenes.shopping)}</option>
                     </select>
                     <button type="button" class="btn btn-outline btn-sm v2-replay-btn" id="btn-replay-before-you-ask" aria-label="Replay Before You Ask transition">Replay: Before You Ask</button>
                   </div>
@@ -6374,6 +6554,9 @@ export function renderApp(
         const key = (e.currentTarget as HTMLElement).getAttribute('data-key');
         if (!key) return;
         const at = contextMode === 'live' ? new Date().toISOString() : snapshotAsOf;
+        if (key === 'shopping_list') {
+          demoShoppingForgotten = true;
+        }
         const known = [...activeLoadedFacts, ...(demoLearnedFact ? [demoLearnedFact] : [])].find(f => f.key === key);
         // A cuisine habit (learned, or a taste you told Yori) is tombstoned for 30 days so the same
         // old choices do not bring it straight back; its recorded choices are removed.
@@ -6396,6 +6579,31 @@ export function renderApp(
           // local journal and tombstone already stop it from shaping anything
         }
         actionFeedbackMessage = `Forgotten: ${humanizeMemoryKey(key).toLowerCase()}. Yori won't use it.`;
+        update();
+      });
+    });
+
+    // -------------------------------------------------------------
+    // SHOPPING-REMINDER: Got it & Not now
+    // -------------------------------------------------------------
+    root.querySelectorAll('.btn-shopping-got-it').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const at = contextMode === 'live' ? new Date().toISOString() : snapshotAsOf;
+        demoShoppingForgotten = true;
+        try {
+          await memoryPort.forget?.('shopping_list', at);
+          activeLoadedFacts = await memoryPort.loadFacts();
+        } catch {
+          // ignore
+        }
+        actionFeedbackMessage = 'Got it! Shopping items completed.';
+        update();
+      });
+    });
+
+    root.querySelectorAll('.btn-shopping-not-now').forEach(btn => {
+      btn.addEventListener('click', () => {
+        isShoppingSuppressed = true;
         update();
       });
     });

@@ -149,12 +149,30 @@ export interface AheadItemVM {
   readonly subtitle: string;
 }
 
+export interface ProposalActionVM {
+  readonly id: string;
+  readonly label: string;
+  readonly href?: string;
+  readonly variant?: 'primary' | 'secondary' | 'quiet' | 'outline';
+}
+
 export interface ProposalItemVM {
   readonly key: string;
   readonly title: string;
   readonly basis?: string;
   readonly provenance?: 'user' | 'fixture' | 'none';
   readonly value?: unknown;
+  readonly actions?: readonly ProposalActionVM[];
+}
+
+export interface ShoppingReminderVM {
+  readonly text: string;
+  readonly storeName: string;
+  readonly distanceLabel?: string;
+  readonly openStatus?: string;
+  readonly directionsUrl?: string;
+  readonly items: readonly string[];
+  readonly isSimulated?: boolean;
 }
 
 export interface DismissedNoteVM {
@@ -210,6 +228,8 @@ export interface HomeCompositionVM {
   // Collapse empty blocks (only populated if non-empty)
   readonly aheadItems: readonly AheadItemVM[];
   readonly proposals: readonly ProposalItemVM[];
+  readonly nearbyItems?: readonly ProposalItemVM[];
+  readonly shoppingReminder?: ShoppingReminderVM;
 
   // Microinteraction state (S3-MICRO)
   readonly planDiff?: {

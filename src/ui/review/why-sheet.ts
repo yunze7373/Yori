@@ -155,6 +155,8 @@ export function humanizeMemoryKey(key: string): string {
       return 'Diet';
     case 'ambience_preference':
       return 'Places you like';
+    case 'shopping_list':
+      return 'Shopping list';
     default:
       return key.replace(/_/g, ' ');
   }
@@ -166,6 +168,10 @@ export function humanizeMemoryValue(key: string, value: unknown): string {
   }
   if (key === 'dietary_preference' && typeof value === 'string') return value.charAt(0).toUpperCase() + value.slice(1);
   if (key === 'ambience_preference' && value === 'quiet') return 'Quiet places';
+  if (key === 'shopping_list') {
+    if (Array.isArray(value)) return value.join(', ');
+    if (typeof value === 'string') return value;
+  }
   if (key === 'prep_buffer_minutes' || key === 'prep_duration_minutes') {
     return STRINGS.memory.minutesUnit.replace('{minutes}', String(value ?? 0));
   }

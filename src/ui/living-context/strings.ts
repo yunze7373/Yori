@@ -47,6 +47,7 @@ export const STRINGS = Object.freeze({
     corruptStorage: 'Storage error',
     multiCandidate: 'Reasoning demo',
     fuel: 'Fuel (Low Fuel Warning)',
+    shopping: 'Shopping',
   }),
   tabs: Object.freeze({
     today: 'Today',

@@ -32,6 +32,7 @@ export const BASE_UI_FACT_KEYS: readonly string[] = Object.freeze([
   'favorite_cuisine',
   'suppress_lunch',
   'suppress_lunch_recommendations',
+  'shopping_list',
 ]);
 
 /**

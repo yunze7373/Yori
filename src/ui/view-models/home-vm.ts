@@ -54,6 +54,7 @@ export interface BuildHomeCompositionOptions {
   spatialEvidence: SpatialMapEvidence | null;
   aheadPlans?: readonly PreparedPlan[];
   proposals?: readonly { key: string; value?: unknown }[];
+  nearbyItems?: readonly ProposalItemVM[];
   acceptedPlanIds?: readonly string[];
   userConfirmedKeys?: ReadonlySet<string>;
   snapshot?: ContextSnapshot | null;
@@ -90,6 +91,7 @@ export interface BuildHomeCompositionOptions {
     location?: string;
     timezone?: string;
   };
+  shoppingReminder?: HomeCompositionVM['shoppingReminder'];
 }
 
 export function derivePlanCountdown(
@@ -943,7 +945,7 @@ function compileAheadItems(aheadPlans: readonly PreparedPlan[]): readonly AheadI
 }
 
 function compileProposals(
-  proposals: readonly { key: string; value?: unknown; status?: string; title?: string; basis?: string; provenance?: 'user' | 'fixture' | 'none' }[]
+  proposals: readonly { key: string; value?: unknown; status?: string; title?: string; basis?: string; provenance?: 'user' | 'fixture' | 'none'; actions?: readonly any[] }[]
 ): readonly ProposalItemVM[] {
   return Object.freeze(
     proposals.map(prop => ({
@@ -952,6 +954,7 @@ function compileProposals(
       basis: prop.basis,
       provenance: prop.provenance || (prop.status === 'confirmed' || prop.basis?.includes('Confirmed') ? 'user' : 'fixture'),
       value: prop.value,
+      actions: prop.actions,
     }))
   );
 }
@@ -1105,5 +1108,7 @@ export function buildHomeComposition(options: BuildHomeCompositionOptions): Home
     })(),
     confirmedMemoryFact,
     confirmedMemoryNote,
+    shoppingReminder: options.shoppingReminder,
+    nearbyItems: options.nearbyItems,
   };
 }

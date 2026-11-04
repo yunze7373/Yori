@@ -830,6 +830,17 @@ function renderDismissedNote(vm: HomeCompositionVM): string {
 }
 
 export function renderV2Home(vm: HomeCompositionVM): string {
+  // If a shopping reminder or nearby items are active when there is no competing plan, render the sectioned feed
+  if ((vm.shoppingReminder || (vm.nearbyItems && vm.nearbyItems.length > 0)) && vm.layoutKind === 'quiet') {
+    return `
+      <div class="v2-home-container shopping-feed">
+        ${renderStateNotices(vm)}
+        ${renderDismissedNote(vm)}
+        ${renderSectionedFeed(vm)}
+      </div>
+    `;
+  }
+
   // 1. Quiet State
   if (vm.layoutKind === 'quiet') {
     // A failed nearby search is not "all caught up": the card says the failure once, with Retry.
@@ -1340,6 +1351,41 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
             <span class="feed-section-subtitle">What's happening right now.</span>
           </div>
         </div>
+        ${
+          vm.shoppingReminder
+            ? `
+        <div class="card feed-now-card shopping-now-card" id="card-shopping-now" data-provenance="${vm.shoppingReminder.isSimulated ? 'fixture' : (vm.isLive ? 'live' : 'fixture')}">
+          <div class="feed-now-body">
+            <div class="feed-now-text">
+              <div class="hero-thought-header" style="margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center;">
+                <span class="hero-thought-badge">
+                  <span class="qp-eyebrow-label">Shopping</span>
+                </span>
+                <div class="hero-header-meta">
+                  ${
+                    vm.shoppingReminder.isSimulated
+                      ? `<span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>`
+                      : (vm.isLive
+                          ? `<span class="card-badge live-badge" data-provenance="live">Live</span>`
+                          : `<span class="card-badge" data-slot="chrome" data-slot-reason="Simulated fixture badge">${escapeHtml(STRINGS.header.simulatedBadge)}</span>`)
+                  }
+                </div>
+              </div>
+              <h3 class="feed-now-title" style="font-size: 1.15rem; font-weight: 600; line-height: 1.35; margin: 4px 0 8px;">${escapeHtml(vm.shoppingReminder.text)}</h3>
+            </div>
+          </div>
+          <div class="shopping-actions-row" style="display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
+            ${
+              vm.shoppingReminder.directionsUrl
+                ? `<a href="${escapeHtml(vm.shoppingReminder.directionsUrl)}" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline btn-shopping-directions">Directions</a>`
+                : ''
+            }
+            <button type="button" class="btn btn-sm btn-primary btn-shopping-got-it">Got it</button>
+            <button type="button" class="btn btn-sm btn-quiet btn-shopping-not-now">Not now</button>
+          </div>
+        </div>
+        `
+            : `
         <div class="card feed-now-card" data-provenance="${vm.isLive ? 'live' : 'fixture'}">
           <div class="feed-now-body">
             <div class="feed-now-text">
@@ -1350,6 +1396,8 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
           </div>
           ${renderProvenanceChip(vm.isLive ? 'live' : 'fixture')}
         </div>
+        `
+        }
       </section>
 
       <!-- Section 2: Ahead -->
@@ -1385,6 +1433,50 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
         </div>
       </section>
 
+      ${
+        vm.nearbyItems && vm.nearbyItems.length > 0
+          ? `
+      <!-- Section: Nearby now (P2 Addendum) -->
+      <section class="feed-section feed-section-nearbynow" id="feed-section-nearbynow" aria-label="Nearby now">
+        <div class="feed-section-header">
+          <div class="feed-section-heading-group">
+            <h2 class="feed-section-title">Nearby now</h2>
+            <span class="feed-section-subtitle">Real places and reminders near you.</span>
+          </div>
+        </div>
+        <div class="nearby-now-list for-you-list">
+          ${vm.nearbyItems
+            .map(
+              item => `
+            <div class="card proposal-card learned-card ${item.key === 'shopping_reminder' ? 'shopping-reminder-card' : 'nearby-item-card'}" data-proposal-key="${escapeHtml(item.key)}" data-provenance="${item.provenance || 'user'}" data-slot="chrome" data-slot-reason="Nearby card">
+              ${renderProvenanceChip(item.provenance === 'fixture' ? 'fixture' : 'user')}
+              <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Nearby title">${escapeHtml(item.title)}</h3>
+              ${item.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Nearby basis">${escapeHtml(item.basis)}</p>` : ''}
+              ${
+                item.actions && item.actions.length > 0
+                  ? `
+              <div class="shopping-actions-row" style="display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
+                ${item.actions
+                  .map(act =>
+                    act.href
+                      ? `<a href="${escapeHtml(act.href)}" target="_blank" rel="noopener noreferrer" class="btn btn-sm ${act.variant === 'primary' ? 'btn-primary' : act.variant === 'outline' ? 'btn-outline' : act.variant === 'quiet' ? 'btn-quiet' : 'btn-secondary'} ${escapeHtml(act.id)}">${escapeHtml(act.label)}</a>`
+                      : `<button type="button" class="btn btn-sm ${act.variant === 'primary' ? 'btn-primary' : act.variant === 'outline' ? 'btn-outline' : act.variant === 'quiet' ? 'btn-quiet' : 'btn-secondary'} ${escapeHtml(act.id)}">${escapeHtml(act.label)}</button>`
+                  )
+                  .join('')}
+              </div>
+              `
+                  : ''
+              }
+            </div>
+          `
+            )
+            .join('')}
+        </div>
+      </section>
+      `
+          : ''
+      }
+
       <!-- Section 3: For You -->
       <section class="feed-section feed-section-foryou" id="feed-section-foryou" aria-label="${escapeHtml(STRINGS.sections.forYou)}">
         <div class="feed-section-header">
@@ -1404,6 +1496,21 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
               ${renderProvenanceChip(prop.provenance === 'fixture' ? 'fixture' : 'user')}
               <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Learned habit title">${escapeHtml(prop.title)}</h3>
               ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Learned habit basis">${escapeHtml(prop.basis)}</p>` : ''}
+              ${
+                prop.actions && prop.actions.length > 0
+                  ? `
+              <div class="shopping-actions-row" style="display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
+                ${prop.actions
+                  .map(act =>
+                    act.href
+                      ? `<a href="${escapeHtml(act.href)}" target="_blank" rel="noopener noreferrer" class="btn btn-sm ${act.variant === 'primary' ? 'btn-primary' : act.variant === 'outline' ? 'btn-outline' : act.variant === 'quiet' ? 'btn-quiet' : 'btn-secondary'} ${escapeHtml(act.id)}">${escapeHtml(act.label)}</a>`
+                      : `<button type="button" class="btn btn-sm ${act.variant === 'primary' ? 'btn-primary' : act.variant === 'outline' ? 'btn-outline' : act.variant === 'quiet' ? 'btn-quiet' : 'btn-secondary'} ${escapeHtml(act.id)}">${escapeHtml(act.label)}</button>`
+                  )
+                  .join('')}
+              </div>
+              `
+                  : ''
+              }
             </div>
           `
                   )

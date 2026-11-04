@@ -385,6 +385,15 @@ export function renderForYouView(proposals: readonly ProposalItemVM[]): string {
                 ${prop.basis ? `<span class="card-badge v2-proposal-basis">${escapeHtml(prop.basis)}</span>` : ''}
                 <h2 class="v2-proposal-title">${escapeHtml(prop.title)}</h2>
               </div>
+              ${prop.actions && prop.actions.length > 0 ? `
+              <div class="shopping-actions-row" style="display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap;">
+                ${prop.actions.map(act => act.href ? `
+                  <a href="${escapeHtml(act.href)}" target="_blank" rel="noopener noreferrer" class="btn btn-sm ${act.variant === 'primary' ? 'btn-primary' : act.variant === 'outline' ? 'btn-outline' : act.variant === 'quiet' ? 'btn-quiet' : 'btn-secondary'} ${escapeHtml(act.id)}">${escapeHtml(act.label)}</a>
+                ` : `
+                  <button type="button" class="btn btn-sm ${act.variant === 'primary' ? 'btn-primary' : act.variant === 'outline' ? 'btn-outline' : act.variant === 'quiet' ? 'btn-quiet' : 'btn-secondary'} ${escapeHtml(act.id)}">${escapeHtml(act.label)}</button>
+                `).join('')}
+              </div>
+              ` : ''}
             </div>
           `
             )
