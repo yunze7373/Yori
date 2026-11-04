@@ -15,6 +15,7 @@ import {
   resolveXMemoConfig,
   UNVERIFIED_XMEMO_MCP_MAPPING,
   normalizeIssuer,
+  normalizeResource,
   isLoopbackHost,
   validateEndpointUrl,
   YORI_MANAGED_FACT_KEYS,
@@ -3235,6 +3236,398 @@ describe('XKEY01: Server-only owner-key demo mode', () => {
         expect(forgetCount).toBe(1);
         expect(forgetPayload.params.name).toBe('forget');
         expect(forgetPayload.params.arguments).toEqual({ key: 'rain_transport_preference' });
+      });
+    });
+  });
+
+  describe('RFC 8707 OAuth Resource Parameter (XMEMO-OAUTH-RESOURCE)', () => {
+    describe('1. normalizeResource helper', () => {
+      it('canonicalises valid HTTPS resource URI without trailing slash or query', () => {
+        const r1 = normalizeResource('https://xmemo.dev/mcp');
+        expect(r1.valid).toBe(true);
+        expect(r1.resource).toBe('https://xmemo.dev/mcp');
+
+        const r2 = normalizeResource('https://xmemo.dev/mcp/');
+        expect(r2.valid).toBe(true);
+        expect(r2.resource).toBe('https://xmemo.dev/mcp');
+
+        const r3 = normalizeResource('https://xmemo.dev/mcp///');
+        expect(r3.valid).toBe(true);
+        expect(r3.resource).toBe('https://xmemo.dev/mcp');
+
+        const r4 = normalizeResource('https://xmemo.dev/mcp?version=1#frag');
+        expect(r4.valid).toBe(true);
+        expect(r4.resource).toBe('https://xmemo.dev/mcp');
+      });
+
+      it('rejects non-HTTPS resource URIs', () => {
+        const r1 = normalizeResource('http://xmemo.dev/mcp');
+        expect(r1.valid).toBe(false);
+        expect(r1.error).toContain('must use https');
+
+        const r2 = normalizeResource('ftp://xmemo.dev/mcp');
+        expect(r2.valid).toBe(false);
+        expect(r2.error).toContain('must use https');
+      });
+
+      it('rejects foreign origin when expected issuer is provided', () => {
+        const r1 = normalizeResource('https://evil.example/mcp', 'https://xmemo.dev');
+        expect(r1.valid).toBe(false);
+        expect(r1.error).toContain('does not match issuer origin');
+      });
+
+      it('rejects empty or invalid URLs', () => {
+        expect(normalizeResource('').valid).toBe(false);
+        expect(normalizeResource('   ').valid).toBe(false);
+        expect(normalizeResource('not-a-valid-url').valid).toBe(false);
+      });
+    });
+
+    describe('2. createAuthUrl resource inclusion & validation', () => {
+      it('includes resource parameter exactly once in authorization URL', () => {
+        const proxy = new XMemoDevProxy({
+          enabled: true,
+          clientId: 'test-client',
+          issuer: 'https://xmemo.dev',
+          mcpUrl: 'https://xmemo.dev/mcp',
+        });
+        const { authUrl } = proxy.createAuthUrl();
+        const parsed = new URL(authUrl);
+
+        expect(parsed.searchParams.getAll('resource')).toHaveLength(1);
+        expect(parsed.searchParams.get('resource')).toBe('https://xmemo.dev/mcp');
+        expect(authUrl).toContain('resource=https%3A%2F%2Fxmemo.dev%2Fmcp');
+      });
+
+      it('normalises trailing slash and query parameters on configured mcpUrl', () => {
+        const proxy = new XMemoDevProxy({
+          enabled: true,
+          clientId: 'test-client',
+          issuer: 'https://xmemo.dev',
+          mcpUrl: 'https://xmemo.dev/mcp/?client=yori#token',
+        });
+        const { authUrl } = proxy.createAuthUrl();
+        const parsed = new URL(authUrl);
+
+        expect(parsed.searchParams.get('resource')).toBe('https://xmemo.dev/mcp');
+      });
+
+      it('refuses to build auth URL if configured mcpUrl is non-HTTPS', () => {
+        const proxy = new XMemoDevProxy({
+          enabled: true,
+          clientId: 'test-client',
+          issuer: 'https://xmemo.dev',
+          mcpUrl: 'http://xmemo.dev/mcp',
+        });
+        expect(() => proxy.getCanonicalResource()).toThrow(/must use https scheme/);
+        expect(() => proxy.createAuthUrl()).toThrow();
+      });
+
+      it('refuses to build auth URL if configured mcpUrl has foreign origin', () => {
+        const proxy = new XMemoDevProxy({
+          enabled: true,
+          clientId: 'test-client',
+          issuer: 'https://xmemo.dev',
+          mcpUrl: 'https://evil.example/mcp',
+        });
+        expect(() => proxy.getCanonicalResource()).toThrow(/does not match issuer origin/);
+        expect(() => proxy.createAuthUrl()).toThrow();
+      });
+    });
+
+    describe('3. exchangeCode resource inclusion & binding', () => {
+      it('sends the exact canonical resource parameter in token exchange POST body', async () => {
+        let capturedBody = '';
+        const mockFetch = vi.fn(async (url: string, init: any) => {
+          if (url === 'https://xmemo.dev/oauth/token') {
+            capturedBody = init.body;
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                access_token: 'secret-token-8707',
+                token_type: 'Bearer',
+                expires_in: 3600,
+              }),
+            };
+          }
+          return { ok: false, status: 404 };
+        });
+
+        const proxy = new XMemoDevProxy(
+          {
+            enabled: true,
+            clientId: 'test-client',
+            issuer: 'https://xmemo.dev',
+            mcpUrl: 'https://xmemo.dev/mcp/',
+          },
+          () => {},
+          undefined,
+          mockFetch as any
+        );
+
+        const { state } = proxy.createAuthUrl();
+        const res = await proxy.exchangeCode('valid-code', state, mockFetch as any);
+
+        expect(res.success).toBe(true);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+
+        const params = new URLSearchParams(capturedBody);
+        expect(params.get('resource')).toBe('https://xmemo.dev/mcp');
+        expect(params.get('grant_type')).toBe('authorization_code');
+        expect(params.get('code')).toBe('valid-code');
+      });
+
+      it('accepts authorization code on a mock server requiring RFC 8707 resource', async () => {
+        const mockTokenServer = vi.fn(async (_url: string, init: any) => {
+          const body = new URLSearchParams(init.body);
+          const resource = body.get('resource');
+
+          // Strict upstream RFC 8707 enforcement
+          if (!resource || resource !== 'https://xmemo.dev/mcp') {
+            return {
+              ok: false,
+              status: 400,
+              json: async () => ({
+                error: 'invalid_target',
+                error_description: 'MCP OAuth requires a valid resource parameter',
+              }),
+            };
+          }
+
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              access_token: 'rfc-8707-authorized-token',
+              token_type: 'Bearer',
+              expires_in: 3600,
+            }),
+          };
+        });
+
+        const proxy = new XMemoDevProxy(
+          {
+            enabled: true,
+            clientId: 'test-client',
+            issuer: 'https://xmemo.dev',
+            mcpUrl: 'https://xmemo.dev/mcp',
+          },
+          () => {},
+          undefined,
+          mockTokenServer as any
+        );
+
+        const { state } = proxy.createAuthUrl();
+        const res = await proxy.exchangeCode('auth-code-123', state, mockTokenServer as any);
+
+        expect(res.success).toBe(true);
+        expect(proxy.isConnected()).toBe(true);
+      });
+
+      it('fails closed when resource in pending auth state mismatches token exchange resource', async () => {
+        const proxy = new XMemoDevProxy({
+          enabled: true,
+          clientId: 'test-client',
+          issuer: 'https://xmemo.dev',
+          mcpUrl: 'https://xmemo.dev/mcp',
+        });
+
+        // Artificially inject mismatched pending state
+        (proxy as any).pendingStates.set('mismatched-state', {
+          codeVerifier: 'verifier',
+          redirectUri: 'http://127.0.0.1:5173/api/xmemo/callback',
+          resource: 'https://xmemo.dev/other-service',
+          createdAt: Date.now(),
+        });
+
+        const res = await proxy.exchangeCode('code', 'mismatched-state');
+        expect(res.success).toBe(false);
+        expect(res.error).toContain('resource mismatch between authorization');
+      });
+    });
+
+    describe('4. Discovery metadata resource validation', () => {
+      it('succeeds when authorization-server metadata advertises matching resource', async () => {
+        const mockFetch = vi.fn(async (url: string) => {
+          if (url.includes('.well-known/oauth-authorization-server')) {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                issuer: 'https://xmemo.dev',
+                authorization_endpoint: 'https://xmemo.dev/oauth/authorize',
+                token_endpoint: 'https://xmemo.dev/oauth/token',
+                registration_endpoint: 'https://xmemo.dev/oauth/register',
+                resource: 'https://xmemo.dev/mcp',
+              }),
+            };
+          }
+          if (url === 'https://xmemo.dev/oauth/register') {
+            return {
+              ok: true,
+              status: 201,
+              json: async () => ({ client_id: 'discovered-client' }),
+            };
+          }
+          return { ok: false, status: 404 };
+        });
+
+        const proxy = new XMemoDevProxy(
+          {
+            enabled: true,
+            issuer: 'https://xmemo.dev',
+            mcpUrl: 'https://xmemo.dev/mcp',
+          },
+          () => {},
+          undefined,
+          mockFetch as any
+        );
+
+        const res = await proxy.ensureRegistered(mockFetch as any);
+        expect(res.success).toBe(true);
+        expect(res.clientId).toBe('discovered-client');
+      });
+
+      it('fails closed when authorization-server metadata advertises mismatched resource', async () => {
+        const mockFetch = vi.fn(async (url: string) => {
+          if (url.includes('.well-known/oauth-authorization-server')) {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                issuer: 'https://xmemo.dev',
+                authorization_endpoint: 'https://xmemo.dev/oauth/authorize',
+                token_endpoint: 'https://xmemo.dev/oauth/token',
+                registration_endpoint: 'https://xmemo.dev/oauth/register',
+                resource: 'https://evil.example/mcp',
+              }),
+            };
+          }
+          return { ok: false, status: 404 };
+        });
+
+        const proxy = new XMemoDevProxy(
+          {
+            enabled: true,
+            issuer: 'https://xmemo.dev',
+            mcpUrl: 'https://xmemo.dev/mcp',
+          },
+          () => {},
+          undefined,
+          mockFetch as any
+        );
+
+        const res = await proxy.ensureRegistered(mockFetch as any);
+        expect(res.success).toBe(false);
+        expect(res.error).toBe('resource_mismatch');
+        expect(() => proxy.createAuthUrl()).toThrow(/registration rejected: resource_mismatch/);
+      });
+
+      it('fails closed when oauth-protected-resource metadata advertises mismatched resource', async () => {
+        const mockFetch = vi.fn(async (url: string) => {
+          if (url.includes('.well-known/oauth-authorization-server')) {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                issuer: 'https://xmemo.dev',
+                authorization_endpoint: 'https://xmemo.dev/oauth/authorize',
+                token_endpoint: 'https://xmemo.dev/oauth/token',
+                registration_endpoint: 'https://xmemo.dev/oauth/register',
+                protected_resource_metadata_endpoint: 'https://xmemo.dev/.well-known/oauth-protected-resource',
+              }),
+            };
+          }
+          if (url.includes('.well-known/oauth-protected-resource')) {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                resource: 'https://evil.example/mcp',
+              }),
+            };
+          }
+          return { ok: false, status: 404 };
+        });
+
+        const proxy = new XMemoDevProxy(
+          {
+            enabled: true,
+            issuer: 'https://xmemo.dev',
+            mcpUrl: 'https://xmemo.dev/mcp',
+          },
+          () => {},
+          undefined,
+          mockFetch as any
+        );
+
+        const res = await proxy.ensureRegistered(mockFetch as any);
+        expect(res.success).toBe(false);
+        expect(res.error).toBe('resource_mismatch');
+        expect(() => proxy.createAuthUrl()).toThrow(/registration rejected: resource_mismatch/);
+      });
+    });
+
+    describe('5. Security & Invariant Preservation', () => {
+      it('preserves single-use state invariant across token exchanges', async () => {
+        const mockFetch = vi.fn(async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ access_token: 'token-1', token_type: 'Bearer', expires_in: 3600 }),
+        }));
+
+        const proxy = new XMemoDevProxy(
+          { enabled: true, clientId: 'client', issuer: 'https://xmemo.dev', mcpUrl: 'https://xmemo.dev/mcp' },
+          () => {},
+          undefined,
+          mockFetch as any
+        );
+
+        const { state } = proxy.createAuthUrl();
+        const first = await proxy.exchangeCode('code', state, mockFetch as any);
+        expect(first.success).toBe(true);
+
+        // Replay of same state must fail closed
+        const replay = await proxy.exchangeCode('code', state, mockFetch as any);
+        expect(replay.success).toBe(false);
+        expect(replay.error).toContain('Invalid or expired state');
+      });
+
+      it('never exposes token or secret in public status or responses', async () => {
+        const mockFetch = vi.fn(async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            access_token: 'super-sensitive-token-999',
+            refresh_token: 'super-sensitive-refresh-999',
+            token_type: 'Bearer',
+            expires_in: 3600,
+          }),
+        }));
+
+        const proxy = new XMemoDevProxy(
+          {
+            enabled: true,
+            clientId: 'client-1',
+            clientSecret: 'super-sensitive-secret-999',
+            issuer: 'https://xmemo.dev',
+            mcpUrl: 'https://xmemo.dev/mcp',
+          },
+          () => {},
+          undefined,
+          mockFetch as any
+        );
+
+        const { state } = proxy.createAuthUrl();
+        const res = await proxy.exchangeCode('code', state, mockFetch as any);
+        expect(res.success).toBe(true);
+
+        const status = proxy.getStatus();
+        const serialized = JSON.stringify(status);
+        expect(serialized).not.toContain('super-sensitive-token-999');
+        expect(serialized).not.toContain('super-sensitive-refresh-999');
+        expect(serialized).not.toContain('super-sensitive-secret-999');
       });
     });
   });

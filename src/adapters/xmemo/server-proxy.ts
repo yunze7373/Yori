@@ -256,6 +256,7 @@ export interface XMemoProxyStatus {
 interface PendingAuthState {
   readonly codeVerifier: string;
   readonly redirectUri: string;
+  readonly resource?: string;
   readonly createdAt: number;
 }
 
@@ -284,6 +285,44 @@ export function normalizeIssuer(urlStr: string): string {
     return res.endsWith('/') ? res.slice(0, -1) : res;
   } catch {
     return urlStr.trim().replace(/\/+$/, '');
+  }
+}
+
+/**
+ * Normalizes and validates an OAuth resource URI (RFC 8707).
+ *
+ * Requirements:
+ * 1. Must be a valid absolute URL with 'https:' scheme. Non-https is rejected.
+ * 2. Origin (scheme + host + port) must match expected issuer origin if provided.
+ * 3. Normalised to canonical form: https, origin + pathname stripped of trailing slashes,
+ *    no query string, no fragment/hash.
+ */
+export function normalizeResource(
+  rawUrl: string,
+  expectedIssuer?: string
+): { valid: boolean; resource?: string; error?: string } {
+  if (!rawUrl || typeof rawUrl !== 'string' || !rawUrl.trim()) {
+    return { valid: false, error: 'Resource URI is missing or empty' };
+  }
+  try {
+    const u = new URL(rawUrl.trim());
+    if (u.protocol !== 'https:') {
+      return { valid: false, error: `Resource URI must use https scheme: '${rawUrl}'` };
+    }
+    if (expectedIssuer) {
+      const issuerUrl = new URL(expectedIssuer.trim());
+      if (u.origin !== issuerUrl.origin) {
+        return {
+          valid: false,
+          error: `Resource origin '${u.origin}' does not match issuer origin '${issuerUrl.origin}'`,
+        };
+      }
+    }
+    const pathname = u.pathname.replace(/\/+$/, '') || '';
+    const resource = `${u.origin}${pathname}`;
+    return { valid: true, resource };
+  } catch (err: unknown) {
+    return { valid: false, error: `Invalid resource URL '${rawUrl}': ${(err as Error).message}` };
   }
 }
 
@@ -729,6 +768,67 @@ export class XMemoDevProxy {
                 return { success: false, error: 'issuer_mismatch' };
               }
 
+              // 1b. RFC 8707: If discovery metadata advertises a resource, it must equal the configured one, else fail closed
+              if (discoData && discoData.resource !== undefined) {
+                let canonicalResource: string;
+                try {
+                  canonicalResource = this.getCanonicalResource();
+                } catch (err: unknown) {
+                  this.registrationError = 'invalid_resource_url';
+                  this.logger(
+                    `[XMemoProxy] Invalid configured resource: ${(err as Error).message}. Failing closed.`
+                  );
+                  return { success: false, error: 'invalid_resource_url' };
+                }
+                const advertised =
+                  typeof discoData.resource === 'string' ? discoData.resource : String(discoData.resource);
+                const norm = normalizeResource(advertised, this.config.issuer);
+                if (!norm.valid || norm.resource !== canonicalResource) {
+                  this.registrationError = 'resource_mismatch';
+                  this.logger(
+                    `[XMemoProxy] Discovery resource mismatch: authorization-server metadata resource '${advertised}' != configured '${canonicalResource}'. Failing closed.`
+                  );
+                  return { success: false, error: 'resource_mismatch' };
+                }
+              }
+
+              if (
+                discoData &&
+                typeof discoData.protected_resource_metadata_endpoint === 'string' &&
+                discoData.protected_resource_metadata_endpoint.trim()
+              ) {
+                let canonicalResource: string;
+                try {
+                  canonicalResource = this.getCanonicalResource();
+                } catch (err: unknown) {
+                  this.registrationError = 'invalid_resource_url';
+                  this.logger(
+                    `[XMemoProxy] Invalid configured resource: ${(err as Error).message}. Failing closed.`
+                  );
+                  return { success: false, error: 'invalid_resource_url' };
+                }
+                const prEndpoint = discoData.protected_resource_metadata_endpoint.trim();
+                const prRes = await fetchFn(prEndpoint, {
+                  method: 'GET',
+                  headers: { Accept: 'application/json' },
+                });
+                if (prRes.ok) {
+                  const prData = (await prRes.json()) as any;
+                  if (prData && prData.resource !== undefined) {
+                    const advertised =
+                      typeof prData.resource === 'string' ? prData.resource : String(prData.resource);
+                    const norm = normalizeResource(advertised, this.config.issuer);
+                    if (!norm.valid || norm.resource !== canonicalResource) {
+                      this.registrationError = 'resource_mismatch';
+                      this.logger(
+                        `[XMemoProxy] Discovery resource mismatch: oauth-protected-resource metadata resource '${advertised}' != configured '${canonicalResource}'. Failing closed.`
+                      );
+                      return { success: false, error: 'resource_mismatch' };
+                    }
+                  }
+                }
+              }
+
               // 2. Validate endpoint origins against configured issuer origin (GATE-X1-HARDEN)
               if (discoData.registration_endpoint) {
                 if (
@@ -1029,6 +1129,19 @@ export class XMemoDevProxy {
   }
 
   /**
+   * Returns the canonical OAuth resource URI (RFC 8707) for XMemo MCP.
+   * Derived from the configured mcpUrl and normalised (https, no trailing slash, no query/fragment).
+   * Refuses and throws if resource is not https or its origin differs from the issuer.
+   */
+  public getCanonicalResource(): string {
+    const norm = normalizeResource(this.config.mcpUrl, this.config.issuer);
+    if (!norm.valid || !norm.resource) {
+      throw new Error(`Invalid canonical resource: ${norm.error}`);
+    }
+    return norm.resource;
+  }
+
+  /**
    * Generates authorization URL with PKCE S256 and exact minimal scopes.
    * PKCE code_verifier is retained strictly in server memory.
    */
@@ -1046,6 +1159,7 @@ export class XMemoDevProxy {
     if (!val.valid) {
       throw new Error(`Cannot create auth URL: authorizeUrl origin invalid (${val.reason})`);
     }
+    const canonicalResource = this.getCanonicalResource();
     const { codeVerifier, codeChallenge } = generatePkcePair();
     const state = generateState();
     const redirectUri = redirectUriOverride || this.config.redirectUri;
@@ -1068,6 +1182,7 @@ export class XMemoDevProxy {
     this.pendingStates.set(state, {
       codeVerifier,
       redirectUri,
+      resource: canonicalResource,
       createdAt: now,
     });
 
@@ -1079,6 +1194,7 @@ export class XMemoDevProxy {
       state,
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
+      resource: canonicalResource,
     });
 
     return {
@@ -1105,6 +1221,20 @@ export class XMemoDevProxy {
     }
     this.pendingStates.delete(state);
 
+    let canonicalResource: string;
+    try {
+      canonicalResource = this.getCanonicalResource();
+    } catch (err: unknown) {
+      return { success: false, error: `Token exchange aborted: ${(err as Error).message}` };
+    }
+
+    if (pending.resource && pending.resource !== canonicalResource) {
+      return {
+        success: false,
+        error: `Token exchange aborted: resource mismatch between authorization '${pending.resource}' and token exchange '${canonicalResource}'`,
+      };
+    }
+
     const effectiveClientId = this.clientId || this.config.clientId || '';
     const bodyParams: Record<string, string> = {
       grant_type: 'authorization_code',
@@ -1112,6 +1242,7 @@ export class XMemoDevProxy {
       redirect_uri: pending.redirectUri,
       client_id: effectiveClientId,
       code_verifier: pending.codeVerifier,
+      resource: canonicalResource,
     };
     const effectiveSecret = this.clientSecret || this.config.clientSecret;
     if (effectiveSecret) {
