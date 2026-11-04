@@ -131,7 +131,7 @@ export const STRINGS = Object.freeze({
   }),
   me: Object.freeze({
     title: 'Me & Memory',
-    subtitle: 'Manage your confirmed preferences, proposals, and privacy controls.',
+    subtitle: 'What Yori has learned about you, and your privacy controls.',
     budgetTitle: "Today's Proactive Prompts",
     budgetSubtitle:
       'Your Living Context refreshes smoothly whenever you check in. To protect your peace of mind, proactive suggestions are kept to a calm daily limit.',

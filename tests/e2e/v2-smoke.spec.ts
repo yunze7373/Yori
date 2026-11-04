@@ -731,43 +731,35 @@ test.describe('V-ANCHOR & V0: Action-State Store & Interaction Shell Suite', () 
     await page.locator('#btn-adjust-remember').click();
     await expect(page.locator('#adjust-dialog-backdrop')).toHaveCount(0);
 
-    // --- Part 5 (For You, Me Tab & Recomputation) Verbatim Quotes ---
-    // Proposal appears on For You tab
+    // --- Part 5 (For You, Me Tab & Recomputation), HABIT-LEARN learn-and-correct ---
+    // Remembered straight away: For You shows the routine with its basis; nothing to confirm.
     await clickNav('for-you');
     await expect(page.locator('.v2-for-you-view')).toBeVisible();
-    await expect(page.locator('.v2-for-you-view .v2-proposal-title')).toContainText(
-      'Remember departure prep & buffer routine?'
+    await expect(page.locator('.v2-for-you-view .v2-proposal-title').first()).toContainText(
+      'Get ready 25 min · Leave a 10 min buffer'
     );
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
-    // Me tab shows budget, empty state, and proposal titled "Preparation buffer habit"
+    // Me tab shows budget and "What Yori has learned" with the routine and a quiet Forget
     await clickNav('me');
     await expect(page.locator('.me-title')).toHaveText('Me & Memory');
     await expect(page.locator('.badge-budget')).toContainText('0 of 3 used today');
-    await expect(page.locator('#confirmed-facts-list .memory-empty')).toHaveText(
-      'No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.'
-    );
-
-    const pendingRow = page.locator('#proposal-prep_buffer_preference');
-    await expect(pendingRow).toBeVisible();
-    await expect(pendingRow.locator('.memory-key')).toHaveText('Preparation buffer habit');
-
-    // Confirm proposal
-    await pendingRow.locator('.btn-confirm-proposal').click();
-    await expect(pendingRow).toHaveCount(0);
-
-    const confirmedRow = page.locator('#fact-prep_buffer_preference');
+    const confirmedRow = page.locator('#habit-prep_buffer_preference');
     await expect(confirmedRow).toBeVisible();
-    await expect(confirmedRow.locator('.badge-confirmed')).toContainText('Confirmed');
+    await expect(confirmedRow.locator('.memory-key')).toHaveText('Preparation buffer habit');
+    await expect(confirmedRow).toContainText('You told Yori');
+    await expect(confirmedRow.locator('.btn-forget-habit')).toBeVisible();
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
     // Return to Home: schedule immediately recomputed to "Get ready at 2:00 PM, leave by 2:25 PM"
     await clickNav('home');
     await expect(page.locator('.now-card')).toBeVisible();
     await expect(page.locator('#now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
 
-    // Post-confirmation Why sheet shows Confirmed
+    // The Why sheet tags the remembered routine "You told Yori"
     await page.locator('#btn-why').click();
     await expect(page.locator('#why-sheet-backdrop')).toBeVisible();
-    await expect(page.locator('#why-sheet-backdrop .badge-confirmed').first()).toHaveText('Confirmed');
+    await expect(page.locator('#why-sheet-backdrop .badge-confirmed').first()).toHaveText('You told Yori');
     await page.locator('#btn-close-why').click();
     await expect(page.locator('#why-sheet-backdrop')).toHaveCount(0);
 

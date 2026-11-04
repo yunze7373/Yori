@@ -26,7 +26,7 @@ test.describe('UI-DEMO-FY: Deterministic For You & Plans / Ahead Loop', () => {
     }
   });
 
-  test('multi-candidate: Plans & For You populated, Confirm moves to Me, Axe WCAG2A/AA passes', async ({
+  test('multi-candidate: Plans populated; For You and Me show what Yori learned with no confirm step; Axe WCAG2A/AA passes', async ({
     page,
   }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile';
@@ -79,21 +79,13 @@ test.describe('UI-DEMO-FY: Deterministic For You & Plans / Ahead Loop', () => {
     await expect(forYouNav).toBeVisible();
     await forYouNav.click();
 
-    // Verify For You view is non-empty with pending routine proposal
+    // HABIT-LEARN: For You lists what Yori has learned (read-only). This curated scene has none
+    // yet, and the old sample "Remember …?" proposal is not shown: nothing waits for a confirm step.
     const forYouView = page.locator('.v2-for-you-view');
     await expect(forYouView).toBeVisible();
-    const proposalCards = page.locator('.v2-for-you-list .v2-proposal-item-card');
-    await expect(proposalCards).toHaveCount(1);
-
-    const firstProposal = proposalCards.first();
-    await expect(firstProposal.locator('.v2-proposal-title')).toHaveText('Remember departure prep & buffer routine?');
-    await expect(firstProposal.locator('.card-badge')).toHaveText('PROPOSAL');
-    await expect(firstProposal.locator('.v2-proposal-basis')).toHaveText('Derived from sample demo profile');
-
-    const confirmBtn = firstProposal.locator('.btn-confirm-proposal');
-    const rejectBtn = firstProposal.locator('.btn-reject-proposal');
-    await expect(confirmBtn).toBeVisible();
-    await expect(rejectBtn).toBeVisible();
+    await expect(page.locator('.v2-empty-proposals')).toContainText('Nothing learned yet');
+    await expect(forYouView).not.toContainText('Remember departure prep & buffer routine?');
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
     // WCAG2A / WCAG2AA accessibility audit on For You view
     await checkAxeWcag(page, `For You View (${viewName})`);
@@ -103,84 +95,62 @@ test.describe('UI-DEMO-FY: Deterministic For You & Plans / Ahead Loop', () => {
       path: path.join(EVIDENCE_DIR, `for-you-${viewName}.png`),
     });
 
-    // 4. Confirm the proposal on For You tab
-    await confirmBtn.click();
-
-    // For You view immediately transitions to empty state
-    await expect(page.locator('.v2-empty-proposals')).toBeVisible();
-    await expect(page.locator('.v2-empty-proposals')).toContainText('No pending proposals waiting right now');
-
-    // 5. Navigate to Me Tab to verify confirmed persistence
+    // Me: "What Yori has learned" replaces the confirmed / pending / rejected lists.
     const meNav = isMobile ? page.locator('#tab-me') : page.locator('#desktop-nav-me');
     await expect(meNav).toBeVisible();
     await meNav.click();
+    await expect(page.locator('#learned-habits-list')).toBeVisible();
+    await expect(page.locator('#pending-proposals-list, #rejected-proposals-list')).toHaveCount(0);
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
+    await checkAxeWcag(page, `Me View (${viewName})`);
 
-    const confirmedList = page.locator('#confirmed-facts-list');
-    await expect(confirmedList).toBeVisible();
-    const confirmedRow = page.locator('#fact-prep_buffer_preference');
-    await expect(confirmedRow).toBeVisible();
-    await expect(confirmedRow.locator('.badge-confirmed')).toHaveText('Confirmed');
-    await expect(confirmedRow.locator('.memory-meta')).toContainText('Source: you confirmed');
-
-    // Verify pending proposals on Me tab is empty
-    const pendingList = page.locator('#pending-proposals-list');
-    await expect(pendingList.locator('.memory-empty')).toBeVisible();
-
-    // Capture Me Confirmed screenshot
+    // Capture Me screenshot
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `me-confirmed-${viewName}.png`),
     });
   });
 
-  test('multi-candidate: Not true moves proposal to declined audit on Me page', async ({
+  test('lunch scene: the Demo shows a labelled sample habit in For You and Me, and Forget hides it (HABIT-LEARN item 8)', async ({
     page,
   }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile';
     const viewName = testInfo.project.name;
 
-    // Open V2 living context in test mode and select multi-candidate scene
-    await page.goto('/?ui=v2&test=1&scene=multi-candidate');
+    await page.goto('/?ui=v2&test=1&scene=lunch');
     await page.waitForSelector('.app-layout');
     await page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
     });
-    await page.goto('/?ui=v2&test=1&scene=multi-candidate');
+    await page.goto('/?ui=v2&test=1&scene=lunch');
     await page.waitForSelector('.app-layout');
+    await selectDemoScene(page, 'lunch');
 
-    await selectDemoScene(page, 'multi-candidate');
-
-    // Navigate to For You Tab
     const forYouNav = isMobile ? page.locator('#tab-for-you') : page.locator('#desktop-nav-for-you');
-    await expect(forYouNav).toBeVisible();
     await forYouNav.click();
+    const card = page.locator('.v2-for-you-list .v2-proposal-item-card[data-proposal-key="learned_lunch_cuisine"]');
+    await expect(card.locator('.v2-proposal-title')).toHaveText('You often pick ramen · 3 of your last 4 lunches');
+    await expect(card.locator('.v2-proposal-basis')).toHaveText('Learned from sample choices · demo');
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
-    const proposalCard = page.locator('.v2-for-you-list .v2-proposal-item-card').first();
-    await expect(proposalCard).toBeVisible();
-
-    // Click Not true
-    const rejectBtn = proposalCard.locator('.btn-reject-proposal');
-    await rejectBtn.click();
-
-    // For You view transitions to empty state
-    await expect(page.locator('.v2-empty-proposals')).toBeVisible();
-
-    // Navigate to Me Tab
     const meNav = isMobile ? page.locator('#tab-me') : page.locator('#desktop-nav-me');
-    await expect(meNav).toBeVisible();
     await meNav.click();
+    const row = page.locator('#habit-learned_lunch_cuisine');
+    await expect(row).toContainText('Lunch habit');
+    await expect(row).toContainText('You often pick ramen · 3 of your last 4 lunches');
+    await expect(row).toContainText('Learned from sample choices · demo');
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, `me-rejected-${viewName}.png`) });
 
-    // Verify proposal appears under Declined Habits & Suggestions
-    const rejectedList = page.locator('#rejected-proposals-list');
-    await expect(rejectedList).toBeVisible();
-    const rejectedRow = page.locator('#rejected-prep_buffer_preference');
-    await expect(rejectedRow).toBeVisible();
-    await expect(rejectedRow.locator('.memory-meta')).toContainText('Declined by user');
-
-    // Capture Me Rejected screenshot
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, `me-rejected-${viewName}.png`),
-    });
+    // Forget: the sample habit is tombstoned like any other and does not come back.
+    await row.locator('.btn-forget-habit').click();
+    await expect(page.locator('#habit-learned_lunch_cuisine')).toHaveCount(0);
+    await forYouNav.click();
+    await expect(page.locator('.v2-empty-proposals')).toContainText('Nothing learned yet');
+    await page.reload();
+    await page.waitForSelector('.app-layout');
+    await selectDemoScene(page, 'lunch');
+    await meNav.click();
+    await expect(page.locator('#habit-learned_lunch_cuisine')).toHaveCount(0);
   });
 
   test('rain scene: 2-tap interaction (Adjust -> Save & Remember) reliably produces For You proposal', async ({
@@ -204,6 +174,7 @@ test.describe('UI-DEMO-FY: Deterministic For You & Plans / Ahead Loop', () => {
     const forYouNav = isMobile ? page.locator('#tab-for-you') : page.locator('#desktop-nav-for-you');
     await forYouNav.click();
     await expect(page.locator('.v2-empty-proposals')).toBeVisible();
+    await expect(page.locator('.v2-empty-proposals')).toContainText('Nothing learned yet');
 
     // 3. Return to Home tab
     const homeNav = isMobile ? page.locator('#tab-home') : page.locator('#desktop-nav-home');
@@ -229,15 +200,14 @@ test.describe('UI-DEMO-FY: Deterministic For You & Plans / Ahead Loop', () => {
     await adjustRememberBtn.click();
     await expect(adjustModal).not.toBeVisible();
 
-    // 4. Navigate to For You tab: proposal is now reliably present!
+    // 4. HABIT-LEARN: the routine is remembered as stated straight away and shown in For You with its
+    // basis; there is no Confirm step.
     await forYouNav.click();
     const proposalCard = page.locator('.v2-for-you-list .v2-proposal-item-card').first();
     await expect(proposalCard).toBeVisible();
-    await expect(proposalCard.locator('.v2-proposal-title')).toHaveText('Remember departure prep & buffer routine?');
-
-    // 5. Click Confirm on For You tab
-    await proposalCard.locator('.btn-confirm-proposal').click();
-    await expect(page.locator('.v2-empty-proposals')).toBeVisible();
+    await expect(proposalCard.locator('.v2-proposal-title')).toHaveText('Get ready 25 min · Leave a 10 min buffer');
+    await expect(proposalCard.locator('.v2-proposal-basis')).toHaveText('You told Yori');
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
     // 6. Return to Home: schedule recomputed to 2:00 PM ready, 2:25 PM leave
     await homeNav.click();

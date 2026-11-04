@@ -9,6 +9,8 @@
  * - Zero raw derivation strings, zero internal keys (no INV-, S4-1, appt -, derivation formulas).
  */
 
+import { describeLearnedCuisine } from '../../core/memory/habit-learner.js';
+import { isLearnedCuisineValue } from '../../core/memory/taste.js';
 import type { PreparedPlan, EvidenceCitation } from '../../core/contracts/index.js';
 import { formatTime, escapeHtml } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
@@ -147,12 +149,23 @@ export function humanizeMemoryKey(key: string): string {
     case 'grocery_store_preference':
     case 'preferred_grocery_store':
       return 'Preferred grocery store';
+    case 'learned_lunch_cuisine':
+      return 'Lunch habit';
+    case 'dietary_preference':
+      return 'Diet';
+    case 'ambience_preference':
+      return 'Places you like';
     default:
       return key.replace(/_/g, ' ');
   }
 }
 
 export function humanizeMemoryValue(key: string, value: unknown): string {
+  if (key === 'learned_lunch_cuisine' && isLearnedCuisineValue(value)) {
+    return describeLearnedCuisine(value);
+  }
+  if (key === 'dietary_preference' && typeof value === 'string') return value.charAt(0).toUpperCase() + value.slice(1);
+  if (key === 'ambience_preference' && value === 'quiet') return 'Quiet places';
   if (key === 'prep_buffer_minutes' || key === 'prep_duration_minutes') {
     return STRINGS.memory.minutesUnit.replace('{minutes}', String(value ?? 0));
   }
@@ -244,6 +257,19 @@ export function buildHumanDerivation(
   if (plan.intentId === 'lunch') {
     const userReq = plan.why?.evidenceSignals?.find(s => s.kind === 'user_request');
     const requestNote = userReq ? ` (${userReq.description})` : '';
+    // HABIT-LEARN: the same basis as the card ("You often pick ramen · 3 of your last 4 lunches").
+    const learned = memoryFacts.find(f => f.key === 'learned_lunch_cuisine' && isLearnedCuisineValue(f.value));
+    const stated = memoryFacts.find(
+      f => (f as { provenance?: { source?: string } }).provenance?.source === 'user_stated' && typeof f.value === 'string'
+    );
+    const learnedIsDemo = Boolean(learned && (learned.value as { demo?: boolean }).demo);
+    if (stated || (learned && !learnedIsDemo)) {
+      const basis = stated
+        ? `You told Yori you like ${String(stated.value).replace(/_/g, ' ')}`
+        : describeLearnedCuisine(learned!.value as any);
+      return `${basis}, so places that match come first; the rest follow by open now and distance.${requestNote}`;
+    }
+    const demoHabitNote = learned && learnedIsDemo ? ` Sample choices from the demo profile: ${describeLearnedCuisine(learned.value as any).charAt(0).toLowerCase()}${describeLearnedCuisine(learned.value as any).slice(1)}.` : '';
     const prefDesc = allConfirmed
       ? 'align with your confirmed taste preferences'
       : hasSynced
@@ -251,7 +277,7 @@ export function buildHumanDerivation(
       : hasPreferences
       ? 'align with sample taste preferences from the demo profile'
       : 'align with your taste preferences';
-    return `Detected that you are away from home during a free schedule window. Recommended places within walking distance that ${prefDesc}.${requestNote}`;
+    return `Detected that you are away from home during a free schedule window. Recommended places within walking distance that ${prefDesc}.${requestNote}${demoHabitNote}`;
   }
 
   // Fallback: sanitize any raw derivation string from internal formulas
@@ -333,7 +359,7 @@ export function renderWhySheet(
                       factsToCheck.every(
                         k => {
                           const kind = classifyFactSource(k, userConfirmedKeys, plan.why.memoryFactsUsed, syncedKeys);
-                          return kind === 'user_confirmed' || kind === 'synced';
+                          return kind === 'user_confirmed' || kind === 'user_stated' || kind === 'learned' || kind === 'synced';
                         }
                       );
 
@@ -440,7 +466,7 @@ export function renderWhySheet(
                   ? memoryFacts
                       .map(fact => {
                         const provKind = classifyFactSource(fact, userConfirmedKeys, undefined, syncedKeys);
-                        const isUserConfirmed = provKind === 'user_confirmed';
+                        const isUserConfirmed = provKind === 'user_confirmed' || provKind === 'user_stated' || provKind === 'learned';
                         const isSynced = provKind === 'synced';
                         const badgeText = provenanceLabel(provKind);
                         const badgeClass = (isUserConfirmed || isSynced) ? 'badge-confirmed' : 'badge-simulated';

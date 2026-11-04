@@ -48,7 +48,7 @@ test.describe('PH-002 C2: XMemo UI Affordance & Invariance Verification', () => 
 
     await page.goto('/');
     await goToMeTab(page, isMobile);
-    await expect(page.locator('#confirmed-facts-list')).toBeVisible();
+    await expect(page.locator('#learned-habits-list')).toBeVisible();
 
     // Verify XMemo section is NOT in the DOM
     await expect(page.locator('#me-xmemo-title')).toHaveCount(0);

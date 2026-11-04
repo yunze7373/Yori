@@ -298,7 +298,7 @@ test.describe('PH-002 E1: Visual Regression and Polish Suite (Dual-Width)', () =
 
     await page.goto('/?ui=v1');
     await goToMeTab(page, isMobile);
-    await expect(page.locator('#confirmed-facts-list')).toBeVisible();
+    await expect(page.locator('#learned-habits-list')).toBeVisible();
     await expect(page.locator('#me-xmemo-title')).toHaveCount(0);
 
     await checkNoHorizontalScroll(page);

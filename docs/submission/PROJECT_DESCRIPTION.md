@@ -46,7 +46,7 @@ Every recommendation is fully transparent:
 - **Dismissals**: Dismissing a card silences it for the day and creates an explainable preference proposal.
 
 ### 3. User Sovereignty & The Me Tab
-- **Confirm-Only Memory (INV-107)**: Invariant enforced both client-side and server-side: observations stay as pending proposals until the user explicitly taps **Confirm**. Rejected items remain archived for audit and are never re-applied.
+- **Learn-and-Correct Memory (INV-107)**: Yori learns habits from what you do in the app (Accept a lunch pick, Directions, Save a restaurant) and applies them right away, with no Confirm prompt: a cuisine you pick on at least 2 of your recent lunches (last 14 days), more than any other, comes first, with its basis shown ("You often pick ramen · 3 of your last 4 lunches"). Things you tell Yori in Ask ("I'm vegetarian", "remember I like quiet places") are saved as stated. Me > **What Yori has learned** lists every habit with its basis and a quiet **Forget**; forgetting removes the habit and its recorded choices and keeps it from being re-learned for 30 days.
 - **Storage Sovereignty**: Users can export raw JSON data or perform a 2-step verified storage reset at any time.
 
 ---
@@ -108,8 +108,8 @@ Yori treats user privacy and credential security as non-negotiable architectural
 - **Factual Hallucination Guard**:
   - Muse Spark reasoning outputs must cite valid available signal IDs and confirmed fact keys.
   - Phrasing outputs are checked for factual token leakage: any unlisted time or place token causes the entire output to be safely discarded for the deterministic template.
-- **Confirm-Only Memory (INV-107, AC-106-3)**:
-  - Both client-side adapter and server-side dev proxy strictly enforce that only facts with `status === 'confirmed'` can be written to long-term memory or synced to remote vaults. Any pending or unconfirmed write is rejected with HTTP 400.
+- **Learn-and-Correct Memory (INV-107, AC-106-3)**:
+  - Client adapters and the server-side proxy accept only what the user told Yori (`status 'confirmed'`, source `user_stated`) or what Yori learned from the user's own choices (`status 'learned'`, provenance source `observed`). Pending, unknown statuses, malformed keys and oversized values are rejected with HTTP 400; keys outside the closed Yori-managed registry get 403. Learned facts are written through to XMemo only when it is connected.
 
 ---
 

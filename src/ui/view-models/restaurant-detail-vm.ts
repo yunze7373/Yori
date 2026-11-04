@@ -219,7 +219,10 @@ export function deriveRestaurantDetailVM(options: DeriveRestaurantDetailOptions)
     : isLive
     ? 'Confirmed taste preference'
     : 'Demo profile · sample';
-  const basis = isLive && !tasteFact
+  const habitBasis = typeof (targetOpt as any)?.habitBasis === 'string' ? ((targetOpt as any).habitBasis as string) : undefined;
+  const basis = habitBasis
+    ? habitBasis /* HABIT-LEARN: the same basis as the card and the Why sheet */
+    : isLive && (!tasteFact || (targetOpt as any)?.reasonKind !== 'taste')
     ? formatCuisineBasis(targetOpt?.cuisine) /* UI-QUIET-PRECISION: plain language */
     : `Based on taste: ${cuisine} (${provenance})`;
 

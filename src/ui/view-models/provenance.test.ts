@@ -56,7 +56,7 @@ describe('Provenance Classifier (src/ui/view-models/provenance.ts)', () => {
 
     const kind = classifyFactSource(confirmedFact, userConfirmedKeys);
     expect(kind).toBe('user_confirmed');
-    expect(provenanceLabel(kind)).toBe('Confirmed');
+    expect(provenanceLabel(kind)).toBe('You told Yori'); // HABIT-LEARN tag wording
     expect(isFactUserConfirmed(confirmedFact, userConfirmedKeys)).toBe(true);
   });
 
@@ -107,7 +107,7 @@ describe('Provenance Classifier (src/ui/view-models/provenance.ts)', () => {
 
       const kind = classifyFactSource(localConfirmedFact, userConfirmed, undefined, syncedKeys);
       expect(kind).toBe('user_confirmed');
-      expect(provenanceLabel(kind)).toBe('Confirmed');
+      expect(provenanceLabel(kind)).toBe('You told Yori'); // HABIT-LEARN tag wording
       expect(isFactUserConfirmed(localConfirmedFact, userConfirmed)).toBe(true);
     });
   });
@@ -219,5 +219,17 @@ describe('Provenance Classifier (src/ui/view-models/provenance.ts)', () => {
       expect(resolveElementProvenance('live', 'route_unavailable')).toEqual({ provenance: 'none' });
       expect(resolveElementProvenance('live', 'empty')).toEqual({ provenance: 'none' });
     });
+  });
+});
+
+describe('HABIT-LEARN provenance tags', () => {
+  it('learned / told / demo-learned facts get their own plain tags', () => {
+    const learned = { key: 'learned_lunch_cuisine', status: 'learned', value: { cuisine: 'ramen', count: 2, total: 2 }, provenance: { source: 'observed' } };
+    const demo = { ...learned, value: { ...learned.value, demo: true } };
+    const told = { key: 'dietary_preference', status: 'confirmed', value: 'vegetarian', provenance: { source: 'user_stated' } };
+    expect(provenanceLabel(classifyFactSource(learned))).toBe('Learned from your choices');
+    expect(provenanceLabel(classifyFactSource(demo))).toBe('Learned from sample choices · demo');
+    expect(provenanceLabel(classifyFactSource(told))).toBe('You told Yori');
+    expect(provenanceLabel(classifyFactSource({ key: 'taste_preference', provenance: { source: 'sample' } }))).toBe('Demo profile · sample preference');
   });
 });

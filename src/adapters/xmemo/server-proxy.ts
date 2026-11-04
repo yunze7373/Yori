@@ -1305,12 +1305,14 @@ export class XMemoDevProxy {
 
     const { key, value, status, provenance } = fact as any;
 
-    // Strict server-side invariant check: INV-107 & AC-106-3
-    if (status !== 'confirmed') {
+    // Strict server-side invariant check (INV-107, learn-and-correct since HABIT-LEARN): only what
+    // the user told Yori ('confirmed') or what Yori learned from the user's own choices ('learned',
+    // provenance source 'observed') reaches the vault. 'pending', 'rejected' and anything else: 400.
+    if (status !== 'confirmed' && status !== 'learned') {
       return {
         status: 400,
         data: {
-          error: `Server invariant violation (INV-107): only confirmed facts can be written to remote vault. Got status '${status}'.`,
+          error: `Server invariant violation (INV-107): only stated or learned facts can be written to remote vault. Got status '${status}'.`,
         },
       };
     }
@@ -1322,10 +1324,44 @@ export class XMemoDevProxy {
       };
     }
 
+    if (!/^[a-z0-9_]{1,60}$/.test(key)) {
+      return {
+        status: 400,
+        data: { error: 'Bad Request: malformed key (lowercase letters, digits and _ only, <= 60 characters)' },
+      };
+    }
+
     if (!provenance || typeof provenance !== 'object') {
       return {
         status: 400,
         data: { error: 'Bad Request: provenance object is required' },
+      };
+    }
+
+    const source = (provenance as { source?: unknown }).source;
+    if (status === 'learned' && source !== 'observed') {
+      return {
+        status: 400,
+        data: { error: "Bad Request: a learned fact must carry provenance source 'observed'" },
+      };
+    }
+    if (status === 'confirmed' && source === 'observed') {
+      return {
+        status: 400,
+        data: { error: "Bad Request: an observed fact is 'learned', not 'confirmed'" },
+      };
+    }
+
+    let serializedValue: string;
+    try {
+      serializedValue = typeof value === 'string' ? value : JSON.stringify(value);
+    } catch {
+      return { status: 400, data: { error: 'Bad Request: value is not serializable' } };
+    }
+    if (value === undefined || value === null || typeof serializedValue !== 'string' || serializedValue.length > 1000) {
+      return {
+        status: 400,
+        data: { error: 'Bad Request: value is missing or larger than 1000 characters' },
       };
     }
 
@@ -1350,9 +1386,8 @@ export class XMemoDevProxy {
         name: UNVERIFIED_XMEMO_MCP_MAPPING.writeTool,
         arguments: {
           [UNVERIFIED_XMEMO_MCP_MAPPING.writeKeyArg]: key,
-          [UNVERIFIED_XMEMO_MCP_MAPPING.writeValueArg]:
-            typeof value === 'string' ? value : JSON.stringify(value),
-          [UNVERIFIED_XMEMO_MCP_MAPPING.writeStatusArg]: 'confirmed',
+          [UNVERIFIED_XMEMO_MCP_MAPPING.writeValueArg]: serializedValue,
+          [UNVERIFIED_XMEMO_MCP_MAPPING.writeStatusArg]: status,
           [UNVERIFIED_XMEMO_MCP_MAPPING.writeTagArg]: UNVERIFIED_XMEMO_MCP_MAPPING.writeTagValue,
           provenance,
         },

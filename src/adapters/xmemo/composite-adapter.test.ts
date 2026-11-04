@@ -667,3 +667,80 @@ describe('CompositeMemoryAdapter (XMEMO-PORT-WIRE)', () => {
     });
   });
 });
+
+describe('HABIT-LEARN: learned facts write through; Forget is local first', () => {
+  const learned = createMemoryFact(
+    'learned_lunch_cuisine',
+    { cuisine: 'ramen', count: 2, total: 2, lastSeen: '2026-11-04T03:00:00.000Z' },
+    'learned',
+    { source: 'observed', recordedAt: '2026-11-04T03:00:00.000Z' },
+    '2026-11-04T03:00:00.000Z'
+  );
+  const emptyStorage = () => {
+    const storage = new YoriStorage(new InMemoryStorageDriver());
+    storage.save({ memoryFacts: [], proposals: [], suppressions: [], promptBudget: { date: '2026-11-04', count: 0 }, acceptedPlanIds: [] }, '2026-11-04T03:00:00.000Z');
+    return storage;
+  };
+
+  it('stores a learned fact locally and does not call the vault while XMemo is off', async () => {
+    const storage = emptyStorage();
+    const fetchFn = vi.fn();
+    const adapter = new CompositeMemoryAdapter({ storage, fetchFn: fetchFn as any, statusChecker: async () => ({ enabled: false, connected: false }) });
+    expect((await adapter.writeBack(learned)).success).toBe(true);
+    expect(storage.load()?.payload.memoryFacts.map(f => [f.key, f.status])).toEqual([['learned_lunch_cuisine', 'learned']]);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('writes the learned fact through to the vault when XMemo is connected', async () => {
+    const storage = emptyStorage();
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+    const adapter = new CompositeMemoryAdapter({ storage, fetchFn: fetchFn as any, statusChecker: async () => ({ enabled: true, connected: true }) });
+    await adapter.writeBack(learned);
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(String(url)).toMatch(/\/confirmed-facts$/);
+    expect(JSON.parse(init.body)).toMatchObject({ key: 'learned_lunch_cuisine', status: 'learned', provenance: { source: 'observed' } });
+  });
+
+  it('still refuses pending facts', async () => {
+    const adapter = new CompositeMemoryAdapter({ storage: emptyStorage(), statusChecker: async () => ({ enabled: false, connected: false }) });
+    const pending = createMemoryFact('taste_preference', 'ramen', 'pending', { source: 'user_feedback', recordedAt: '2026-11-04T03:00:00.000Z' }, '2026-11-04T03:00:00.000Z');
+    await expect(adapter.writeBack(pending)).rejects.toThrow(/INV-107/);
+  });
+
+  it('keeps a valid remote learned fact on load and drops an out-of-bounds one', async () => {
+    const storage = emptyStorage();
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => [
+        { key: 'learned_lunch_cuisine', value: { cuisine: 'ramen', count: 3, total: 4, lastSeen: '2026-11-04T03:00:00.000Z' }, status: 'learned' },
+      ],
+    });
+    const adapter = new CompositeMemoryAdapter({ storage, fetchFn: fetchFn as any, statusChecker: async () => ({ enabled: true, connected: true }) });
+    const facts = await adapter.loadFacts();
+    expect(facts.find(f => f.key === 'learned_lunch_cuisine')?.status).toBe('learned');
+    expect(isValidRemoteFactValue('learned_lunch_cuisine', { cuisine: 'ramen', count: 1, total: 1, lastSeen: '2026-11-04T03:00:00.000Z' })).toBe(false);
+    expect(isValidRemoteFactValue('dietary_preference', 'vegetarian')).toBe(true);
+    expect(isValidRemoteFactValue('dietary_preference', 'carnivore')).toBe(false);
+  });
+
+  it('Forget removes the fact locally and, only when connected, deletes it in the vault', async () => {
+    const storage = emptyStorage();
+    const fetchFn = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
+    let connected = false;
+    const adapter = new CompositeMemoryAdapter({ storage, fetchFn: fetchFn as any, statusChecker: async () => ({ enabled: true, connected }) });
+    await adapter.writeBack(learned);
+    await adapter.forget('learned_lunch_cuisine', '2026-11-04T04:00:00.000Z');
+    expect(storage.load()?.payload.memoryFacts).toEqual([]);
+    expect(fetchFn).not.toHaveBeenCalled();
+
+    connected = true;
+    await adapter.writeBack(learned);
+    fetchFn.mockClear();
+    await adapter.forget('learned_lunch_cuisine', '2026-11-04T05:00:00.000Z');
+    const [, init] = fetchFn.mock.calls[0]!;
+    expect(init.method).toBe('DELETE');
+    expect(JSON.parse(init.body)).toEqual({ key: 'learned_lunch_cuisine', userConfirmed: true });
+    expect(storage.load()?.payload.memoryFacts).toEqual([]);
+  });
+});

@@ -50,7 +50,7 @@ describe('MemoryPort (XMemo & Local Adapters)', () => {
     );
 
     await expect(memoryPort.writeBack(pendingFact)).rejects.toThrow(
-      /MemoryPort invariant violation \(INV-107\): only confirmed facts can be written back/
+      /MemoryPort invariant violation \(INV-107\): only stated or learned facts can be written back/
     );
   });
 
@@ -66,7 +66,7 @@ describe('MemoryPort (XMemo & Local Adapters)', () => {
     );
 
     await expect(memoryPort.writeBack(rejectedFact)).rejects.toThrow(
-      /MemoryPort invariant violation \(INV-107\): only confirmed facts can be written back/
+      /MemoryPort invariant violation \(INV-107\): only stated or learned facts can be written back/
     );
   });
 

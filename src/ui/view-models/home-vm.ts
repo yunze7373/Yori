@@ -639,8 +639,11 @@ function compileHomeComposition(options: BuildHomeCompositionOptions): HomeCompo
           const provenance = isConfirmed ? 'You confirmed' : 'Demo profile · sample';
           // D2: Live options without a confirmed-taste match say why they are shown instead.
           const reasonKind = (opt as any).reasonKind as 'taste' | 'open_now' | 'nearest' | undefined;
-          const basis =
-            options.isLive && reasonKind === 'open_now'
+          // HABIT-LEARN: a learned or told preference speaks for itself (same text in Why and Ask).
+          const habitBasis = typeof (opt as any).habitBasis === 'string' ? ((opt as any).habitBasis as string) : undefined;
+          const basis = habitBasis
+            ? habitBasis
+            : options.isLive && reasonKind === 'open_now'
               ? (opt as any).provenance === 'google'
                 ? 'Open now · from Google opening hours'
                 : 'Open now · from OpenStreetMap opening hours'
@@ -939,12 +942,12 @@ function compileAheadItems(aheadPlans: readonly PreparedPlan[]): readonly AheadI
 }
 
 function compileProposals(
-  proposals: readonly { key: string; value?: unknown; status?: string; basis?: string; provenance?: 'user' | 'fixture' | 'none' }[]
+  proposals: readonly { key: string; value?: unknown; status?: string; title?: string; basis?: string; provenance?: 'user' | 'fixture' | 'none' }[]
 ): readonly ProposalItemVM[] {
   return Object.freeze(
     proposals.map(prop => ({
       key: prop.key,
-      title: humanizeProposalTitle(prop.key),
+      title: prop.title ?? humanizeProposalTitle(prop.key),
       basis: prop.basis,
       provenance: prop.provenance || (prop.status === 'confirmed' || prop.basis?.includes('Confirmed') ? 'user' : 'fixture'),
       value: prop.value,

@@ -14,6 +14,12 @@
  * - Storage persistence via WebStorageDriver (AC-105-4)
  */
 
+import { demoLearnedFact as computeDemoLearnedFact } from './demo-habits.js';
+import { humanizeMemoryKey, humanizeMemoryValue } from '../review/why-sheet.js';
+import { classifyFactSource, provenanceLabel } from '../view-models/provenance.js';
+import { HabitJournal } from '../../core/memory/habit-journal.js';
+import { learnLunchCuisine, toLearnedFact, LEARNED_LUNCH_CUISINE_KEY, forgetCuisine, liftTombstone, undoAccept } from '../../core/memory/habit-learner.js';
+import { isActiveMemoryFact } from '../../core/contracts/memory.js';
 import { applyDemoStatus, demoFlagsReady, isXmemoHidden } from '../demo-flags.js';
 import { appliedRainBufferMinutes, forecastCitation } from '../view-models/rain-buffer.js';
 import { STRINGS } from './strings.js';
@@ -76,7 +82,6 @@ import {
   formatNowPlan,
   formatAheadPlan,
   formatNoticeMessage,
-  humanizeProposalTitle,
   describeDemoReplan,
 } from './presentation.js';
 import { isWeatherStale } from '../view-models/provenance.js';
@@ -408,11 +413,11 @@ export function computeSceneState(
   const storedProposals = loadedEnvelope?.payload.proposals ?? [];
   const storedConfirmedFacts = loadedEnvelope?.payload.memoryFacts ?? [];
 
-  const activeConfirmedFacts: MemoryFact[] = [...storedConfirmedFacts.filter(f => f.status === 'confirmed')];
+  const activeConfirmedFacts: MemoryFact[] = [...storedConfirmedFacts.filter(f => isActiveMemoryFact(f))]; // HABIT-LEARN: stated + learned
   if (externalMemoryFacts && externalMemoryFacts.length > 0) {
     const localKeys = new Set(activeConfirmedFacts.map(f => f.key));
     for (const ef of externalMemoryFacts) {
-      if (ef.status === 'confirmed' && !localKeys.has(ef.key)) {
+      if (isActiveMemoryFact(ef) && !localKeys.has(ef.key)) {
         activeConfirmedFacts.push(ef);
       }
     }
@@ -1202,7 +1207,7 @@ export function computeLiveState(
 
   const storedSuppressions = loadedEnvelope?.payload.suppressions ?? [];
   const rawStoredConfirmed = loadedEnvelope?.payload.memoryFacts ?? [];
-  const activeStoredConfirmed: MemoryFact[] = [...rawStoredConfirmed.filter((f: MemoryFact) => f.status === 'confirmed')];
+  const activeStoredConfirmed: MemoryFact[] = [...rawStoredConfirmed.filter((f: MemoryFact) => isActiveMemoryFact(f))];
 
   // Process prep_buffer_preference if present
   const uPrep = activeStoredConfirmed.find(f => f.key === 'prep_buffer_preference');
@@ -1233,7 +1238,7 @@ export function computeLiveState(
   }
 
   // Merge confirmed facts from externalMemoryFacts and activeStoredConfirmed (INV-107 confirmed-only)
-  const extConfirmed = (externalMemoryFacts ?? []).filter(f => f && f.status === 'confirmed');
+  const extConfirmed = (externalMemoryFacts ?? []).filter(f => isActiveMemoryFact(f));
   const combinedMemory = [
     ...extConfirmed,
     ...activeStoredConfirmed.filter(sc => !extConfirmed.some(af => af.key === sc.key)),
@@ -1794,6 +1799,56 @@ export function renderApp(
       },
     });
   let activeLoadedFacts: readonly MemoryFact[] = [];
+
+  // HABIT-LEARN: in-app lunch choices -> a learned habit, applied without asking; Forget on Me.
+  const habitJournal = new HabitJournal(new WebStorageDriver());
+  const syncLearnedHabit = async (atIso: string): Promise<void> => {
+    const j = habitJournal.load();
+    const learned = learnLunchCuisine(j.observations, j.tombstones, atIso);
+    try {
+      activeLoadedFacts = await memoryPort.loadFacts();
+    } catch {
+      // keep what is loaded
+    }
+    const existing = activeLoadedFacts.find(f => f.key === LEARNED_LUNCH_CUISINE_KEY);
+    const ev = existing?.value as { cuisine?: string; count?: number; total?: number } | undefined;
+    try {
+      if (learned) {
+        if (!existing || ev?.cuisine !== learned.cuisine || ev?.count !== learned.count || ev?.total !== learned.total) {
+          await memoryPort.writeBack(toLearnedFact(learned));
+          if (!existing || ev?.cuisine !== learned.cuisine) {
+            actionFeedbackMessage = `Noted: you often pick ${learned.cuisine}, so it comes first now. You can forget it in Me.`;
+          }
+        }
+      } else if (existing?.status === 'learned') {
+        await memoryPort.forget?.(LEARNED_LUNCH_CUISINE_KEY, atIso);
+      }
+      activeLoadedFacts = await memoryPort.loadFacts();
+    } catch {
+      // the habit is re-derived from the journal next time
+    }
+  };
+  const recordLunchChoice = (
+    candidate: { cuisine?: unknown; recordId?: unknown; id?: unknown; placeId?: unknown } | null | undefined,
+    action: 'accept' | 'directions' | 'save',
+    planId?: string
+  ): void => {
+    if (contextMode !== 'live' || !candidate) return; // Demo shows a labelled sample history instead
+    const at = new Date().toISOString();
+    const placeId = [candidate.placeId, candidate.recordId, candidate.id].find(v => typeof v === 'string') as string | undefined;
+    if (!habitJournal.record({ cuisine: candidate.cuisine, placeId, planId, action, at })) return;
+    void syncLearnedHabit(at).then(() => update());
+  };
+  let demoLearnedFact: MemoryFact | null = null;
+  const findLunchCandidate = (plan: PreparedPlan | null | undefined, candidateId?: string | null): any => {
+    if (!plan || plan.intentId !== 'lunch') return null;
+    const opts = (plan.optionsOrSteps as any[]).filter(o => o && typeof o === 'object');
+    if (candidateId) {
+      const hit = opts.find(o => o.id === candidateId || `candidate-${o.id}` === candidateId);
+      if (hit) return hit;
+    }
+    return opts[0] ?? null;
+  };
   const actionStore: ActionStateStore = createActionStateStore();
   let conversationCleanup: (() => void) | null = null;
 
@@ -2386,10 +2441,25 @@ export function renderApp(
         source: (o.provenance === 'google' ? 'google' : 'osm') as 'google' | 'osm',
       }));
     const confirmedFacts = (plan.why?.memoryFactsUsed ?? [])
-      .filter(f => f.status === 'confirmed' && typeof f.value === 'string' && /^[a-z0-9_]{1,60}$/.test(f.key))
-      .slice(0, 5)
-      .map(f => ({ key: f.key, value: String(f.value).slice(0, 80) }));
+      .flatMap(f => {
+        // HABIT-LEARN: the learned habit goes to the model as a short plain fact (no history).
+        if (f.status === 'learned' && f.key === LEARNED_LUNCH_CUISINE_KEY && typeof (f.value as any)?.cuisine === 'string') {
+          const v = f.value as { cuisine: string; count: number; total: number };
+          return [{ key: f.key, value: `${v.cuisine} (picked ${v.count} of last ${v.total} lunches)`.slice(0, 80) }];
+        }
+        return f.status === 'confirmed' && typeof f.value === 'string' && /^[a-z0-9_]{1,60}$/.test(f.key)
+          ? [{ key: f.key, value: String(f.value).slice(0, 80) }]
+          : [];
+      })
+      .slice(0, 5);
     return { request, candidates, confirmedFacts };
+  }
+
+  /** HABIT-LEARN: the local reason line says why a learned / told pick leads (same basis as the card). */
+  function habitLedReason(plan: PreparedPlan): string | null {
+    const top = (plan.optionsOrSteps as any[]).find(o => o && typeof o === 'object');
+    if (!top || typeof top.habitBasis !== 'string') return null;
+    return `${top.name}: ${top.habitBasis.charAt(0).toLowerCase()}${top.habitBasis.slice(1)}.`;
   }
 
   async function requestCandidateReasoning(
@@ -2405,7 +2475,7 @@ export function renderApp(
     const keepLocalRank = () => {
       if (request !== 'rank') return;
       const local = deterministicCandidateReasoning(input);
-      candidateReasoning = { key, order: [...local.order], reason: local.reason, live: false, engine: 'offline_deterministic', statusLabel: 'Reasoned locally' };
+      candidateReasoning = { key, order: [...local.order], reason: habitLedReason(plan) ?? local.reason, live: false, engine: 'offline_deterministic', statusLabel: 'Reasoned locally' };
       update();
     };
     const started = Date.now();
@@ -2596,7 +2666,7 @@ export function renderApp(
               // ignore
             }
           }
-          const confirmedFacts = activeLoadedFacts.filter(f => f.status === 'confirmed');
+          const confirmedFacts = activeLoadedFacts.filter(f => isActiveMemoryFact(f));
           livePlacesList = rankPlacesByConfirmedPreferences(data.places, confirmedFacts);
           livePlacesError = false;
           livePlacesDiscovery = {
@@ -2843,11 +2913,48 @@ export function renderApp(
     }
   }
 
-  const liveCandidateReasoner = async (request: 'why' | 'closer' | 'quieter') =>
-    (await requestCandidateReasoning(request)) ?? {
-      reason: 'I could not reason about these places right now.',
-      statusLabel: 'Reasoned locally',
-    };
+  // HABIT-LEARN: what the user tells Yori in Ask is saved as stated (no proposal, no Confirm).
+  actionStore.setMemoryStatementHandler(statement => {
+    void (async () => {
+      const at = new Date().toISOString();
+      try {
+        await memoryPort.writeBack(
+          createMemoryFact(statement.key, statement.value, 'confirmed', { source: 'user_stated', recordedAt: at }, at)
+        );
+        if (statement.key === 'taste_preference') {
+          // A newer explicit statement overrides a Forget tombstone for that cuisine.
+          const j = habitJournal.load();
+          habitJournal.save({ observations: j.observations, tombstones: liftTombstone(j.tombstones, statement.value) });
+        }
+        activeLoadedFacts = await memoryPort.loadFacts();
+        if (livePlacesList.length > 0) {
+          livePlacesList = rankPlacesByConfirmedPreferences(livePlacesList, activeLoadedFacts.filter(f => isActiveMemoryFact(f)));
+        }
+      } catch {
+        // stays unsaved; the reply already said what Yori heard
+      }
+      update();
+    })();
+  });
+
+  const liveCandidateReasoner = async (request: 'why' | 'closer' | 'quieter') => {
+    // HABIT-LEARN: "why this restaurant?" leads with the same basis as the card and the Why sheet.
+    const top = lastLiveLunchPlan ? (lastLiveLunchPlan.optionsOrSteps as any[]).find(o => o && typeof o === 'object') : null;
+    const habitLead =
+      request === 'why' && top && typeof top.habitBasis === 'string'
+        ? `${top.name} is first because ${top.habitBasis.charAt(0).toLowerCase()}${top.habitBasis.slice(1)}.`
+        : null;
+    const answer = await requestCandidateReasoning(request);
+    if (habitLead) {
+      return { reason: answer ? `${habitLead} ${answer.reason}` : habitLead, statusLabel: answer?.statusLabel ?? 'Reasoned locally' };
+    }
+    return (
+      answer ?? {
+        reason: 'I could not reason about these places right now.',
+        statusLabel: 'Reasoned locally',
+      }
+    );
+  };
   if (contextMode === 'live') {
     actionStore.setNearbyRequestHandler(source => void requestNearbyNow(source));
     actionStore.setCandidateReasoner(liveCandidateReasoner);
@@ -2918,6 +3025,12 @@ export function renderApp(
   }
 
   function update() {
+    // HABIT-LEARN item 8: the labelled sample habit belongs to the Demo lunch story (lunch scenes and
+    // the continuous timeline); other curated scenes keep their exact composition.
+    demoLearnedFact =
+      contextMode === 'demo' && (['lunch', 'away-lunch', 'busy-lunch'].includes(currentScene) || Boolean(activeTimelineBeat))
+        ? computeDemoLearnedFact(habitJournal.load().tombstones)
+        : null;
     const isDesktopLayout = typeof window !== 'undefined' && window.innerWidth >= 1024;
     // UI-QUIET-PRECISION (b): a consented fix with no weather request for it yet gets one now.
     if (contextMode === 'live' && weatherStatus.enabled && !isWeatherLoading && liveWeatherState.status !== 'pending') {
@@ -2952,7 +3065,10 @@ export function renderApp(
             currentScene,
             sharedStorage,
             weatherStatus.enabled ? liveWeatherSignal : null,
-            activeLoadedFacts,
+            // HABIT-LEARN item 8: the labelled sample habit joins Demo memory (never stored).
+            demoLearnedFact && !activeLoadedFacts.some(f => f.key === demoLearnedFact!.key)
+              ? [...activeLoadedFacts, demoLearnedFact]
+              : activeLoadedFacts,
             undefined,
             contextMode === 'demo' ? activeTimelineBeat : null
           );
@@ -2998,7 +3114,7 @@ export function renderApp(
     const acceptedPlanIds: readonly string[] = storedEnvelope?.payload.acceptedPlanIds ?? [];
     const storedSuppressions = storedEnvelope?.payload.suppressions ?? [];
     const rawStoredConfirmed = storedEnvelope?.payload.memoryFacts ?? [];
-    const activeStoredConfirmed: MemoryFact[] = [...rawStoredConfirmed.filter(f => f.status === 'confirmed')];
+    const activeStoredConfirmed: MemoryFact[] = [...rawStoredConfirmed.filter(f => isActiveMemoryFact(f))];
     const uPrep = activeStoredConfirmed.find(f => f.key === 'prep_buffer_preference');
     if (uPrep && typeof uPrep.value === 'object' && uPrep.value !== null) {
       const val = uPrep.value as { prepMinutes?: number; bufferMinutes?: number };
@@ -3284,10 +3400,36 @@ export function renderApp(
     // Build Main Content based on activeTab
     let mainContentHtml = '';
 
+    // HABIT-LEARN: For You shows what Yori learned / what you told it (read-only; Forget on Me).
+    const learnedSource = [
+      ...(contextMode === 'live' ? activeLoadedFacts : combinedMemory),
+      ...(contextMode === 'demo' && demoLearnedFact && !combinedMemory.some(f => f.key === demoLearnedFact!.key) ? [demoLearnedFact] : []),
+    ];
+    const hasPrepPreference = learnedSource.some(f => f.key === 'prep_buffer_preference');
+    const learnedItems = learnedSource
+      .filter(f => f.status === 'learned' || (f.status === 'confirmed' && f.provenance?.source === 'user_stated'))
+      // The two minute facts derived from one "Remember" are shown once, as the routine.
+      .filter(f => !(hasPrepPreference && (f.key === 'prep_buffer_minutes' || f.key === 'prep_duration_minutes')))
+      .filter((f, i, arr) => arr.findIndex(g => g.key === f.key) === i)
+      .map(f => {
+        const kind = classifyFactSource(f);
+        return {
+          key: f.key,
+          title: humanizeMemoryValue(f.key, f.value),
+          basis: provenanceLabel(kind),
+          value: f.value,
+          provenance: kind === 'learned_demo' ? ('fixture' as const) : ('user' as const),
+        };
+      });
+
     if (activeTab === 'me') {
-      const memoryFacts = activeLoadedFacts.length > 0
+      const storedFacts = activeLoadedFacts.length > 0
         ? activeLoadedFacts
         : (storedEnvelope?.payload.memoryFacts ?? []);
+      // Demo: the labelled sample habit shows here too, so the offline demo has something to forget.
+      const memoryFacts = contextMode === 'demo' && demoLearnedFact && !storedFacts.some(f => f.key === demoLearnedFact!.key)
+        ? [...storedFacts, demoLearnedFact]
+        : storedFacts;
       const storedProposals = storedEnvelope?.payload.proposals ?? [];
       const pendingFromMemory = combinedMemory.filter(
         m => m.status === 'pending' && !storedProposals.some(p => p.key === m.key)
@@ -3369,34 +3511,7 @@ export function renderApp(
           v2BodyHtml = renderPlansView(aheadPlans);
         }
       } else if (activeTab === 'for-you') {
-        if (contextMode === 'live') {
-          const userConfirmedProposals = living.forYou
-            .filter(f => userConfirmedKeys.has(f.key))
-            .map(f => ({
-              key: f.key,
-              title: humanizeProposalTitle(f.key),
-              basis: 'Confirmed preference',
-              value: f.value,
-              provenance: 'user' as const,
-            }));
-          v2BodyHtml = renderForYouView(userConfirmedProposals);
-        } else {
-          const proposalsVM = living.forYou.map(f => {
-            const isConfirmed = userConfirmedKeys.has(f.key);
-            const title = humanizeProposalTitle(f.key);
-            const basis = isConfirmed
-              ? 'Confirmed preference'
-              : 'Derived from sample demo profile';
-            return {
-              key: f.key,
-              title,
-              basis,
-              value: f.value,
-              provenance: isConfirmed ? ('user' as const) : ('fixture' as const),
-            };
-          });
-          v2BodyHtml = renderForYouView(proposalsVM);
-        }
+        v2BodyHtml = renderForYouView(learnedItems);
       } else {
         let currentPlanDiff: PlanDiff | null = null;
         if (actionStore.canUndo()) {
@@ -3718,7 +3833,7 @@ export function renderApp(
             // D4: while the live answer is pending, show the labelled local answer (distance order
             // unchanged); only an accepted live answer replaces it.
             const local = deterministicCandidateReasoning(candidateReasoningInput(nowPlan, 'rank'));
-            candidateReasoningForVm = { order: [...local.order], reason: local.reason, statusLabel: 'Reasoned locally', engine: 'offline_deterministic' };
+            candidateReasoningForVm = { order: [...local.order], reason: habitLedReason(nowPlan) ?? local.reason, statusLabel: 'Reasoned locally', engine: 'offline_deterministic' };
           }
         } else if (contextMode === 'live') {
           lastLiveLunchPlan = null;
@@ -3776,7 +3891,7 @@ export function renderApp(
           plan: nowPlan,
           spatialEvidence: spatialMapEvidence,
           aheadPlans,
-          proposals: living.forYou.map(f => ({ key: f.key, value: f.value })),
+          proposals: learnedItems,
           acceptedPlanIds,
           userConfirmedKeys,
           snapshot: effectiveSnapshot,
@@ -4067,22 +4182,14 @@ export function renderApp(
             <h2 class="section-label">${escapeHtml(STRINGS.sections.forYou)}</h2>
             <div class="for-you-list" id="for-you-proposals-list">
               ${
-                living.forYou.length > 0
-                  ? living.forYou
+                learnedItems.length > 0
+                  ? learnedItems
                       .map(
-                        fact => `
-                <div class="item-row pending-for-you-row" id="for-you-${escapeHtml(fact.key)}">
+                        item => `
+                <div class="item-row learned-for-you-row" id="for-you-${escapeHtml(item.key)}">
                   <div style="flex: 1;">
-                    <div class="item-title">${escapeHtml(humanizeProposalTitle(fact.key))}</div>
-                    <div class="item-subtitle">${fact.provenance.note ? escapeHtml(fact.provenance.note) : escapeHtml(STRINGS.proposals.awaitingConfirmation)}</div>
-                  </div>
-                  <div class="proposal-actions">
-                    <button type="button" class="btn btn-sm btn-primary btn-confirm-proposal" data-key="${escapeHtml(fact.key)}">
-                      ${escapeHtml(STRINGS.actions.confirm)}
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline btn-reject-proposal" data-key="${escapeHtml(fact.key)}">
-                      ${escapeHtml(STRINGS.actions.notTrue)}
-                    </button>
+                    <div class="item-title">${escapeHtml(item.title)}</div>
+                    <div class="item-subtitle">${escapeHtml(item.basis)}</div>
                   </div>
                 </div>
               `
@@ -4090,7 +4197,7 @@ export function renderApp(
                       .join('')
                   : `
                 <div class="item-row" style="color: var(--color-muted);">
-                  <span>No memory confirmations pending</span>
+                  <span>Nothing learned yet</span>
                 </div>
               `
               }
@@ -5478,6 +5585,7 @@ export function renderApp(
             (o: any) => o && (o.id === candId || `candidate-${o.id}` === candId)
           );
           if (!candidate) return;
+          if (nowPlan?.intentId === 'lunch') recordLunchChoice(candidate, 'directions', nowPlan.id);
 
           const bundle =
             effectiveEvidenceBundle ??
@@ -5646,6 +5754,7 @@ export function renderApp(
         restSaveBtn.addEventListener('click', () => {
           if (activeDetail && activeDetail.type === 'restaurant') {
             activeDetail.isSaved = !activeDetail.isSaved;
+            if (activeDetail.isSaved) recordLunchChoice(findLunchCandidate(nowPlan, activeDetail.candidateId), 'save', nowPlan?.id);
             update();
           }
         });
@@ -5681,6 +5790,10 @@ export function renderApp(
         };
 
         const updatedAccepted = Array.from(new Set([...existingAccepted, nowPlan.id]));
+        // HABIT-LEARN: accepting a lunch pick is a choice Yori learns from.
+        if (nowPlan.intentId === 'lunch') {
+          recordLunchChoice(findLunchCandidate(nowPlan, selectedCardState?.candidateId), 'accept', nowPlan.id);
+        }
         sharedStorage.save(
           {
             memoryFacts: envelope?.payload.memoryFacts ?? [],
@@ -5715,6 +5828,12 @@ export function renderApp(
             snapshotAsOf
           );
           actionFeedbackMessage = 'Plan restored. Acceptance undone.';
+          if (nowPlan.intentId === 'lunch') {
+            // The choice that Accept recorded is taken back too.
+            const j = habitJournal.load();
+            habitJournal.save({ observations: undoAccept(j.observations, nowPlan.id), tombstones: j.tombstones });
+            void syncLearnedHabit(new Date().toISOString()).then(() => update());
+          }
           update();
           return;
         }
@@ -5910,23 +6029,21 @@ export function renderApp(
           const prepMinutes = prepInput ? parseInt(prepInput.value, 10) || 20 : 20;
           const bufferMinutes = bufferInput ? parseInt(bufferInput.value, 10) || 5 : 5;
 
-          // Create pending proposal (never direct confirmed write!) (INV-107)
+          // HABIT-LEARN: "Remember" saves what the user just set, as stated (no proposal, no Confirm).
           const proposal: MemoryFact = createMemoryFact(
             'prep_buffer_preference',
             { prepMinutes, bufferMinutes },
-            'pending',
+            'confirmed',
             {
-              source: 'user_feedback',
+              source: 'user_stated',
               recordedAt: snapshotAsOf,
-              note: 'Adjusted prep and buffer preference',
+              note: 'Set in Adjust',
             },
             snapshotAsOf
           );
 
           const envelope = sharedStorage.load();
-          const existingProposals = envelope?.payload.proposals ?? [];
-          const updatedProposals = existingProposals.filter(p => p.key !== proposal.key);
-          updatedProposals.push(proposal);
+          const updatedProposals = (envelope?.payload.proposals ?? []).filter(p => p.key !== proposal.key);
 
           const adjustAckSig = buildLiveAckSignature(planToAdjust, snapshotAsOf, snapshotTimezone);
           sharedStorage.save(
@@ -5946,6 +6063,13 @@ export function renderApp(
           );
 
           applyTimingAdjustment(planToAdjust, prepMinutes, bufferMinutes);
+          void memoryPort
+            .writeBack(proposal)
+            .then(async () => {
+              activeLoadedFacts = await memoryPort.loadFacts();
+              update();
+            })
+            .catch(() => undefined);
           closeModal();
         });
       }
@@ -5988,28 +6112,10 @@ export function renderApp(
           );
           updatedSuppressions.push(suppression);
 
-          // Also create a pending proposal for preferences when relevant (INV-107)
-          const existingProposals = envelope?.payload.proposals ?? [];
-          const updatedProposals = [...existingProposals];
-
-          if (reasonKey === 'dont_suggest_today') {
-            const proposalKey = `suppress_${planToDismiss.intentId}_recommendations`;
-            const pendingProposal = createMemoryFact(
-              proposalKey,
-              'user_requested_today',
-              'pending',
-              {
-                source: 'user_feedback',
-                recordedAt: snapshotAsOf,
-                note: proposalNote,
-              },
-              snapshotAsOf
-            );
-            const filtered = updatedProposals.filter(p => p.key !== proposalKey);
-            filtered.push(pendingProposal);
-            updatedProposals.length = 0;
-            updatedProposals.push(...filtered);
-          }
+          // HABIT-LEARN: the same-day suppression above is the whole effect; no "remember this?"
+          // proposal is created (nothing waits for a confirm step).
+          const updatedProposals = envelope?.payload.proposals ?? [];
+          void proposalNote;
 
           const currentBudgetCount = envelope?.payload.promptBudget?.count ?? 0;
           const newBudgetCount = Math.max(1, currentBudgetCount);
@@ -6047,7 +6153,41 @@ export function renderApp(
     }
 
     // -------------------------------------------------------------
-    // PROPOSAL CONFIRM & REJECT HANDLERS (INV-107 & XKEYDEL-P2)
+    // HABIT-LEARN: Forget (Me > What Yori has learned)
+    // -------------------------------------------------------------
+    root.querySelectorAll('.btn-forget-habit').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        const key = (e.currentTarget as HTMLElement).getAttribute('data-key');
+        if (!key) return;
+        const at = contextMode === 'live' ? new Date().toISOString() : snapshotAsOf;
+        const known = [...activeLoadedFacts, ...(demoLearnedFact ? [demoLearnedFact] : [])].find(f => f.key === key);
+        // A cuisine habit (learned, or a taste you told Yori) is tombstoned for 30 days so the same
+        // old choices do not bring it straight back; its recorded choices are removed.
+        const cuisines: string[] = [];
+        if (key === LEARNED_LUNCH_CUISINE_KEY && known && typeof (known.value as any)?.cuisine === 'string') {
+          cuisines.push((known.value as any).cuisine);
+        } else if (known && /taste|cuisine/.test(key) && typeof known.value === 'string') {
+          cuisines.push(...known.value.toLowerCase().split(/[\s,_\/;]+|\bor\b/).filter(t => t.length > 1));
+        }
+        let j = habitJournal.load();
+        for (const c of cuisines) {
+          const next = forgetCuisine(j.observations, j.tombstones, c, at);
+          j = next;
+        }
+        if (cuisines.length > 0) habitJournal.save(j);
+        try {
+          await memoryPort.forget?.(key, at);
+          activeLoadedFacts = await memoryPort.loadFacts();
+        } catch {
+          // local journal and tombstone already stop it from shaping anything
+        }
+        actionFeedbackMessage = `Forgotten: ${humanizeMemoryKey(key).toLowerCase()}. Yori won't use it.`;
+        update();
+      });
+    });
+
+    // -------------------------------------------------------------
+    // PROPOSAL CONFIRM & REJECT HANDLERS (legacy; no control renders them since HABIT-LEARN)
     // -------------------------------------------------------------
     root.querySelectorAll('.btn-confirm-proposal').forEach(btn => {
       btn.addEventListener('click', async e => {

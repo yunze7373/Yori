@@ -102,6 +102,33 @@ export function isValidRemoteFactValue(key: string, value: unknown): boolean {
       return typeof value === 'boolean' || value === 'true' || value === 'false';
     }
 
+    // HABIT-LEARN: a learned lunch cuisine { cuisine, count, total, lastSeen }.
+    case 'learned_lunch_cuisine': {
+      if (typeof value !== 'object' || Array.isArray(value)) return false;
+      const v = value as Record<string, unknown>;
+      return (
+        typeof v.cuisine === 'string' &&
+        v.cuisine.trim().length > 0 &&
+        v.cuisine.length <= 40 &&
+        typeof v.count === 'number' &&
+        Number.isInteger(v.count) &&
+        v.count >= 2 &&
+        v.count <= 1000 &&
+        typeof v.total === 'number' &&
+        Number.isInteger(v.total) &&
+        v.total >= v.count &&
+        v.total <= 1000 &&
+        typeof v.lastSeen === 'string' &&
+        Number.isFinite(Date.parse(v.lastSeen))
+      );
+    }
+
+    case 'dietary_preference':
+      return value === 'vegetarian' || value === 'vegan';
+
+    case 'ambience_preference':
+      return value === 'quiet';
+
     default:
       // Unknown or non-governed key: reject fail-closed
       return false;
@@ -266,7 +293,7 @@ export class CompositeMemoryAdapter implements MemoryPort {
       // - Remote-origin facts carry truthful provenance ('xmemo', note 'Synced from XMemo vault').
       const localKeys = new Set(localFacts.map(f => f.key));
       const validRemoteFacts = remoteFacts.filter(fact => {
-        if (fact.status !== 'confirmed') return false;
+        if (fact.status !== 'confirmed' && fact.status !== 'learned') return false; // HABIT-LEARN
         if (!isYoriManagedFactKey(fact.key)) return false;
         if (!isValidRemoteFactValue(fact.key, fact.value)) return false; // Bounds & schema validation (INV-102)
         if (localKeys.has(fact.key)) return false; // Local confirmed fact takes precedence
@@ -296,8 +323,10 @@ export class CompositeMemoryAdapter implements MemoryPort {
    */
   public async writeBack(fact: MemoryFact): Promise<{ readonly success: boolean; readonly error?: string }> {
     // Invariant INV-107 & AC-106-3: Only confirmed facts may be written back!
-    if (fact.status !== 'confirmed') {
-      const errorMsg = `MemoryPort invariant violation (INV-107): only confirmed facts can be written back. Got status '${fact.status}'.`;
+    // INV-107 (learn-and-correct): what the user told Yori ('confirmed') and what Yori learned
+    // from the user's own choices ('learned') are written; 'pending' and anything else never are.
+    if (fact.status !== 'confirmed' && fact.status !== 'learned') {
+      const errorMsg = `MemoryPort invariant violation (INV-107): only stated or learned facts can be written back. Got status '${fact.status}'.`;
       throw new Error(errorMsg);
     }
 
@@ -372,6 +401,38 @@ export class CompositeMemoryAdapter implements MemoryPort {
   }
 
   /**
+   * HABIT-LEARN Forget: removes the fact locally first, then (only when XMemo is connected) asks
+   * the proxy to delete the Yori-managed key from the vault. A remote failure never undoes the
+   * local forget.
+   */
+  public async forget(key: string, at: string): Promise<{ readonly success: boolean; readonly error?: string }> {
+    const local = await this.localAdapter.forget(key, at);
+    if (this.cachedMergedFacts) {
+      this.cachedMergedFacts = Object.freeze(this.cachedMergedFacts.filter(f => f.key !== key));
+    }
+    let status: { enabled: boolean; connected: boolean };
+    try {
+      status = await this.checkRemoteStatus();
+    } catch {
+      status = { enabled: false, connected: false };
+    }
+    if (!status.enabled || !status.connected || !isYoriManagedFactKey(key)) return local;
+    try {
+      const response = await this.fetchFn(`${this.proxyEndpoint}/confirmed-facts`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', 'x-yori-confirm': 'true' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ key, userConfirmed: true }),
+      });
+      return response.ok
+        ? Object.freeze({ success: true })
+        : Object.freeze({ success: true, error: `Remote forget fallback: status ${response.status}` });
+    } catch (err: unknown) {
+      return Object.freeze({ success: true, error: `Remote forget fallback: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
+
+  /**
    * Parses remote MCP response payloads into MemoryFact candidates.
    */
   private parseRemoteFacts(json: unknown): readonly MemoryFact[] {
@@ -417,7 +478,14 @@ export class CompositeMemoryAdapter implements MemoryPort {
       if (typeof key !== 'string' || !key.trim()) continue;
 
       const value = item.value ?? item.content ?? item.text ?? '';
-      const status = item.status === 'confirmed' ? 'confirmed' : item.status === 'rejected' ? 'rejected' : 'pending';
+      const status =
+        item.status === 'confirmed'
+          ? 'confirmed'
+          : item.status === 'learned'
+          ? 'learned'
+          : item.status === 'rejected'
+          ? 'rejected'
+          : 'pending';
       const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : new Date().toISOString();
       const recordedAt = typeof item.recordedAt === 'string' ? item.recordedAt : updatedAt;
       const note = typeof item.note === 'string' ? item.note : (item.provenance?.note || 'Synced from XMemo vault');

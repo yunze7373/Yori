@@ -1403,9 +1403,9 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
         <div class="feed-section-header">
           <div class="feed-section-heading-group">
             <h2 class="feed-section-title">${escapeHtml(STRINGS.sections.forYou)}</h2>
-            <span class="feed-section-subtitle">Personalized suggestions, just for you.</span>
+            <span class="feed-section-subtitle">What Yori has learned about you.</span>
           </div>
-          <button type="button" class="btn-see-all v2-see-all-link" id="link-foryou-see-all" aria-label="See all memory proposals">See all ›</button>
+          <button type="button" class="btn-see-all v2-see-all-link" id="link-foryou-see-all" aria-label="See everything Yori has learned">See all ›</button>
         </div>
         <div class="for-you-list">
           ${
@@ -1413,18 +1413,10 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
               ? proposals
                   .map(
                     prop => `
-            <div class="card proposal-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.provenance || (prop.basis?.includes('Confirmed') ? 'user' : 'fixture')}" data-slot="chrome" data-slot-reason="Proposal card container">
-              ${renderProvenanceChip(prop.provenance || (prop.basis?.includes('Confirmed') ? 'user' : 'fixture'))}
-              <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Proposal card title">${escapeHtml(prop.title)}</h3>
-              ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Proposal card basis">${escapeHtml(prop.basis)}</p>` : ''}
-              <div class="proposal-actions" style="margin-top: 12px; display: flex; gap: 8px;">
-                <button type="button" class="btn btn-sm btn-primary btn-confirm-proposal" data-key="${escapeHtml(prop.key)}" aria-label="Confirm preference: ${escapeHtml(prop.title)}">
-                  Confirm
-                </button>
-                <button type="button" class="btn btn-sm btn-outline btn-reject-proposal" data-key="${escapeHtml(prop.key)}" aria-label="Reject preference: ${escapeHtml(prop.title)}">
-                  Reject
-                </button>
-              </div>
+            <div class="card proposal-card learned-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.provenance || 'user'}" data-slot="chrome" data-slot-reason="Learned habit card">
+              ${renderProvenanceChip(prop.provenance === 'fixture' ? 'fixture' : 'user')}
+              <h3 class="proposal-title" data-slot="chrome" data-slot-reason="Learned habit title">${escapeHtml(prop.title)}</h3>
+              ${prop.basis ? `<p class="proposal-basis" data-slot="chrome" data-slot-reason="Learned habit basis">${escapeHtml(prop.basis)}</p>` : ''}
             </div>
           `
                   )
@@ -1432,7 +1424,7 @@ function renderSectionedFeed(vm: HomeCompositionVM): string {
               : `
             <div class="card proposal-card feed-empty-card" data-provenance="${vm.isLive ? 'none' : 'fixture'}">
               ${renderProvenanceChip(vm.isLive ? 'live' : 'fixture')}
-              <p class="proposal-basis" style="color: var(--color-muted);">No suggestions pending right now.</p>
+              <p class="proposal-basis" style="color: var(--color-muted);">Nothing learned yet. Yori learns from the places you pick.</p>
             </div>
           `
           }

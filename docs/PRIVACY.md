@@ -26,10 +26,12 @@ Yori processes only the minimal data strictly necessary to synthesize your **Liv
 - **No Coordinate Leakage**: Raw coordinates are held in volatile client memory only for proximity filtering. Raw latitude and longitude coordinates are **never** logged, persisted to disk, or transmitted to any AI model.
 - **Demo Mode**: In standard demo scenes, only deterministic mock fixtures with fixed city coordinates (San Francisco / Los Angeles) are utilized.
 
-### B. Personal Memories & Preferences (Confirm-Only)
-- **Confirm-Only Invariant (INV-107)**: Yori separates candidate observations from confirmed facts. Unconfirmed behavioral patterns remain local pending proposals in the **Me** tab.
-- **User Control**: Only facts that you explicitly inspect and tap **Confirm** on are committed to long-term memory or synced to remote vaults.
-- **Scoped Schema**: Confirmed facts are restricted to bounded preference tags (`yori:living-context`, food preferences, transit choices).
+### B. Personal Memories & Habits (Learn-and-Correct)
+- **What is observed**: only choices you make inside Yori: Accept on a lunch pick, Directions, and Save on a restaurant. Each is recorded as a cuisine label, the place id, the plan id and the time. No location, no visits, no tracking outside the app, no model calls.
+- **Where it is stored**: on this device, in your browser's local storage (`yori_habits_v1`, next to `yori_state_v1`); at most 200 recent choices.
+- **How it is used**: a cuisine you pick on at least 2 of your recent lunches (last 14 days), more than any other, is applied straight away (no Confirm prompt) and shown with its basis ("You often pick ramen · 3 of your last 4 lunches"). What you tell Yori in Ask ("I'm vegetarian") is saved as stated and outranks what Yori learned.
+- **How to forget**: Me > **What Yori has learned** > **Forget**. This removes the habit and its recorded choices, and keeps the same old choices from re-learning it for 30 days (telling Yori explicitly overrides that). Reset Storage removes everything.
+- **XMemo write-through**: only when you have connected XMemo; otherwise nothing leaves the device. Scoped to bounded Yori-managed keys (`yori:living-context`).
 
 ### C. Schedule & Ambient Conditions
 - **Local Fixtures**: In demonstration mode, schedule events (e.g. "Piano lesson at 3:00 PM") and transit times are simulated scenario snapshots loaded locally from code fixtures.
@@ -74,7 +76,7 @@ Yori enforces strict architectural boundaries isolating external service integra
 
 ### B. Long-Term Memory Vault (`MemoryPort` / XMemo)
 - **Integration Boundary**: Operates behind server-side OAuth 2.0 PKCE and Model Context Protocol (MCP) at `https://xmemo.dev/mcp`.
-- **Confirm-Only Write-Back (INV-107)**: The proxy validates every outgoing write request; non-confirmed facts are rejected with HTTP 400.
+- **Learn-and-Correct Write-Back (INV-107)**: The proxy validates every outgoing write: only user-stated (`confirmed`) or learned (`learned`, source `observed`) facts pass; pending, unknown statuses, malformed keys and values over 1000 characters are rejected with HTTP 400.
 - **Origin Allowlist**: Enforces RFC 8414 §3.3 issuer exact-match and HTTPS same-origin allowlists. No tokens, credentials, or facts are dispatched to foreign or untrusted endpoints.
 - **Fallback Resilience**: When XMemo is disconnected or disabled, Yori seamlessly degrades to in-browser storage (`LocalMemoryAdapter`) with zero data loss or UI interruption.
 

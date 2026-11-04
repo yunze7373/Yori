@@ -309,10 +309,19 @@ test.describe('CLOSEOUT_REV3UI: Truthfulness & Provenance Audit', () => {
           await page.locator('#tab-for-you').click();
         }
         await page.waitForSelector('.v2-for-you-view');
-        const proposalItem = page.locator('.v2-proposal-item-card').first();
-        await expect(proposalItem).toBeVisible();
-        await expect(proposalItem).toHaveAttribute('data-provenance', 'fixture');
-        await expect(proposalItem).toContainText('sample demo profile');
+        // HABIT-LEARN: For You lists only what Yori learned (read-only). In Demo every learned item
+        // is the labelled sample habit (provenance fixture, "· demo"); with none, the empty state
+        // claims nothing; and nothing waits for a confirm step.
+        const learnedItems = page.locator('.v2-proposal-item-card');
+        const n = await learnedItems.count();
+        if (n === 0) {
+          await expect(page.locator('.v2-empty-proposals')).toHaveAttribute('data-provenance', 'none');
+        }
+        for (let i = 0; i < n; i++) {
+          await expect(learnedItems.nth(i)).toHaveAttribute('data-provenance', 'fixture');
+          await expect(learnedItems.nth(i)).toContainText('demo');
+        }
+        await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
         // Plans in Demo: labelled fixture and contains SIMULATED badge
         if (vp.width >= 1024) {

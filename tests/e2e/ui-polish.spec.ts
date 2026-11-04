@@ -226,7 +226,9 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
     await checkZeroHorizontalOverflow(page, 'plans-view-mobile');
     await checkAxeWcag(page, 'plans-view-mobile');
 
-    // 2. For You View
+    // 2. For You View (HABIT-LEARN: the lunch scene carries the labelled sample habit card)
+    await page.goto('/?ui=v2&scene=lunch&test=1');
+    await page.waitForSelector('#tab-for-you');
     await page.click('#tab-for-you');
     await page.waitForSelector('.v2-proposal-item-card');
 
@@ -323,6 +325,7 @@ test.describe('UI-POLISH (BACKLOG-20261031-UIP3)', () => {
         fullPage: false,
       });
 
+      await page.goto(page.url().replace(/scene=[^&]+/, 'scene=lunch'));
       const forYouTab = isMobile ? page.locator('#tab-for-you') : page.locator('#desktop-nav-for-you');
       await forYouTab.click();
       await page.waitForSelector('.v2-proposal-item-card');

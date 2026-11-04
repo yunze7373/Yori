@@ -32,8 +32,10 @@ export class LocalMemoryAdapter implements MemoryPort {
 
   public async writeBack(fact: MemoryFact): Promise<{ readonly success: boolean; readonly error?: string }> {
     // Invariant INV-107 & AC-106-3: Only confirmed facts may be written back!
-    if (fact.status !== 'confirmed') {
-      const errorMsg = `MemoryPort invariant violation (INV-107): only confirmed facts can be written back. Got status '${fact.status}'.`;
+    // INV-107 (learn-and-correct): what the user told Yori ('confirmed') and what Yori learned
+    // from the user's own choices ('learned') are written; 'pending' and anything else never are.
+    if (fact.status !== 'confirmed' && fact.status !== 'learned') {
+      const errorMsg = `MemoryPort invariant violation (INV-107): only stated or learned facts can be written back. Got status '${fact.status}'.`;
       throw new Error(errorMsg);
     }
 
@@ -53,6 +55,7 @@ export class LocalMemoryAdapter implements MemoryPort {
 
     this.storage.save(
       {
+        ...((envelope?.payload as object) ?? {}),
         memoryFacts: updatedFacts,
         proposals: updatedProposals,
         suppressions,
@@ -62,6 +65,21 @@ export class LocalMemoryAdapter implements MemoryPort {
       fact.updatedAt
     );
 
+    return Object.freeze({ success: true });
+  }
+
+  /** HABIT-LEARN Forget: removes the fact (and any legacy proposal) for this key from this device. */
+  public async forget(key: string, at: string): Promise<{ readonly success: boolean; readonly error?: string }> {
+    const envelope = this.storage.load();
+    if (!envelope) return Object.freeze({ success: true });
+    this.storage.save(
+      {
+        ...(envelope.payload as any),
+        memoryFacts: envelope.payload.memoryFacts.filter(f => f.key !== key),
+        proposals: envelope.payload.proposals.filter(p => p.key !== key),
+      },
+      at
+    );
     return Object.freeze({ success: true });
   }
 }

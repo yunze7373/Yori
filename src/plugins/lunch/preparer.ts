@@ -7,6 +7,8 @@
  * Ranks mock places by taste fit and returns at most 3 options.
  */
 
+import { isActiveMemoryFact } from '../../core/contracts/memory.js';
+import { tasteSignals, bestTasteMatch, isTasteFactKey } from '../../core/memory/taste.js';
 import type {
   Preparer,
   IntentCandidate,
@@ -85,15 +87,9 @@ export class LunchPreparer implements Preparer {
     }
 
     // 1. Invariant AC-103-1: Must cite confirmed taste facts; missing taste facts fail closed
-    const confirmedTasteFacts = memory.filter(
-      f =>
-        f.status === 'confirmed' &&
-        (f.key === 'taste_preference' ||
-          f.key === 'favorite_cuisine' ||
-          f.key.toLowerCase().includes('taste') ||
-          f.key.toLowerCase().includes('cuisine') ||
-          f.key.toLowerCase().includes('food'))
-    );
+    // HABIT-LEARN: what the user told Yori ('confirmed') and what Yori learned ('learned') both count.
+    const confirmedTasteFacts = memory.filter(f => isActiveMemoryFact(f) && isTasteFactKey(f.key));
+    const habitSignals = tasteSignals(confirmedTasteFacts);
 
     const lunchPlacesSignalEarly = snapshot.signals.find(s => s.kind === 'places_lunch');
     const liveProviderPlaces = isLiveProviderPlacesSignal(lunchPlacesSignalEarly);
@@ -106,7 +102,7 @@ export class LunchPreparer implements Preparer {
     // 2. Extract taste keywords from confirmed facts
     const tasteKeywords: string[] = [];
     for (const fact of confirmedTasteFacts) {
-      if (typeof fact.value === 'string') {
+      if (fact.status === 'confirmed' && typeof fact.value === 'string') {
         // Split on separators like commas, underscores, or 'or'
         const tokens = fact.value
           .toLowerCase()
@@ -184,10 +180,14 @@ export class LunchPreparer implements Preparer {
           matchScore += 1;
         }
       }
+      // A learned habit adds weight below what the user told Yori (HABIT-LEARN precedence).
+      const habit = bestTasteMatch(habitSignals, place);
+      if (habit?.source === 'learned') matchScore += 1.5;
 
       return {
         place,
         matchScore,
+        habit,
       };
     });
 
@@ -200,12 +200,20 @@ export class LunchPreparer implements Preparer {
       return null;
     }
     const matchingPlaces = usedTaste
-      ? tasteMatched
+      ? liveProviderPlaces
+        ? // Live: taste matches lead, the other real places stay (open now first).
+          scoredPlaces.map(p => (p.matchScore > 0 ? p : { ...p, matchScore: (p.place as any).openingStatus === 'open' ? 0.1 : 0 }))
+        : tasteMatched
       : scoredPlaces.map(p => ({
           ...p,
           // Open now (from OSM opening_hours) ranks above unknown or closed hours.
           matchScore: (p.place as any).openingStatus === 'open' ? 1 : 0,
         }));
+
+    const statedVegetarian = memory.some(
+      f => isActiveMemoryFact(f) && f.key === 'dietary_preference' && (f.value === 'vegetarian' || f.value === 'vegan')
+    );
+    const statedQuiet = memory.some(f => isActiveMemoryFact(f) && f.key === 'ambience_preference' && f.value === 'quiet');
 
     // 5. Evaluate filters from UserRequestOverride if present
     const filters = override?.kind === 'lunch_filter' && Array.isArray(override.filters)
@@ -229,6 +237,9 @@ export class LunchPreparer implements Preparer {
           }
         }
       }
+      // HABIT-LEARN: what the user told Yori lasts (not "this time only"): vegetarian / quiet.
+      if (statedVegetarian && item.place.vegetarian === true) filterScore += 50;
+      if (statedQuiet && item.place.noiseLevel === 'quiet') filterScore += 50;
       return {
         ...item,
         totalScore: item.matchScore + filterScore,
@@ -253,7 +264,8 @@ export class LunchPreparer implements Preparer {
     });
 
     // 6. Select at most 3 options (Section 7 outcome)
-    const selected = scoredWithOverride.slice(0, 3).map(m => m.place);
+    const selectedItems = scoredWithOverride.slice(0, 3);
+    const selected = selectedItems.map(m => m.place);
 
     const optionsOrSteps: RankedPlaceOption[] = selected.map((p, idx) => {
       const extraTags: string[] = [];
@@ -289,7 +301,16 @@ export class LunchPreparer implements Preparer {
         osmId: pAny.osmId,
         fetchedAt: pAny.fetchedAt,
         attribution: pAny.attribution,
-        reasonKind: usedTaste ? 'taste' : pAny.openingStatus === 'open' ? 'open_now' : 'nearest',
+        reasonKind:
+          usedTaste && (selectedItems[idx]?.matchScore ?? 0) >= 1
+            ? 'taste'
+            : pAny.openingStatus === 'open'
+            ? 'open_now'
+            : 'nearest',
+        // HABIT-LEARN: the same basis on the card, in Why and in Ask.
+        ...(selectedItems[idx]?.habit && (selectedItems[idx]!.habit!.source !== 'confirmed')
+          ? { habitBasis: selectedItems[idx]!.habit!.basis, tasteSource: selectedItems[idx]!.habit!.source }
+          : {}),
         provenance: pAny.provenance,
         rating: pAny.rating,
         userRatingCount: pAny.userRatingCount,
@@ -355,6 +376,8 @@ export class LunchPreparer implements Preparer {
     }
 
     const citedTasteFacts = usedTaste ? confirmedTasteFacts : [];
+    const learnedBasis = selectedItems.find(i => i.habit?.source === 'learned')?.habit?.basis;
+    const statedBasis = selectedItems.find(i => i.habit?.source === 'user_stated')?.habit?.basis;
     const memoryFactsUsed: (MemoryCitation & { provenance?: unknown })[] = citedTasteFacts.map(f =>
       Object.freeze({
         key: f.key,
@@ -399,7 +422,9 @@ export class LunchPreparer implements Preparer {
       why: Object.freeze({
         evidenceSignals: Object.freeze(evidenceSignals),
         memoryFactsUsed: Object.freeze(memoryFactsUsed),
-        derivation: usedTaste
+        derivation: usedTaste && (statedBasis || learnedBasis) && !confirmedTasteFacts.some(f => f.status === 'confirmed' && (f.provenance as any)?.source !== 'user_stated')
+          ? `${filterNote}${statedBasis || learnedBasis}. Showing ${selected.length} nearby options.`
+          : usedTaste
           ? `${filterNote}Recommended ${selected.length} options matching ${tasteDesc} (${tasteFactSummary}).`
           : `${filterNote}No confirmed taste yet: showing ${selected.length} nearby places, open now first (${
               optionsOrSteps.some(o => o.provenance === 'google') ? 'Google opening hours' : 'OSM opening_hours'

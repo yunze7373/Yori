@@ -3,19 +3,19 @@
  * Governed by Architecture Rev3 Section 6 and Invariants INV-105, INV-107, INV-110.
  *
  * Requirements:
- * - Confirmed / pending / rejected facts with provenance.
+ * - "What Yori has learned": learned habits and things you told Yori, each with its basis and a
+ *   quiet Forget (INV-107 learn-and-correct; no confirm steps).
  * - Today's proactive prompt budget used (INV-105).
- * - Action controls on pending proposals: Confirm / Not true (INV-107).
- * - Only Confirm writes a confirmed fact; rejected proposals stay queryable and are never applied.
  * - Data controls: Export Raw Data, Reset Storage with two-step confirmation (INV-110).
  */
 
 import { isXmemoHidden } from '../demo-flags.js';
 import type { MemoryFact } from '../../core/contracts/index.js';
 import type { PromptBudgetRecord } from '../../core/storage/index.js';
-import { escapeHtml, formatTime } from '../living-context/presentation.js';
+import { escapeHtml } from '../living-context/presentation.js';
 import { STRINGS } from '../living-context/strings.js';
 import { humanizeMemoryKey, humanizeMemoryValue } from '../review/why-sheet.js';
+import { classifyFactSource, provenanceLabel } from '../view-models/provenance.js';
 
 /**
  * Maps provenance source tokens to human-readable user copy.
@@ -58,9 +58,8 @@ export interface MeViewState {
 }
 
 export function renderMeView(state: MeViewState): string {
-  const confirmed = state.memoryFacts.filter(f => f.status === 'confirmed');
-  const pending = state.proposals.filter(f => f.status === 'pending');
-  const rejected = state.proposals.filter(f => f.status === 'rejected');
+  // HABIT-LEARN: what Yori learned and what you told it; pending / rejected proposals gate nothing.
+  const learned = state.memoryFacts.filter(f => f.status === 'confirmed' || f.status === 'learned');
 
   const budgetUsageText = STRINGS.me.budgetUsage
     .replace('{used}', String(state.promptBudget.count))
@@ -97,97 +96,29 @@ export function renderMeView(state: MeViewState): string {
         </div>
       </section>
 
-      <!-- 2. Confirmed Preferences -->
-      <section class="card me-card" aria-labelledby="me-confirmed-title">
-        <h2 id="me-confirmed-title" class="section-label" data-slot="chrome" data-slot-reason="Confirmed preferences section label">${escapeHtml(STRINGS.me.confirmedTitle)}</h2>
-        <div class="memory-list" id="confirmed-facts-list">
+      <!-- 2. What Yori has learned (HABIT-LEARN: learn-and-correct; no confirm steps) -->
+      <section class="card me-card" aria-labelledby="me-learned-title">
+        <h2 id="me-learned-title" class="section-label" data-slot="chrome" data-slot-reason="Learned habits section label">What Yori has learned</h2>
+        <p class="me-card-desc" data-slot="chrome" data-slot-reason="Learned habits description">Learned from your choices in Yori, or things you told it. Forget anything here and Yori stops using it.</p>
+        <div class="memory-list" id="learned-habits-list">
           ${
-            confirmed.length > 0
-              ? confirmed
+            learned.length > 0
+              ? learned
                   .map(fact => {
-                    const time = formatTime(fact.updatedAt, state.timezone);
+                    const tag = provenanceLabel(classifyFactSource(fact));
                     return `
-                    <div class="memory-row" id="fact-${escapeHtml(fact.key)}">
+                    <div class="memory-row learned-row" id="habit-${escapeHtml(fact.key)}" data-habit-key="${escapeHtml(fact.key)}" data-habit-status="${escapeHtml(fact.status)}">
                       <div class="memory-main">
                         <div class="memory-key" data-slot="chrome" data-slot-reason="Memory preference key">${escapeHtml(humanizeMemoryKey(fact.key))}</div>
                         <div class="memory-val" data-source-ref="${escapeHtml(fact.key)}.value" data-slot="domain">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</div>
-                        <div class="memory-meta" data-source-ref="${escapeHtml(fact.key)}.provenance" data-slot="domain">${escapeHtml(formatProvenanceSource(fact.provenance.source))} · Updated ${escapeHtml(time)}</div>
+                        <div class="memory-meta" data-source-ref="${escapeHtml(fact.key)}.provenance" data-slot="domain">${escapeHtml(tag)}</div>
                       </div>
-                      <span class="card-badge badge-confirmed" data-slot="chrome" data-slot-reason="Confirmed preference badge">Confirmed</span>
+                      <button type="button" class="btn btn-sm btn-quiet btn-forget-habit" data-key="${escapeHtml(fact.key)}" aria-label="Forget ${escapeHtml(humanizeMemoryKey(fact.key).toLowerCase())}" data-slot="chrome" data-slot-reason="Forget learned habit button">Forget</button>
                     </div>
                   `;
                   })
                   .join('')
-              : `<p class="memory-empty" data-slot="chrome" data-slot-reason="Empty confirmed preferences notice">${escapeHtml(STRINGS.me.confirmedEmpty)}</p>`
-          }
-        </div>
-      </section>
-
-      <!-- 3. Pending Proposals (Confirm / Not true) -->
-      <section class="card me-card" aria-labelledby="me-pending-title">
-        <div class="me-card-header">
-          <h2 id="me-pending-title" class="section-label" data-slot="chrome" data-slot-reason="Pending proposals section label">${escapeHtml(STRINGS.me.pendingTitle)}</h2>
-          <span class="card-badge badge-pending" data-slot="chrome" data-slot-reason="Pending proposals count badge">${pending.length} Pending</span>
-        </div>
-        <p class="me-card-desc" data-slot="chrome" data-slot-reason="Pending proposals description">${escapeHtml(STRINGS.me.pendingSubtitle)}</p>
-
-        <div class="memory-list" id="pending-proposals-list">
-          ${
-            pending.length > 0
-              ? pending
-                  .map(fact => {
-                    const time = formatTime(fact.updatedAt, state.timezone);
-                    return `
-                    <div class="memory-row pending-row" id="proposal-${escapeHtml(fact.key)}">
-                      <div class="memory-main">
-                        <div class="memory-key" data-slot="chrome" data-slot-reason="Memory preference key">${escapeHtml(humanizeMemoryKey(fact.key))}</div>
-                        <div class="memory-val" data-slot="chrome" data-slot-reason="Pending proposal value">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</div>
-                        <div class="memory-meta" data-slot="chrome" data-slot-reason="Pending proposal metadata">
-                          ${fact.provenance.note ? `${escapeHtml(fact.provenance.note)} · ` : ''}
-                          Created ${escapeHtml(time)}
-                        </div>
-                      </div>
-                      <div class="proposal-actions">
-                        <button type="button" class="btn btn-sm btn-primary btn-confirm-proposal" data-key="${escapeHtml(fact.key)}" data-slot="chrome" data-slot-reason="Confirm proposal button">
-                          ${escapeHtml(STRINGS.actions.confirm)}
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline btn-reject-proposal" data-key="${escapeHtml(fact.key)}" data-slot="chrome" data-slot-reason="Reject proposal button">
-                          ${escapeHtml(STRINGS.actions.notTrue)}
-                        </button>
-                      </div>
-                    </div>
-                  `;
-                  })
-                  .join('')
-              : `<p class="memory-empty" data-slot="chrome" data-slot-reason="Empty pending proposals notice">${escapeHtml(STRINGS.me.pendingEmpty)}</p>`
-          }
-        </div>
-      </section>
-
-      <!-- 4. Rejected Proposals (Audit Trail) -->
-      <section class="card me-card" aria-labelledby="me-rejected-title">
-        <h2 id="me-rejected-title" class="section-label" data-slot="chrome" data-slot-reason="Rejected proposals section label">${escapeHtml(STRINGS.me.rejectedTitle)}</h2>
-        <p class="me-card-desc" data-slot="chrome" data-slot-reason="Rejected proposals description">${escapeHtml(STRINGS.me.rejectedSubtitle)}</p>
-
-        <div class="memory-list" id="rejected-proposals-list">
-          ${
-            rejected.length > 0
-              ? rejected
-                  .map(fact => {
-                    const time = formatTime(fact.updatedAt, state.timezone);
-                    return `
-                    <div class="memory-row rejected-row" id="rejected-${escapeHtml(fact.key)}">
-                      <div class="memory-main">
-                        <div class="memory-key" data-slot="chrome" data-slot-reason="Memory preference key">${escapeHtml(humanizeMemoryKey(fact.key))}</div>
-                        <div class="memory-val" data-slot="chrome" data-slot-reason="Rejected proposal value">${escapeHtml(humanizeMemoryValue(fact.key, fact.value))}</div>
-                        <div class="memory-meta" data-slot="chrome" data-slot-reason="Rejected proposal metadata">Declined by user · Recorded ${escapeHtml(time)}</div>
-                      </div>
-                      <span class="card-badge badge-rejected" data-slot="chrome" data-slot-reason="Rejected proposal badge">Rejected</span>
-                    </div>
-                  `;
-                  })
-                  .join('')
-              : `<p class="memory-empty" data-slot="chrome" data-slot-reason="Empty rejected proposals notice">${escapeHtml(STRINGS.me.rejectedEmpty)}</p>`
+              : `<p class="memory-empty" data-slot="chrome" data-slot-reason="Empty learned habits notice">Nothing yet. As you pick places in Yori, it learns what you like and puts it first.</p>`
           }
         </div>
       </section>

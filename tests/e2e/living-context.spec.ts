@@ -211,7 +211,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     await expect(modal).not.toBeVisible();
   });
 
-  test('Review Loop: Adjust creates pending memory proposal when remembered (INV-107)', async ({
+  test('Review Loop: Adjust "Remember" saves the routine directly, no confirm step (INV-107 learn-and-correct)', async ({
     page,
   }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile';
@@ -246,12 +246,13 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     await rememberBtn.click();
     await expect(modal).not.toBeVisible();
 
-    // 5. Invariant INV-107: Proposal appears in FOR YOU with Confirm and Not true buttons
+    // 5. HABIT-LEARN (INV-107 learn-and-correct): the routine is remembered as stated and shown in
+    // FOR YOU with its basis; there is no Confirm / Not true step anywhere.
     const forYouRow = page.locator('#for-you-prep_buffer_preference');
     await expect(forYouRow).toBeVisible();
-    await expect(forYouRow).toContainText('departure prep & buffer routine');
-    await expect(forYouRow.locator('.btn-confirm-proposal')).toBeVisible();
-    await expect(forYouRow.locator('.btn-reject-proposal')).toBeVisible();
+    await expect(forYouRow).toContainText('Get ready 25 min · Leave a 10 min buffer');
+    await expect(forYouRow).toContainText('You told Yori');
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
   });
 
   test('Review Loop: Dismiss with reason creates same-day suppression and removes plan', async ({
@@ -288,18 +289,18 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     // 5. Zero degradation notice on dismissed lunch scene (Finding 1)
     await expect(page.locator('.notice-box')).toHaveCount(0);
 
-    // 6. Clean human proposal copy in FOR YOU (Finding 3)
-    const lunchProposal = page.locator('#for-you-suppress_lunch_recommendations');
-    await expect(lunchProposal).toBeVisible();
-    await expect(lunchProposal.locator('.item-title')).toContainText('Skip lunch suggestions for today?');
-    await expect(lunchProposal.locator('.item-subtitle')).toContainText('You dismissed lunch · Not today');
+    // 6. HABIT-LEARN: the dismissal is the whole effect (same-day suppression above); Yori does not
+    // follow up with a "Skip lunch suggestions for today?" question to confirm.
+    await expect(page.locator('#for-you-suppress_lunch_recommendations')).toHaveCount(0);
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
+    await expect(page.locator('body')).not.toContainText('Skip lunch suggestions for today?');
 
     // Screenshot evidence after dismiss
     const screenshotPath = path.join(EVIDENCE_DIR, `after-dismiss-${viewName}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
   });
 
-  test('Me Page: Proactive budget meter, confirmed/pending facts, and confirm action', async ({
+  test('Me Page: Proactive budget meter and "What Yori has learned" with the remembered routine', async ({
     page,
   }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile';
@@ -307,7 +308,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
 
     await page.goto('/?ui=v1');
 
-    // 1. First trigger Adjust to create a pending proposal
+    // 1. Adjust and Remember (saved as stated, no proposal)
     const select = page.locator('#scene-select');
     await select.selectOption('clear');
     await page.locator('#btn-adjust').click();
@@ -330,80 +331,73 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     await expect(budgetBadge).toBeVisible();
     await expect(budgetBadge).toContainText('0 of 3 used today');
 
-    // 4. Verify pending proposal is shown in Me page
-    const pendingProposal = page.locator('#proposal-prep_buffer_preference');
-    await expect(pendingProposal).toBeVisible();
-    await expect(pendingProposal).toContainText('Preparation buffer habit');
+    // 4. The routine is listed under "What Yori has learned" with its basis; nothing to confirm.
+    const learnedRow = page.locator('#habit-prep_buffer_preference');
+    await expect(learnedRow).toBeVisible();
+    await expect(learnedRow).toContainText('Preparation buffer habit');
+    await expect(learnedRow).toContainText('Get ready 25 min');
+    await expect(learnedRow).toContainText('You told Yori');
+    await expect(learnedRow.locator('.btn-forget-habit')).toBeVisible();
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
-    // Screenshot evidence of Me page with pending and budget
+    // Screenshot evidence of Me page with the learned list and budget
     const screenshotPath = path.join(EVIDENCE_DIR, `me-page-${viewName}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
-
-    // 5. Click Confirm on the pending proposal
-    const confirmBtn = pendingProposal.locator('.btn-confirm-proposal');
-    await confirmBtn.click();
-
-    // 6. Proposal disappears from pending list and moves to Confirmed list!
-    await expect(pendingProposal).not.toBeVisible();
-    const confirmedFact = page.locator('#fact-prep_buffer_preference');
-    await expect(confirmedFact).toBeVisible();
-    await expect(confirmedFact).toContainText('Confirmed');
   });
 
-  test('Me Page: Proposal rejection moves fact to audit and never applies (INV-107)', async ({
+  test('Me Page: Forget removes the remembered routine and it stays gone after reload (INV-107)', async ({
     page,
   }) => {
     await page.goto('/?ui=v1');
     const isMobile = page.viewportSize() ? page.viewportSize()!.width < 600 : false;
 
-    // 1. Create proposal via adjust
+    // 1. Remember a routine via Adjust (saved directly)
     await page.locator('#scene-select').selectOption('clear');
     await page.locator('#btn-adjust').click();
     await page.locator('#btn-adjust-remember').click();
 
     // 2. Go to Me page
-    if (isMobile) {
-      await page.locator('#tab-me').click();
-    } else {
-      await page.locator('#desktop-nav-me').click();
-    }
+    const openMe = async () => {
+      if (isMobile) {
+        await page.locator('#tab-me').click();
+      } else {
+        await page.locator('#desktop-nav-me').click();
+      }
+    };
+    await openMe();
+    const row = page.locator('#habit-prep_buffer_preference');
+    await expect(row).toBeVisible();
 
-    const pendingProposal = page.locator('#proposal-prep_buffer_preference');
-    await expect(pendingProposal).toBeVisible();
-
-    // 3. Click Not true (Reject)
-    const rejectBtn = pendingProposal.locator('.btn-reject-proposal');
-    await rejectBtn.click();
-
-    // 4. Proposal is moved to rejected audit list, with Rejected badge
-    await expect(pendingProposal).not.toBeVisible();
-    const rejectedRow = page.locator('#rejected-prep_buffer_preference');
-    await expect(rejectedRow).toBeVisible();
-    await expect(rejectedRow).toContainText('Rejected');
+    // 3. Forget it: gone from Me, and from storage (survives a reload)
+    await row.locator('.btn-forget-habit').click();
+    await expect(row).toHaveCount(0);
+    await expect(page.locator('#learned-habits-list')).toContainText('Nothing yet');
+    const stored = await page.evaluate(() => window.localStorage.getItem('yori_state_v1'));
+    expect(stored ?? '').not.toContain('prep_buffer_preference');
+    await page.reload();
+    await page.locator('#scene-select').selectOption('clear');
+    await openMe();
+    await expect(page.locator('#habit-prep_buffer_preference')).toHaveCount(0);
   });
 
   test('Persistence Across Browser Reload (AC-105-4 & INV-110)', async ({ page }) => {
     await page.goto('/?ui=v1');
     const isMobile = page.viewportSize() ? page.viewportSize()!.width < 600 : false;
 
-    // 1. Adjust prep time and remember proposal
+    // 1. Adjust prep time and Remember (saved directly as stated)
     await page.locator('#scene-select').selectOption('clear');
     await page.locator('#btn-adjust').click();
     await page.locator('#input-prep-minutes').fill('30');
     await page.locator('#btn-adjust-remember').click();
 
-    // 2. Confirm proposal in Me page
+    // 2. It is listed on the Me page right away
     if (isMobile) {
       await page.locator('#tab-me').click();
     } else {
       await page.locator('#desktop-nav-me').click();
     }
 
-    const pendingRow = page.locator('#proposal-prep_buffer_preference');
-    await expect(pendingRow).toBeVisible();
-    await pendingRow.locator('.btn-confirm-proposal').click();
-
-    const confirmedFact = page.locator('#fact-prep_buffer_preference');
+    const confirmedFact = page.locator('#habit-prep_buffer_preference');
     await expect(confirmedFact).toBeVisible();
 
     // 3. Dismiss away lunch to record same-day suppression
@@ -430,7 +424,7 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
     } else {
       await page.locator('#desktop-nav-me').click();
     }
-    await expect(page.locator('#fact-prep_buffer_preference')).toBeVisible();
+    await expect(page.locator('#habit-prep_buffer_preference')).toBeVisible();
     await expect(page.locator('.badge-budget')).toContainText('1 of 3 used today');
   });
 
@@ -606,13 +600,9 @@ test.describe('Living Context UI E2E & Visual Verification (S5-1 Chapter Closeou
       await page.locator('#desktop-nav-me').click();
     }
 
-    const proposal = page.locator('#proposal-prep_buffer_preference');
-    await expect(proposal).toBeVisible();
-    await proposal.locator('.btn-confirm-proposal').click();
-
-    const confirmedFact = page.locator('#fact-prep_buffer_preference');
+    const confirmedFact = page.locator('#habit-prep_buffer_preference');
     await expect(confirmedFact).toBeVisible();
-    await expect(confirmedFact).toContainText('Source: you confirmed');
+    await expect(confirmedFact).toContainText('You told Yori');
 
     const meText = await page.innerText('body');
     for (const pattern of forbiddenPatterns) {

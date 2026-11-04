@@ -111,7 +111,7 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
 
     // Assert: XMemo affordance is absent when flag is off
     await expect(page.locator('#me-xmemo-title')).toHaveCount(0);
-    await expect(page.locator('#confirmed-facts-list')).toBeVisible();
+    await expect(page.locator('#learned-habits-list')).toBeVisible();
 
     // Visual screenshot evidence
     await saveScreenshot(page, `xmemo-wire-off-${viewName}.png`);
@@ -203,6 +203,7 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
       // Must NOT be demo sample and must NOT claim user confirmation
       expect(badgeText).not.toBe('Demo profile · sample preference');
       expect(badgeText).not.toBe('Confirmed');
+      expect(badgeText).not.toBe('You told Yori');
       expect(badgeText).toBe('Synced from XMemo');
     }
 
@@ -217,13 +218,13 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
     await expect(page.locator('#me-xmemo-title')).toBeVisible();
     await expect(page.locator('#btn-xmemo-disconnect')).toBeVisible();
 
-    // Assert: Merged fact appears under Confirmed Preferences
-    const factRow = page.locator('#fact-rain_transport_preference');
+    // Assert: Merged fact appears under "What Yori has learned"
+    const factRow = page.locator('#habit-rain_transport_preference');
     await expect(factRow).toBeVisible();
     await expect(factRow.locator('.memory-key')).toHaveText('Rain travel habit');
 
-    // Assert: Truthful provenance (no invented "you confirmed")
-    await expect(factRow.locator('.memory-meta')).toContainText('Source: synced from XMemo');
+    // Assert: Truthful provenance (no invented "You told Yori")
+    await expect(factRow.locator('.memory-meta')).toHaveText('Synced from XMemo');
 
     // Assert: zero requests to xmemo.dev and zero client authorization headers
     expect(externalHosts).toHaveLength(0);
@@ -280,7 +281,7 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
     );
 
     // Assert: Local preferences list renders cleanly without disruption
-    await expect(page.locator('#confirmed-facts-list')).toBeVisible();
+    await expect(page.locator('#learned-habits-list')).toBeVisible();
 
     // Visual screenshot evidence
     await saveScreenshot(page, `xmemo-wire-fallback-${viewName}.png`);
@@ -339,7 +340,7 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
     expect(remoteWriteCount).toBe(0);
     expect(remoteWritePayload).toBeNull();
 
-    // 2. Perform Adjust -> Remember as preference -> Confirm proposal (INV-107)
+    // 2. Perform Adjust -> Remember as preference (HABIT-LEARN: saved as stated, written through)
     const adjustBtn = page.locator('#btn-adjust');
     await expect(adjustBtn).toBeVisible();
     await adjustBtn.click();
@@ -352,29 +353,16 @@ test.describe('XMEMO-PORT-WIRE: Local-First Composite MemoryPort Verification', 
     await rememberBtn.click();
     await expect(adjustModal).not.toBeVisible();
 
-    // Proposal row is now in FOR YOU
+    // The remembered routine is in FOR YOU at once, with no confirm control
     const forYouRow = page.locator('#for-you-prep_buffer_preference');
     await expect(forYouRow).toBeVisible();
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
-    // Invariant INV-107: Before confirmation, zero remote writes have occurred
-    expect(remoteWriteCount).toBe(0);
-
-    // Explicit user confirmation triggers write-back
-    const confirmBtn = forYouRow.locator('.btn-confirm-proposal');
-    await expect(confirmBtn).toBeVisible();
-    const writePromise = page.waitForRequest(
-      req => req.url().includes('/api/xmemo/confirmed-facts') && req.method() === 'POST'
-    );
-    await confirmBtn.click();
-    await writePromise;
-
-    // Proposal disappears from FOR YOU upon confirmation
-    await expect(forYouRow).not.toBeVisible();
-
-    // Assert: exactly 1 remote write was dispatched
-    expect(remoteWriteCount).toBe(1);
+    // Write-through to the connected vault: exactly 1 remote write, as a user-stated fact
+    await expect.poll(() => remoteWriteCount).toBe(1);
     expect(remoteWritePayload).not.toBeNull();
     expect(remoteWritePayload.status).toBe('confirmed');
+    expect(remoteWritePayload.provenance?.source).toBe('user_stated');
     expect(remoteWritePayload.key).toBe('prep_buffer_preference');
 
     // Assert: zero client Authorization headers

@@ -127,6 +127,8 @@ export interface ActionStateStore {
   isLiveMode(): boolean;
   /** D2: Live registers the on-demand nearby search used by an Ask for food nearby (null = off). */
   setNearbyRequestHandler(handler: ((source: 'ask') => void) | null): void;
+  /** HABIT-LEARN: Ask statements ("I'm vegetarian") are handed to the app to save as stated. */
+  setMemoryStatementHandler(handler: ((statement: import('../conversation/memory-statements.js').MemoryStatement) => void) | null): void;
   /** D4: Live registers live reasoning over the real lunch candidates (null = off). */
   setCandidateReasoner(
     reasoner: ((request: 'why' | 'closer' | 'quieter') => Promise<{ reason: string; statusLabel: string }>) | null

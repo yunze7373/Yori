@@ -12,7 +12,7 @@
  * - 'provider': live or external provider facts.
  */
 
-export type FactSourceKind = 'user_confirmed' | 'demo_sample' | 'user_request' | 'provider' | 'synced';
+export type FactSourceKind = 'user_confirmed' | 'user_stated' | 'learned' | 'learned_demo' | 'demo_sample' | 'user_request' | 'provider' | 'synced';
 
 export interface FactLike {
   readonly key: string;
@@ -59,6 +59,15 @@ export function classifyFactSource(
     return 'provider';
   }
 
+  // HABIT-LEARN: learned from the user's own choices / told to Yori by the user.
+  if (provSource === 'observed' || factObj?.status === 'learned') {
+    const v = factObj?.value as { demo?: unknown } | undefined;
+    return v && typeof v === 'object' && v.demo === true ? 'learned_demo' : 'learned';
+  }
+  if (provSource === 'user_stated') {
+    return 'user_stated';
+  }
+
   // Local user confirmation strictly wins over remote or demo
   if (userConfirmedKeys?.has(key) && (provSource === undefined || provSource === 'user_confirmed')) {
     return 'user_confirmed';
@@ -90,7 +99,12 @@ export function classifyFactSource(
 export function provenanceLabel(kind: FactSourceKind): string {
   switch (kind) {
     case 'user_confirmed':
-      return 'Confirmed';
+    case 'user_stated':
+      return 'You told Yori';
+    case 'learned':
+      return 'Learned from your choices';
+    case 'learned_demo':
+      return 'Learned from sample choices · demo';
     case 'synced':
       return 'Synced from XMemo';
     case 'demo_sample':

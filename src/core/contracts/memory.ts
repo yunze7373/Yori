@@ -1,13 +1,23 @@
 /**
  * Core Contracts: Memory & Facts
- * Governed by Invariants INV-107 and Acceptance Criteria AC-101-1.
+ * Governed by Invariant INV-107 (learn-and-correct, HABIT-LEARN 2026-11-04) and AC-101-1.
  */
 
 import { deepFreeze } from './signal.js';
 
-export type MemoryStatus = 'confirmed' | 'pending' | 'rejected';
+/**
+ * 'confirmed' = something the user said or did on purpose (user_confirmed / user_stated);
+ * 'learned'   = a habit Yori learned from the user's own in-app choices (source 'observed');
+ * 'pending' / 'rejected' are legacy states kept readable for stored data; nothing is gated on them.
+ */
+export type MemoryStatus = 'confirmed' | 'learned' | 'pending' | 'rejected';
 
-export type MemorySource = 'user_confirmed' | 'user_feedback' | 'seed' | 'inferred';
+export type MemorySource = 'user_confirmed' | 'user_stated' | 'observed' | 'user_feedback' | 'seed' | 'inferred';
+
+/** Facts that shape recommendations: what the user told Yori and what Yori learned. */
+export function isActiveMemoryFact(f: { status?: string } | null | undefined): boolean {
+  return Boolean(f && (f.status === 'confirmed' || f.status === 'learned'));
+}
 
 export interface MemoryProvenance {
   readonly source: MemorySource;
@@ -18,7 +28,9 @@ export interface MemoryProvenance {
 
 /**
  * MemoryFact
- * Memory writes only on user confirm; feedback creates pending proposals, never direct mutation (INV-107).
+ * INV-107 (learn-and-correct): Yori learns habits from the user's own in-app choices and applies
+ * them without asking; what the user tells Yori is saved as stated. Every fact is visible to the
+ * user with its basis and can be forgotten; nothing waits for a confirm step.
  */
 export interface MemoryFact<T = unknown> {
   readonly key: string;

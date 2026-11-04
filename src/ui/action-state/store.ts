@@ -3,6 +3,7 @@
  * Governed by LIVING_CONTEXT_V2.md Section 2 and §8 D3/D4/D5.
  */
 
+import { parseMemoryStatement, type MemoryStatement } from '../conversation/memory-statements.js';
 import type {
   ActionCommandContext,
   ActionStateRecord,
@@ -182,6 +183,30 @@ export class DefaultActionStateStore implements ActionStateStore {
     reasoner: ((request: 'why' | 'closer' | 'quieter') => Promise<{ reason: string; statusLabel: string }>) | null
   ): void {
     this.candidateReasoner = reasoner;
+  }
+
+  // HABIT-LEARN: "I'm vegetarian" / "remember I like quiet places" are saved as stated, directly.
+  private memoryStatementHandler: ((statement: MemoryStatement) => void) | null = null;
+  public setMemoryStatementHandler(handler: ((statement: MemoryStatement) => void) | null): void {
+    this.memoryStatementHandler = handler;
+  }
+
+  /** Answers a memory statement without a proposal or a Confirm step; null when it is not one. */
+  private tryMemoryStatement(
+    trimmed: string,
+    now: string
+  ): { collapsed: boolean; rule: AutoCollapseRule; response: string } | null {
+    const statement = parseMemoryStatement(trimmed);
+    if (!statement || !this.memoryStatementHandler) return null;
+    this.memoryStatementHandler(statement);
+    this.transcriptList.push({
+      id: `msg-${Date.now()}-a`,
+      sender: 'assistant',
+      text: statement.reply,
+      timestamp: now,
+    });
+    this.notify();
+    return { collapsed: false, rule: 'long_form_discussion', response: statement.reply };
   }
 
   public setNearbyRequestHandler(handler: ((source: 'ask') => void) | null): void {
@@ -530,6 +555,9 @@ export class DefaultActionStateStore implements ActionStateStore {
       timestamp: now,
     });
 
+    const remembered = this.tryMemoryStatement(trimmed, now);
+    if (remembered) return remembered;
+
     const { ctx, interpCtx } = this.buildInterpretationContext(contextOverride);
     const cmd = this.interpreter.interpret(trimmed, interpCtx);
     return this.applyCommand(trimmed, cmd, ctx, now);
@@ -554,6 +582,9 @@ export class DefaultActionStateStore implements ActionStateStore {
       text: trimmed,
       timestamp: now,
     });
+
+    const rememberedAsync = this.tryMemoryStatement(trimmed, now);
+    if (rememberedAsync) return rememberedAsync;
 
     const inflightId = `msg-${Date.now()}-inflight`;
     this.transcriptList.push({

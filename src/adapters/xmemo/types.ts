@@ -46,4 +46,6 @@ export interface MemoryPort {
   loadFacts(): Promise<readonly MemoryFact[]>;
   writeBack(fact: MemoryFact): Promise<{ readonly success: boolean; readonly error?: string }>;
   getStatus(): MemoryPortStatus;
+  /** HABIT-LEARN: Forget a fact (local first; remote only when connected). */
+  forget?(key: string, at: string): Promise<{ readonly success: boolean; readonly error?: string }>;
 }

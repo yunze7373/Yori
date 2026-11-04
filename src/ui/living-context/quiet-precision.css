@@ -3103,3 +3103,28 @@ body {
   font-weight: 500;
   color: var(--qp-ink-soft);
 }
+
+/* HABIT-LEARN: Me > What Yori has learned. One calm row per habit; Forget is a quiet text action. */
+.me-view-container .learned-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--qp-s3);
+}
+
+.me-view-container .btn-forget-habit {
+  min-height: 44px;
+  padding: 0 var(--qp-s3);
+  border: 0;
+  border-radius: var(--qp-r-btn);
+  background: transparent;
+  box-shadow: none;
+  color: var(--qp-forest);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.me-view-container .btn-forget-habit:hover {
+  background: var(--qp-sage-wash);
+}

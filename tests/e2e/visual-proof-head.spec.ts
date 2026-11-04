@@ -237,19 +237,12 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await page.waitForTimeout(200);
 
     await navigateToMe(page, isMobile);
-    const pendingInMe = page.locator('#proposal-prep_buffer_preference');
-    await expect(pendingInMe).toBeVisible();
-    await expect(pendingInMe).toContainText('Preparation buffer habit');
-
-    const confirmBtn = pendingInMe.locator('.btn-confirm-proposal');
-    await expect(confirmBtn).toBeVisible();
-    await confirmBtn.click();
-
-    await expect(pendingInMe).not.toBeVisible();
-    const confirmedFact = page.locator('#fact-prep_buffer_preference');
+    // HABIT-LEARN: remembered as stated at once, listed with its basis; no confirm step.
+    const confirmedFact = page.locator('#habit-prep_buffer_preference');
     await expect(confirmedFact).toBeVisible();
-    await expect(confirmedFact.locator('.badge-confirmed')).toHaveText('Confirmed');
-    await expect(confirmedFact).toContainText('Source: you confirmed');
+    await expect(confirmedFact).toContainText('Preparation buffer habit');
+    await expect(confirmedFact).toContainText('You told Yori');
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
@@ -392,12 +385,11 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     await expect(quietTitle).toBeVisible();
     await expect(quietTitle).toHaveText('Nothing needs your attention right now.');
 
-    // Navigate to For You tab to view the generated routine proposal
+    // HABIT-LEARN: no follow-up "Skip lunch suggestions for today?" proposal; the dismissal is the effect
     await navigateToForYou(page, isMobile);
     const lunchProposal = page.locator('.v2-proposal-item-card[data-proposal-key="suppress_lunch_recommendations"]');
-    await expect(lunchProposal).toBeVisible();
-    await expect(lunchProposal.locator('.v2-proposal-title')).toContainText('Skip lunch suggestions for today?');
-    await expect(lunchProposal.locator('.v2-proposal-basis')).toBeVisible();
+    await expect(lunchProposal).toHaveCount(0);
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);
@@ -406,21 +398,11 @@ test.describe('VISUAL-PROOF-HEAD: Current-HEAD Visual Evidence Matrix (AC-205-2)
     });
 
     // -------------------------------------------------------------------------
-    // Capture 08: Lunch Suppression Accepted -> Promoted to Confirmed in Me Tab
+    // Capture 08: Lunch suppressed for today; Me has nothing waiting for confirmation
     // -------------------------------------------------------------------------
-    const confirmProposalBtn = lunchProposal.locator('.btn-confirm-proposal');
-    await expect(confirmProposalBtn).toBeVisible();
-    await confirmProposalBtn.click();
-
-    // Verify proposal is no longer pending in FOR YOU
-    await expect(lunchProposal).not.toBeVisible();
-
-    // Navigate to Me tab to assert and capture sovereign memory confirmation
     await navigateToMe(page, isMobile);
-    const confirmedSuppression = page.locator('#fact-suppress_lunch_recommendations');
-    await expect(confirmedSuppression).toBeVisible();
-    await expect(confirmedSuppression.locator('.badge-confirmed')).toHaveText('Confirmed');
-    await expect(confirmedSuppression).toContainText('Source: you confirmed');
+    await expect(page.locator('#learned-habits-list')).toBeVisible();
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
     await checkNoHorizontalScroll(page);
     await checkAxe(page);

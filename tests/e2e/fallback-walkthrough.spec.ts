@@ -302,14 +302,16 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
       path: path.join(EVIDENCE_DIR, `06-adjust-dialog-${viewName}.png`),
     });
 
-    // Click Remember as preference (creates a pending proposal under INV-107)
+    // Click Remember as preference (saved as stated at once: INV-107 learn-and-correct)
     await page.locator('#btn-adjust-remember').click();
     await expect(adjustModal).not.toBeVisible();
     await page.waitForTimeout(200);
 
-    // Verify proposal appears in FOR YOU section on home screen
+    // Verify the remembered routine appears in FOR YOU on the home screen, with no confirm control
     const forYouProposal = page.locator('#for-you-prep_buffer_preference');
     await expect(forYouProposal).toBeVisible();
+    await expect(forYouProposal).toContainText('You told Yori');
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
     // -------------------------------------------------------------------------
     // Step 5: User Sovereignty & The Me Tab (Confirm-only Memory & Budget)
@@ -326,55 +328,37 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await expect(budgetBadge).toBeVisible();
     await expect(budgetBadge).toContainText('0 of 3 used today');
 
-    // Verify empty confirmed memory wording explicitly notes demo sample profile
-    const confirmedEmpty = page.locator('#confirmed-facts-list .memory-empty');
-    await expect(confirmedEmpty).toBeVisible();
-    await expect(confirmedEmpty).toHaveText(
-      'No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.'
-    );
+    // HABIT-LEARN: "What Yori has learned" lists the routine at once with its basis and a quiet
+    // Forget; there is no pending row and no Confirm / Not true step.
+    const learnedRow = page.locator('#habit-prep_buffer_preference');
+    await expect(learnedRow).toBeVisible();
+    await expect(learnedRow).toContainText('Preparation buffer habit');
+    await expect(learnedRow).toContainText('You told Yori');
+    const forgetBtn = learnedRow.locator('.btn-forget-habit');
+    await expect(forgetBtn).toBeVisible();
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
-    // Pending proposal present in Me tab
-    const pendingInMe = page.locator('#proposal-prep_buffer_preference');
-    await expect(pendingInMe).toBeVisible();
-    await expect(pendingInMe).toContainText('Preparation buffer habit');
-
-    // P3: Ensure pending proposal card (title, Confirm and Not true buttons) is scrolled into viewport before capture
-    await pendingInMe.scrollIntoViewIfNeeded();
-
-    const confirmBtn = pendingInMe.locator('.btn-confirm-proposal');
-    const rejectBtn = pendingInMe.locator('.btn-reject-proposal');
-    await expect(confirmBtn).toBeVisible();
-    await expect(rejectBtn).toBeVisible();
-
+    // The row and its Forget are inside the viewport at capture time (above the tab bar on mobile)
+    await learnedRow.scrollIntoViewIfNeeded();
     if (isMobile) {
       const tabBar = page.locator('.bottom-tab-bar');
-      const pendingBox = await pendingInMe.boundingBox();
+      const rowBox = await learnedRow.boundingBox();
       const tabBox = await tabBar.boundingBox();
-      if (pendingBox && tabBox && pendingBox.y + pendingBox.height > tabBox.y) {
-        const scrollDelta = pendingBox.y + pendingBox.height - tabBox.y + 24;
-        await page.evaluate(delta => window.scrollBy(0, delta), scrollDelta);
+      if (rowBox && tabBox && rowBox.y + rowBox.height > tabBox.y) {
+        await page.evaluate(delta => window.scrollBy(0, delta), rowBox.y + rowBox.height - tabBox.y + 24);
       }
     }
-
-    // Assert the pending proposal card and buttons are inside the viewport at capture time
-    const pendingBoxFinal = await pendingInMe.boundingBox();
-    const confirmBox = await confirmBtn.boundingBox();
-    const rejectBox = await rejectBtn.boundingBox();
+    const rowBoxFinal = await learnedRow.boundingBox();
+    const forgetBox = await forgetBtn.boundingBox();
     const vp = page.viewportSize();
-    expect(pendingBoxFinal).not.toBeNull();
-    expect(confirmBox).not.toBeNull();
-    expect(rejectBox).not.toBeNull();
-    expect(vp).not.toBeNull();
-    expect(pendingBoxFinal!.y).toBeGreaterThanOrEqual(0);
+    expect(rowBoxFinal).not.toBeNull();
+    expect(forgetBox).not.toBeNull();
+    expect(rowBoxFinal!.y).toBeGreaterThanOrEqual(0);
     if (!isMobile) {
-      expect(pendingBoxFinal!.y + pendingBoxFinal!.height).toBeLessThanOrEqual(vp!.height);
-      expect(confirmBox!.y + confirmBox!.height).toBeLessThanOrEqual(vp!.height);
-      expect(rejectBox!.y + rejectBox!.height).toBeLessThanOrEqual(vp!.height);
+      expect(forgetBox!.y + forgetBox!.height).toBeLessThanOrEqual(vp!.height);
     } else {
-      const tabBar = page.locator('.bottom-tab-bar');
-      const tabBox = await tabBar.boundingBox();
-      expect(tabBox).not.toBeNull();
-      expect(pendingBoxFinal!.y + pendingBoxFinal!.height).toBeLessThanOrEqual(tabBox!.y);
+      const tabBox = await page.locator('.bottom-tab-bar').boundingBox();
+      expect(rowBoxFinal!.y + rowBoxFinal!.height).toBeLessThanOrEqual(tabBox!.y);
     }
 
     await checkNoHorizontalScroll(page);
@@ -382,20 +366,6 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `07-me-pending-proposal-${viewName}.png`),
     });
-
-    // Confirm proposal: moves from pending to confirmed preferences
-    await confirmBtn.click();
-
-    // Proposal disappears from pending and is confirmed
-    await expect(pendingInMe).not.toBeVisible();
-    const confirmedFact = page.locator('#fact-prep_buffer_preference');
-    await expect(confirmedFact).toBeVisible();
-    await expect(confirmedFact).toContainText('Confirmed');
-    await expect(confirmedFact).toContainText('Source: you confirmed');
-    await expect(page.locator('#confirmed-facts-list .memory-empty')).toHaveCount(0);
-
-    await checkNoHorizontalScroll(page);
-    await checkAxe(page);
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `08-me-confirmed-preference-${viewName}.png`),
     });
@@ -411,8 +381,9 @@ test.describe('Guaranteed Zero-Credential Fallback Walkthrough (AC-205-2)', () =
     await expect(postWhyModal).toBeVisible();
     await page.waitForTimeout(300);
     const postWhyMemory = page.locator('.why-section', { hasText: 'Memory & Habits' });
-    // User-confirmed facts show 'Confirmed'
+    // Remembered facts show 'You told Yori'
     await expect(postWhyMemory.locator('.badge-confirmed')).toHaveCount(2);
+    await expect(postWhyMemory.locator('.badge-confirmed').first()).toHaveText('You told Yori');
     await expect(postWhyMemory).toContainText('Buffer before leaving');
     await expect(postWhyMemory).toContainText('Time to get ready');
     // Unchanged sample fact (rain habit) still shows 'Demo profile · sample preference'

@@ -111,20 +111,19 @@ export const VIDEO_SCRIPT_FIXTURES = {
       'Adjust Departure Timing',
       'For this time only',
       'Remember as preference',
-      'Remember departure prep & buffer routine?',
+      'Get ready 25 min · Leave a 10 min buffer',
     ],
   },
   segment5: {
     title: '5. User Sovereignty & The Me Tab',
     budgetSeconds: 33,
     quotedStrings: [
-      'Remember departure prep & buffer routine?',
+      'What Yori has learned',
       'Me & Memory',
       '0 of 3 used today',
-      'No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.',
       'Reset Storage',
       'Preparation buffer habit',
-      'Confirmed',
+      'You told Yori',
       'Get ready at 2:00 PM, leave by 2:25 PM',
     ],
   },
@@ -373,11 +372,12 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await page.locator('#btn-adjust-remember').click();
     await expect(page.locator('#adjust-dialog-backdrop')).toHaveCount(0);
 
-    // Proposal created under For You
+    // Remembered straight away (HABIT-LEARN): For You shows the routine; nothing to confirm
     await clickNav(page, 'for-you', isMobile);
-    await expect(page.locator('.v2-for-you-view .v2-proposal-title')).toContainText(
-      'Remember departure prep & buffer routine?'
+    await expect(page.locator('.v2-for-you-view .v2-proposal-title').first()).toContainText(
+      'Get ready 25 min · Leave a 10 min buffer'
     );
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, `04-explainable-review-loop-${viewName}.png`),
@@ -396,34 +396,27 @@ test.describe('Video Script Verbatim Walkthrough (VIDEO-SCRIPT-SYNC)', () => {
     await clickNav(page, 'me', isMobile);
     await expect(page.locator('.me-title')).toHaveText('Me & Memory');
     await expect(page.locator('.badge-budget')).toContainText('0 of 3 used today');
-    await expect(page.locator('#confirmed-facts-list .memory-empty')).toHaveText(
-      'No confirmed preferences yet. Active demo scenes use sample preferences from the simulated demo profile until you confirm your own.'
-    );
+    await expect(page.locator('#me-learned-title')).toHaveText('What Yori has learned');
     await expect(page.locator('#btn-me-reset')).toHaveText('Reset Storage');
 
-    // Locate pending proposal "Preparation buffer habit" and confirm it
-    const pendingRow = page.locator('#proposal-prep_buffer_preference');
-    await expect(pendingRow).toBeVisible();
-    await expect(pendingRow.locator('.memory-key')).toHaveText('Preparation buffer habit');
-
-    await pendingRow.locator('.btn-confirm-proposal').click();
-    await expect(pendingRow).toHaveCount(0);
-
-    // Promoted to Confirmed preferences
-    const confirmedRow = page.locator('#fact-prep_buffer_preference');
+    // "Preparation buffer habit" is listed with its basis and a quiet Forget (no confirm step)
+    const confirmedRow = page.locator('#habit-prep_buffer_preference');
     await expect(confirmedRow).toBeVisible();
-    await expect(confirmedRow.locator('.badge-confirmed')).toContainText('Confirmed');
+    await expect(confirmedRow.locator('.memory-key')).toHaveText('Preparation buffer habit');
+    await expect(confirmedRow).toContainText('You told Yori');
+    await expect(confirmedRow.locator('.btn-forget-habit')).toBeVisible();
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
 
     // Return to Home tab: schedule immediately recomputed to 2:00 PM / 2:25 PM
     await clickNav(page, 'home', isMobile);
     await expect(page.locator('.now-card')).toBeVisible();
     await expect(page.locator('#now-title')).toContainText('Get ready at 2:00 PM, leave by 2:25 PM');
 
-    // Re-opened Why sheet shows Confirmed for prep & buffer while rain habit remains sample
+    // Re-opened Why sheet tags prep & buffer "You told Yori" while the rain habit remains sample
     await page.locator('#btn-why').click();
     await expect(page.locator('#why-sheet-backdrop')).toBeVisible();
     const postWhyMemory = page.locator('.why-section', { hasText: 'Memory & Habits' });
-    await expect(postWhyMemory.locator('.badge-confirmed').first()).toHaveText('Confirmed');
+    await expect(postWhyMemory.locator('.badge-confirmed').first()).toHaveText('You told Yori');
     await expect(postWhyMemory).toContainText('Buffer before leaving');
     await expect(postWhyMemory).toContainText('Time to get ready');
     await expect(

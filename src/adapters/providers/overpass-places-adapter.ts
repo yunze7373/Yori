@@ -17,6 +17,7 @@
  * - Ranking is deterministic and explainable: cites confirmed memory facts or the distance rule.
  */
 
+import { tasteSignals, bestTasteMatch } from '../../core/memory/taste.js';
 import type { LocationCoords } from './location-port.js';
 import type { PlaceItem, PlacesProvider, PlacesQuery } from './places-types.js';
 import { computeHaversineDistanceMeters, formatStraightLineDistance } from './simulated-places-provider.js';
@@ -280,62 +281,32 @@ export function parseOverpassElements(
 export interface RankedPlaceItem extends PlaceItem {
   readonly rankScore: number;
   readonly rankingExplanation: string;
+  /** HABIT-LEARN: which memory placed it first ('user_stated' | 'confirmed' | 'learned'). */
+  readonly tasteSource?: string;
 }
 
 /**
- * Deterministically ranks candidates against confirmed taste preferences.
- * - Matches confirmed taste facts -> cites confirmed fact.
- * - No match or no taste memory -> cites distance rule.
- * - Zero model calls (Muse Spark not invoked in this slice).
+ * Deterministically ranks candidates against what the user told Yori and what Yori learned
+ * (HABIT-LEARN). Told / confirmed taste outranks a learned habit; a learned habit outranks
+ * open-now; open-now outranks the rest. Zero model calls.
  */
 export function rankPlacesByConfirmedPreferences(
   places: readonly PlaceItem[],
-  confirmedFacts: readonly { key: string; value: unknown; status?: string }[]
+  facts: readonly { key: string; value: unknown; status?: string; provenance?: { source?: string } }[]
 ): readonly RankedPlaceItem[] {
-  const tasteFacts = confirmedFacts.filter(
-    f =>
-      f.status === 'confirmed' ||
-      f.key === 'taste_preference' ||
-      f.key === 'favorite_cuisine' ||
-      f.key.toLowerCase().includes('taste') ||
-      f.key.toLowerCase().includes('cuisine') ||
-      f.key.toLowerCase().includes('food')
-  );
-
-  const keywordsWithFacts: { keyword: string; factKey: string; factValue: string }[] = [];
-  for (const f of tasteFacts) {
-    if (typeof f.value === 'string') {
-      const tokens = f.value
-        .toLowerCase()
-        .split(/[\s,_\/]+|\bor\b/)
-        .map(t => t.trim())
-        .filter(t => t.length > 1);
-      for (const tok of tokens) {
-        keywordsWithFacts.push({ keyword: tok, factKey: f.key, factValue: f.value });
-      }
-    }
-  }
+  const signals = tasteSignals(facts as any);
 
   const scored: RankedPlaceItem[] = places.map(place => {
-    const cuisineLower = (place.cuisine || '').toLowerCase();
-    const nameLower = place.name.toLowerCase();
-
-    let matchedFact: { keyword: string; factKey: string; factValue: string } | null = null;
-    for (const item of keywordsWithFacts) {
-      if (cuisineLower.includes(item.keyword) || nameLower.includes(item.keyword)) {
-        matchedFact = item;
-        break;
-      }
-    }
-
+    const match = bestTasteMatch(signals, place);
     const distMeters = place.straightLineDistanceMeters ?? 1000;
     const distLabel = place.straightLineDistanceLabel ?? `${distMeters} m`;
 
-    if (matchedFact) {
+    if (match) {
       return {
         ...place,
-        rankScore: 10000 - distMeters,
-        rankingExplanation: `Matches your confirmed taste for ${matchedFact.keyword}`,
+        rankScore: match.weight * 10000 - distMeters,
+        rankingExplanation: match.basis,
+        tasteSource: match.source,
       };
     } else if (place.openingStatus === 'open') {
       // D2: without a taste match, open now (OSM opening_hours only) ranks above unknown/closed,

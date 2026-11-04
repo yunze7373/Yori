@@ -31,5 +31,9 @@ export const lunchPlugin: Plugin<SimulatedProviderAdapter> & {
     'favorite_cuisine',
     'suppress_lunch',
     'suppress_lunch_recommendations',
+    // HABIT-LEARN: what Yori learned from your choices, and what you told Yori.
+    'learned_lunch_cuisine',
+    'dietary_preference',
+    'ambience_preference',
   ]),
 });

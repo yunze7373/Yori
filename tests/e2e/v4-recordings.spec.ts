@@ -297,16 +297,12 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
 
     await clickNav('for-you');
     await expect(page.locator('.v2-for-you-view')).toBeVisible();
-    await expect(page.locator('.v2-for-you-view .v2-proposal-title')).toContainText(
-      'Remember departure prep & buffer routine?'
+    await expect(page.locator('.v2-for-you-view .v2-proposal-title').first()).toContainText(
+      'Get ready 25 min · Leave a 10 min buffer'
     );
+    // HABIT-LEARN: remembered as stated; there is no Confirm step to take
+    await expect(page.locator('.btn-confirm-proposal, .btn-reject-proposal')).toHaveCount(0);
     await page.waitForTimeout(2000);
-
-    // Confirm proposal on For You tab
-    const acceptProposalBtn = page.locator('.v2-for-you-view .btn-primary').first();
-    await expect(acceptProposalBtn).toBeVisible();
-    await acceptProposalBtn.click();
-    await page.waitForTimeout(1000);
 
     // Return to Home tab to see recomputed schedule
     await clickNav('home');
@@ -318,11 +314,12 @@ test.describe('V4 Closeout: Local Preview Screen Recordings & Evidence Audit Har
     await expect(page.locator('.me-view-container')).toBeVisible();
     await expect(page.locator('.me-view-container')).toContainText('Preparation buffer habit');
     await checkAxe(page);
+    await expect(page.locator('#habit-prep_buffer_preference')).toContainText('You told Yori');
     await recordStep(
-      'Confirm-Only Memory & Sovereignty',
-      'Adjust prep/buffer, view pending proposal under For You / Me, confirm proposal',
-      'Home schedule recomputed to 2:00 PM / 2:25 PM; Me shows Confirmed preference',
-      'INV-107 confirm-only memory; X1 unauthorized remote sync off; storage sovereign'
+      'Learn-and-Correct Memory & Sovereignty',
+      'Adjust prep/buffer and Remember; it shows in For You / Me with its basis and a Forget',
+      'Home schedule recomputed to 2:00 PM / 2:25 PM; Me lists the routine as "You told Yori"',
+      'INV-107 learn-and-correct memory; X1 unauthorized remote sync off; storage sovereign'
     );
     await page.waitForTimeout(2500);
 

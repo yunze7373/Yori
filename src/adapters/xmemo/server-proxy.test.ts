@@ -525,6 +525,57 @@ describe('XMemoDevProxy: Flag ON', () => {
       );
     });
 
+    describe('HABIT-LEARN: learned and user-stated facts', () => {
+      const okFetch = () => {
+        const calls: any[] = [];
+        const fn = (async (_url: string, init: any) => {
+          calls.push(JSON.parse(init.body));
+          return { ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 1, result: { success: true } }) };
+        }) as any;
+        return { fn, calls };
+      };
+      const learned = {
+        key: 'learned_lunch_cuisine',
+        value: { cuisine: 'ramen', count: 3, total: 4, lastSeen: '2026-11-04T03:00:00.000Z' },
+        status: 'learned',
+        provenance: { source: 'observed', recordedAt: '2026-11-04T03:00:00.000Z' },
+      };
+
+      it('accepts a learned fact (source observed) and forwards status learned', async () => {
+        const { fn, calls } = okFetch();
+        const res = await proxy.writeConfirmedFact(learned, fn);
+        expect(res.status).toBe(200);
+        expect(calls[0].params.arguments[UNVERIFIED_XMEMO_MCP_MAPPING.writeStatusArg]).toBe('learned');
+        expect(calls[0].params.arguments[UNVERIFIED_XMEMO_MCP_MAPPING.writeKeyArg]).toBe('learned_lunch_cuisine');
+      });
+
+      it('accepts a user-stated fact', async () => {
+        const { fn, calls } = okFetch();
+        const res = await proxy.writeConfirmedFact(
+          { key: 'dietary_preference', value: 'vegetarian', status: 'confirmed', provenance: { source: 'user_stated', recordedAt: '2026-11-04T03:00:00.000Z' } },
+          fn
+        );
+        expect(res.status).toBe(200);
+        expect(calls[0].params.arguments[UNVERIFIED_XMEMO_MCP_MAPPING.writeStatusArg]).toBe('confirmed');
+      });
+
+      it.each([
+        ['pending', { ...learned, status: 'pending' }, 'INV-107'],
+        ['unknown status', { ...learned, status: 'maybe' }, 'INV-107'],
+        ['learned without observed source', { ...learned, provenance: { source: 'user_stated' } }, "source 'observed'"],
+        ['observed claimed as confirmed', { ...learned, status: 'confirmed' }, "is 'learned'"],
+        ['malformed key', { ...learned, key: 'Learned-Lunch' }, 'malformed key'],
+        ['oversized value', { ...learned, key: 'taste_preference', status: 'confirmed', value: 'x'.repeat(1001), provenance: { source: 'user_stated' } }, 'larger than 1000'],
+        ['missing value', { ...learned, value: undefined }, 'missing'],
+      ])('rejects %s with 400 and never calls upstream', async (_label, fact, message) => {
+        const { fn, calls } = okFetch();
+        const res = await proxy.writeConfirmedFact(fact, fn);
+        expect(res.status).toBe(400);
+        expect((res.data as any).error).toContain(message);
+        expect(calls).toHaveLength(0);
+      });
+    });
+
     it('upstream 401 on write clears server session and returns 401 fallback', async () => {
       const mock401 = (async () => ({
         ok: false,
@@ -2764,8 +2815,22 @@ describe('XKEY01: Server-only owner-key demo mode', () => {
         const res = createMockRes();
         await proxy.handleHttpRequest(req, res);
 
-        expect(res.statusCode).toBe(403);
-        expect(res.body).toContain('not a Yori-managed key');
+        // HABIT-LEARN: a malformed key is a 400 before the registry check; never forwarded.
+        expect(res.statusCode).toBe(400);
+        expect(res.body).toContain('malformed key');
+        expect(mockFetch).not.toHaveBeenCalled();
+
+        // A well-formed key outside the closed registry is still 403.
+        const req2 = createMockReq({
+          url: '/api/xmemo/confirmed-facts',
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: 'family_address', value: 'secret-location', status: 'confirmed', provenance: { source: 'user' } }),
+        });
+        const res2 = createMockRes();
+        await proxy.handleHttpRequest(req2, res2);
+        expect(res2.statusCode).toBe(403);
+        expect(res2.body).toContain('not a Yori-managed key');
         expect(mockFetch).not.toHaveBeenCalled();
       });
     });

@@ -104,8 +104,10 @@ describe('D2 lunch preparer: Live places without confirmed taste', () => {
     ] as unknown as MemoryFact[];
     const plan = lunchPreparer.prepare(candidate(), snap([location, livePlaces, request('nearby_now')]), memory);
     const opts = plan!.optionsOrSteps as any[];
-    expect(opts.map(o => o.name)).toEqual(['Near Unknown Cafe']);
+    // HABIT-LEARN: in Live a taste match leads; the other real places stay, each with its own reason.
+    expect(opts[0].name).toBe('Near Unknown Cafe');
     expect(opts[0].reasonKind).toBe('taste');
+    expect(opts.slice(1).map(o => o.reasonKind)).not.toContain('taste');
     expect(plan!.why.memoryFactsUsed.map(f => f.key)).toEqual(['taste_preference']);
   });
 
@@ -131,5 +133,44 @@ describe('D2 lunch preparer: Live places without confirmed taste', () => {
       const c = lunchDetector.detect(s, noMemory)!;
       expect(lunchPreparer.prepare(c, s, noMemory)).toBeNull();
     }
+  });
+});
+
+describe('HABIT-LEARN: the lunch preparer applies what Yori learned and what the user told it', () => {
+  const learnedBurger = {
+    key: 'learned_lunch_cuisine',
+    value: { cuisine: 'burger', count: 3, total: 4, lastSeen: AS_OF },
+    status: 'learned',
+    provenance: { source: 'observed', recordedAt: AS_OF },
+  } as unknown as MemoryFact;
+
+  it('a learned habit leads the Live list with its plain basis, without any confirm step', () => {
+    const c = lunchDetector.detect(snap([location, livePlaces, request('nearby_now')]), [learnedBurger])!;
+    const plan = lunchPreparer.prepare(c, snap([location, livePlaces, request('nearby_now')]), [learnedBurger])!;
+    const opts = plan.optionsOrSteps as any[];
+    expect(opts[0].name).toBe('Mid Closed Grill');
+    expect(opts[0].reasonKind).toBe('taste');
+    expect(opts[0].habitBasis).toBe('You often pick burger · 3 of your last 4 lunches');
+    expect(opts[0].tasteSource).toBe('learned');
+    expect(opts[1].habitBasis).toBeUndefined();
+    expect(plan.why.memoryFactsUsed.map(f => f.key)).toEqual(['learned_lunch_cuisine']);
+    expect(plan.why.derivation).toContain('You often pick burger · 3 of your last 4 lunches');
+    expect(plan.requiresConfirmation).toBe(false);
+  });
+
+  it('what the user told Yori outranks the learned habit', () => {
+    const told = { key: 'taste_preference', value: 'cafe', status: 'confirmed', provenance: { source: 'user_stated', recordedAt: AS_OF } } as unknown as MemoryFact;
+    const plan = lunchPreparer.prepare(lunchDetector.detect(snap([location, livePlaces, request('nearby_now')]), [])!, snap([location, livePlaces, request('nearby_now')]), [learnedBurger, told])!;
+    const opts = plan.optionsOrSteps as any[];
+    expect(opts[0].name).toBe('Near Unknown Cafe');
+    expect(opts[0].habitBasis).toBe('You told Yori you like cafe');
+    expect(opts[1].name).toBe('Mid Closed Grill');
+    expect(opts[1].habitBasis).toBe('You often pick burger · 3 of your last 4 lunches');
+  });
+
+  it('a pending proposal shapes nothing (Live falls back to open now)', () => {
+    const pending = { ...learnedBurger, status: 'pending' } as unknown as MemoryFact;
+    const plan = lunchPreparer.prepare(lunchDetector.detect(snap([location, livePlaces, request('nearby_now')]), [])!, snap([location, livePlaces, request('nearby_now')]), [pending])!;
+    expect((plan.optionsOrSteps as any[])[0].reasonKind).toBe('open_now');
   });
 });

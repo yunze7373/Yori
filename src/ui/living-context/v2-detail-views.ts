@@ -391,21 +391,21 @@ export function renderPlansView(aheadPlans: readonly PreparedPlan[]): string {
 }
 
 /**
- * Render For You View (Bottom Navigation 'For You' Tab = Proposals & Insights)
+ * Render For You View (HABIT-LEARN: what Yori has learned, read-only; Forget lives on Me).
  */
 export function renderForYouView(proposals: readonly ProposalItemVM[]): string {
   return `
-    <div class="v2-for-you-view" aria-label="For You Proposals">
+    <div class="v2-for-you-view" aria-label="For You">
       <header class="v2-view-header">
         <h1 class="v2-view-title">For You</h1>
-        <p class="v2-view-subtitle">Proposals and routine insights waiting for your feedback.</p>
+        <p class="v2-view-subtitle">What Yori has learned from your choices, and what you told it. Forget anything on Me.</p>
       </header>
 
       ${
         proposals.length === 0
           ? `
         <div class="card v2-empty-proposals" data-provenance="none">
-          <p>No pending proposals waiting right now. Yori learns routines calmly as you use the app.</p>
+          <p>Nothing learned yet. Yori learns calmly from the places you pick.</p>
         </div>
       `
           : `
@@ -413,31 +413,10 @@ export function renderForYouView(proposals: readonly ProposalItemVM[]): string {
           ${proposals
             .map(
               prop => `
-            <div class="card v2-proposal-item-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.provenance || (prop.basis?.includes('Confirmed') ? 'user' : 'fixture')}">
+            <div class="card v2-proposal-item-card learned-card" data-proposal-key="${escapeHtml(prop.key)}" data-provenance="${prop.provenance || 'user'}">
               <div class="v2-proposal-header">
-                <span class="card-badge">PROPOSAL</span>
+                ${prop.basis ? `<span class="card-badge v2-proposal-basis">${escapeHtml(prop.basis)}</span>` : ''}
                 <h2 class="v2-proposal-title">${escapeHtml(prop.title)}</h2>
-              </div>
-              ${
-                prop.basis
-                  ? `<p class="v2-proposal-basis">${escapeHtml(prop.basis)}</p>`
-                  : ''
-              }
-              <div class="v2-proposal-actions">
-                <button
-                  type="button"
-                  class="btn btn-primary btn-confirm-proposal"
-                  data-key="${escapeHtml(prop.key)}"
-                >
-                  ${escapeHtml(STRINGS.actions.confirm)}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-reject-proposal"
-                  data-key="${escapeHtml(prop.key)}"
-                >
-                  ${escapeHtml(STRINGS.actions.notTrue)}
-                </button>
               </div>
             </div>
           `

@@ -33,8 +33,8 @@ unavoidable, it stops and returns as a separate owner-level decision.
 | Review flows | Why/adjust/dismiss reuse the existing review components inside both home cards and conversation | `src/ui/review/*` (presentation wiring only) |
 
 Invariants protected: golden D1–D6 unchanged (fixtures only *add*
-attributes; no existing value changes), INV-107 confirm-only memory
-writes, INV-102 simulated labelling, prompt budget and suppression
+attributes; no existing value changes), INV-107 learn-and-correct memory
+(learned from in-app choices, applied without asking, forgettable on Me), INV-102 simulated labelling, prompt budget and suppression
 remain core-owned and untouched.
 
 ## 2. Action-state model and interaction state machine
@@ -56,8 +56,8 @@ updated/needs-confirmation ──Undo (window)──▶ previous home state rest
   no decorative thinking animation divorced from work. `working`
   shows what is being recomputed (e.g. "Comparing departure options").
 - **Undo** restores the exact prior home composition and plan state;
-  it never un-writes a confirmed memory fact (that stays governed by
-  the Me surface, INV-107).
+  it never un-writes a remembered fact (that stays governed by the Me
+  surface: What Yori has learned + Forget, INV-107).
 
 ### 2.2 Interaction states
 
@@ -92,11 +92,13 @@ swaps, and no information is carried by motion alone.
 ### 2.3 "This time only" vs "Remember → Confirm"
 
 An adjust inside conversation defaults to **this time only** (the
-current plan changes; memory does not). Choosing **Remember** creates
-a `pending` MemoryFact proposal; the conversation stays open in
-`needs-confirmation` until the user confirms or rejects — the exact
-PH-001 boundary (INV-107), now reachable from chat as well as cards.
-Nothing is ever written on send alone.
+current plan changes; memory does not). Choosing **Remember** saves
+what the user just set, as stated; things the user tells Yori in Ask
+("I'm vegetarian", "remember I like quiet places") are saved the same
+way. Habits are learned from in-app choices (Accept, Directions, Save)
+and applied without a confirm step (HABIT-LEARN, INV-107
+learn-and-correct); every one is visible on Me with its basis and can
+be forgotten.
 
 **Override mechanism (exact, no forgery).** The depart and lunch
 preparers read only `status === "confirmed"` memory facts and fail

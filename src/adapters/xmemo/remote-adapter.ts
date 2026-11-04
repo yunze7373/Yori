@@ -142,7 +142,8 @@ export class XMemoRemoteAdapter implements MemoryPort {
           return {
             key,
             value,
-            status: 'confirmed' as const, // Remote synced preferences enter strictly as confirmed
+            // Remote synced preferences enter as confirmed; a habit Yori learned stays 'learned' (HABIT-LEARN).
+            status: (item.status === 'learned' ? 'learned' : 'confirmed') as 'learned' | 'confirmed',
             provenance: {
               source: 'xmemo' as unknown as MemorySource,
               recordedAt,
@@ -168,8 +169,10 @@ export class XMemoRemoteAdapter implements MemoryPort {
     fact: MemoryFact
   ): Promise<{ readonly success: boolean; readonly error?: string }> {
     // Invariant INV-107 & AC-106-3: Only confirmed facts may be written back!
-    if (fact.status !== 'confirmed') {
-      const errorMsg = `MemoryPort invariant violation (INV-107): only confirmed facts can be written back. Got status '${fact.status}'.`;
+    // INV-107 (learn-and-correct): what the user told Yori ('confirmed') and what Yori learned
+    // from the user's own choices ('learned') are written; 'pending' and anything else never are.
+    if (fact.status !== 'confirmed' && fact.status !== 'learned') {
+      const errorMsg = `MemoryPort invariant violation (INV-107): only stated or learned facts can be written back. Got status '${fact.status}'.`;
       throw new Error(errorMsg);
     }
 
