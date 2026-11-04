@@ -25,6 +25,7 @@ export type CommandIntent =
   | 'CHANGE_ROUTE'
   | 'FIND_LUNCH'
   | 'FIND_FUEL'
+  | 'FIND_ESSENTIALS'
   | 'WHY'
   | 'ACCEPT'
   | 'UNDO'
@@ -32,12 +33,15 @@ export type CommandIntent =
 
 export type SupportedMode = 'drive' | 'bus';
 export type SupportedLunchFilter = 'quieter' | 'vegetarian' | 'nearer';
+export type SupportedEssentialCategory = 'supermarket' | 'convenience' | 'shopping_mall' | 'pharmacy';
 
 export interface CommandSlotValues {
   readonly deltaMinutes?: number;
   readonly mode?: SupportedMode;
   readonly filters?: readonly SupportedLunchFilter[];
   readonly ambiguous?: boolean;
+  readonly category?: SupportedEssentialCategory | string;
+  readonly amenity?: string;
 }
 
 export interface SituationAttribution {
@@ -97,7 +101,7 @@ export interface CommandInterpreter {
 
 
 const HONEST_CAPABILITY_GENERAL =
-  "I can help adjust your departure plan ('Leave 15 minutes later', 'Take the bus'), find lunch spots ('Find a quieter vegetarian lunch spot'), or find nearby fuel ('Find gas').";
+  "I can help adjust your departure plan ('Leave 15 minutes later', 'Take the bus'), find lunch spots ('Find a quieter vegetarian lunch spot'), find nearby fuel ('Find gas'), or find nearby essentials ('Supermarket nearby').";
 
 const LUNCH_STOP_WORDS: ReadonlySet<string> = new Set([
   'find', 'me', 'a', 'an', 'the', 'spot', 'spots', 'place', 'places',
@@ -366,7 +370,53 @@ export class DeterministicCommandInterpreter implements CommandInterpreter {
       };
     }
 
-    // 8. TOTAL PARSER FALLBACK -> UNSUPPORTED
+    // 8. FIND_ESSENTIALS ('supermarket nearby', 'mall nearby', 'convenience store', 'pharmacy')
+    const isSupermarket =
+      /\b(?:supermarkets?|grocery|groceries|grocery\s+stores?)\b/i.test(normalized) ||
+      /(?:超市|找超市|附近的超市|买菜)/.test(rawText);
+
+    const isMall =
+      /\b(?:shopping\s+malls?|malls?)\b/i.test(normalized) ||
+      /(?:商场|购物中心|附近的商场)/.test(rawText);
+
+    const isConvenience =
+      /\b(?:convenience\s+stores?|convenience)\b/i.test(normalized) ||
+      /(?:便利店|附近的便利店)/.test(rawText);
+
+    const isPharmacy =
+      /\b(?:pharmac(?:y|ies)|drugstores?|chemists?)\b/i.test(normalized) ||
+      /(?:药店|药房|附近的药店)/.test(rawText);
+
+    const isGenericEssentials =
+      /\b(?:essentials?|nearby\s+essentials?|essentials?\s+nearby)\b/i.test(normalized) ||
+      /(?:日常用品|附近的生活用品|生活必需品)/.test(rawText);
+
+    if (isSupermarket || isMall || isConvenience || isPharmacy || isGenericEssentials) {
+      let category: SupportedEssentialCategory = 'supermarket';
+      let desc = 'supermarkets';
+      if (isPharmacy) {
+        category = 'pharmacy';
+        desc = 'pharmacies';
+      } else if (isConvenience) {
+        category = 'convenience';
+        desc = 'convenience stores';
+      } else if (isMall) {
+        category = 'shopping_mall';
+        desc = 'shopping malls';
+      } else if (isSupermarket || isGenericEssentials) {
+        category = 'supermarket';
+        desc = 'supermarkets';
+      }
+
+      return {
+        intent: 'FIND_ESSENTIALS',
+        rawText,
+        slots: { category, amenity: category },
+        explanation: `Finding nearby ${desc}.`,
+      };
+    }
+
+    // 9. TOTAL PARSER FALLBACK -> UNSUPPORTED
     return {
       intent: 'UNSUPPORTED',
       rawText,

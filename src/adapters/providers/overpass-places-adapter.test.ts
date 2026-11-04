@@ -19,6 +19,10 @@ import {
   parseDeterministicOpeningHours,
   rankPlacesByConfirmedPreferences,
   isPlacesLiveEnabled,
+  isAllowedAmenity,
+  getOverpassTagFilter,
+  buildOverpassQuery,
+  ALLOWED_AMENITIES,
   OVERPASS_ATTRIBUTION,
   type OverpassElement,
 } from './overpass-places-adapter.js';
@@ -146,5 +150,96 @@ describe('S3-LIVE-LUNCH: Overpass Places Adapter', () => {
     expect(results[0]!.name).toBe('Recorded Bistro');
     expect(results[0]!.osmId).toBe(1234);
     expect(results[0]!.attribution).toBe(OVERPASS_ATTRIBUTION);
+  });
+
+  describe('NEARBY-ESSENTIALS: proxy allowlist and tag mapping', () => {
+    it('extends ALLOWED_AMENITIES with supermarket, convenience, shopping_mall, pharmacy', () => {
+      expect(ALLOWED_AMENITIES).toContain('supermarket');
+      expect(ALLOWED_AMENITIES).toContain('convenience');
+      expect(ALLOWED_AMENITIES).toContain('shopping_mall');
+      expect(ALLOWED_AMENITIES).toContain('pharmacy');
+      expect(ALLOWED_AMENITIES).toContain('restaurant');
+      expect(ALLOWED_AMENITIES).toContain('cafe');
+      expect(ALLOWED_AMENITIES).toContain('fast_food');
+
+      expect(isAllowedAmenity('supermarket')).toBe(true);
+      expect(isAllowedAmenity('convenience')).toBe(true);
+      expect(isAllowedAmenity('shopping_mall')).toBe(true);
+      expect(isAllowedAmenity('pharmacy')).toBe(true);
+      expect(isAllowedAmenity('unknown_category')).toBe(false);
+    });
+
+    it('maps categories to correct OSM tags via getOverpassTagFilter', () => {
+      expect(getOverpassTagFilter('supermarket')).toEqual({ key: 'shop', value: 'supermarket' });
+      expect(getOverpassTagFilter('convenience')).toEqual({ key: 'shop', value: 'convenience' });
+      expect(getOverpassTagFilter('shopping_mall')).toEqual({ key: 'shop', value: 'mall' });
+      expect(getOverpassTagFilter('pharmacy')).toEqual({ key: 'amenity', value: 'pharmacy' });
+      expect(getOverpassTagFilter('restaurant')).toEqual({ key: 'amenity', value: 'restaurant' });
+      expect(getOverpassTagFilter('cafe')).toEqual({ key: 'amenity', value: 'cafe' });
+      expect(getOverpassTagFilter('fast_food')).toEqual({ key: 'amenity', value: 'fast_food' });
+      expect(getOverpassTagFilter('fuel')).toEqual({ key: 'amenity', value: 'fuel' });
+      expect(getOverpassTagFilter(undefined)).toEqual({ key: 'amenity', value: 'restaurant' });
+    });
+
+    it('buildOverpassQuery constructs queries with appropriate tag keys and values', () => {
+      const qSupermarket = buildOverpassQuery({ location: userLoc, category: 'supermarket' });
+      expect(qSupermarket).toContain('node["shop"="supermarket"]');
+      expect(qSupermarket).toContain('way["shop"="supermarket"]');
+
+      const qConvenience = buildOverpassQuery({ location: userLoc, category: 'convenience' });
+      expect(qConvenience).toContain('node["shop"="convenience"]');
+      expect(qConvenience).toContain('way["shop"="convenience"]');
+
+      const qMall = buildOverpassQuery({ location: userLoc, category: 'shopping_mall' });
+      expect(qMall).toContain('node["shop"="mall"]');
+      expect(qMall).toContain('way["shop"="mall"]');
+
+      const qPharmacy = buildOverpassQuery({ location: userLoc, category: 'pharmacy' });
+      expect(qPharmacy).toContain('node["amenity"="pharmacy"]');
+      expect(qPharmacy).toContain('way["amenity"="pharmacy"]');
+
+      const qRestaurant = buildOverpassQuery({ location: userLoc, category: 'restaurant' });
+      expect(qRestaurant).toContain('node["amenity"="restaurant"]');
+      expect(qRestaurant).toContain('way["amenity"="restaurant"]');
+    });
+
+    it('parses supermarket and pharmacy elements with brand fallback', () => {
+      const elements: OverpassElement[] = [
+        {
+          id: 5001,
+          type: 'node',
+          lat: 37.776,
+          lon: -122.417,
+          tags: { name: 'Whole Foods Market', shop: 'supermarket' },
+        },
+        {
+          id: 5002,
+          type: 'node',
+          lat: 37.777,
+          lon: -122.416,
+          tags: { brand: '7-Eleven', shop: 'convenience' }, // Brand without name
+        },
+        {
+          id: 5003,
+          type: 'node',
+          lat: 37.778,
+          lon: -122.415,
+          tags: { name: 'Walgreens', amenity: 'pharmacy', opening_hours: '24/7' },
+        },
+      ];
+
+      const parsedSupermarket = parseOverpassElements([elements[0]!], 'supermarket', userLoc, fetchedAt);
+      expect(parsedSupermarket[0]!.name).toBe('Whole Foods Market');
+      expect(parsedSupermarket[0]!.category).toBe('supermarket');
+
+      const parsedConvenience = parseOverpassElements([elements[1]!], 'convenience', userLoc, fetchedAt);
+      expect(parsedConvenience[0]!.name).toBe('7-Eleven');
+      expect(parsedConvenience[0]!.category).toBe('convenience');
+
+      const parsedPharmacy = parseOverpassElements([elements[2]!], 'pharmacy', userLoc, fetchedAt);
+      expect(parsedPharmacy[0]!.name).toBe('Walgreens');
+      expect(parsedPharmacy[0]!.openingStatus).toBe('open');
+      expect(parsedPharmacy[0]!.category).toBe('pharmacy');
+    });
   });
 });

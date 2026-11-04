@@ -27,7 +27,11 @@ import {
   type SituationAttribution,
   type InterpretedCommand,
   type CommandInterpretationContext,
+  type SupportedEssentialCategory,
 } from '../conversation/grammar.js';
+import { roundCoordinate3Decimals, OVERPASS_ATTRIBUTION } from '../../adapters/providers/overpass-places-adapter.js';
+import { GOOGLE_PLACES_ATTRIBUTION } from '../../adapters/providers/google-places-adapter.js';
+import type { LocationCoords } from '../../adapters/providers/location-port.js';
 import { defaultModelCommandInterpreter } from '../conversation/model-interpreter.js';
 import {
   globalDecisionLogger,
@@ -287,6 +291,17 @@ export class DefaultActionStateStore implements ActionStateStore {
     this.nearbyRequestHandler = handler;
   }
 
+  private placesFetcher?: (
+    category: string,
+    coords: LocationCoords
+  ) => Promise<{ places: readonly PlaceItem[]; discovery?: string; attribution?: string }>;
+
+  public setPlacesFetcher(
+    fetcher: ((category: string, coords: LocationCoords) => Promise<{ places: readonly PlaceItem[]; discovery?: string; attribution?: string }>) | null
+  ): void {
+    this.placesFetcher = fetcher ?? undefined;
+  }
+
   public setLocationRequestHandler(
     handler: (() => Promise<LocationStatus>) | null
   ): void {
@@ -428,7 +443,7 @@ export class DefaultActionStateStore implements ActionStateStore {
 
       let suggestions: readonly string[];
       if (isLiveIdle) {
-        suggestions = ['Lunch nearby', 'Somewhere quiet', 'Closer to me'];
+        suggestions = ['Lunch nearby', 'Somewhere quiet', 'Closer to me', 'Supermarket nearby'];
       } else if (isFuel) {
         suggestions = ['Find gas nearby'];
       } else if (isLunch) {
@@ -784,7 +799,10 @@ export class DefaultActionStateStore implements ActionStateStore {
       ctx?.snapshot?.signals?.some(s => (s as any).provenance === 'live' || s.kind === 'places_lunch');
 
     const quick = this.interpreter.interpret(trimmed, interpCtx);
-    const quickNeedsLoc = quick.intent === 'FIND_LUNCH' || quick.intent === 'FIND_FUEL';
+    const quickNeedsLoc =
+      quick.intent === 'FIND_LUNCH' ||
+      quick.intent === 'FIND_FUEL' ||
+      quick.intent === 'FIND_ESSENTIALS';
     if (isLive && quickNeedsLoc && (locStatus.status === 'prompt' || locStatus.status === 'denied')) {
       const run = existingRun ?? this.traceBus.startRun();
       this.activeTraceRunId = run.id;
@@ -870,6 +888,10 @@ export class DefaultActionStateStore implements ActionStateStore {
       this.traceBus.failStep(modelStep.id, label, 'offline');
     } else {
       this.traceBus.finishStep(modelStep.id, engineLabel, badge);
+    }
+
+    if (cmd.intent === 'FIND_ESSENTIALS') {
+      return this.handleEssentialsAsync(trimmed, cmd, ctx, now, run, engineLabel);
     }
 
     return this.applyCommand(trimmed, cmd, ctx, now, run, engineLabel);
@@ -1191,6 +1213,377 @@ export class DefaultActionStateStore implements ActionStateStore {
     this.transcriptList.push(item);
   }
 
+  private async handleEssentialsAsync(
+    trimmed: string,
+    cmd: InterpretedCommand,
+    ctx?: ActionCommandContext,
+    _now: string = new Date().toISOString(),
+    run?: AgentTraceRun,
+    engineLabel?: string,
+    inflightMsgId?: string
+  ): Promise<{ collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan }> {
+    const isLive =
+      this.isLiveMode() ||
+      this.nearbyRequestHandler !== null ||
+      ctx?.sceneId === 'live' ||
+      ctx?.snapshot?.signals?.some(s => (s as any).provenance === 'live' || s.kind === 'places_lunch');
+
+    const category = (cmd.slots.category as SupportedEssentialCategory) ?? 'supermarket';
+    const categoryLabel =
+      category === 'shopping_mall'
+        ? 'shopping malls'
+        : category === 'convenience'
+        ? 'convenience stores'
+        : category === 'pharmacy'
+        ? 'pharmacies'
+        : 'supermarkets';
+
+    if (!isLive) {
+      const offlineMsg = `Live places search is needed to find nearby ${categoryLabel}.`;
+      this.resolveDegraded(offlineMsg);
+      if (inflightMsgId) {
+        const idx = this.transcriptList.findIndex(m => m.id === inflightMsgId);
+        if (idx !== -1) {
+          this.transcriptList[idx] = {
+            id: inflightMsgId,
+            sender: 'assistant',
+            text: offlineMsg,
+            timestamp: new Date().toISOString(),
+            inFlight: false,
+            traceRun: run,
+          };
+        }
+      } else {
+        this.pushAssistantMessage({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: offlineMsg,
+          timestamp: new Date().toISOString(),
+        }, run, undefined, engineLabel);
+      }
+      this.notify();
+      return { collapsed: false, rule: 'degraded_failure', response: offlineMsg };
+    }
+
+    const locStatus = defaultLocationPort.getLocation();
+    if (locStatus.status === 'prompt') {
+      const promptMsg = 'I need your location to find places near you.';
+      this.resolveDegraded('Location permission required.');
+      if (inflightMsgId) {
+        const idx = this.transcriptList.findIndex(m => m.id === inflightMsgId);
+        if (idx !== -1) {
+          this.transcriptList.splice(idx, 1);
+        }
+      }
+      this.pushAssistantMessage({
+        id: `msg-${Date.now()}-a`,
+        sender: 'assistant',
+        text: promptMsg,
+        timestamp: new Date().toISOString(),
+        actions: [
+          {
+            id: 'act-allow-loc',
+            label: 'Allow location',
+            variant: 'primary',
+            action: 'allow_location',
+          },
+          {
+            id: 'act-not-now',
+            label: 'Not now',
+            variant: 'secondary',
+            action: 'not_now',
+          },
+        ],
+        pendingUtterance: trimmed,
+      }, run, undefined, 'offline');
+      this.notify();
+      return { collapsed: false, rule: 'degraded_failure', response: promptMsg };
+    }
+
+    if (locStatus.status === 'denied' || !locStatus.coords) {
+      const deniedMsg =
+        'Location access is blocked in your browser settings. Please enable location in your browser to find places near you.';
+      this.resolveDegraded(deniedMsg);
+      if (inflightMsgId) {
+        const idx = this.transcriptList.findIndex(m => m.id === inflightMsgId);
+        if (idx !== -1) {
+          this.transcriptList.splice(idx, 1);
+        }
+      }
+      this.pushAssistantMessage({
+        id: `msg-${Date.now()}-a`,
+        sender: 'assistant',
+        text: deniedMsg,
+        timestamp: new Date().toISOString(),
+      }, run, undefined, 'offline');
+      this.notify();
+      return { collapsed: false, rule: 'degraded_failure', response: deniedMsg };
+    }
+
+    const activeRun = run ?? this.traceBus.startRun();
+    this.activeTraceRunId = activeRun.id;
+
+    const placesStep = this.traceBus.startStep(
+      activeRun.id,
+      'places',
+      'Places lookup',
+      `Searching nearby ${categoryLabel}…`,
+      'live'
+    );
+
+    let places: readonly PlaceItem[] = [];
+    let discovery = 'osm';
+    let attribution = OVERPASS_ATTRIBUTION;
+
+    try {
+      if (this.placesFetcher) {
+        const fetchRes = await this.placesFetcher(category, locStatus.coords);
+        places = fetchRes.places;
+        discovery = fetchRes.discovery ?? 'osm';
+        attribution = fetchRes.attribution ?? (discovery === 'google' ? GOOGLE_PLACES_ATTRIBUTION : OVERPASS_ATTRIBUTION);
+      } else {
+        const roundedLat = roundCoordinate3Decimals(locStatus.coords.lat);
+        const roundedLng = roundCoordinate3Decimals(locStatus.coords.lng);
+        const res = await fetch(`/api/places?lat=${roundedLat}&lng=${roundedLng}&amenity=${category}&radius=1500&fresh=1`, {
+          cache: 'no-store',
+        });
+        if (!res.ok) {
+          throw new Error(`Places API responded with HTTP ${res.status}`);
+        }
+        const data = (await res.json()) as {
+          places?: readonly PlaceItem[];
+          discovery?: string;
+          attribution?: string;
+        };
+        places = data.places ?? [];
+        discovery = data.discovery ?? 'osm';
+        attribution = data.attribution ?? (discovery === 'google' ? GOOGLE_PLACES_ATTRIBUTION : OVERPASS_ATTRIBUTION);
+      }
+    } catch {
+      this.traceBus.failStep(placesStep.id, `Places lookup unavailable`, 'offline');
+      this.traceBus.completeRun(activeRun.id, engineLabel);
+      const errMsg = `Unable to find nearby ${categoryLabel} right now.`;
+      this.resolveDegraded(errMsg);
+      if (inflightMsgId) {
+        const idx = this.transcriptList.findIndex(m => m.id === inflightMsgId);
+        if (idx !== -1) {
+          this.transcriptList[idx] = {
+            id: inflightMsgId,
+            sender: 'assistant',
+            text: errMsg,
+            timestamp: new Date().toISOString(),
+            inFlight: false,
+            traceRun: activeRun,
+          };
+        }
+      } else {
+        this.pushAssistantMessage({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: errMsg,
+          timestamp: new Date().toISOString(),
+        }, activeRun, undefined, engineLabel);
+      }
+      this.activeTraceRunId = null;
+      this.notify();
+      return { collapsed: false, rule: 'degraded_failure', response: errMsg };
+    }
+
+    const providerLabel = discovery === 'google' ? 'Google Places' : 'OpenStreetMap';
+
+    if (places.length === 0) {
+      this.traceBus.finishStep(placesStep.id, `0 places found via ${providerLabel}`, 'live');
+      this.traceBus.completeRun(activeRun.id, engineLabel);
+      const emptyMsg = `No ${categoryLabel} found nearby within 1.5 km on ${providerLabel}.`;
+      this.resolveDegraded(emptyMsg);
+      if (inflightMsgId) {
+        const idx = this.transcriptList.findIndex(m => m.id === inflightMsgId);
+        if (idx !== -1) {
+          this.transcriptList[idx] = {
+            id: inflightMsgId,
+            sender: 'assistant',
+            text: emptyMsg,
+            timestamp: new Date().toISOString(),
+            inFlight: false,
+            traceRun: activeRun,
+          };
+        }
+      } else {
+        this.pushAssistantMessage({
+          id: `msg-${Date.now()}-a`,
+          sender: 'assistant',
+          text: emptyMsg,
+          timestamp: new Date().toISOString(),
+        }, activeRun, undefined, engineLabel);
+      }
+      this.activeTraceRunId = null;
+      this.notify();
+      return { collapsed: false, rule: 'degraded_failure', response: emptyMsg };
+    }
+
+    this.traceBus.finishStep(placesStep.id, `Found ${places.length} places via ${providerLabel}`, 'live');
+
+    // Sort by straightLineDistanceMeters
+    const sorted = [...places].sort((a, b) => (a.straightLineDistanceMeters ?? 0) - (b.straightLineDistanceMeters ?? 0));
+    const top = sorted[0]!;
+
+    const topCard: AgentTraceLunchCard = {
+      name: top.name,
+      straightLineDistanceLabel: top.straightLineDistanceLabel,
+      openingStatus: top.openingStatus,
+      rating: top.rating,
+      userRatingCount: top.userRatingCount,
+      priceLevel: top.priceLevel,
+      cuisine: top.cuisine,
+      attribution: top.attribution ?? attribution,
+      photoUrl: top.photo?.uri,
+      photoAttribution: top.photo?.authorAttributions?.[0]?.displayName,
+    };
+
+    const renderStep = this.traceBus.startStep(activeRun.id, 'render', 'Answer presentation', 'Top recommendation ready');
+    this.traceBus.finishStep(renderStep.id, 'Top recommendation ready');
+    this.traceBus.completeRun(activeRun.id, engineLabel, topCard);
+
+    const distPart = topCard.straightLineDistanceLabel ? ` · ${topCard.straightLineDistanceLabel}` : '';
+    const openPart = topCard.openingStatus === 'open' ? ' · Open now' : topCard.openingStatus === 'closed' ? ' · Closed' : '';
+    const responseText = `Found ${topCard.name}${distPart}${openPart}.`;
+
+    if (inflightMsgId) {
+      const idx = this.transcriptList.findIndex(m => m.id === inflightMsgId);
+      if (idx !== -1) {
+        this.transcriptList[idx] = {
+          id: inflightMsgId,
+          sender: 'assistant',
+          text: responseText,
+          timestamp: new Date().toISOString(),
+          inFlight: false,
+          traceRun: activeRun,
+          lunchCard: topCard,
+        };
+      }
+    } else {
+      this.pushAssistantMessage({
+        id: `msg-${Date.now()}-a`,
+        sender: 'assistant',
+        text: responseText,
+        timestamp: new Date().toISOString(),
+        lunchCard: topCard,
+      }, activeRun, undefined, engineLabel);
+    }
+
+    this.activeTraceRunId = null;
+    this.resolveExecutable(responseText);
+    this.notify();
+
+    return {
+      collapsed: false,
+      rule: 'executable_determinate',
+      response: responseText,
+    };
+  }
+
+  private handleEssentialsSync(
+    trimmed: string,
+    cmd: InterpretedCommand,
+    ctx?: ActionCommandContext,
+    now: string = new Date().toISOString(),
+    run?: AgentTraceRun,
+    engineLabel?: string
+  ): { collapsed: boolean; rule: AutoCollapseRule; response: string; plan?: PreparedPlan } {
+    const isLive =
+      this.isLiveMode() ||
+      this.nearbyRequestHandler !== null ||
+      ctx?.sceneId === 'live' ||
+      ctx?.snapshot?.signals?.some(s => (s as any).provenance === 'live' || s.kind === 'places_lunch');
+
+    const category = (cmd.slots.category as SupportedEssentialCategory) ?? 'supermarket';
+    const categoryLabel =
+      category === 'shopping_mall'
+        ? 'shopping malls'
+        : category === 'convenience'
+        ? 'convenience stores'
+        : category === 'pharmacy'
+        ? 'pharmacies'
+        : 'supermarkets';
+
+    if (!isLive) {
+      const offlineMsg = `Live places search is needed to find nearby ${categoryLabel}.`;
+      this.resolveDegraded(offlineMsg);
+      this.pushAssistantMessage({
+        id: `msg-${Date.now()}-a`,
+        sender: 'assistant',
+        text: offlineMsg,
+        timestamp: new Date().toISOString(),
+      }, run, undefined, engineLabel);
+      this.notify();
+      return { collapsed: false, rule: 'degraded_failure', response: offlineMsg };
+    }
+
+    const locStatus = defaultLocationPort.getLocation();
+    if (locStatus.status === 'prompt') {
+      const promptMsg = 'I need your location to find places near you.';
+      this.resolveDegraded('Location permission required.');
+      this.pushAssistantMessage({
+        id: `msg-${Date.now()}-a`,
+        sender: 'assistant',
+        text: promptMsg,
+        timestamp: new Date().toISOString(),
+        actions: [
+          {
+            id: 'act-allow-loc',
+            label: 'Allow location',
+            variant: 'primary',
+            action: 'allow_location',
+          },
+          {
+            id: 'act-not-now',
+            label: 'Not now',
+            variant: 'secondary',
+            action: 'not_now',
+          },
+        ],
+        pendingUtterance: trimmed,
+      }, run, undefined, 'offline');
+      this.notify();
+      return { collapsed: false, rule: 'degraded_failure', response: promptMsg };
+    }
+
+    if (locStatus.status === 'denied' || !locStatus.coords) {
+      const deniedMsg =
+        'Location access is blocked in your browser settings. Please enable location in your browser to find places near you.';
+      this.resolveDegraded(deniedMsg);
+      this.pushAssistantMessage({
+        id: `msg-${Date.now()}-a`,
+        sender: 'assistant',
+        text: deniedMsg,
+        timestamp: new Date().toISOString(),
+      }, run, undefined, 'offline');
+      this.notify();
+      return { collapsed: false, rule: 'degraded_failure', response: deniedMsg };
+    }
+
+    const activeRun = run ?? this.traceBus.startRun();
+    this.activeTraceRunId = activeRun.id;
+    const inflightMsgId = `msg-${Date.now()}-a`;
+    this.transcriptList.push({
+      id: inflightMsgId,
+      sender: 'assistant',
+      text: 'Working on your request',
+      timestamp: new Date().toISOString(),
+      inFlight: true,
+      traceRun: activeRun,
+    });
+    this.notify();
+
+    void this.handleEssentialsAsync(trimmed, cmd, ctx, now, activeRun, engineLabel, inflightMsgId);
+
+    return {
+      collapsed: false,
+      rule: 'executable_determinate',
+      response: `Searching nearby ${categoryLabel}…`,
+    };
+  }
+
   private applyCommand(
     trimmed: string,
     cmd: InterpretedCommand,
@@ -1210,6 +1603,7 @@ export class DefaultActionStateStore implements ActionStateStore {
     const needsLocation =
       cmd.intent === 'FIND_LUNCH' ||
       cmd.intent === 'FIND_FUEL' ||
+      cmd.intent === 'FIND_ESSENTIALS' ||
       (cmd.intent === 'WHY' && ctx?.plan?.intentId === 'lunch');
 
     if (isLive && needsLocation) {
@@ -2240,7 +2634,12 @@ export class DefaultActionStateStore implements ActionStateStore {
       };
     }
 
-    // 8. UNSUPPORTED (Honest capability answers)
+    // 8. FIND_ESSENTIALS ('supermarket nearby', 'mall nearby', 'convenience store', 'pharmacy')
+    if (cmd.intent === 'FIND_ESSENTIALS') {
+      return this.handleEssentialsSync(trimmed, cmd, ctx, now, run, engineLabel);
+    }
+
+    // 9. UNSUPPORTED (Honest capability answers)
     this.beginCommand(trimmed);
     const isLunch =
       this.commandContext?.sceneId === 'away-lunch' ||

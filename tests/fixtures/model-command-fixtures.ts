@@ -16,6 +16,8 @@ export interface ModelCommandDecisionOutput {
     readonly deltaMinutes?: number;
     readonly mode?: SupportedMode;
     readonly filters?: readonly SupportedLunchFilter[];
+    readonly category?: string;
+    readonly amenity?: string;
   };
   readonly situationAttribution?: {
     readonly signalId: string;
@@ -337,4 +339,64 @@ export const FIXTURE_FAULT_INVENTED_TIME: ModelCommandDecisionOutput = {
 export const FIXTURE_FAULT_SCHEMA_INVALID: any = {
   intent: 'LEAVE_LATER',
   // missing slots, citedSignalIds, citedFactKeys, reasonCodes
+};
+
+/**
+ * 13. Nearby Essentials: Supermarket
+ */
+export const FIXTURE_CMD_FIND_SUPERMARKET_NEARBY: ModelCommandDecisionOutput = {
+  intent: 'FIND_ESSENTIALS',
+  slots: {
+    category: 'supermarket',
+    amenity: 'supermarket',
+  },
+  citedSignalIds: [],
+  citedFactKeys: [],
+  reasonCodes: [],
+  explanation: 'Finding nearby supermarkets.',
+};
+
+/**
+ * 14. Nearby Essentials: Mall
+ */
+export const FIXTURE_CMD_FIND_MALL_NEARBY: ModelCommandDecisionOutput = {
+  intent: 'FIND_ESSENTIALS',
+  slots: {
+    category: 'shopping_mall',
+    amenity: 'shopping_mall',
+  },
+  citedSignalIds: [],
+  citedFactKeys: [],
+  reasonCodes: [],
+  explanation: 'Finding nearby shopping malls.',
+};
+
+/**
+ * 15. Nearby Essentials: Convenience store
+ */
+export const FIXTURE_CMD_FIND_CONVENIENCE: ModelCommandDecisionOutput = {
+  intent: 'FIND_ESSENTIALS',
+  slots: {
+    category: 'convenience',
+    amenity: 'convenience',
+  },
+  citedSignalIds: [],
+  citedFactKeys: [],
+  reasonCodes: [],
+  explanation: 'Finding nearby convenience stores.',
+};
+
+/**
+ * 16. Nearby Essentials: Pharmacy
+ */
+export const FIXTURE_CMD_FIND_PHARMACY: ModelCommandDecisionOutput = {
+  intent: 'FIND_ESSENTIALS',
+  slots: {
+    category: 'pharmacy',
+    amenity: 'pharmacy',
+  },
+  citedSignalIds: [],
+  citedFactKeys: [],
+  reasonCodes: [],
+  explanation: 'Finding nearby pharmacies.',
 };

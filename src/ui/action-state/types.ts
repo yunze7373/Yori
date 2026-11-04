@@ -149,6 +149,9 @@ export interface ActionStateStore {
   setCandidateReasoner(
     reasoner: ((request: 'why' | 'closer' | 'quieter') => Promise<{ reason: string; statusLabel: string }>) | null
   ): void;
+  setPlacesFetcher?(
+    fetcher: ((category: string, coords: import('../../adapters/providers/location-port.js').LocationCoords) => Promise<{ places: readonly import('../../adapters/providers/places-types.js').PlaceItem[]; discovery?: string; attribution?: string }>) | null
+  ): void;
   setLocationRequestHandler(
     handler: (() => Promise<import('../../adapters/providers/location-port.js').LocationStatus>) | null
   ): void;

@@ -2411,6 +2411,7 @@ export function renderApp(
   // Live Places Seam (L3-REAL-PLACES)
   let livePlacesStatus: { enabled: boolean; provider?: string; attribution?: string } = { enabled: false };
   let livePlacesList: readonly RankedPlaceItem[] = [];
+  let liveEssentialsSummary: string | null = null;
   let livePlacesLoading = false;
   let livePlacesError = false;
   // D2 (DEMO_RESCUE): on-demand "Nearby now" / Ask path. The explicit request becomes a
@@ -2651,6 +2652,7 @@ export function renderApp(
     // D2: only the 3-decimal fix leaves the page (the proxy re-rounds too).
     const lat = roundFixCoordinate(locCoords[0]);
     const lng = roundFixCoordinate(locCoords[1]);
+    void requestEssentialsForYou(lat, lng);
     const fetchKey = `${lat},${lng}`;
     if (
       lastPlacesFetch &&
@@ -2741,6 +2743,27 @@ export function renderApp(
     } finally {
       livePlacesLoading = false;
       update();
+    }
+  }
+
+  async function requestEssentialsForYou(lat: number | string, lng: number | string) {
+    if (liveEssentialsSummary !== null) return;
+    try {
+      if (typeof fetch === 'undefined') return;
+      const resp = await fetch(`/api/places?lat=${lat}&lng=${lng}&amenity=supermarket&radius=1500`, {
+        cache: 'no-store',
+      });
+      if (resp.ok) {
+        const data = (await resp.json()) as { enabled?: boolean; places?: readonly PlaceItem[] };
+        if (data.enabled && Array.isArray(data.places) && data.places.length > 0) {
+          const first = data.places[0]!;
+          const dist = first.straightLineDistanceLabel ? ` · ${first.straightLineDistanceLabel}` : '';
+          liveEssentialsSummary = `${first.name}${dist}`;
+          update();
+        }
+      }
+    } catch {
+      // Fail closed, keep null
     }
   }
 
@@ -3503,6 +3526,15 @@ export function renderApp(
         };
       });
 
+    const essentialsProposal = (contextMode === 'live' && liveEssentialsSummary) ? [{
+      key: 'nearby_essentials',
+      title: 'Nearby essentials',
+      basis: liveEssentialsSummary,
+      value: liveEssentialsSummary,
+      provenance: 'user' as const,
+    }] : [];
+    const effectiveLearnedItems = [...learnedItems, ...essentialsProposal];
+
     if (activeTab === 'me') {
       const storedFacts = activeLoadedFacts.length > 0
         ? activeLoadedFacts
@@ -3592,7 +3624,7 @@ export function renderApp(
           v2BodyHtml = renderPlansView(aheadPlans);
         }
       } else if (activeTab === 'for-you') {
-        v2BodyHtml = renderForYouView(learnedItems);
+        v2BodyHtml = renderForYouView(effectiveLearnedItems);
       } else {
         let currentPlanDiff: PlanDiff | null = null;
         if (actionStore.canUndo()) {
@@ -3972,7 +4004,7 @@ export function renderApp(
           plan: nowPlan,
           spatialEvidence: spatialMapEvidence,
           aheadPlans,
-          proposals: learnedItems,
+          proposals: effectiveLearnedItems,
           acceptedPlanIds,
           userConfirmedKeys,
           snapshot: effectiveSnapshot,
@@ -4261,8 +4293,8 @@ export function renderApp(
             <h2 class="section-label">${escapeHtml(STRINGS.sections.forYou)}</h2>
             <div class="for-you-list" id="for-you-proposals-list">
               ${
-                learnedItems.length > 0
-                  ? learnedItems
+                effectiveLearnedItems.length > 0
+                  ? effectiveLearnedItems
                       .map(
                         item => `
                 <div class="item-row learned-for-you-row" id="for-you-${escapeHtml(item.key)}">
@@ -5174,6 +5206,7 @@ export function renderApp(
         actionStore.setNearbyRequestHandler(null);
         actionStore.setCandidateReasoner(null);
         liveNearbyRequestSignal = null;
+        liveEssentialsSummary = null;
         liveLocationStatus = defaultLocationPort.getLocation();
         await refreshConnectorStatuses();
         update();

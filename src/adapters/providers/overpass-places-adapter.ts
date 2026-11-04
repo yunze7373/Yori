@@ -22,7 +22,15 @@ import type { LocationCoords } from './location-port.js';
 import type { PlaceItem, PlacesProvider, PlacesQuery } from './places-types.js';
 import { computeHaversineDistanceMeters, formatStraightLineDistance } from './simulated-places-provider.js';
 
-export const ALLOWED_AMENITIES = ['restaurant', 'cafe', 'fast_food'] as const;
+export const ALLOWED_AMENITIES = [
+  'restaurant',
+  'cafe',
+  'fast_food',
+  'supermarket',
+  'convenience',
+  'shopping_mall',
+  'pharmacy',
+] as const;
 export type AllowedAmenity = (typeof ALLOWED_AMENITIES)[number];
 
 export const DEFAULT_OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter';
@@ -164,29 +172,63 @@ export function parseDeterministicOpeningHours(
   return undefined;
 }
 
+export interface OverpassTagFilter {
+  readonly key: 'amenity' | 'shop';
+  readonly value: string;
+}
+
+/**
+ * Maps category/amenity enum to the canonical OSM tag key and value.
+ * - supermarket: shop=supermarket
+ * - convenience: shop=convenience
+ * - shopping_mall: shop=mall
+ * - pharmacy: amenity=pharmacy
+ * - gas_station / fuel: amenity=fuel
+ * - restaurant (default), cafe, fast_food: amenity=<value>
+ */
+export function getOverpassTagFilter(category?: string): OverpassTagFilter {
+  if (category === 'supermarket') {
+    return { key: 'shop', value: 'supermarket' };
+  }
+  if (category === 'convenience') {
+    return { key: 'shop', value: 'convenience' };
+  }
+  if (category === 'shopping_mall') {
+    return { key: 'shop', value: 'mall' };
+  }
+  if (category === 'pharmacy') {
+    return { key: 'amenity', value: 'pharmacy' };
+  }
+  if (category === 'gas_station' || category === 'fuel') {
+    return { key: 'amenity', value: 'fuel' };
+  }
+  if (category && isAllowedAmenity(category)) {
+    return { key: 'amenity', value: category };
+  }
+  return { key: 'amenity', value: 'restaurant' };
+}
+
 /**
  * Builds Overpass QL query string for nearby POI search.
  * Enforces coordinate privacy (rounded to 3 decimals), radius cap (<= 1500m),
  * allowlisted amenity enum, and 8s timeout.
  */
 export function buildOverpassQuery(query: PlacesQuery & { timeoutSeconds?: number }): string {
-  let amenityTag = 'restaurant';
-  if (query.category === 'gas_station' || query.category === 'fuel') {
-    amenityTag = 'fuel';
-  } else if (query.category && isAllowedAmenity(query.category)) {
-    amenityTag = query.category;
-  }
+  const filter = getOverpassTagFilter(query.category);
+  const tagKey = filter.key;
+  const tagValue = filter.value;
 
+  const isFuel = filter.key === 'amenity' && filter.value === 'fuel';
   const radius =
-    amenityTag === 'fuel'
+    isFuel
       ? query.radiusMeters ?? 3000
       : Math.min(Math.max(query.radiusMeters ?? OVERPASS_MAX_RADIUS_METERS, 100), OVERPASS_MAX_RADIUS_METERS);
   const lat = query.location.lat;
   const lng = query.location.lng;
 
-  const timeout = query.timeoutSeconds ?? (amenityTag === 'fuel' ? 10 : 8);
+  const timeout = query.timeoutSeconds ?? (isFuel ? 10 : 8);
 
-  return `[out:json][timeout:${timeout}];(node["amenity"="${amenityTag}"](around:${radius},${lat},${lng});way["amenity"="${amenityTag}"](around:${radius},${lat},${lng}););out center;`;
+  return `[out:json][timeout:${timeout}];(node["${tagKey}"="${tagValue}"](around:${radius},${lat},${lng});way["${tagKey}"="${tagValue}"](around:${radius},${lat},${lng}););out center;`;
 }
 
 export interface OverpassElement {
@@ -198,6 +240,7 @@ export interface OverpassElement {
   readonly tags?: {
     readonly name?: string;
     readonly amenity?: string;
+    readonly shop?: string;
     readonly brand?: string;
     readonly cuisine?: string;
     readonly opening_hours?: string;
@@ -230,10 +273,11 @@ export function parseOverpassElements(
       continue;
     }
 
-    // Venue name from tags only (for dining/restaurant); gas_station fallback to brand if present
+    // Venue name from tags only; gas_station/convenience/supermarket fallback to brand if name tag absent
     const name =
       el.tags?.name?.trim() ||
-      (category === 'gas_station' && el.tags?.brand ? `${el.tags.brand} Station` : undefined);
+      (category === 'gas_station' && el.tags?.brand ? `${el.tags.brand} Station` : undefined) ||
+      ((category === 'convenience' || category === 'supermarket') && el.tags?.brand ? String(el.tags.brand) : undefined);
     if (!name) {
       continue;
     }

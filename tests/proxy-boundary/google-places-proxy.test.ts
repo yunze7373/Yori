@@ -18,6 +18,7 @@ import {
   GOOGLE_SKU_NEARBY,
   GOOGLE_SKU_PHOTO,
   GoogleQuotaExceededError,
+  GOOGLE_PLACES_AMENITY_TYPE_MAP,
 } from '../../src/adapters/providers/google-places-adapter.js';
 import { MemoryGooglePlacesLedger } from '../../src/adapters/providers/google-places-ledger.js';
 import {
@@ -133,6 +134,32 @@ describe('D7 GooglePlacesAdapter (recorded responses)', () => {
     expect(places[1]!.cuisine).toBe('ramen');
     expect(places[1]!.rating).toBeUndefined();
     expect(places[3]!.openingStatus).toBe('closed');
+  });
+
+  it('NEARBY-ESSENTIALS: maps supermarket, convenience, shopping_mall, pharmacy to Google Places includedTypes', async () => {
+    expect(GOOGLE_PLACES_AMENITY_TYPE_MAP.supermarket).toEqual(['supermarket']);
+    expect(GOOGLE_PLACES_AMENITY_TYPE_MAP.convenience).toEqual(['convenience_store']);
+    expect(GOOGLE_PLACES_AMENITY_TYPE_MAP.shopping_mall).toEqual(['shopping_mall']);
+    expect(GOOGLE_PLACES_AMENITY_TYPE_MAP.pharmacy).toEqual(['pharmacy']);
+    expect(GOOGLE_PLACES_AMENITY_TYPE_MAP.restaurant).toEqual(['restaurant', 'cafe']);
+
+    const fetchFn = googleFetch();
+    const ledger = new MemoryGooglePlacesLedger();
+    const adapter = new GooglePlacesAdapter({ apiKey: FAKE_KEY, ledger, fetchFn: fetchFn as any });
+
+    const supermarketPlaces = await adapter.searchNearby(ORIGIN, 'supermarket');
+    const pharmacyPlaces = await adapter.searchNearby(ORIGIN, 'pharmacy');
+
+    const searchCalls = fetchFn.mock.calls.filter(c => String(c[0]).includes(':searchNearby')) as unknown as [string, RequestInit][];
+    expect(searchCalls.length).toBe(2);
+
+    const supermarketBody = JSON.parse(String(searchCalls[0]![1].body));
+    expect(supermarketBody.includedTypes).toEqual(['supermarket']);
+    expect(supermarketPlaces[0]!.category).toBe('supermarket');
+
+    const pharmacyBody = JSON.parse(String(searchCalls[1]![1].body));
+    expect(pharmacyBody.includedTypes).toEqual(['pharmacy']);
+    expect(pharmacyPlaces[0]!.category).toBe('pharmacy');
   });
 
   it('photo media: server-side skipHttpRedirect, keyless URI, credits kept, only the first 3 cards', async () => {

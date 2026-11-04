@@ -182,7 +182,7 @@ describe('V0: Action-State Store & Interaction State Machine (§2)', () => {
       storeLive.openConversation();
       const liveWelcome = storeLive.getTranscript()[0]!;
       expect(liveWelcome.text).toBe("Here's what I can look into for you.");
-      expect(liveWelcome.suggestions).toEqual(['Lunch nearby', 'Somewhere quiet', 'Closer to me']);
+      expect(liveWelcome.suggestions).toEqual(['Lunch nearby', 'Somewhere quiet', 'Closer to me', 'Supermarket nearby']);
       expect(liveWelcome.text).not.toMatch(cjkRegex);
       expect(liveWelcome.text).not.toMatch(bannedHints);
       liveWelcome.suggestions?.forEach((s) => {

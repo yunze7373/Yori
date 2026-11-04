@@ -53,6 +53,7 @@ import {
   GooglePlacesAdapter,
   GoogleQuotaExceededError,
   GOOGLE_PLACES_ATTRIBUTION,
+  GOOGLE_PLACES_AMENITY_TYPE_MAP,
 } from './google-places-adapter.js';
 import { FileGooglePlacesLedger, DEFAULT_GOOGLE_PLACES_DAILY_CAP } from './google-places-ledger.js';
 import { loadEnvLocal } from '../model/server-proxy.js';
@@ -1158,12 +1159,12 @@ export function createPlacesProxyMiddleware(
 
       lastOutboundPlacesQueryMs = Date.now();
 
-      // D7: Google first for food when configured; any Google failure (or the daily cap) falls
+      // D7: Google first when configured; any Google failure (or the daily cap) falls
       // back to the Overpass chain and the response says so. Fixed error messages only.
       let failover: { from: 'google'; reason: 'daily_cap' | 'unavailable' } | null = null;
-      if (googleAdapter && (amenityParam === 'restaurant' || amenityParam === 'cafe')) {
+      if (googleAdapter && (amenityParam in GOOGLE_PLACES_AMENITY_TYPE_MAP)) {
         try {
-          const places = await googleAdapter.searchNearby({ lat: roundedLat, lng: roundedLng });
+          const places = await googleAdapter.searchNearby({ lat: roundedLat, lng: roundedLng }, amenityParam);
           const body = JSON.stringify({ enabled: true, discovery: 'google', places, attribution: GOOGLE_PLACES_ATTRIBUTION });
           googleResultCache.set(cacheKey, { at: Date.now(), body });
           if (googleResultCache.size > 50) googleResultCache.delete(googleResultCache.keys().next().value!);

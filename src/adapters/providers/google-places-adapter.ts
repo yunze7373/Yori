@@ -48,6 +48,26 @@ export const GOOGLE_PLACES_FIELD_MASK = [
 export const GOOGLE_SKU_NEARBY = 'places.searchNearby (Nearby Search Enterprise)';
 export const GOOGLE_SKU_PHOTO = 'places.photos.media (Place Details Photos)';
 
+/**
+ * Mapping from generic/allowlisted amenity to Google Places (New) includedTypes.
+ * - supermarket -> ['supermarket']
+ * - convenience -> ['convenience_store']
+ * - shopping_mall -> ['shopping_mall']
+ * - pharmacy -> ['pharmacy']
+ * - restaurant (default) -> ['restaurant', 'cafe']
+ * - cafe -> ['cafe']
+ * - fast_food -> ['fast_food_restaurant']
+ */
+export const GOOGLE_PLACES_AMENITY_TYPE_MAP: Record<string, readonly string[]> = {
+  restaurant: ['restaurant', 'cafe'],
+  cafe: ['cafe'],
+  fast_food: ['fast_food_restaurant'],
+  supermarket: ['supermarket'],
+  convenience: ['convenience_store'],
+  shopping_mall: ['shopping_mall'],
+  pharmacy: ['pharmacy'],
+};
+
 const PRICE_LEVELS: Record<string, number> = {
   PRICE_LEVEL_FREE: 0,
   PRICE_LEVEL_INEXPENSIVE: 1,
@@ -136,8 +156,10 @@ export class GooglePlacesAdapter {
   }
 
   /** origin must already be rounded to 3 decimals by the caller (the proxy does). */
-  public async searchNearby(origin: LocationCoords): Promise<readonly PlaceItem[]> {
+  public async searchNearby(origin: LocationCoords, amenity?: string): Promise<readonly PlaceItem[]> {
     if (!this.ledger.tryReserve(GOOGLE_SKU_NEARBY)) throw new GoogleQuotaExceededError();
+    const effectiveCategory = amenity ?? 'restaurant';
+    const includedTypes = GOOGLE_PLACES_AMENITY_TYPE_MAP[effectiveCategory] ?? ['restaurant', 'cafe'];
     const res = await this.call(GOOGLE_PLACES_SEARCH_URL, {
       method: 'POST',
       headers: {
@@ -146,7 +168,7 @@ export class GooglePlacesAdapter {
         'X-Goog-FieldMask': GOOGLE_PLACES_FIELD_MASK,
       },
       body: JSON.stringify({
-        includedTypes: ['restaurant', 'cafe'],
+        includedTypes,
         maxResultCount: GOOGLE_PLACES_MAX_RESULTS,
         rankPreference: 'DISTANCE',
         locationRestriction: {
@@ -177,7 +199,7 @@ export class GooglePlacesAdapter {
         placeId: `google-${p.id}`,
         coords,
         name,
-        category: 'restaurant',
+        category: effectiveCategory,
         source: 'live',
         provenance: 'google',
         fetchedAt,

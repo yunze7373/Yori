@@ -844,6 +844,7 @@ export type DecisionCommandIntent =
   | 'CHANGE_ROUTE'
   | 'FIND_LUNCH'
   | 'FIND_FUEL'
+  | 'FIND_ESSENTIALS'
   | 'WHY'
   | 'ACCEPT'
   | 'UNDO'
@@ -854,6 +855,7 @@ export const CLOSED_DECISION_INTENTS: ReadonlySet<string> = new Set([
   'CHANGE_ROUTE',
   'FIND_LUNCH',
   'FIND_FUEL',
+  'FIND_ESSENTIALS',
   'WHY',
   'ACCEPT',
   'UNDO',
@@ -866,6 +868,8 @@ export interface DecisionCommandOutput {
     readonly deltaMinutes?: number;
     readonly mode?: 'drive' | 'bus';
     readonly filters?: readonly string[];
+    readonly category?: string;
+    readonly amenity?: string;
   };
   readonly reply?: string;
   readonly situationAttribution?: {
@@ -911,6 +915,8 @@ export const ALLOWED_DECISION_COMMAND_SLOT_KEYS: ReadonlySet<string> = new Set([
   'deltaMinutes',
   'mode',
   'filters',
+  'category',
+  'amenity',
 ]);
 
 export const ALLOWED_SITUATION_ATTRIBUTION_KEYS: ReadonlySet<string> = new Set([
@@ -997,6 +1003,16 @@ export function validateDecisionCommandOutput(
       if (typeof f !== 'string' || !allowedFilters.has(f)) {
         return { valid: false, reason: 'unknown_filter', error: `Unsupported filter '${sanitizeModelText(f)}'` };
       }
+    }
+  }
+  if (slots.category !== undefined) {
+    if (typeof slots.category !== 'string' || slots.category.length === 0 || slots.category.length > 64) {
+      return { valid: false, reason: 'schema_invalid', error: `Invalid category '${sanitizeModelText(slots.category)}'` };
+    }
+  }
+  if (slots.amenity !== undefined) {
+    if (typeof slots.amenity !== 'string' || slots.amenity.length === 0 || slots.amenity.length > 64) {
+      return { valid: false, reason: 'schema_invalid', error: `Invalid amenity '${sanitizeModelText(slots.amenity)}'` };
     }
   }
 

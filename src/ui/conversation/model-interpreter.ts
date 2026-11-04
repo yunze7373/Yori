@@ -65,6 +65,10 @@ import {
   FIXTURE_CMD_FIND_LUNCH_NEARBY,
   FIXTURE_CMD_FIND_LUNCH_VEGETARIAN,
   FIXTURE_CMD_FIND_LUNCH_QUIET,
+  FIXTURE_CMD_FIND_SUPERMARKET_NEARBY,
+  FIXTURE_CMD_FIND_MALL_NEARBY,
+  FIXTURE_CMD_FIND_CONVENIENCE,
+  FIXTURE_CMD_FIND_PHARMACY,
 } from '../../../tests/fixtures/model-command-fixtures.js';
 
 export type ModelInterpreterMode =
@@ -120,6 +124,15 @@ const DEFAULT_RECORDED_FIXTURES: Record<string, ModelCommandDecisionOutput> = {
   'closer': FIXTURE_CMD_FIND_LUNCH_NEARBY,
   'nearer': FIXTURE_CMD_FIND_LUNCH_NEARBY,
   'closer lunch': FIXTURE_CMD_FIND_LUNCH_NEARBY,
+  'supermarket nearby': FIXTURE_CMD_FIND_SUPERMARKET_NEARBY,
+  'supermarket': FIXTURE_CMD_FIND_SUPERMARKET_NEARBY,
+  'supermarkets nearby': FIXTURE_CMD_FIND_SUPERMARKET_NEARBY,
+  'mall nearby': FIXTURE_CMD_FIND_MALL_NEARBY,
+  'shopping mall': FIXTURE_CMD_FIND_MALL_NEARBY,
+  'convenience store': FIXTURE_CMD_FIND_CONVENIENCE,
+  'convenience store nearby': FIXTURE_CMD_FIND_CONVENIENCE,
+  'pharmacy': FIXTURE_CMD_FIND_PHARMACY,
+  'pharmacy nearby': FIXTURE_CMD_FIND_PHARMACY,
 };
 
 function normalizeKey(str: string): string {
