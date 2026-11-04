@@ -129,7 +129,7 @@ async function setupMockRoutes(page: Page) {
         result: {
           intent: 'FIND_LUNCH',
           slots: { filters: ['quieter'] },
-          reply: 'Here is a quiet lunch recommendation: Near Cafe is open now and just 45m away.',
+          reply: 'Updated lunch options to quieter spots—Near Cafe is your top pick.',
           citedSignalIds: [],
           citedFactKeys: [],
           reasonCodes: [],
@@ -206,7 +206,7 @@ test.describe('ASK-AGENT-TRACE: Real Activity Timeline & Top Pick Presentation',
     // 4. Verify assistant reply appears with agent activity summary toggle
     const transcript = page.locator('#conversation-transcript');
     await expect(transcript).toContainText('somewhere quieter');
-    await expect(transcript).toContainText('Near Cafe is open now');
+    await expect(transcript).toContainText('Near Cafe is open now and 45m away.');
 
     // Agent activity toggle button
     const toggleBtn = page.locator('.trace-summary-toggle').first();
@@ -299,10 +299,11 @@ test.describe('ASK-AGENT-TRACE: Real Activity Timeline & Top Pick Presentation',
     const offlineBadges = traceDetails.locator('.trace-badge-offline');
     expect(await offlineBadges.count()).toBeGreaterThanOrEqual(1);
 
-    // Verify steps include Grammar match, Grounding check, Answer presentation
+    // Verify steps include Grammar match, Answer presentation (and no false Grounding check)
     const traceText = await traceDetails.innerText();
     expect(traceText).toContain('Grammar match');
-    expect(traceText).toContain('Grounding check');
+    expect(traceText).toContain('Answer presentation');
+    expect(traceText).not.toContain('Grounding check');
 
     // Capture screenshot: Offline deterministic trace
     await page.screenshot({

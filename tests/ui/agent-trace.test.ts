@@ -255,12 +255,12 @@ describe('Store & Trace Integration', () => {
     const trace = assistantMsg!.traceRun!;
     expect(trace.status).toBe('completed');
     expect(trace.engineLabel).toBe('Local plan · deterministic');
-    expect(trace.steps.length).toBeGreaterThanOrEqual(3);
+    expect(trace.steps.length).toBe(2);
 
     const phases = trace.steps.map(s => s.phase);
     expect(phases).toContain('Grammar match');
-    expect(phases).toContain('Grounding check');
     expect(phases).toContain('Answer presentation');
+    expect(phases).not.toContain('Grounding check');
 
     for (const step of trace.steps) {
       expect(step.status).toBe('finished');

@@ -817,20 +817,6 @@ export class DefaultActionStateStore implements ActionStateStore {
     const run = existingRun ?? this.traceBus.startRun();
     this.activeTraceRunId = run.id;
 
-    if (isLive && quickNeedsLoc && !run.steps.some(s => s.kind === 'location')) {
-      const locStep = this.traceBus.startStep(
-        run.id,
-        'location',
-        'Geolocation fix',
-        'Acquiring location…'
-      );
-      const locLabel =
-        typeof (locStatus as any).areaLabel === 'string'
-          ? (locStatus as any).areaLabel
-          : 'Location fix obtained';
-      this.traceBus.finishStep(locStep.id, locLabel);
-    }
-
     const inflightId = `msg-${Date.now()}-inflight`;
     this.transcriptList.push({
       id: inflightId,
@@ -882,7 +868,17 @@ export class DefaultActionStateStore implements ActionStateStore {
       : 'offline';
 
     if (cmd.engineStatus === 'offline_deterministic' && (this.interpreter as any).isLiveMode?.()) {
-      this.traceBus.failStep(modelStep.id, 'Model timeout · fell back to local', 'offline');
+      const isTimeout = cmd.fallbackReason === 'timeout';
+      const isGrounding = cmd.fallbackReason === 'validation_failed' || cmd.fallbackReason === 'unlisted_fact_token';
+      const isPaused = cmd.fallbackReason === 'model_paused';
+      const label = isTimeout
+        ? 'Model timeout · local fallback'
+        : isGrounding
+        ? 'Reply failed grounding · local fallback'
+        : isPaused
+        ? 'Model paused · local fallback'
+        : 'Model unavailable · local fallback';
+      this.traceBus.failStep(modelStep.id, label, 'offline');
     } else {
       this.traceBus.finishStep(modelStep.id, engineLabel, badge);
     }
@@ -1142,13 +1138,13 @@ export class DefaultActionStateStore implements ActionStateStore {
     run?: AgentTraceRun,
     planForCard?: PreparedPlan,
     engineLabel?: string,
-    factCheckPassed: boolean = true
+    factCheck?: { ran: boolean; passed: boolean }
   ): void {
     if (run) {
       const isOffline = run.steps.some((s) => s.kind === 'local') || !this.isLiveMode();
 
-      // Ensure fact_check step
-      if (!run.steps.some((s) => s.kind === 'fact_check') && !item.actions) {
+      // Emit fact_check step ONLY when validateAssistantReply actually ran
+      if (factCheck?.ran && !run.steps.some((s) => s.kind === 'fact_check') && !item.actions) {
         const factStep = this.traceBus.startStep(
           run.id,
           'fact_check',
@@ -1158,7 +1154,7 @@ export class DefaultActionStateStore implements ActionStateStore {
         );
         this.traceBus.finishStep(
           factStep.id,
-          factCheckPassed ? 'Passed grounded check' : 'Template grounded',
+          factCheck.passed ? 'Passed grounded check' : 'Reply replaced by template',
           isOffline ? 'offline' : undefined
         );
       }
@@ -1320,8 +1316,10 @@ export class DefaultActionStateStore implements ActionStateStore {
           if (candRun.status === 'cancelled') {
             return;
           }
-          const factStep = this.traceBus.startStep(candRun.id, 'fact_check', 'Grounding check', 'Validating reply against facts…');
-          this.traceBus.finishStep(factStep.id, checkValid ? 'Passed grounded check' : 'Template grounded');
+          if (cmd.reply) {
+            const factStep = this.traceBus.startStep(candRun.id, 'fact_check', 'Grounding check', 'Validating reply against facts…');
+            this.traceBus.finishStep(factStep.id, checkValid ? 'Passed grounded check' : 'Reply replaced by template');
+          }
           const renderStep = this.traceBus.startStep(candRun.id, 'render', 'Answer presentation', 'Rendering answer…');
           this.traceBus.finishStep(renderStep.id, 'Answer ready');
           const topCard = extractLunchCard(ctx?.plan?.optionsOrSteps?.[0]);
@@ -1383,7 +1381,7 @@ export class DefaultActionStateStore implements ActionStateStore {
           sender: 'assistant',
           text: response,
           timestamp: new Date().toISOString(),
-        }, run, confirmedPlan, engineLabel, check.valid);
+        }, run, confirmedPlan, engineLabel, { ran: Boolean(cmd.reply), passed: Boolean(check.valid) });
         const collapsed = this.evaluateAutoCollapse('executable_determinate');
         this.notify();
         return { collapsed, rule: 'executable_determinate', response, plan: confirmedPlan };
@@ -1397,7 +1395,7 @@ export class DefaultActionStateStore implements ActionStateStore {
         sender: 'assistant',
         text: response,
         timestamp: new Date().toISOString(),
-      }, run, undefined, engineLabel, check.valid);
+      }, run, undefined, engineLabel, { ran: Boolean(cmd.reply), passed: Boolean(check.valid) });
       const collapsed = this.evaluateAutoCollapse('executable_determinate');
       this.notify();
       return { collapsed, rule: 'executable_determinate', response };
@@ -1415,7 +1413,7 @@ export class DefaultActionStateStore implements ActionStateStore {
         sender: 'assistant',
         text: response,
         timestamp: new Date().toISOString(),
-      }, run, restored?.planState ?? undefined, engineLabel, check.valid);
+      }, run, restored?.planState ?? undefined, engineLabel, { ran: Boolean(cmd.reply), passed: Boolean(check.valid) });
       const collapsed = this.evaluateAutoCollapse('executable_determinate');
       this.notify();
       return {
@@ -1698,7 +1696,7 @@ export class DefaultActionStateStore implements ActionStateStore {
         sender: 'assistant',
         text: successMsg,
         timestamp: new Date().toISOString(),
-      }, run, newPlan, engineLabel, check.valid);
+      }, run, newPlan, engineLabel, { ran: Boolean(cmd.reply), passed: Boolean(check.valid) });
 
       const collapsed = this.evaluateAutoCollapse('executable_determinate');
       this.notify();
@@ -1798,7 +1796,7 @@ export class DefaultActionStateStore implements ActionStateStore {
         sender: 'assistant',
         text: successMsg,
         timestamp: new Date().toISOString(),
-      }, run, newPlan, engineLabel, check.valid);
+      }, run, newPlan, engineLabel, { ran: Boolean(cmd.reply), passed: Boolean(check.valid) });
 
       const collapsed = this.evaluateAutoCollapse('executable_determinate');
       this.notify();
@@ -1873,8 +1871,8 @@ export class DefaultActionStateStore implements ActionStateStore {
         }
 
         let placesStep: AgentTraceStep | undefined;
-        if (run) {
-          placesStep = this.traceBus.startStep(run.id, 'places', 'Places search', 'Searching nearby restaurants…', 'live');
+        if (run && !this.nearbyRequestHandler) {
+          placesStep = this.traceBus.startStep(run.id, 'places', 'Places lookup', 'Checking simulated places…', 'simulated');
         }
         try {
           const provider = mockLunchAdapter.getProvider();
@@ -1884,11 +1882,11 @@ export class DefaultActionStateStore implements ActionStateStore {
             count = Array.isArray(res) ? res.length : 0;
           }
           if (placesStep) {
-            this.traceBus.finishStep(placesStep.id, `${count} places found`, 'live');
+            this.traceBus.finishStep(placesStep.id, `${count} simulated places (demo provider)`, 'simulated');
           }
         } catch {
           if (placesStep) {
-            this.traceBus.failStep(placesStep.id, 'Places provider failure');
+            this.traceBus.failStep(placesStep.id, 'Places provider failure', 'simulated');
           }
           const errorMsg = 'Unable to search for lunch places: places provider failure. Fails closed.';
           this.resolveDegraded(errorMsg);
@@ -1921,7 +1919,7 @@ export class DefaultActionStateStore implements ActionStateStore {
           sender: 'assistant',
           text: askMsg,
           timestamp: new Date().toISOString(),
-        }, run, undefined, engineLabel, check.valid);
+        }, run, undefined, engineLabel, { ran: Boolean(cmd.reply), passed: Boolean(check.valid) });
         const collapsed = this.evaluateAutoCollapse('executable_determinate');
         this.notify();
         return { collapsed, rule: 'executable_determinate', response: askMsg };
@@ -2019,7 +2017,7 @@ export class DefaultActionStateStore implements ActionStateStore {
         sender: 'assistant',
         text: successMsg,
         timestamp: new Date().toISOString(),
-      }, run, newPlan, engineLabel, check.valid);
+      }, run, newPlan, engineLabel, { ran: Boolean(cmd.reply), passed: Boolean(check.valid) });
 
       const collapsed = this.evaluateAutoCollapse('executable_determinate');
       this.notify();
@@ -2123,7 +2121,7 @@ export class DefaultActionStateStore implements ActionStateStore {
 
       let placesStep: AgentTraceStep | undefined;
       if (run) {
-        placesStep = this.traceBus.startStep(run.id, 'places', 'Gas stations search', 'Searching nearby fuel stations…', 'live');
+        placesStep = this.traceBus.startStep(run.id, 'places', 'Gas stations lookup', 'Searching simulated fuel stations…', 'simulated');
       }
 
       try {
@@ -2133,14 +2131,14 @@ export class DefaultActionStateStore implements ActionStateStore {
           : [];
         placesStatus = places.length > 0 ? 'ok' : 'empty';
         if (placesStep) {
-          this.traceBus.finishStep(placesStep.id, `${places.length} stations found`, 'live');
+          this.traceBus.finishStep(placesStep.id, `${places.length} simulated stations (demo provider)`, 'simulated');
         }
       } catch (err: unknown) {
         placesStatus = 'error';
         placesError = err instanceof Error ? err.message : 'Places provider failure';
         places = [];
         if (placesStep) {
-          this.traceBus.failStep(placesStep.id, 'Fuel stations lookup failed');
+          this.traceBus.failStep(placesStep.id, 'Fuel stations lookup failed', 'simulated');
         }
       }
 
@@ -2236,7 +2234,7 @@ export class DefaultActionStateStore implements ActionStateStore {
         sender: 'assistant',
         text: successMsg,
         timestamp: new Date().toISOString(),
-      }, run, newPlan, engineLabel, check.valid);
+      }, run, newPlan, engineLabel, { ran: Boolean(cmd.reply), passed: Boolean(check.valid) });
 
       this.resolveExecutable(
         'Nearby gas stations found.',
@@ -2279,7 +2277,7 @@ export class DefaultActionStateStore implements ActionStateStore {
       sender: 'assistant',
       text: responseText,
       timestamp: new Date().toISOString(),
-    }, run, undefined, engineLabel, check.valid);
+    }, run, undefined, engineLabel, { ran: Boolean(cmd.reply), passed: Boolean(check.valid) });
 
     this.resolveDegraded(responseText);
     const rule: AutoCollapseRule = this.pinned ? 'pinned' : 'unsupported_ask';

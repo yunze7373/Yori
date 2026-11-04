@@ -60,6 +60,7 @@ export interface InterpretedCommand {
   readonly citedSignalIds?: readonly string[];
   readonly citedFactKeys?: readonly string[];
   readonly engineStatus?: EngineStatus;
+  readonly fallbackReason?: string;
 }
 
 export interface CommandSuppliedFacts {

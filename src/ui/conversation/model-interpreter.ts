@@ -889,7 +889,14 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       // Discard to deterministic fallback on any error, timeout, or 500
       const deterministic = this.fallbackInterpreter.interpret(input, context);
       const isTimeout = err instanceof Error && err.name === 'AbortError';
-      const reason = reachedPauseThreshold ? 'model_paused' : (isTimeout ? 'timeout' : 'error');
+      const isValidationFail = err instanceof Error && err.message.startsWith('Model validation failed');
+      const reason = reachedPauseThreshold
+        ? 'model_paused'
+        : isTimeout
+        ? 'timeout'
+        : isValidationFail
+        ? 'validation_failed'
+        : 'error';
       const errorMsg = reachedPauseThreshold ? 'model paused' : (err instanceof Error ? err.message : String(err));
 
       this.logger.log({
@@ -910,6 +917,7 @@ export class ModelCommandInterpreter implements CommandInterpreter {
       return {
         ...deterministic,
         engineStatus: 'offline_deterministic',
+        fallbackReason: reason,
       };
     }
   }

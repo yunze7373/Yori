@@ -2621,7 +2621,7 @@ export function renderApp(
 
     if (!livePlacesStatus.enabled) {
       if (traceStep) {
-        agentTrace.finishStep(traceStep.id, 'Places service disabled', 'live');
+        agentTrace.skipStep(traceStep.id, 'Places service disabled');
       }
       livePlacesList = [];
       update();
@@ -2641,7 +2641,7 @@ export function renderApp(
 
     if (!hasLocation || !locCoords) {
       if (traceStep) {
-        agentTrace.finishStep(traceStep.id, 'Location unavailable', 'live');
+        agentTrace.skipStep(traceStep.id, 'Location unavailable');
       }
       livePlacesList = [];
       update();

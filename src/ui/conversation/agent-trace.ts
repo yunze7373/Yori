@@ -183,6 +183,19 @@ export class AgentTraceBus {
     return step;
   }
 
+  public skipStep(stepId: string, summary: string): AgentTraceStep | undefined {
+    const step = this.findStep(stepId);
+    if (!step) return undefined;
+    step.status = 'skipped';
+    step.endedAt = nowMonotonicMs();
+    step.durationMs = undefined;
+    step.summary = sanitizeTraceText(summary);
+    step.badge = undefined;
+    const run = this.runs.get(step.runId);
+    if (run) this.notify(run);
+    return step;
+  }
+
   public cancelRun(runId: string, summary: string = 'Cancelled'): void {
     const run = this.runs.get(runId);
     if (!run || run.status !== 'in_flight') return;
@@ -288,6 +301,9 @@ export function renderTraceStepMarker(status: TraceStatus): string {
   if (status === 'cancelled') {
     return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 8H12" stroke="#586B64" stroke-width="2" stroke-linecap="round"/></svg>`;
   }
+  if (status === 'skipped') {
+    return `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="4.5" stroke="#8A9992" stroke-width="1.6" stroke-dasharray="2 2"/></svg>`;
+  }
   // status === 'started'
   return `<span class="trace-step-dot" aria-hidden="true"></span>`;
 }
@@ -296,7 +312,7 @@ export function renderTraceStepsHtml(steps: readonly AgentTraceStep[]): string {
   if (!steps || steps.length === 0) return '';
   return steps
     .map((step) => {
-      const isOffline = step.badge?.toLowerCase().includes('offline');
+      const isOffline = step.badge?.toLowerCase().includes('offline') || step.badge?.toLowerCase().includes('simulated');
       const badgeHtml = step.badge
         ? `<span class="trace-badge ${isOffline ? 'trace-badge-offline' : ''}">${escapeHtml(step.badge)}</span>`
         : '';
